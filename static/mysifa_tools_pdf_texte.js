@@ -423,7 +423,7 @@
           n += trouves.length; nb++;
           var nouveau = base.replace(re, function () { return rep; });
           if (deja) { deja.texte = nouveau; continue; }
-          var a = await preparer(p, info.d, bl, info.tc, info.bornes);
+          var a = await preparer(p, info.d, bl, info.tc, info.bornes[k]);
           a.texte = nouveau; p.annots.push(a);
         }
       }
@@ -431,7 +431,9 @@
       return { n: n, blocs: nb, ignorees: ignorees };
     }
     EXT.texte = { blocsPage: blocsPage, preparer: preparer, trouverRemplace: trouverRemplace,
-      remplacerPartout: remplacerPartout, mesure: mesureCss, AVERTISSEMENT: AVERTISSEMENT };
+      remplacerPartout: remplacerPartout, mesure: mesureCss, AVERTISSEMENT: AVERTISSEMENT,
+      // Rendu dédié de la page (non pivotée, px.k pixels par point) : celui de la mesure d'encre.
+      rendu: function (p) { return rendu2(S().sources[p.src], p.idx); } };
     function editer(a, p, z, neuf) {
       var s = S();
       var inp = document.createElement('input');

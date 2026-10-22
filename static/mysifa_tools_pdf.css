@@ -634,3 +634,48 @@ select.tpdf-fc { padding: 0 1px; }
   .tpdf-par-cols { grid-template-columns: 1fr; }
   .tpdf-feuille2 { display: none; }
 }
+
+/* ── Modifier avec l'IA : panneau ancré à droite, page visible ─────── */
+.tpdf-modale-fond.tpdf-fond-cote { background: transparent; pointer-events: none; justify-content: flex-end; align-items: stretch; }
+.tpdf-fond-cote .tpdf-modale { pointer-events: auto; max-width: 440px; max-height: none; box-shadow: 0 12px 40px var(--iav-lueur); }
+@media (max-width: 700px) {
+  .tpdf-modale-fond.tpdf-fond-cote { align-items: flex-end; }
+  .tpdf-fond-cote .tpdf-modale { max-width: none; max-height: 60vh; }
+}
+.tpdf-menu-badge { margin-left: auto; }
+.tpdf-ia-props { display: flex; flex-direction: column; gap: 6px; }
+.tpdf-ia-prop { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.tpdf-ia-prop input[type="checkbox"] { margin-top: 3px; accent-color: var(--iav-2); flex: none; }
+.tpdf-ia-prop-actif { border-color: var(--iav-2); background: var(--iav-bg); }
+.tpdf-ia-prop-off { opacity: .5; }
+.tpdf-ia-prop-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: var(--bg); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.tpdf-ia-prop-actif .tpdf-ia-prop-corps { background: transparent; }
+.tpdf-ia-prop-tete { font-size: 11px; font-weight: 700; color: var(--iav-1); }
+.tpdf-diff { font-size: 13px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.tpdf-diff-moins { color: var(--danger); text-decoration: line-through; background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.tpdf-diff-plus { color: var(--success); text-decoration: none; background: color-mix(in srgb, var(--success) 14%, transparent); }
+.tpdf-diff-ctx { color: var(--muted); font-size: 12px; }
+.tpdf-ia-apercu {
+  position: absolute; z-index: 6; padding: 0 2px; white-space: pre; pointer-events: none;
+  background: var(--card); color: var(--text); outline: 2px solid var(--iav-2); border-radius: 2px;
+  box-shadow: 0 0 0 4px var(--iav-lueur); font-family: Helvetica, Arial, sans-serif;
+}
+.tpdf-ia-apercu-vide { color: var(--muted); font-style: italic; }
+.tpdf-ia-place { display: block; }
+.tpdf-ia-chev {
+  display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; letter-spacing: .3px; color: white; background: var(--warn);
+  font-family: 'Segoe UI', system-ui, sans-serif; font-style: normal; line-height: 1.6;
+}
+.tpdf-ia-apercu-chev { outline-color: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 35%, transparent); }
+.tpdf-ia-apercu .tpdf-ia-chev { position: absolute; left: -2px; bottom: 100%; margin-bottom: 6px; white-space: nowrap; }
+
+/* ── Créer avec l'IA ────────────────────────────────────────────── */
+.tpdf-ia-creer .ia-badge { color: white; background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .55); }
+.tpdf-ia-consigne { display: flex; align-items: flex-start; gap: 8px; }
+.tpdf-ia-consigne textarea { flex: 1; min-width: 0; }
+.tpdf-micro { width: 40px; height: 40px; flex: none; }
+.tpdf-micro:disabled { opacity: .45; cursor: not-allowed; }
+.tpdf-micro.tpdf-micro-ecoute { background: var(--danger); border-color: var(--danger); color: white; animation: ia-pulse 1.4s ease-in-out infinite; }
+.tpdf-ia-apercu-doc { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-height: 56vh; overflow-y: auto; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.tpdf-ia-page { width: 300px; max-width: 100%; height: auto; background: white; box-shadow: 0 2px 10px rgba(0, 0, 0, .25); }

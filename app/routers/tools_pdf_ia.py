@@ -4,6 +4,9 @@
   POST /api/tools/pdf/ia/question   multipart `pdf`, `question`
   POST /api/tools/pdf/ia/extraire   multipart `pdf`, `nature` (facture|bl|fiche|libre), `consigne`
   POST /api/tools/pdf/ia/champs     multipart `pdf`
+  POST /api/tools/pdf/ia/modifier   `consigne`, `blocs` (JSON : [{id, page, texte, x, y}]) — sans le PDF
+  POST /api/tools/pdf/ia/creer      `consigne`, `format`, `ton`, `langue`, `entete`, [`precedent`, `affiner`]
+  GET  /api/tools/pdf/ia/entete     identité de l'organisation pour l'en-tête (nom, adresse, logo)
 
 Le travail est dans app/services/pdf_ia.py. Ouvert à tout utilisateur
 connecté (outil transverse de MyTools), avec un quota par heure
@@ -133,3 +136,82 @@ async def remplir(request: Request, pdf: UploadFile = File(...), champs: str = F
     except ValueError:
         raise HTTPException(status_code=400, detail="Liste des champs illisible.")
     return await _executer(request, pdf, pdf_ia.remplir, liste if isinstance(liste, list) else [], donnees)
+
+
+# ─── Modification assistée ─────────────────────────────────────────
+
+@router.post("/modifier")
+async def modifier(request: Request, consigne: str = Form(...), blocs: str = Form("[]")):
+    """Propositions de modification sur les blocs de texte envoyés (rien n'est appliqué ici)."""
+    import json
+    user = get_current_user(request)
+    if len(consigne) > 2000:
+        raise HTTPException(status_code=400, detail="Consigne trop longue — 2 000 caractères au plus.")
+    if len(blocs) > 400000:
+        raise HTTPException(status_code=413, detail="Document trop long pour un seul passage — choisir la page courante ou une sélection.")
+    try:
+        liste = json.loads(blocs or "[]")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Liste des blocs illisible.")
+    _quota(user)
+
+    def travail():
+        with ia_usage.suivi(user, "pdf", "MyTools"):
+            return pdf_ia.modifier(consigne, liste)
+    try:
+        return await run_in_threadpool(travail)
+    except pdf_ia.PdfIaErreur as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# ─── Créer un document ─────────────────────────────────────────────
+
+def _identite() -> dict:
+    """Nom, adresse et logo de l'organisation, lus dans la configuration."""
+    import os
+    import config
+    nom = str(getattr(config, "APP_ORG_NAME", "") or "")
+    adresse = str(getattr(config, "APP_ORG_ADRESSE", "") or "")
+    logo = ""
+    for attr in ("APP_LOGO_PATH", "BAT_LOGO_PATH"):
+        chemin = getattr(config, attr, None)
+        if chemin and os.path.isfile(chemin):
+            statique = os.path.join(config.BASE_DIR, "static")
+            if os.path.abspath(chemin).startswith(os.path.abspath(statique) + os.sep):
+                logo = "/static/" + os.path.relpath(chemin, statique).replace(os.sep, "/")
+                break
+    return {"nom": nom, "adresse": [l.strip() for l in adresse.replace("\\n", "\n").split("\n") if l.strip()], "logo": logo}
+
+
+@router.get("/entete")
+async def entete(request: Request):
+    get_current_user(request)
+    return _identite()
+
+
+@router.post("/creer")
+async def creer(request: Request, consigne: str = Form(""), format: str = Form("a4"), ton: str = Form("neutre"),
+                langue: str = Form("fr"), entete: str = Form("0"), precedent: str = Form(""), affiner: str = Form("")):
+    """Structure d'un document (titre + blocs) à composer dans le navigateur."""
+    import json
+    user = get_current_user(request)
+    if len(consigne) > 4000 or len(affiner) > 4000:
+        raise HTTPException(status_code=400, detail="Consigne trop longue — 4 000 caractères au plus.")
+    if len(precedent) > 200000:
+        raise HTTPException(status_code=413, detail="Document précédent trop long pour être affiné.")
+    prec = None
+    if precedent:
+        try:
+            prec = json.loads(precedent)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Document précédent illisible.")
+    org = _identite()["nom"] if entete in ("1", "true", "oui") else ""
+    _quota(user)
+
+    def travail():
+        with ia_usage.suivi(user, "pdf", "MyTools"):
+            return pdf_ia.creer(consigne, format, ton, langue, org, prec, affiner)
+    try:
+        return await run_in_threadpool(travail)
+    except pdf_ia.PdfIaErreur as e:
+        raise HTTPException(status_code=502, detail=str(e))

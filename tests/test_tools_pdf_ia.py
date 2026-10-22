@@ -154,6 +154,152 @@ class Lot4(Base):
         self.assertEqual(r["valeurs"], {"client": "ACME"})
 
 
+class Modifier(Base):
+    BLOCS = [{"id": "1.0", "page": 1, "texte": "Date : 12/10/2026", "x": 60, "y": 90},
+             {"id": "1.4", "page": 1, "texte": "Téléphone : 01 02 03 04 05", "x": 60, "y": 110},
+             {"id": "2.3", "page": 2, "texte": "Échéance le 12/10/2026", "x": 60, "y": 90}]
+
+    def op(self, **k):
+        o = {"type": "remplacer", "id": "1.0", "ancien": "", "nouveau": "", "position": "dessous", "motif": ""}
+        o.update(k)
+        return o
+
+    def test_texte_seul_et_operations_filtrees(self):
+        self.brancher(json.dumps({"operations": [
+            self.op(ancien="12/10", nouveau="14/11"),
+            self.op(id="2.3", ancien="12/10", nouveau="14/11"),
+            self.op(id="9.9", ancien="12/10", nouveau="14/11"),          # id inexistant
+            self.op(id="1.4", ancien="absent", nouveau="x"),             # ancien absent du bloc
+            self.op(type="masquer", id="1.4", ancien="", nouveau="n'importe"),
+            self.op(type="inserer", id="1.0", nouveau="  "),             # insertion vide
+            self.op(type="inserer", id="2.3", nouveau="Signature", position="droite"),
+            self.op(ancien="12/10", nouveau="14/11"),                    # doublon
+        ], "remarque": ""}))
+        r = pdf_ia.modifier("remplace la date du 12/10 par le 14/11 partout", self.BLOCS)
+        self.assertEqual(r["ecartees"], 3)
+        self.assertEqual([(o["type"], o["id"]) for o in r["operations"]],
+                         [("remplacer", "1.0"), ("remplacer", "2.3"), ("masquer", "1.4"), ("inserer", "2.3")])
+        masque = r["operations"][2]
+        self.assertEqual((masque["ancien"], masque["nouveau"]), ("Téléphone : 01 02 03 04 05", ""))
+        self.assertEqual(r["operations"][3]["position"], "droite")
+        kw = self.client.appels[0]
+        contenu = kw["messages"][0]["content"]
+        self.assertFalse(any(b.get("type") in ("document", "image") for b in contenu), "ni PDF ni image envoyés")
+        self.assertIn('"id": "1.4"', contenu[0]["text"])
+        self.assertIn("format", kw["extra_body"]["output_config"])
+        self.assertEqual(kw["model"], pdf_ia.PDF_IA_MODELE)
+
+    def test_limites(self):
+        self.brancher(json.dumps({"operations": [], "remarque": ""}))
+        with self.assertRaisesRegex(pdf_ia.PdfIaErreur, "Consigne vide"):
+            pdf_ia.modifier("  ", self.BLOCS)
+        with self.assertRaisesRegex(pdf_ia.PdfIaErreur, "Aucun texte"):
+            pdf_ia.modifier("corrige", [])
+        long = [{"id": str(i), "page": 1, "texte": "x" * 2000, "x": 0, "y": 0} for i in range(40)]
+        with self.assertRaisesRegex(pdf_ia.PdfIaErreur, "page courante ou une sélection"):
+            pdf_ia.modifier("corrige", long)
+        self.assertEqual(self.client.appels, [], "aucun appel quand la demande est refusée d'avance")
+
+    def test_suivi_fonction_pdf(self):
+        self.brancher(json.dumps({"operations": [], "remarque": "Aucune faute."}))
+        with ia_usage.suivi({"id": 7, "nom": "Test"}, "pdf", "MyTools") as s:
+            r = pdf_ia.modifier("corrige les fautes", self.BLOCS)
+        self.assertEqual(r, {"operations": [], "ecartees": 0, "remarque": "Aucune faute."})
+        self.assertEqual(s.nb_appels, 1)
+        self.assertEqual(s.nb_fichiers, 0)
+
+    def test_route(self):
+        from unittest.mock import patch
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.routers import tools_pdf_ia
+        app = FastAPI()
+        app.include_router(tools_pdf_ia.router)
+        self.brancher(json.dumps({"operations": [self.op(ancien="12/10", nouveau="14/11")], "remarque": ""}))
+        with patch.object(tools_pdf_ia, "get_current_user", return_value={"id": 43, "nom": "Test"}):
+            c = TestClient(app)
+            r = c.post("/api/tools/pdf/ia/modifier", data={"consigne": "date", "blocs": json.dumps(self.BLOCS)})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertEqual(r.json()["operations"][0]["nouveau"], "14/11")
+            self.assertEqual(c.post("/api/tools/pdf/ia/modifier", data={"consigne": "date", "blocs": "{"}).status_code, 400)
+            self.assertEqual(c.post("/api/tools/pdf/ia/modifier", data={"consigne": "x" * 2001, "blocs": "[]"}).status_code, 400)
+            self.assertEqual(c.post("/api/tools/pdf/ia/modifier", data={"consigne": "date", "blocs": "[]"}).status_code, 502)
+
+
+class Creer(Base):
+    REPONSE = {"titre": "Relance facture 123", "remarque": "Adresse du client absente.", "blocs": [
+        {"type": "adresse", "texte": "", "elements": ["Client X", "[adresse du client]"], "colonnes": [], "lignes": []},
+        {"type": "paragraphe", "texte": "Madame, Monsieur,", "elements": [], "colonnes": [], "lignes": []},
+        {"type": "paragraphe", "texte": "", "elements": [], "colonnes": [], "lignes": []},          # vide : retiré
+        {"type": "html", "texte": "<b>x</b>", "elements": [], "colonnes": [], "lignes": []},       # type inconnu
+        {"type": "tableau", "texte": "", "elements": [], "colonnes": ["Facture", "Montant"],
+         "lignes": [["123"], ["124", "50 €", "en trop"]]},
+        {"type": "tableau", "texte": "", "elements": [], "colonnes": [], "lignes": [["a"]]},       # sans colonnes
+        {"type": "liste", "texte": "", "elements": ["", "Point 1"], "colonnes": [], "lignes": []},
+        {"type": "separateur", "texte": "", "elements": [], "colonnes": [], "lignes": []},
+        {"type": "signature", "texte": "Fait le 22/10/2026", "elements": ["E. Leconte", "Direction"], "colonnes": [], "lignes": []},
+    ]}
+
+    def test_structure_nettoyee_et_texte_seul(self):
+        self.brancher(json.dumps(self.REPONSE))
+        r = pdf_ia.creer("courrier de relance au client X pour la facture 123, ton ferme mais poli", "a4", "ferme", "fr", "ACME")
+        self.assertEqual([b["type"] for b in r["blocs"]], ["adresse", "paragraphe", "tableau", "liste", "separateur", "signature"])
+        self.assertEqual(r["blocs"][2]["lignes"], [["123", ""], ["124", "50 €"]])
+        self.assertEqual(r["blocs"][3]["elements"], ["Point 1"])
+        self.assertEqual(r["remarque"], "Adresse du client absente.")
+        kw = self.client.appels[0]
+        contenu = kw["messages"][0]["content"]
+        self.assertFalse(any(b.get("type") in ("document", "image") for b in contenu))
+        self.assertIn("ferme mais poli", contenu[0]["text"])
+        self.assertIn("« ACME »", contenu[0]["text"])
+        self.assertIn("format", kw["extra_body"]["output_config"])
+        self.assertEqual(kw["model"], pdf_ia.PDF_IA_MODELE)
+
+    def test_affiner_renvoie_la_structure_precedente(self):
+        self.brancher(json.dumps(self.REPONSE))
+        precedent = {"titre": "Ancien", "blocs": [{"type": "paragraphe", "texte": "Texte d'avant"}], "remarque": ""}
+        pdf_ia.creer("courrier", "a5", "neutre", "fr", "", precedent, "ajoute un tableau des factures")
+        texte = self.client.appels[0]["messages"][0]["content"][0]["text"]
+        self.assertIn("Texte d'avant", texte)
+        self.assertIn("ajoute un tableau des factures", texte)
+        self.assertNotIn("en-tête de l'entreprise", texte)
+
+    def test_refus_et_document_vide(self):
+        self.brancher(json.dumps({"titre": "", "blocs": [], "remarque": ""}))
+        with self.assertRaisesRegex(pdf_ia.PdfIaErreur, "Consigne vide"):
+            pdf_ia.creer("  ")
+        with self.assertRaisesRegex(pdf_ia.PdfIaErreur, "inconnu"):
+            pdf_ia.creer("x", "a3")
+        with self.assertRaisesRegex(pdf_ia.PdfIaErreur, "Document vide"):
+            pdf_ia.creer("x")
+
+    def test_suivi_et_route(self):
+        from unittest.mock import patch
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.routers import tools_pdf_ia
+        app = FastAPI()
+        app.include_router(tools_pdf_ia.router)
+        self.brancher(json.dumps(self.REPONSE))
+        with ia_usage.suivi({"id": 7, "nom": "Test"}, "pdf", "MyTools") as s:
+            pdf_ia.creer("attestation", "a4")
+        self.assertEqual((s.nb_appels, s.nb_fichiers), (1, 0))
+        with patch.object(tools_pdf_ia, "get_current_user", return_value={"id": 44, "nom": "Test"}):
+            c = TestClient(app)
+            r = c.post("/api/tools/pdf/ia/creer", data={"consigne": "fiche sécurité", "entete": "1"})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertEqual(r.json()["titre"], "Relance facture 123")
+            import config
+            self.assertIn(f"« {config.APP_ORG_NAME} »", self.client.appels[-1]["messages"][0]["content"][0]["text"])
+            self.assertEqual(c.post("/api/tools/pdf/ia/creer", data={"consigne": "x", "precedent": "{"}).status_code, 400)
+            self.assertEqual(c.post("/api/tools/pdf/ia/creer", data={"consigne": "x" * 4001}).status_code, 400)
+            ent = c.get("/api/tools/pdf/ia/entete").json()
+            self.assertEqual(ent["nom"], config.APP_ORG_NAME)
+            self.assertIsInstance(ent["adresse"], list)
+            if ent["logo"]:
+                self.assertTrue(ent["logo"].startswith("/static/"))
+
+
 class Actions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
