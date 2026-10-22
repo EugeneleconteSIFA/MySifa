@@ -129,7 +129,13 @@ tr:hover td{background:var(--accent-bg)}
 .preview-body .preview-unknown{color:var(--muted);font-size:13px;text-align:center;padding:30px}
 @media(max-width:640px){.preview-back{padding:0}.preview-modal{border-radius:0;max-width:none;border:none}.preview-header{padding:10px 12px}.preview-title{font-size:12px}.preview-body{padding:8px}}
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:0;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.35)}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:0;max-width:520px;width:100%;max-height:90vh;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;box-shadow:0 24px 64px rgba(0,0,0,.35)}
+/* Sur téléphone, un champ à 100 % plus son padding débordait et laissait
+   « étirer » la fenêtre de côté : tout est compté bordure comprise, et la
+   page derrière ne défile plus tant qu'une fenêtre est ouverte. */
+.modal *,.modal *::before,.modal *::after{box-sizing:border-box}
+.modal-back{overscroll-behavior:contain;touch-action:pan-y}
+html:has(.modal-back),html:has(.modal-back) body{overflow:hidden}
 .modal h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
 .modal-head{display:flex;align-items:center;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--border)}
 .modal-head-ico{width:34px;height:34px;flex-shrink:0;border-radius:9px;background:var(--bg);border:1px solid var(--border);color:var(--text2);display:flex;align-items:center;justify-content:center}
@@ -186,7 +192,15 @@ tr.ndf-row{cursor:pointer}
 .toast.ok{border-left-color:var(--ok)}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
-@media(max-width:640px){.container{max-width:100%}.row2,.row3{grid-template-columns:1fr}table{font-size:12px}th,td{padding:8px}.doc-list{grid-template-columns:1fr}}
+@media(max-width:640px){.container{max-width:100%}.row2,.row3{grid-template-columns:1fr}table{font-size:12px}th,td{padding:8px}.doc-list{grid-template-columns:1fr}
+  .modal-back{padding:10px}
+  .modal-head,.modal-body,.modal-actions{padding-left:16px;padding-right:16px}
+  /* Boutons du bas : l'action principale sur toute la largeur, les deux
+     autres côte à côte en dessous. */
+  .modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .modal-actions .sep{display:none}
+  .modal-actions .btn{justify-content:center;width:100%;white-space:nowrap;padding:11px 8px}
+  .modal-actions .btn:not(.ghost){grid-column:1/-1;order:-1}}
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
@@ -279,7 +293,7 @@ tr.ndf-row{cursor:pointer}
 
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_confirm.js?v=2"></script>
-<script src="/static/mysifa_ndf_fiche.js?v=1"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=2"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='coffre';</script>

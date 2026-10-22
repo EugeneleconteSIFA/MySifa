@@ -271,7 +271,7 @@ tr.ndf-row{cursor:pointer}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_ndf_reglages.js?v=4"></script>
 <script src="/static/mysifa_confirm.js?v=2"></script>
-<script src="/static/mysifa_ndf_fiche.js?v=1"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=2"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/rh_coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
