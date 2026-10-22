@@ -37,7 +37,10 @@ const _PLAN_MODALES={
   reglages_semaine:{ok:_PLAN_JOUR,ouvrir:v=>openWeekSettingsModal(getMon(_planJourDe(v)).getTime()), fermer:()=>closeM(true)},
   horaires:{ok:_PLAN_JOUR,ouvrir:v=>openHorairesModal(v,_planJourDe(v).getDay()), fermer:()=>closeM(true)},
   commentaire_jour:{ok:_PLAN_JOUR,ouvrir:v=>openDayCommentModal(v,_planJourDe(v).getDay()), fermer:()=>closeM(true)},
-  commentaire_semaine:{ok:_PLAN_JOUR,ouvrir:v=>{const m=getMon(_planJourDe(v));openWeekCommentModal(semaineKey(m),m.getTime());}, fermer:()=>closeM(true)}
+  commentaire_semaine:{ok:_PLAN_JOUR,ouvrir:v=>{const m=getMon(_planJourDe(v));openWeekCommentModal(semaineKey(m),m.getTime());}, fermer:()=>closeM(true)},
+  // Historique des modifications (static/planning_historique.js) ; ses filtres
+  // sont dans les clés hist_*, relues à l'ouverture.
+  historique:{ok:/^(machine|toutes)$/,ouvrir:v=>openHistoriqueModal(v), fermer:()=>closeM(true)}
 };
 // Déclare la fenêtre qui vient de s'ouvrir (appelé en tête de chaque open…).
 function planningModaleOuverte(cle,id){ S.urlModale={cle,id:String(id)}; planningSyncUrl(); }
@@ -50,6 +53,7 @@ function planningParams(){
   let nav="m"+MID+"/"+(S.planningVue||"prod");
   const mo=S.urlModale;
   if(mo&&mo.cle&&mo.id!=null){ p[mo.cle]=mo.id; nav+="/"+mo.cle; }
+  if(mo&&mo.cle==="historique"&&typeof planningHistoriqueParams==="function") Object.assign(p,planningHistoriqueParams());
   return {params:p,nav};
 }
 function planningSyncUrl(){
