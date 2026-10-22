@@ -213,7 +213,7 @@
   var EXTENSIONS = ['mysifa_tools_pdf_texte.js', 'mysifa_tools_pdf_formulaires.js', 'mysifa_tools_pdf_creation.js', 'mysifa_tools_pdf_flou.js',
     'mysifa_tools_pdf_pages.js', 'mysifa_tools_pdf_revision.js', 'mysifa_tools_pdf_securite.js', 'mysifa_tools_pdf_ocr.js', 'mysifa_tools_pdf_ia.js',
     'mysifa_tools_pdf_navigation.js', 'mysifa_tools_pdf_mesure.js', 'mysifa_tools_pdf_prepresse.js', 'mysifa_tools_pdf_formavance.js',
-    'mysifa_tools_pdf_contenu.js', 'mysifa_tools_pdf_lot.js', 'mysifa_tools_pdf_partage.js'];
+    'mysifa_tools_pdf_contenu.js', 'mysifa_tools_pdf_lot.js', 'mysifa_tools_pdf_partage.js', 'mysifa_tools_pdf_iacreer.js'];
   // menus : groupes de la barre (Pages, Réviser, Protéger, IA) ; panneaux :
   // fenêtres qui ont une adresse (clé « panneau » de l'URL).
   var EXT = { types: {}, outils: {}, actions: {}, hooks: {}, boutons: [], modeAnnot: null, docPourExport: null,
@@ -340,7 +340,8 @@
     try { if (S && S.ctx && typeof S.ctx.surChange === 'function') S.ctx.surChange(etatAdresse()); } catch (e) { /* page sans suivi d'adresse */ }
   }
   function etatAdresse() {
-    if (!S || !S.pages.length) return {};
+    // Sans document : seul un panneau qui s'en passe (EXT.panneaux[cle].sansDoc) a une adresse.
+    if (!S || !S.pages.length) return S && S.modaleCle && EXT.panneaux[S.modaleCle] && EXT.panneaux[S.modaleCle].sansDoc ? { panneau: S.modaleCle } : {};
     var e = { page: String(S.cur + 1) };
     if (S.modaleCle) e.panneau = S.modaleCle;
     return e;
@@ -657,6 +658,7 @@
       x.disabled = !!it.doc && !S.pages.length;
       x.innerHTML = ico(it.icone || 'reglages', 16);
       var l = document.createElement('span'); l.textContent = it.libelle; x.appendChild(l);
+      if (it.badge) { var bg = document.createElement('span'); bg.className = 'ia-badge tpdf-menu-badge'; bg.textContent = it.badge; x.appendChild(bg); }
       d.appendChild(x);
     });
     S.el.appendChild(d);
@@ -2178,7 +2180,10 @@
     a = a || {};
     var n = parseInt(a.page, 10), pan = a.panneau && EXT.panneaux[a.panneau] ? a.panneau : null;
     if (!S || !S.pages.length) {
-      if (S) { if (n >= 1) S.pageDemandee = n; S.panneauDemande = pan; }
+      if (!S) return;
+      if (pan && EXT.panneaux[pan].sansDoc) { if (S.modaleCle !== pan) EXT.panneaux[pan](); return; }
+      if (!pan && S.modaleCle && a.panneau !== undefined && EXT.panneaux[S.modaleCle] && EXT.panneaux[S.modaleCle].sansDoc) { fermerModale(true); return; }
+      if (n >= 1) S.pageDemandee = n; S.panneauDemande = pan;
       return;
     }
     if (n >= 1 && n <= S.pages.length) allerPage(n - 1, false);

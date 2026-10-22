@@ -81,6 +81,9 @@ APP_NAME_SUFFIX = APP_NAME[APP_SPLIT:]
 # Nom de l'organisation propriétaire de l'instance (utilisé dans le footer,
 # les emails, la meta description).
 APP_ORG_NAME = os.getenv("APP_ORG_NAME", "SIFA")
+# Adresse postale de l'organisation (en-tête des documents créés dans l'Éditeur
+# PDF), une ligne par « \n » dans le .env. Vide : l'en-tête ne montre que le nom et le logo.
+APP_ORG_ADRESSE = os.getenv("APP_ORG_ADRESSE", "").replace("\\n", "\n")
 
 # Sous-titre du login et du portail.
 APP_TAGLINE = os.getenv(
