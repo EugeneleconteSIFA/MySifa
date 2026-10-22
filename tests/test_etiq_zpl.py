@@ -364,7 +364,16 @@ class FauxServeur:
                 self.recu.append(brut)
 
     def fermer(self):
+        # Sous Linux, close() ne réveille pas le fil bloqué dans accept() : le
+        # socket reste en écoute et le test suivant, qui reprend PORT_FAUX,
+        # tombait sur « Address already in use » (CI GitHub rouge du 22/10/2026,
+        # vert sous macOS). shutdown() débloque accept(), puis on attend le fil.
+        try:
+            self.s.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
         self.s.close()
+        self.t.join(timeout=3)
 
 
 def test_envoi_reseau():
