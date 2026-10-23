@@ -66,11 +66,17 @@
       '.nf-dl dd{margin:0;white-space:pre-wrap;word-break:break-word}',
       '.nf-total{font-weight:700;font-variant-numeric:tabular-nums}',
       '.nf-vide{font-size:12px;color:var(--muted);margin:0 0 16px}',
-      '.nf-vent{width:100%;border-collapse:collapse;font-size:13px;margin:0 0 16px;font-variant-numeric:tabular-nums}',
-      '.nf-vent th{text-align:right;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:0 0 6px;border-bottom:1px solid var(--border)}',
-      '.nf-vent td{text-align:right;padding:6px 0;border-bottom:1px solid var(--border)}',
+      // Encadré, avec un retrait dans chaque cellule. Les règles th/td/tr:hover
+      // propres à chaque page (Coffre RH : en-têtes collants, fond au survol)
+      // sont neutralisées ici pour que la fiche ait le même rendu partout.
+      '.nf-vent-cadre{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:0 0 16px}',
+      '.nf-vent{width:100%;border-collapse:collapse;font-size:13px;margin:0;font-variant-numeric:tabular-nums}',
+      '.nf-vent th{position:static;text-align:right;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:9px 14px;background:var(--bg);border-bottom:1px solid var(--border)}',
+      '.nf-vent td{text-align:right;padding:9px 14px;border-bottom:1px solid var(--border);color:var(--text);background:none}',
+      '.nf-vent tbody tr:hover td{background:none}',
       '.nf-vent th:first-child,.nf-vent td:first-child{text-align:left}',
-      '.nf-vent tfoot td{font-weight:700;border-bottom:none}',
+      '.nf-vent tfoot td{font-weight:700;border-bottom:none;background:var(--bg)}',
+      '@media(max-width:640px){.nf-vent th,.nf-vent td{padding:8px 10px}}',
       '.nf-resume{padding:4px 0 18px;margin-bottom:16px;border-bottom:1px solid var(--border)}',
       '.nf-montant{font-size:28px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.1}',
       '.nf-montant span{font-size:12px;font-weight:600;color:var(--muted);margin-left:6px;letter-spacing:0}',
@@ -172,14 +178,14 @@
     }
     // Ticket à plusieurs taux : le détail ligne par ligne, comme sur le ticket.
     var ventilation = (n.tva_lignes || []).length > 1
-      ? '<div class="nf-section"><div class="nf-titre">Ventilation de la TVA</div><table class="nf-vent">' +
+      ? '<div class="nf-section"><div class="nf-titre">Ventilation de la TVA</div><div class="nf-vent-cadre"><table class="nf-vent">' +
           '<thead><tr><th>Taux</th><th>HT</th><th>TVA</th><th>TTC</th></tr></thead><tbody>' +
           n.tva_lignes.map(function (l) {
             return '<tr><td>' + esc(taux(l.taux_tva)) + '</td><td>' + montant(l.montant_ht) + '</td><td>' +
               montant(l.montant_tva) + '</td><td>' + montant(l.montant_ttc) + '</td></tr>';
           }).join('') +
           '</tbody><tfoot><tr><td>Total</td><td>' + montant(n.montant_ht) + '</td><td>' + montant(n.montant_tva) +
-          '</td><td>' + montant(n.montant_ttc) + '</td></tr></tfoot></table></div>'
+          '</td><td>' + montant(n.montant_ttc) + '</td></tr></tfoot></table></div></div>'
       : '';
     var just = '/api/coffre/notes-frais/' + encodeURIComponent(n.id) + '/justificatif';
     var image = /\.(png|jpe?g|gif|webp|heic)$/i.test(n.justificatif_nom || '');
