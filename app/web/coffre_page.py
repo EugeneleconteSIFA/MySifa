@@ -182,7 +182,23 @@ tr.ndf-row{cursor:pointer}
 .justif-nom strong{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .justif-nom span{font-size:11px;color:var(--muted)}
 .scan-etat{margin-top:8px;font-size:12px;line-height:1.45;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2)}
-.scan-etat.encours{color:var(--accent)}
+.scan-etat.encours{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;overflow:hidden;color:var(--text);border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:var(--accent-bg)}
+.scan-etat.encours[hidden]{display:none}
+.scan-rond{width:16px;height:16px;flex-shrink:0;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 25%,transparent);border-top-color:var(--accent);animation:scanTour .8s linear infinite}
+.scan-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.scan-txt strong{font-weight:600;font-size:13px}
+.scan-txt span{font-size:11px;color:var(--muted)}
+.scan-barre{position:absolute;left:0;right:0;bottom:0;height:2px;overflow:hidden}
+.scan-barre::after{content:'';position:absolute;top:0;bottom:0;width:35%;background:var(--accent);animation:scanBarre 1.3s ease-in-out infinite}
+.justif-vign{position:relative;flex-shrink:0;border-radius:6px;overflow:hidden;line-height:0}
+.justif-apercu.lecture .justif-vign::after{content:'';position:absolute;left:0;right:0;height:3px;top:0;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:scanLigne 1.4s ease-in-out infinite alternate}
+.justif-apercu.lecture{border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+@keyframes scanTour{to{transform:rotate(360deg)}}
+@keyframes scanBarre{from{left:-35%}to{left:100%}}
+@keyframes scanLigne{from{top:0}to{top:calc(100% - 3px)}}
+html.perf-eco .scan-rond,html.reduce-anim .scan-rond{animation-duration:2s}
+html.perf-eco .scan-barre,html.reduce-anim .scan-barre,html.perf-eco .justif-apercu.lecture .justif-vign::after,html.reduce-anim .justif-apercu.lecture .justif-vign::after{display:none}
+@media (prefers-reduced-motion:reduce){.scan-rond{animation-duration:2s}.scan-barre,.justif-apercu.lecture .justif-vign::after{display:none}}
 .scan-etat.ok{border-color:color-mix(in srgb,var(--success) 40%,var(--border));color:var(--text)}
 .scan-etat.err{border-color:color-mix(in srgb,var(--danger) 40%,var(--border));color:var(--danger)}
 .field label .lu{display:inline-block;margin-left:6px;padding:0 6px;border-radius:5px;background:var(--accent-bg);text-transform:none;letter-spacing:0;font-weight:600;font-size:10px;line-height:16px;color:var(--accent)}
@@ -582,7 +598,7 @@ function openNdfModal(noteId){
             <input type="file" id="ndf-file" accept="application/pdf,image/*" hidden>
             <input type="file" id="ndf-photo" accept="image/*" capture="environment" hidden>
             <div class="justif-apercu" id="justif-apercu" hidden></div>
-            <div class="scan-etat" id="scan-etat" hidden></div>
+            <div class="scan-etat" id="scan-etat" role="status" aria-live="polite" hidden></div>
             <div class="calc-hint" id="scan-manuel">Pas de justificatif ? Remplissez directement les champs ci-dessous.</div>
           </div>
         </div>
@@ -758,8 +774,15 @@ function openNdfModal(noteId){
     if(oui&&!m){m=document.createElement('span');m.className='lu';m.textContent='lu';m.title='Lu sur le justificatif : vérifiez';lbl.appendChild(m);}
     if(!oui&&m)m.remove();
   }
-  function etat(texte,type){
-    scanEtat.hidden=!texte;scanEtat.className='scan-etat'+(type?' '+type:'');scanEtat.textContent=texte||'';
+  // Pendant la lecture : rond qui tourne, barre qui défile et ligne de scan sur
+  // la vignette, pour qu'on voie que l'IA travaille (quelques secondes).
+  function etat(texte,type,detail){
+    scanEtat.hidden=!texte;scanEtat.className='scan-etat'+(type?' '+type:'');
+    $('#justif-apercu').classList.toggle('lecture',type==='encours');
+    if(type!=='encours'){scanEtat.textContent=texte||'';return;}
+    scanEtat.innerHTML='<span class="scan-rond" aria-hidden="true"></span><span class="scan-txt"><strong></strong><span></span></span><span class="scan-barre" aria-hidden="true"></span>';
+    scanEtat.querySelector('strong').textContent=texte;
+    scanEtat.querySelector('.scan-txt span').textContent=detail||'';
   }
   function poser(nom,valeur){
     const el=form.elements[nom];
@@ -769,7 +792,8 @@ function openNdfModal(noteId){
   async function lire(fichier){
     const cat=catCourante();
     if(cat&&cat.saisie==='km')return;
-    etat('Lecture du justificatif…','encours');
+    etat('Lecture du ticket par l\'IA…','encours','Quelques secondes — les champs se rempliront tout seuls.');
+    if(tactile)scanEtat.scrollIntoView({block:'nearest',behavior:'smooth'});
     boutons.forEach(b=>b.disabled=true);
     try{
       const fd=new FormData();fd.append('justificatif',fichier);
@@ -809,7 +833,7 @@ function openNdfModal(noteId){
     if(f){
       urlLocale=URL.createObjectURL(f);
       const image=(f.type||'').startsWith('image/');
-      zone.innerHTML=(image?`<img alt="" src="${esc(urlLocale)}">`:'<div class="justif-doc">PDF</div>')+
+      zone.innerHTML='<div class="justif-vign">'+(image?`<img alt="" src="${esc(urlLocale)}">`:'<div class="justif-doc">PDF</div>')+'</div>'+
         `<div class="justif-nom"><strong></strong><span>Nouveau justificatif</span></div>`+
         `<button type="button" class="btn ghost small" id="justif-voir">Voir</button>`;
       zone.querySelector('strong').textContent=f.name;
@@ -818,7 +842,7 @@ function openNdfModal(noteId){
     }else if(edite&&edite.justificatif_nom){
       const url='/api/coffre/notes-frais/'+edite.id+'/justificatif';
       const image=PREVIEW_IMG_RE.test(edite.justificatif_nom);
-      zone.innerHTML=(image?`<img alt="" src="${esc(url)}?inline=1">`:'<div class="justif-doc">PDF</div>')+
+      zone.innerHTML='<div class="justif-vign">'+(image?`<img alt="" src="${esc(url)}?inline=1">`:'<div class="justif-doc">PDF</div>')+'</div>'+
         `<div class="justif-nom"><strong></strong><span>Justificatif joint</span></div>`+
         `<button type="button" class="btn ghost small" data-preview-url="${esc(url)}" data-preview-name="${esc(edite.justificatif_nom)}">Voir</button>`;
       zone.querySelector('strong').textContent=edite.justificatif_nom;
