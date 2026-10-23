@@ -85,6 +85,14 @@
       { id: 'gif', lib: 'GIF animé', ou: 'serveur', opt: ['glargeur'] }, { id: 'mp3', lib: 'Son seul · MP3', ou: 'serveur' },
       { id: 'm4a', lib: 'Son seul · M4A', ou: 'serveur' }, { id: 'wav', lib: 'Son seul · WAV', ou: 'serveur' }],
   };
+  // Famille du fichier PRODUIT par une cible : les tuiles de droite deviennent,
+  // une fois un fichier déposé, « Convertir en » (Image, Image vectorielle, PDF…).
+  const DEST = { svg: 'svg', 'svg-nb': 'svg', pdf: 'pdf', fusion: 'pdf', compresser: 'pdf',
+    docx: 'document', odt: 'document', rtf: 'document', txt: 'document', html: 'document',
+    pptx: 'presentation', odp: 'presentation', xlsx: 'tableur', ods: 'tableur', csv: 'tableur', json: 'tableur',
+    mp3: 'audio', wav: 'audio', ogg: 'audio', flac: 'audio', m4a: 'audio', opus: 'audio', aiff: 'audio',
+    mp4: 'video', webm: 'video', mov: 'video', mkv: 'video' };
+  const destDe = c => DEST[c.id] || 'image';
   const OPTIONS = {
     largeur: { lib: 'Taille', cle: 'largeur', choix: [['0', 'Originale'], ['2048', '2048 px'], ['1080', '1080 px'], ['512', '512 px']] },
     qualite: { lib: 'Qualité', cle: 'qualite', choix: [['0.95', 'Haute'], ['0.88', 'Bonne'], ['0.72', 'Légère']], defaut: '0.88' },
@@ -389,7 +397,7 @@
     h.className = 'tconv';
     h.innerHTML =
       '<header class="tconv-tete"><span class="tconv-tete-ic">' + svg('convertir', 26) + '</span><div><h2>Convertir un fichier</h2>'
-      + '<p>Plus de 50 formats. Ce qui peut se faire sur ce poste s\'y fait ; le reste passe par le serveur MySifa, qui efface tout aussitôt.</p></div></header>'
+      + '<p>Plus de 50 formats : déposer un fichier, choisir ce qu\'il doit devenir, convertir.</p></div></header>'
       + '<ol class="tconv-etapes" data-etapes>'
       + '<li data-n="1"><b>1</b><span>Déposer</span></li><li data-n="2"><b>2</b><span>Choisir le format</span></li><li data-n="3"><b>3</b><span>Convertir</span></li></ol>'
       // Deux colonnes sur un écran large : le travail à gauche, le résultat et
@@ -412,10 +420,21 @@
     depot.addEventListener('dragleave', () => depot.classList.remove('tconv-survol'));
     depot.addEventListener('drop', e => { e.preventDefault(); depot.classList.remove('tconv-survol'); ajouter([...(e.dataTransfer.files || [])]); });
     h.addEventListener('click', async e => {
-      const b = e.target.closest('[data-a],[data-cible],[data-opt],[data-retirer],[data-dl]');
+      const b = e.target.closest('[data-a],[data-cible],[data-opt],[data-retirer],[data-dl],[data-dest],[data-source]');
       if (!b || b.disabled) return;
       const d = b.dataset;
       if (d.a === 'choisir') inp.click();
+      else if (d.source) {
+        // Sans fichier : la tuile ouvre le choix de fichier, filtré sur sa famille.
+        inp.accept = FAMILLES[d.source].ext.map(x => '.' + x).join(',');
+        inp.click();
+        setTimeout(() => { inp.accept = ''; }, 0);
+      } else if (d.dest) {
+        // Avec un fichier : la tuile choisit la famille de sortie (premier format
+        // disponible, ou celui déjà choisi s'il en fait partie).
+        const liste = CIBLES[C.fam].filter(c => (!c.min || C.fichiers.length >= c.min) && destDe(c) === d.dest && dispoServeur(c));
+        if (liste.length && !(C.cible && destDe(C.cible) === d.dest)) { C.cible = liste[0]; C.resultats = []; rendre(); }
+      }
       else if (d.retirer != null) { C.fichiers.splice(Number(d.retirer), 1); if (!C.fichiers.length) { C.fam = null; C.cible = null; } C.resultats = []; rendre(); }
       else if (d.a === 'vider') { C.fichiers = []; C.fam = null; C.cible = null; C.resultats = []; rendre(); }
       else if (d.cible) { C.cible = CIBLES[C.fam].find(c => c.id === d.cible); C.resultats = []; rendre(); }
@@ -442,9 +461,9 @@
       z('cibles').innerHTML = '<div class="tconv-titre">' + esc(FAMILLES[C.fam].lib) + ' → convertir en</div><div class="tconv-pastilles">'
         + CIBLES[C.fam].filter(c => !c.min || C.fichiers.length >= c.min).map(c => {
           const ok = dispoServeur(c), o = outilRequis(C.fam, c.id);
-          const bulle = !ok ? 'Absent du serveur : ' + ((C.serveur.paquets || {})[o] || o) : (c.ou === 'serveur' ? 'Traité sur le serveur' : 'Sur ce poste');
+          const bulle = !ok ? 'Indisponible pour le moment' : c.lib;
           return '<span data-bulle="' + esc(bulle) + '"><button type="button" class="tconv-pastille' + (C.cible && C.cible.id === c.id ? ' actif' : '') + '" data-cible="' + c.id + '"'
-            + (ok ? '' : ' disabled') + '>' + esc(c.lib) + (c.ou === 'serveur' ? ' <span class="tconv-srv">serveur</span>' : '') + '</button></span>';
+            + (ok ? '' : ' disabled') + '>' + esc(c.lib) + '</button></span>';
         }).join('') + '</div>';
       const c = C.cible;
       z('options').innerHTML = !c || !c.opt ? '' : c.opt.map(k => {
@@ -454,7 +473,7 @@
           '<button type="button" class="tconv-pastille' + (String(v) === val ? ' actif' : '') + '" data-opt="' + o.cle + '" data-val="' + val + '">' + esc(lib) + '</button>').join('') + '</div></div>';
       }).join('');
       z('action').innerHTML = !c ? '' : '<div class="tconv-action"><p class="tconv-ou">'
-        + (c.ou === 'serveur' ? 'Traité sur le serveur MySifa, puis effacé aussitôt.' : c.ou === 'nav' ? 'Converti sur ce poste : le fichier ne part nulle part.' : 'Converti sur ce poste (le serveur prend le relais si le navigateur ne lit pas ce format).')
+        + (c.ou === 'serveur' ? 'Le fichier passe par le serveur MySifa, qui l\'efface aussitôt.' : '')
         + '</p><button type="button" class="tconv-go" data-a="go"' + (C.enCours ? ' disabled' : '') + '>' + (C.enCours ? 'Conversion…' : 'Convertir') + '</button>'
         + '<div class="tconv-prog" data-prog hidden><span></span></div><p class="tconv-etape" data-etape></p></div>';
       z('resultats').innerHTML = !C.resultats.length ? '' : '<div class="tconv-titre">Prêt · ' + C.resultats.length + ' fichier' + (C.resultats.length > 1 ? 's' : '') + '</div>' + C.resultats.map((x, i) =>
@@ -468,20 +487,29 @@
       const n = Number(li.getAttribute('data-n'));
       li.classList.toggle('fait', n < etape); li.classList.toggle('actif', n === etape);
     });
-    // Familles de formats, toujours visibles à droite ; celle du fichier
-    // déposé est mise en avant.
+    // Tuiles de droite. Sans fichier : ce que l'outil accepte (clic = choisir
+    // un fichier de cette famille). Avec un fichier : ce qu'il peut devenir
+    // (clic = choisir ce format de sortie).
     const fam = h.querySelector('[data-zone="familles"]');
-    const tuile = (k, fa) => {
-      const cibles = CIBLES[k], local = cibles.filter(c => c.ou !== 'serveur').length;
-      const lieu = local === cibles.length ? 'Sur ce poste' : local ? 'Poste et serveur' : 'Sur le serveur';
-      return '<div class="tconv-famille' + (C.fam === k ? ' actif' : '') + '"><span class="tconv-famille-ic">' + svg(k) + '</span>'
-        + '<div class="tconv-famille-txt"><b>' + esc(fa.lib) + '</b>'
-        + '<small>' + esc(fa.ext.slice(0, 6).join(', ').toUpperCase()) + (fa.ext.length > 6 ? '…' : '') + '</small>'
-        + '<span class="tconv-famille-vers">→ ' + esc(cibles.slice(0, 4).map(c => c.lib.replace(/ \(.*\)$/, '').replace(/^Images? /, '')).join(', ')) + (cibles.length > 4 ? '…' : '') + '</span></div>'
-        + '<span class="tconv-lieu' + (local === cibles.length ? ' local' : '') + '">' + lieu + '</span></div>';
-    };
-    fam.innerHTML = '<div class="tconv-titre">Ce que l\'outil sait convertir</div><div class="tconv-grille">'
-      + Object.entries(FAMILLES).map(([k, fa]) => tuile(k, fa)).join('') + '</div>';
+    const raccourci = l => l.replace(/ \(.*\)$/, '').replace(/^Images? /, '');
+    if (vide) {
+      fam.innerHTML = '<div class="tconv-titre">Ce que l\'outil sait convertir</div><div class="tconv-grille">'
+        + Object.entries(FAMILLES).map(([k, fa]) => '<button type="button" class="tconv-famille" data-source="' + k + '" data-bulle="Choisir">'
+          + '<span class="tconv-famille-ic">' + svg(k) + '</span><span class="tconv-famille-txt"><b>' + esc(fa.lib) + '</b>'
+          + '<small>' + esc(fa.ext.slice(0, 6).join(', ').toUpperCase()) + (fa.ext.length > 6 ? '…' : '') + '</small>'
+          + '<span class="tconv-famille-vers">→ ' + esc(CIBLES[k].slice(0, 4).map(c => raccourci(c.lib)).join(', ')) + (CIBLES[k].length > 4 ? '…' : '') + '</span></span></button>').join('')
+        + '</div>';
+    } else {
+      const groupes = {};
+      CIBLES[C.fam].filter(c => !c.min || C.fichiers.length >= c.min).forEach(c => { (groupes[destDe(c)] = groupes[destDe(c)] || []).push(c); });
+      fam.innerHTML = '<div class="tconv-titre">' + esc(FAMILLES[C.fam].lib) + ' → convertir en</div><div class="tconv-grille">'
+        + Object.keys(groupes).map(k => {
+          const l = groupes[k], ok = l.some(dispoServeur), actif = C.cible && destDe(C.cible) === k;
+          return '<button type="button" class="tconv-famille' + (actif ? ' actif' : '') + '" data-dest="' + k + '"' + (ok ? '' : ' disabled') + ' data-bulle="' + esc(FAMILLES[k].lib) + '">'
+            + '<span class="tconv-famille-ic">' + svg(k) + '</span><span class="tconv-famille-txt"><b>' + esc(FAMILLES[k].lib) + '</b>'
+            + '<span class="tconv-famille-vers">' + esc(l.map(c => raccourci(c.lib)).join(', ')) + '</span></span></button>';
+        }).join('') + '</div>';
+    }
   }
 
   function etape(texte, p) {

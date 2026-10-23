@@ -16,8 +16,9 @@
  *   Øbobine (mm) = 2 × √((Ømandrin/2)² + métrage × épaisseur ÷ π)
  *   fronts       = ⌊(laize − 2 × rive) ÷ (étiquette + espace)⌋     (of-fiches-techniques)
  *   métrage      = quantité ÷ fronts × (hauteur + espace) ÷ 1000
- *   carton       bobines rangées en grille, debout (axe vertical) ou couchées
- *                (axe le long d'un côté) ; dimensions du carton diminuées du jeu.
+ *   carton       bobines rangées en grille, toujours debout (base au sol, axe
+ *                vertical — règle d'atelier, 23/10/2026) ; dimensions du carton
+ *                diminuées du jeu.
  *
  * Épaisseur : une épaisseur type (GET /api/stock/metrage-epaisseurs), ou la
  * somme des couches choisies parmi les matières MyStock — frontal + adhésif +
@@ -258,9 +259,8 @@
         + '<div class="tcal-liens" id="tcal-l-carton"></div>'
         + '<div id="tcal-cartons"></div>',
         fins('carton', '<div class="tcal-grille">' + champ('jeu', 'Jeu (mm)', { placeholder: '4' }, 'Retiré de chaque dimension du carton')
-          + '<label class="tcal-case" data-bulle="Axe vertical"><input type="checkbox" id="tcal-debout"> Bobines debout</label>'
-          + '<label class="tcal-case" data-bulle="Axe horizontal"><input type="checkbox" id="tcal-couche"> Bobines couchées</label></div>',
-          'Jeu et sens de rangement'));
+          + '<div class="tcal-aide">Bobines toujours debout, base au sol, empilées par couches.</div></div>',
+          'Jeu'));
 
     const m = lire(LS_MTR), c = lire(LS_CALC);
     $('tcal-ep').value = m.ep != null ? m.ep : '';
@@ -270,8 +270,6 @@
     C.sens = c.sens === 'diametre' ? 'diametre' : 'metrage';
     C.sens3 = c.sens3 === 'metres' ? 'metres' : 'qte';
     C.priorite = c.priorite === 'cartons' ? 'cartons' : 'vide';
-    $('tcal-debout').checked = c.debout !== false;
-    $('tcal-couche').checked = c.couche !== false;
     if (!C.ongletAdresse && ONGLETS.some(o => o[0] === c.onglet)) C.onglet = c.onglet;
     if (!C.adresseAttente) {
       C.typeMem = m.type || '';
@@ -446,7 +444,7 @@
 
   function maj() {
     if (!C.host) return;
-    const c = { sens: C.sens, sens3: C.sens3, priorite: C.priorite, onglet: C.onglet, debout: $('tcal-debout').checked, couche: $('tcal-couche').checked,
+    const c = { sens: C.sens, sens3: C.sens3, priorite: C.priorite, onglet: C.onglet,
       choix: C.choix, umCouche: C.umCouche };
     CHAMPS.forEach(k => { if (!['ep', 'dm', 'db'].includes(k)) c[k] = val('tcal-' + k); });
     ecrire(LS_CALC, c);
@@ -526,8 +524,7 @@
     if (diam != null && Math.round(diam) !== Math.round(n(val('tcal-cd')))) lc.push(lien('tcal-cd', String(Math.round(diam)), 'Ø : ' + fmt(diam) + ' mm'));
     if (f.nb && Math.abs(f.module - n(val('tcal-cl'))) > 0.05) lc.push(lien('tcal-cl', String(Math.round(f.module * 10) / 10), 'Largeur : ' + fmt(f.module, 1) + ' mm'));
     $('tcal-l-carton').innerHTML = lc.join('');
-    const sensTxt = [$('tcal-debout').checked ? 'debout' : '', $('tcal-couche').checked ? 'couchées' : ''].filter(Boolean).join(' et ');
-    resume('carton', 'Jeu ' + fmtL(val('tcal-jeu') === '' ? 4 : n0(val('tcal-jeu'))) + ' mm · ' + (sensTxt ? 'bobines ' + sensTxt : 'aucun sens coché'));
+    resume('carton', 'Jeu ' + fmtL(val('tcal-jeu') === '' ? 4 : n0(val('tcal-jeu'))) + ' mm · bobines debout');
     rendreCartons();
     signaler();
   }
@@ -538,9 +535,9 @@
     const S = SCH(), vide = () => S && dessiner('carton', S.carton({}));
     if (C.cartons === null) { z.innerHTML = '<div class="tcal-res tcal-res--vide"><div class="tcal-res-l">Chargement des références carton…</div></div>'; vide(); return; }
     const D = n(val('tcal-cd')), L = n(val('tcal-cl'));
-    const sens = { debout: $('tcal-debout').checked, couche: $('tcal-couche').checked };
+    // Toujours debout : une bobine se pose sur sa base, jamais sur sa tranche.
+    const sens = { debout: true, couche: false };
     if (!(D > 0) || !(L > 0)) { z.innerHTML = '<div class="tcal-res tcal-res--vide"><div class="tcal-res-v">—</div><div class="tcal-res-l">Diamètre et largeur de bobine à renseigner — ' + C.cartons.length + ' références carton</div></div>'; vide(); return; }
-    if (!sens.debout && !sens.couche) { z.innerHTML = '<div class="tcal-err">Cocher au moins un sens de rangement (Réglages fins).</div>'; vide(); return; }
     const jeu = val('tcal-jeu') === '' ? 4 : val('tcal-jeu');
     const Q = Math.floor(n(val('tcal-cq'))) || 0;
     C.host.querySelector('[data-si-quantite]').hidden = !Q;
