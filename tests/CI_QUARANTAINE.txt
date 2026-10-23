@@ -15,14 +15,3 @@
 # separe avec `playwright install` et l'app lancee.
 test_settings_rvgi.py         # Playwright — Locator.click timeout 30s
 test_stock_reception_rvgi.py  # Playwright — wait_for_selector timeout 15s
-
-# --- Tests en decalage avec le code (27/08/2026) --------------------------
-# Ceux-la echouent pour de vraies raisons, qui demandent un arbitrage produit.
-# Ils ne sont pas "casses par la CI" : la CI les a revele.
-#
-# test_pricing_api.py — 4 echecs apres correction du bug SQL de create_material :
-#   - PricingMaterial.__init__() n'accepte plus `tax_incidence` (renomme ?)
-#   - deux calculs de cout renvoient 0 au lieu du montant attendu
-#   - le role `fabrication` recoit 403 la ou le test attend 200 (permission
-#     volontairement resserree, ou regression ?)
-test_pricing_api.py
