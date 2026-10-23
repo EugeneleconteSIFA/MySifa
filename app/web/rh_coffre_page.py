@@ -106,12 +106,26 @@ tr:hover td{background:var(--accent-bg)}
 .b-distribue{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .b-consulte{background:rgba(52,211,153,.15);color:var(--ok)}
 tr.ndf-row{cursor:pointer}
+/* Totaux de la liste : bandeau au-dessus, total et sous-totaux dans le tableau. */
+.ndf-totaux{margin-bottom:10px}
+.ndf-totaux .stat-val{font-size:20px;font-variant-numeric:tabular-nums}
+.ndf-rappel{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin:0 0 14px}
+.ndf-rappel strong{color:var(--text);font-weight:600}
+.ndf-detail{font-size:10px;color:var(--muted);font-weight:400}
+tr.ndf-sous-total td,tr.ndf-sous-total:hover td{background:var(--bg);color:var(--text);font-size:12px;font-weight:600}
+tr.ndf-total td,tr.ndf-total:hover td{background:none;color:var(--text);font-weight:700;border-top:2px solid var(--border);border-bottom:none}
+#ndf-grouper[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+#ndf-mois:disabled{opacity:.5}
 /* Téléphone : filtres sur deux colonnes (libellé, liste), boutons côte à côte. */
 @media(max-width:640px){
   #ndf-bloc .toolbar{display:grid;grid-template-columns:auto 1fr 1fr;align-items:center;gap:8px}
   #ndf-bloc .toolbar select{grid-column:2/-1;width:100%}
   #ndf-bloc .toolbar .btn{justify-content:center}
   #ndf-bloc .toolbar .btn:first-of-type{grid-column:1/3}
+  #ndf-bloc .toolbar #ndf-grouper{grid-column:1/-1}
+  #ndf-bloc .ndf-totaux{grid-template-columns:1fr 1fr;gap:8px}
+  #ndf-bloc .ndf-totaux .stat{padding:10px 12px}
+  #ndf-bloc .ndf-totaux .stat-val{font-size:17px}
 }
 .statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent}
 .statut.brouillon{background:transparent;border:1px dashed var(--border);color:var(--muted)}
@@ -263,8 +277,11 @@ tr.ndf-row{cursor:pointer}
             </select>
             <label style="font-size:12px;color:var(--muted)">Année :</label>
             <select id="ndf-annee"><option value="">Toutes</option></select>
+            <label style="font-size:12px;color:var(--muted)">Mois :</label>
+            <select id="ndf-mois" disabled title="Choisissez d'abord une année"><option value="">Tous</option></select>
             <button type="button" class="btn ghost" onclick="exportNdf()">Export CSV</button>
             <button type="button" class="btn ghost" onclick="ouvrirReglagesRh()">Réglages</button>
+            <button type="button" class="btn ghost" id="ndf-grouper" aria-pressed="false" onclick="basculerGroupeNdf()">Grouper par salarié</button>
           </div>
           <div style="overflow-x:auto" id="ndf-container"></div>
         </div>
@@ -278,16 +295,16 @@ tr.ndf-row{cursor:pointer}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_ndf_reglages.js?v=4"></script>
 <script src="/static/mysifa_confirm.js?v=3"></script>
-<script src="/static/mysifa_ndf_fiche.js?v=6"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=7"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/rh_coffre_url.js?v=2"></script>
+<script src="/static/rh_coffre_url.js?v=3"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
 <script>
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 let ME=null;let CURRENT_TAB='';
 // Liste affichée et fenêtres ouvertes, lues par static/rh_coffre_url.js.
-let NDF_RH=[];let NDF_OUVERTE=null;let APERCU=null;
+let NDF_RH=[];let NDF_OUVERTE=null;let APERCU=null;let NDF_GROUPE=false;
 const now=new Date();const curYear=now.getFullYear();const curMonth=now.getMonth()+1;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -379,6 +396,14 @@ function showTab(tab, opts){
 {
   const sel=document.getElementById('ndf-annee');
   for(let y=curYear;y>=curYear-5;y--){sel.innerHTML+=`<option value="${y}">${y}</option>`;}
+  const sm=document.getElementById('ndf-mois');
+  for(let m=1;m<=12;m++){sm.innerHTML+=`<option value="${m}">${MOIS_LABELS[m]}</option>`;}
+}
+// Le mois n'a de sens qu'avec une année : sans année, il est vidé et grisé.
+function majFiltreMois(){
+  const a=document.getElementById('ndf-annee').value,m=document.getElementById('ndf-mois');
+  if(!a)m.value='';
+  m.disabled=!a;m.title=a?'':'Choisissez d\'abord une année';
 }
 
 const dropZone=document.getElementById('zip-drop');
@@ -503,8 +528,9 @@ async function openSingleUpload(){
 async function loadNdf(){
   const statut=document.getElementById('ndf-statut').value;
   const annee=document.getElementById('ndf-annee').value;
+  const mois=document.getElementById('ndf-mois').value;
   try{
-    const j=await api(`/api/rh-coffre/ndf?statut=${statut}&annee=${annee}`);
+    const j=await api(`/api/rh-coffre/ndf?statut=${statut}&annee=${annee}&mois=${mois}`);
     NDF_RH=j.notes||[];
     try{
       const all=await api('/api/rh-coffre/ndf?statut=soumise');
@@ -522,11 +548,13 @@ async function loadNdf(){
     }catch(e){}
     const c=document.getElementById('ndf-container');
     if(!j.notes.length){c.innerHTML='<p style="color:var(--muted);text-align:center;padding:30px 0">Aucune note de frais.</p>';return;}
-    // Téléphone : cartes par mois à la place du tableau (static/mysifa_ndf_fiche.js).
-    const cartes=MySifaNdfFiche.cartes(NDF_RH,{salarie:true,ouvrir:'ouvrirNoteRh'});
-    c.innerHTML=`<div class="ndf-tableau"><table>
-      <thead><tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th>Actions</th></tr></thead>
-      <tbody>${j.notes.map(n=>`
+    // Totaux : sur la liste filtrée. Avec « Tous », les refusées et les
+    // brouillons ne sont pas comptés (rien à rembourser) ; filtrés
+    // explicitement, ils le sont.
+    const compte=n=>!!statut||(n.statut!=='refusee'&&n.statut!=='brouillon');
+    const exclues=NDF_RH.filter(n=>!compte(n)).length;
+    const liste=NDF_GROUPE?NDF_RH.slice().sort((a,b)=>String(a.employe_nom||'').localeCompare(String(b.employe_nom||''),'fr')):NDF_RH;
+    const ligneNdf=n=>`
         <tr class="ndf-row" onclick="if(!event.target.closest('a,button'))ouvrirNoteRh(${n.id})" title="Consulter">
           <td><strong>${esc(n.employe_nom)}</strong><br><span style="font-size:11px;color:var(--muted)">${esc(n.matricule||'')}</span></td>
           <td>${esc(fmtDate(n.date_frais))}</td>
@@ -540,13 +568,67 @@ async function loadNdf(){
             ${n.statut==='soumise'?`<button class="btn ghost small" onclick="refuserNdf(${n.id})">Refuser</button>`:''}
             ${n.statut==='validee'?`<button class="btn ok small" onclick="marquerPayee(${n.id})">Marquer payée</button>`:''}
           </td>
-        </tr>
-      `).join('')}</tbody>
+        </tr>`;
+    let corps='';
+    if(NDF_GROUPE){
+      let i=0;
+      while(i<liste.length){
+        const nom=liste[i].employe_nom;let k=i;
+        while(k<liste.length&&liste[k].employe_nom===nom)k++;
+        const g=liste.slice(i,k);
+        corps+=g.map(ligneNdf).join('')+ligneTotalNdf('ndf-sous-total',(nom||'—')+' — ',g.filter(compte));
+        i=k;
+      }
+    }else corps=liste.map(ligneNdf).join('');
+    // Téléphone : cartes par mois (ou par salarié) à la place du tableau
+    // (static/mysifa_ndf_fiche.js).
+    const cartes=MySifaNdfFiche.cartes(liste,{salarie:true,ouvrir:'ouvrirNoteRh',grouper:NDF_GROUPE?'salarie':'',compter:compte});
+    c.innerHTML=bandeauTotauxNdf(NDF_RH.filter(compte),statut,exclues)+`<div class="ndf-tableau"><table>
+      <thead><tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th>Actions</th></tr></thead>
+      <tbody>${corps}</tbody>
+      <tfoot>${ligneTotalNdf('ndf-total','Total'+(exclues?' hors refusées et brouillons':'')+' — ',NDF_RH.filter(compte))}</tfoot>
     </table></div>${cartes}`;
   }catch(e){document.getElementById('ndf-container').innerHTML='<p style="color:var(--danger)">Erreur : '+esc(e.message)+'</p>';}
 }
 document.getElementById('ndf-statut').addEventListener('change',()=>{loadNdf();rhCoffreSyncUrl();});
-document.getElementById('ndf-annee').addEventListener('change',()=>{loadNdf();rhCoffreSyncUrl();});
+document.getElementById('ndf-annee').addEventListener('change',()=>{majFiltreMois();loadNdf();rhCoffreSyncUrl();});
+document.getElementById('ndf-mois').addEventListener('change',()=>{loadNdf();rhCoffreSyncUrl();});
+function basculerGroupeNdf(force){
+  NDF_GROUPE=force==null?!NDF_GROUPE:!!force;
+  document.getElementById('ndf-grouper').setAttribute('aria-pressed',String(NDF_GROUPE));
+  loadNdf();rhCoffreSyncUrl();
+}
+function sommeNdf(liste){
+  const t={n:liste.length,ttc:0,tva:0,ht:0};
+  liste.forEach(n=>{
+    const ttc=Number(n.montant_ttc)||0,tva=Number(n.montant_tva)||0;
+    t.ttc+=ttc;t.tva+=tva;t.ht+=n.montant_ht!=null?Number(n.montant_ht)||0:ttc-tva;
+  });
+  return t;
+}
+function compteNdf(k){return k+(k>1?' notes':' note');}
+function ligneTotalNdf(cls,libelle,liste){
+  const t=sommeNdf(liste);
+  return `<tr class="${cls}"><td colspan="4">${esc(libelle+compteNdf(t.n))}</td>
+    <td class="montant">${fmtMontant(t.ttc)}<div class="ndf-detail">TVA ${fmtMontant(t.tva)} · HT ${fmtMontant(t.ht)}</div></td><td colspan="2"></td></tr>`;
+}
+// Bandeau au-dessus de la liste. Statut « Tous » : rappel de ce qui reste à
+// valider et à payer.
+function bandeauTotauxNdf(liste,statut,exclues){
+  const t=sommeNdf(liste);
+  const tuile=(l,v)=>`<div class="stat"><div class="stat-lbl">${l}</div><div class="stat-val">${v}</div></div>`;
+  let rappel='';
+  if(!statut){
+    const p=[['soumise','À valider'],['validee','À payer']].map(([s,l])=>{
+      const g=sommeNdf(liste.filter(n=>n.statut===s));
+      return g.n?`<span>${l} : <strong>${compteNdf(g.n)} · ${fmtMontant(g.ttc)}</strong></span>`:'';
+    }).filter(Boolean);
+    if(exclues)p.push(`<span>${exclues} refusée(s) ou brouillon(s) non comptée(s)</span>`);
+    if(p.length)rappel=`<div class="ndf-rappel">${p.join('')}</div>`;
+  }
+  const tuiles=[['Notes',String(t.n)],['Total TTC',fmtMontant(t.ttc)],['TVA récupérable',fmtMontant(t.tva)],['Total HT',fmtMontant(t.ht)]].map(([l,v])=>tuile(l,v)).join('');
+  return `<div class="stats ndf-totaux">${tuiles}</div>${rappel}`;
+}
 
 // Les trois actions rendent true si elles ont abouti (la fiche se ferme alors).
 async function validerNdf(id){
@@ -617,7 +699,8 @@ function ndfMeta(n){
 function exportNdf(){
   const statut=document.getElementById('ndf-statut').value;
   const annee=document.getElementById('ndf-annee').value;
-  window.open(`/api/rh-coffre/ndf/export?statut=${statut}&annee=${annee}`,'_blank');
+  const mois=document.getElementById('ndf-mois').value;
+  window.open(`/api/rh-coffre/ndf/export?statut=${statut}&annee=${annee}&mois=${mois}`,'_blank');
 }
 
 (async function init(){

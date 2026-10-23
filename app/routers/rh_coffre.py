@@ -416,8 +416,16 @@ def delete_document(doc_id: int, request: Request):
 
 # ── Notes de frais côté compta ─────────────────────────────────────────
 
+def _filtre_mois(where: list, params: list, mois: str) -> None:
+    """Filtre « Mois » de la liste et de l'export : 1 à 12, ignoré sinon."""
+    m = (mois or "").strip()
+    if m.isdigit() and 1 <= int(m) <= 12:
+        where.append("strftime('%m', n.date_frais)=?")
+        params.append(f"{int(m):02d}")
+
+
 @router.get("/api/rh-coffre/ndf")
-def list_all_ndf(request: Request, statut: str = "", annee: str = ""):
+def list_all_ndf(request: Request, statut: str = "", annee: str = "", mois: str = ""):
     _require_rh(request)
     where = ["n.deleted_at IS NULL"]
     params: list = []
@@ -427,6 +435,7 @@ def list_all_ndf(request: Request, statut: str = "", annee: str = ""):
     if annee.strip():
         where.append("strftime('%Y', n.date_frais)=?")
         params.append(annee.strip())
+    _filtre_mois(where, params, mois)
     with get_db() as conn:
         rows = conn.execute(
             f"""SELECT n.*, u.nom AS employe_nom, u.email AS employe_email
@@ -635,7 +644,7 @@ def _rubrique_feuille(categorie: str, taux, km: bool) -> str:
 
 
 @router.get("/api/rh-coffre/ndf/export")
-def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
+def export_ndf_csv(request: Request, annee: str = "", statut: str = "", mois: str = ""):
     """Export CSV des notes de frais (filtrable). Pour intégration compta.
 
     Une ligne par taux de TVA : un ticket de restaurant à 10 % et 20 % donne
@@ -652,6 +661,7 @@ def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
     if annee.strip():
         where.append("strftime('%Y', n.date_frais)=?")
         params.append(annee.strip())
+    _filtre_mois(where, params, mois)
     with get_db() as conn:
         rows = conn.execute(
             f"""SELECT n.id,u.nom AS employe,u.matricule,n.date_frais,n.categorie,
