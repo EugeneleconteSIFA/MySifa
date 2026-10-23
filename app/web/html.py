@@ -2037,6 +2037,20 @@ function shouldRefreshAlertsFromApi(path,opts){
 function closeSidebar(){if(S.sidebarOpen){S.sidebarOpen=false;render();}}
 function toggleSidebar(){S.sidebarOpen=!S.sidebarOpen;render();}
 
+// Fermeture d'un modal au clic sur son fond. Un simple `click` dont la cible
+// est le fond ne suffit pas : selectionner du texte dans un champ en relachant
+// la souris hors de la fenetre produit un click sur le fond, et le modal se
+// fermait en emportant la saisie. On exige que l'appui ET le relachement
+// aient eu lieu sur le fond lui-meme.
+function fermerSurFond(ov,fermer){
+  let appuiFond=false;
+  ov.addEventListener('mousedown',e=>{appuiFond=(e.target===ov);});
+  ov.addEventListener('click',e=>{
+    const ok=appuiFond&&e.target===ov;
+    appuiFond=false;
+    if(ok)fermer();
+  });
+}
 function h(t,a,...c){
   const el=document.createElement(t);
   if(a)Object.entries(a).forEach(([k,v])=>{
@@ -2249,7 +2263,7 @@ function isSuperAdmin(u){return !!(u && u.role==='superadmin');}
 async function loadMessagesUnread(){
   if(!isSuperAdmin(S.user))return;
   const r=await api('/api/messages/unread-count');
-  if(r && typeof r.count==='number') set({msgUnread:r.count});
+  if(r && typeof r.count==='number' && r.count!==S.msgUnread) set({msgUnread:r.count});
 }
 // Pastille « mes tâches » : tâches ouvertes qui me sont assignées. L'endpoint
 // répond 0 plutôt qu'une erreur pour un rôle non autorisé — une pastille ne
@@ -2266,7 +2280,7 @@ function _peutVoirTaches(u){
 async function loadTachesCount(){
   if(!_peutVoirTaches(S.user))return;
   const r=await api('/api/taches/badge');
-  if(r && typeof r.count==='number') set({tachesCount:r.count});
+  if(r && typeof r.count==='number' && r.count!==S.tachesCount) set({tachesCount:r.count});
 }
 // Pastille « invitations » : alimentée par mysifa_cal_rappel.js, qui interroge
 // déjà /api/calendrier/notifications une fois par minute pour la pop-up de
@@ -10761,6 +10775,76 @@ function __restoreScroll(pos){
   requestAnimationFrame(apply);
 }
 
+// Modals rendus dans #root : chaque set() reconstruit tout le DOM, modal
+// compris. Les valeurs survivent (elles sont dans S) mais le champ en cours de
+// saisie perd le focus et la fenetre revient en haut — la frappe part dans le
+// vide. On note le chemin du champ actif et le defilement des modals avant le
+// rendu, puis on les reapplique si l'element au meme chemin est le meme champ.
+const MODAL_KEEP_SEL='.add-row-modal,.expe-devis-modal-overlay,.expe-trp-overlay,.expe-trp-modal-overlay,.contact-modal-overlay,[role="dialog"]';
+function __domPath(el,root){
+  const path=[];
+  while(el&&el!==root){
+    const p=el.parentElement;
+    if(!p) return null;
+    path.unshift(Array.prototype.indexOf.call(p.children,el));
+    el=p;
+  }
+  return el===root?path:null;
+}
+function __domAt(root,path){
+  let el=root;
+  for(const i of path){ el=el&&el.children[i]; if(!el) return null; }
+  return el;
+}
+function __fieldSig(el){
+  return [el.tagName,el.type||'',el.name||'',el.placeholder||'',el.className||''].join('|');
+}
+function __captureModalState(root){
+  const st={focus:null,scroll:[]};
+  try{
+    const ae=document.activeElement;
+    if(ae&&root.contains(ae)&&ae.id!=='prod-filter-dossier-search'&&ae.closest(MODAL_KEEP_SEL)
+       &&(/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae.isContentEditable)){
+      const path=__domPath(ae,root);
+      if(path){
+        let sel=null;
+        try{ if(typeof ae.selectionStart==='number') sel=[ae.selectionStart,ae.selectionEnd,ae.selectionDirection]; }catch(_){}
+        st.focus={path,sig:__fieldSig(ae),sel};
+      }
+    }
+    root.querySelectorAll(MODAL_KEEP_SEL).forEach(m=>{
+      [m,...m.querySelectorAll('*')].forEach(el=>{
+        if(el.scrollTop||el.scrollLeft){
+          const path=__domPath(el,root);
+          if(path) st.scroll.push({path,top:el.scrollTop,left:el.scrollLeft});
+        }
+      });
+    });
+  }catch(_){}
+  return st;
+}
+function __restoreModalState(root,st){
+  if(!st) return;
+  try{
+    st.scroll.forEach(s=>{
+      const el=__domAt(root,s.path);
+      if(!el) return;
+      if(s.top) el.scrollTop=s.top;
+      if(s.left) el.scrollLeft=s.left;
+    });
+    const f=st.focus;
+    if(!f) return;
+    const cur=document.activeElement;
+    if(cur&&cur!==document.body&&root.contains(cur)) return;  // le rendu a deja place le focus
+    const el=__domAt(root,f.path);
+    if(!el||__fieldSig(el)!==f.sig) return;
+    el.focus({preventScroll:true});
+    if(f.sel){
+      const n=(el.value||'').length;
+      try{ el.setSelectionRange(Math.min(f.sel[0],n),Math.min(f.sel[1],n),f.sel[2]||'none'); }catch(_){}
+    }
+  }catch(_){}
+}
 function render(){
   const _dfAe = document.activeElement;
   const _dfFocus = _dfAe && _dfAe.id === 'prod-filter-dossier-search';
@@ -10768,6 +10852,7 @@ function render(){
 
   const root=document.getElementById('root');
   const __keepScroll=__captureScroll();
+  const __keepModal=__captureModalState(root);
   root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
   document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='myrh' || S.app==='expe' || S.app==='devis');
@@ -10962,6 +11047,7 @@ function render(){
   // l'indicateur de navigation glissant. No-op si window.Motion absent.
   try{ if(window.Motion) window.Motion.scan(document); }catch(_){}
   try{ __restoreScroll(__keepScroll); }catch(_){}
+  __restoreModalState(root,__keepModal);
 }
 
 async function nav(){

@@ -14,4 +14,8 @@
 # timeout, pas sur un defaut du code. A faire tourner en local, ou dans un job
 # separe avec `playwright install` et l'app lancee.
 test_settings_rvgi.py         # Playwright — Locator.click timeout 30s
-test_stock_reception_rvgi.py  # Playwright — wait_for_selector timeout 15s
+test_stock_reception_rvgi.py  # Playwright — passe en local (23/10/2026)
+# Attention : ce timeout de 15 s n'etait PAS du a la CI. Le bloc RVGI avait
+# disparu de la page le 26/08 (commit f23c820d) et le test attendait un
+# selecteur qui ne venait jamais. Un test en quarantaine se relance a la main
+# de temps en temps, sinon il cache exactement ce qu'il devait trouver.

@@ -15,8 +15,11 @@ def _lire(nom):
         return open(RACINE + "/static/" + nom, encoding="utf-8").read()
     except OSError:
         return ""
+# stock_url.js porte stockSyncUrl(), que la page appelle au rendu ; il
+# s'appuie sur mysifa_url.js.
 MODULES = {n: _lire(n) for n in ("mysifa_rvgi_reception.js", "mysifa_stock_modals.js",
-                                 "mysifa_fournisseur_picker.js")}
+                                 "mysifa_fournisseur_picker.js",
+                                 "mysifa_url.js", "stock_url.js")}
 
 RECEPTIONS = [
     {"cde": 5721, "bl": "AE0049887", "date_reception": "2026-08-05",
@@ -86,8 +89,10 @@ def route(r):
     return r.fulfill(status=404, json={"detail": "non stubé " + p})
 
 with sync_playwright() as pw:
-    b = pw.chromium.launch(executable_path=os.environ.get(
-        "PW_CHROMIUM", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"))
+    # PW_CHROMIUM d'abord, puis le Chromium du bac à sable Linux, sinon celui
+    # que `playwright install` a posé sur le poste.
+    _chrome = os.environ.get("PW_CHROMIUM") or "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
+    b = pw.chromium.launch(executable_path=_chrome if os.path.exists(_chrome) else None)
     pg = b.new_page(viewport={"width": 1400, "height": 1000})
     pg.on("pageerror", lambda e: erreurs.append("pageerror: %s" % e))
     pg.on("console", lambda mm: erreurs.append("console %s: %s" % (mm.type, mm.text))
@@ -101,6 +106,12 @@ with sync_playwright() as pw:
 
     print("— le module")
     ok(pg.evaluate("()=>!!window.MysRvgiReception"), "MysRvgiReception est chargé")
+    if not pg.evaluate("()=>!!window.MysRvgiReception"):
+        # Sans le module, le bloc ne s'affichera jamais : inutile d'attendre
+        # 15 s un sélecteur. C'est ainsi que le retrait accidentel du 26/08
+        # est passé inaperçu — le test « traînait » au lieu d'échouer net.
+        print("\nLa page n'inclut plus /static/mysifa_rvgi_reception.js (app/web/stock_page.py).")
+        sys.exit(1)
 
     print("— l'onglet Réception")
     pg.evaluate("()=>{S.tab='reception';S.recepSubTab='nouvelle';renderContent();}")
