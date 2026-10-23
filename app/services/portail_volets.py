@@ -218,18 +218,23 @@ VOLETS_TUILES = {
                 _entree("print_bureaux", "Bureaux", "/tools?outil=etiquettes&poste=bureaux", "printer",
                         roles=_ROLES_ETIQUETTES),
             ]),
-            _groupe("Outils", [
+            # Mêmes sections que le menu de MyTools (app/web/tools_page.py) ;
+            # libellés courts : le volet doit rester compact (retour du 23/10).
+            # Parapheur et Scanner sont des onglets de l'Éditeur PDF.
+            _groupe("Technique", [
+                _entree("tools_calculs", "Calculs bobine", "/tools?outil=calculs", "layers"),
                 _entree("print_specifiques", "Étiquettes spécifiques", "/tools?outil=etiquettes&poste=specifiques", "tag",
                         roles=_ROLES_ETIQUETTES),
+            ]),
+            _groupe("Imagerie", [
+                _entree("tools_image", "Image et BAT", "/tools?outil=image", "layers"),
+                _entree("tools_convertir", "Convertir", "/tools?outil=convertir", "file-text"),
+            ]),
+            _groupe("Documents", [
+                _entree("tools_pdf", "Éditeur PDF", "/tools?outil=pdf", "file-text"),
                 _entree("tools_formulaires", "Formulaires", "/tools?outil=formulaires", "file-text",
                         roles=_ROLES_FORMULAIRES),
-                _entree("tools_pdf", "Éditeur PDF", "/tools?outil=pdf", "file-text"),
-                _entree("tools_image", "Image et BAT — améliorer, vectoriser", "/tools?outil=image", "layers"),
-                _entree("tools_convertir", "Convertir un fichier", "/tools?outil=convertir", "file-text"),
-                _entree("tools_calculs", "Calculs bobine", "/tools?outil=calculs", "layers"),
                 _entree("tools_traduction", "Traducteur", "/tools?outil=traduction", "globe"),
-                _entree("tools_parapheur", "Parapheur — envoyer un PDF à signer", "/tools?outil=parapheur", "edit"),
-                _entree("tools_scanner", "Scanner un document", "/tools?outil=scanner", "file-text"),
             ]),
             _groupe("Configuration", [
                 _entree("print_imprimantes", "Imprimantes", "/settings#printers", "sliders",
