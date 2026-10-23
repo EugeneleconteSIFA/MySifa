@@ -432,6 +432,23 @@ class TestCalageCloture(unittest.TestCase):
         self.assertEqual(self._ligne(s02)["date_operation"], _iso(self.t0 + timedelta(minutes=1, seconds=20)))
         self.assertEqual(self._ligne(s03)["date_operation"], _iso(self.t0 + timedelta(minutes=1, seconds=45)))
 
+    # ── 10. Une annulation borne le passage comme une clôture ────────────
+    def test_10_annulation_borne_le_perimetre(self):
+        from app.services import calage_cloture
+        from database import get_db
+
+        self._saisie("01", 0)
+        s02_annule = self._saisie("02", 1)
+        self._saisie("90", 20)
+        self._saisie("01", 120)
+        s02 = self._saisie("02", 121)
+        self._saisie("03", 160)
+        with get_db() as conn:
+            a = calage_cloture._analyser(conn, DOSSIER, MACHINE_NOM, datetime.now())
+        # Le premier calage est celui du passage repris, pas celui du cycle annulé.
+        self.assertEqual(a["rows"][a["debut"]]["id"], s02)
+        self.assertNotIn(s02_annule, [r["id"] for r in a["rows"]])
+
     # ── 9. Objectifs devis du pied de page de la saisie ──────────────────
     def test_9_devis_saisie(self):
         from database import get_db

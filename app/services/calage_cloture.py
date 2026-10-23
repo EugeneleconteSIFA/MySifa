@@ -96,8 +96,14 @@ def _debut_perimetre(conn, no_dossier: str, machine: str, avant_id: Optional[int
 
     Un dossier rouvert après une clôture repart de zéro : le papier du
     nouveau passage ne parle pas du calage de l'ancien.
+
+    Une annulation (90) borne le passage comme une clôture. Sans elle, le
+    calage du cycle annulé restait le « premier calage » du dossier, et le
+    report des heures déclarées le déplaçait dans le passage suivant (cas
+    réel : 9932448 + 9932451, Cohésio 1, 21-22/10/2026 — le calage annulé de
+    la veille s'est retrouvé à 05:25 dans le passage du lendemain).
     """
-    params: list = [no_dossier, machine, CODE_FIN_DOS]
+    params: list = [no_dossier, machine, CODE_FIN_DOS, CODE_ANNUL_DOS]
     filtre_id = ""
     if avant_id:
         filtre_id = " AND id <> ?"
@@ -105,7 +111,8 @@ def _debut_perimetre(conn, no_dossier: str, machine: str, avant_id: Optional[int
     derniere_cloture = conn.execute(
         f"""SELECT MAX(date_operation) FROM production_data
              WHERE trim(no_dossier) = trim(?) AND trim(machine) = trim(?)
-               AND operation_code = ? AND COALESCE(fin_dossier, 0) = 1
+               AND ((operation_code = ? AND COALESCE(fin_dossier, 0) = 1)
+                    OR operation_code = ?)
                AND COALESCE(est_annule, 0) = 0{filtre_id}""",
         params,
     ).fetchone()[0]

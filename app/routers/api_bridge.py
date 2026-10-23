@@ -690,6 +690,36 @@ def _aligner_les_tiers(journal) -> dict:
     return out
 
 
+def _enrichir_les_produits(journal) -> dict:
+    """Articles RVGI commandés → produits MyStock, juste après le miroir.
+
+    `produits` n'avait été chargée qu'une fois, en avril 2026 : toute
+    référence créée depuis dans l'ERP manquait au stock. Même moment et même
+    raison que les tiers — l'ERP est la source, la base doit suivre sans que
+    personne y pense. Les produits existants sont liés, jamais réécrits.
+
+    Ne fait jamais échouer l'import.
+    """
+    try:
+        from database import get_db
+        from app.services import erp_mirror as miroir
+        from app.services import rvgi_produits
+    except Exception as e:
+        journal.append("Enrichissement des produits impossible : %s" % str(e)[:160])
+        return {}
+    try:
+        with get_db() as conn, miroir.get_erp_db() as erp:
+            res = rvgi_produits.synchroniser(conn, erp)
+            conn.commit()
+        journal.append(
+            "Produits : %d créé(s) depuis RVGI, %d lié(s), %d conflit(s) de type."
+            % (res["crees"], res["lies"], res["nb_conflits"]))
+        return res
+    except Exception as e:
+        journal.append("Enrichissement des produits en échec : %s" % str(e)[:160])
+        return {"erreur": str(e)[:200]}
+
+
 def _integrer_les_receptions(journal) -> dict:
     """Réceptions RVGI appariées → entrées MyStock, juste après le miroir.
 
@@ -754,6 +784,9 @@ def _erp_importer_en_fond(dossier_csv: str, dossier_temp: str) -> None:
         # pense — et on ne saurait jamais depuis quand il existe.
         # Les réceptions d'abord : la comparaison des stocks qui suit doit
         # voir le stock après les entrées que l'ERP vient d'annoncer.
+        # Les produits avant tout le reste : la comparaison des stocks PF
+        # doit connaître les références que l'ERP vient de créer.
+        _ERP_ETAT["produits"] = _enrichir_les_produits(lignes_journal)
         _ERP_ETAT["receptions"] = _integrer_les_receptions(lignes_journal)
         _ERP_ETAT["comparaisons"] = _comparer_les_stocks(lignes_journal)
         # Même raison, même moment : les fiches clients et fournisseurs

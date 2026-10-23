@@ -71,6 +71,7 @@ function openHistoriqueModal(portee){
       <select id="hist-utilisateur" aria-label="Utilisateur" onchange="_histFiltre('utilisateur',this.value)"></select>
       <select id="hist-action" aria-label="Type de modification" onchange="_histFiltre('action',this.value)"></select>
       <div class="hist-search">
+        ${icon("search",15)}
         <input type="text" id="hist-q" placeholder="Rechercher (dossier, référence, date, utilisateur…)" autocomplete="off"
           oninput="_histRecherche(this.value)" onkeydown="if(event.key==='Escape'&&this.value){this.value='';_histRecherche('');event.stopPropagation();}">
       </div>
@@ -125,6 +126,8 @@ async function _histCharger(suite){
 function _histOptions(sel,vide,items,val){
   const el=document.getElementById(sel);
   if(!el) return;
+  // Un filtre posé se voit : il prend la couleur d'accent.
+  el.classList.toggle("hist-actif",!!val);
   // Une valeur venue de l'adresse reste choisie même si la période ne la contient plus.
   if(val&&!items.some(i=>i[0]===val)) items=items.concat([[val,val]]);
   el.innerHTML=`<option value="">${escHtml(vide)}</option>`+items.map(i=>
@@ -132,6 +135,8 @@ function _histOptions(sel,vide,items,val){
 }
 function _histRendreFiltres(){
   const h=_hist;
+  const jr=document.getElementById("hist-jours");
+  if(jr) jr.classList.toggle("hist-actif",h.jours!=="30");
   _histOptions("hist-machine","Toutes les machines",h.machines.map(m=>[String(m.id),m.nom]),h.machine);
   _histOptions("hist-utilisateur","Tous les utilisateurs",h.utilisateurs.map(u=>[u,u]),h.utilisateur);
   _histOptions("hist-action","Tous les types",h.actions.map(a=>[a.valeur,a.libelle]),h.action);
@@ -164,10 +169,18 @@ function _histInitiales(nom){
   return ((m[0]||"?")[0]+(m.length>1?m[m.length-1][0]:"")).toUpperCase();
 }
 
+// Détail en tableau : champ | valeur d'origine → valeur modifiée. Une ligne
+// sans valeur d'origine connue (création, réglage ponctuel) n'a que sa valeur.
 function _histLigneDetail(l){
-  const champ=l.champ?`<span class="hist-champ">${escHtml(l.champ)}</span>`:"";
-  if(l.valeur!=null) return `<div class="hist-det">${champ}<span>${escHtml(l.valeur)}</span></div>`;
-  return `<div class="hist-det">${champ}<span class="hist-avant">${escHtml(l.avant)}</span><span class="hist-fleche">→</span><span class="hist-apres">${escHtml(l.apres)}</span></div>`;
+  const champ=`<span class="hist-champ">${escHtml(l.champ||"")}</span>`;
+  if(l.valeur!=null) return `${champ}<span class="hist-val">${escHtml(l.valeur)}</span>`;
+  return `${champ}<span class="hist-avant" title="Valeur d'origine">${escHtml(l.avant)}</span><span class="hist-fleche">→</span><span class="hist-apres" title="Valeur modifiée">${escHtml(l.apres)}</span>`;
+}
+function _histDetail(lignes){
+  if(!lignes||!lignes.length) return "";
+  const avecAvant=lignes.some(l=>l.valeur==null);
+  const tete=avecAvant?`<span></span><span class="hist-col">Avant</span><span></span><span class="hist-col">Après</span>`:"";
+  return `<div class="hist-diff">${tete}${lignes.map(_histLigneDetail).join("")}</div>`;
 }
 
 function _histRendreListe(){
@@ -184,18 +197,24 @@ function _histRendreListe(){
   for(const l of h.lignes){
     if(l.jour!==jour){ jour=l.jour; html+=`<div class="hist-jour">${escHtml(_histJour(jour))}</div>`; }
     const heure=(l.quand||"").slice(-5);
+    // Le geste en premier (« Changé de machine »), puis le dossier visé. Sans
+    // geste reconnu, le titre du journal tient lieu de geste.
+    const geste=l.geste||l.titre;
     html+=`<div class="hist-item${l.inchange?" hist-item--inchange":""}" style="--hist-u:${_histCouleur(l.utilisateur)};--hist-c:${escAttr(_histTeinteAction(l))}">
       <div class="hist-av" aria-hidden="true">${escHtml(_histInitiales(l.utilisateur))}</div>
       <div class="hist-corps">
         <div class="hist-tete">
           <span class="hist-qui">${escHtml(l.utilisateur)}</span>
           <span class="hist-heure">${escHtml(heure)}</span>
-          <span class="hist-type">${escHtml(l.action_label||l.action)}</span>
           ${toutes&&l.machine?`<span class="hist-machine">${escHtml(l.machine)}</span>`:""}
+          <span class="hist-type">${escHtml(l.action_label||l.action)}</span>
+        </div>
+        <div class="hist-quoi">
+          <span class="hist-geste">${escHtml(geste)}</span>
+          ${l.dossier?`<span class="hist-dossier" title="Dossier concerné">Dossier ${escHtml(l.dossier)}</span>`:""}
           ${l.inchange?`<span class="hist-inch">aucun changement</span>`:""}
         </div>
-        <div class="hist-titre">${escHtml(l.titre)}</div>
-        ${(l.lignes||[]).map(_histLigneDetail).join("")}
+        ${_histDetail(l.lignes)}
       </div>
     </div>`;
   }

@@ -968,11 +968,70 @@
     }
   }
 
+  // Aperçu de l'OF et de la fiche technique : les deux documents d'où part le
+  // calcul. On les lit à côté des quantités, sans quitter le contrôle. Mêmes
+  // routes que l'aperçu des Besoins matières (`pdf-preview`, servi `inline`
+  // et `no-store`, prévu pour l'iframe).
+  const DOCS = {
+    of: {libelle: 'OF', url: id => '/api/of/' + id + '/pdf-preview', absent: 'Aucun OF rattaché à ce dossier.'},
+    ft: {libelle: 'Fiche technique', url: id => '/api/fiches-techniques/' + id + '/pdf-preview',
+         absent: 'Aucune fiche technique rapprochée de ce dossier.'},
+  };
+
+  function styleBouton(b, actif) {
+    b.setAttribute('aria-expanded', actif ? 'true' : 'false');
+    b.style.background = actif ? 'var(--accent-bg)' : 'var(--bg)';
+    b.style.borderColor = actif ? 'var(--accent)' : 'var(--border)';
+    b.style.color = actif ? 'var(--accent)' : 'var(--text)';
+  }
+
+  function brancherDocs(d) {
+    const docs = (d && d.documents) || {};
+    E.docs = {of: docs.of_id || null, ft: docs.ft_id || null};
+    Object.keys(DOCS).forEach(type => {
+      const b = document.querySelector('[data-dr-doc="' + type + '"]');
+      if (!b) return;
+      const id = E.docs[type];
+      b.disabled = !id;
+      b.style.opacity = id ? '' : '.5';
+      b.style.cursor = id ? 'pointer' : 'not-allowed';
+      b.title = id ? 'Aperçu ' + (type === 'of' ? 'de l\'OF' : 'de la fiche technique') : DOCS[type].absent;
+    });
+  }
+
+  function basculerDoc(type) {
+    const zone = document.getElementById('dr-doc');
+    const id = E.docs && E.docs[type];
+    if (!zone || !id) return;
+    const ouvert = !zone.hidden && zone.dataset.type === type;
+    document.querySelectorAll('[data-dr-doc]').forEach(b => styleBouton(b, false));
+    if (ouvert) { zone.hidden = true; zone.innerHTML = ''; zone.dataset.type = ''; return; }
+    const doc = DOCS[type];
+    const url = doc.url(id);
+    zone.dataset.type = type;
+    zone.hidden = false;
+    styleBouton(document.querySelector('[data-dr-doc="' + type + '"]'), true);
+    zone.innerHTML = '<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)">'
+      + '<span style="font-weight:600;color:var(--text)">' + esc(doc.libelle) + ' — aperçu</span>'
+      + '<span style="display:flex;gap:8px">'
+      + '<button type="button" data-dr-doc-onglet style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);'
+      + 'background:var(--card);color:var(--text);font-family:inherit;font-size:12px;cursor:pointer" '
+      + 'title="Ouvrir le PDF dans un onglet (impression, zoom)">Ouvrir à part</button>'
+      + '<button type="button" data-dr-doc-fermer style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);'
+      + 'background:var(--card);color:var(--text);font-family:inherit;font-size:12px;cursor:pointer">Masquer</button>'
+      + '</span></div>'
+      + '<iframe src="' + esc(url) + '" title="' + esc(doc.libelle) + ' — aperçu" '
+      + 'style="display:block;width:100%;height:72vh;border:0;background:var(--card)"></iframe></div>';
+    zone.querySelector('[data-dr-doc-onglet]').addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+    zone.querySelector('[data-dr-doc-fermer]').addEventListener('click', () => basculerDoc(type));
+  }
+
   async function ouvrir(entryId, opts) {
     E.opts = opts || {};
     E.entryId = entryId;
     fermerChoix();
-    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false;
+    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false; E.docs = {};
     const root = document.getElementById('mroot');
     if (!root) return;
     injecterStyle();
@@ -987,12 +1046,17 @@
       + '<h3 style="margin:0;font-size:18px;color:var(--text);display:flex;align-items:center;gap:8px">'
       + (E.opts.icone || '') + '<span>Déstockage — ' + esc(ref)
       + '<span id="dr-titre-detail" style="font-weight:600;color:var(--text2)"></span></span></h3>'
-      + '<div style="display:flex;gap:8px">'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">'
+      + '<button type="button" data-dr-doc="of" disabled aria-expanded="false" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
+      + 'background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;cursor:not-allowed;opacity:.5">OF</button>'
+      + '<button type="button" data-dr-doc="ft" disabled aria-expanded="false" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
+      + 'background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;cursor:not-allowed;opacity:.5">Fiche technique</button>'
       + '<button type="button" data-dr-prod aria-expanded="false" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
       + 'background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;cursor:pointer">Données de prod</button>'
       + '<button type="button" data-dr-fermer style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
       + 'background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer">Fermer</button></div></div>'
       + '<div id="dr-infos" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>'
+      + '<div id="dr-doc" hidden style="margin-bottom:16px"></div>'
       + '<div id="dr-prod" hidden style="margin-bottom:16px"></div>'
       + '<div id="dr-body"><div style="padding:24px;text-align:center;color:var(--muted)">Chargement…</div></div>'
       + '</div></div>';
@@ -1004,11 +1068,14 @@
     overlay.addEventListener('scroll', placerChoix);
     root.querySelector('[data-dr-fermer]').addEventListener('click', fermer);
     root.querySelector('[data-dr-prod]').addEventListener('click', (ev) => basculerProd(ev.currentTarget, entryId));
+    root.querySelectorAll('[data-dr-doc]').forEach(b =>
+      b.addEventListener('click', () => basculerDoc(b.getAttribute('data-dr-doc'))));
     const body = document.getElementById('dr-body');
     try {
       const d = await appel('/api/stock/destockage/' + entryId + '/relecture');
       preparer(d);
       afficherInfos(d);
+      brancherDocs(d);
       body.innerHTML = corpsHtml(d);
       brancher(body);
       rendreLignes();

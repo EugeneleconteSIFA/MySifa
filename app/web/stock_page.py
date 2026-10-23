@@ -2542,7 +2542,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_etiq_specifiques.js?v=4"></script>
 <script src="/static/mysifa_etiq_editeur.js?v=2"></script>
 <script src="/static/mysifa_donnees_prod.js?v=16"></script>
-<script src="/static/mysifa_destockage.js?v=9"></script>
+<script src="/static/mysifa_destockage.js?v=10"></script>
 <script src="/static/mysifa_dock.js?v=3"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>

@@ -398,6 +398,20 @@ body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a0
 .slot.slot-annule:hover{box-shadow:0 0 0 3px rgba(239,68,68,.85),0 5px 20px rgba(239,68,68,.62)!important}
 body.light .slot.slot-annule{border-color:#dc2626!important;
   box-shadow:0 0 0 2px rgba(220,38,38,.45),0 3px 14px rgba(220,38,38,.38)!important}
+/* Relance après annulation : le cadre rouge clignote tant qu'elle reste à
+   placer. Le clignotement passe par outline : border et box-shadow sont en
+   !important ci-dessous, et une déclaration !important bat une animation. */
+.slot.slot-annule{outline:3px solid var(--danger);outline-offset:1px;animation:relanceClign 1.4s ease-in-out infinite}
+@keyframes relanceClign{0%,100%{outline-color:var(--danger)}50%{outline-color:transparent}}
+.perf-eco .slot.slot-annule,.reduce-anim .slot.slot-annule{animation:none}
+.slot .line-relance{display:block;width:calc(100% - 4px);max-width:100%;margin-top:4px;padding:3px 5px;border-radius:5px;
+  background:var(--danger);color:white;font-size:10px;font-weight:800;line-height:1.25;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr.tr-relance-annul{outline:2px solid var(--danger);outline-offset:-2px;animation:relanceLigne 1.4s ease-in-out infinite}
+@keyframes relanceLigne{0%,100%{outline-color:var(--danger)}50%{outline-color:transparent}}
+.perf-eco .tr.tr-relance-annul,.reduce-anim .tr.tr-relance-annul{animation:none}
+.tr-relance{display:inline-block;margin-top:2px;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;
+  background:var(--danger);color:white;white-space:nowrap}
 .badge-annule{background:#ef4444;color:#fff;font-size:10px;font-weight:800;
   padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;letter-spacing:.4px;
   text-transform:uppercase;border:1px solid rgba(255,255,255,.35);
@@ -597,38 +611,53 @@ body.light .btn-p{color:#fff}
 .hist-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .hist-hdr h3{margin:0;font-size:18px;font-family:var(--mono);color:var(--text);display:flex;align-items:center;gap:8px}
 .hist-sub{font-size:12px;color:var(--muted);margin:8px 0 14px}
-.hist-filtres{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
-.hist-filtres select,.hist-search input{padding:7px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card);
-  color:var(--text);font-size:12px;font-family:inherit;outline:none}
-.hist-filtres select:focus,.hist-search input:focus{border-color:var(--accent)}
-.hist-search{flex:1;min-width:200px}
-.hist-search input{width:100%;box-sizing:border-box}
-.hist-compte{font-size:11px;color:var(--muted);margin-bottom:6px;min-height:14px}
+.hist-filtres{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;padding:10px;border-radius:10px;
+  background:var(--accent-bg);border:1px solid var(--accent)}
+.hist-filtres select{padding:8px 30px 8px 12px;border:1.5px solid var(--accent);border-radius:8px;background-color:var(--card);
+  color:var(--text);font-size:13px;font-weight:600;font-family:inherit;outline:none;cursor:pointer}
+.hist-filtres select.hist-actif{background-color:var(--accent);border-color:var(--accent);color:white}
+.hist-search{flex:1;min-width:220px;position:relative;display:flex;align-items:center}
+.hist-search svg{position:absolute;left:11px;color:var(--accent);pointer-events:none}
+.hist-search input{width:100%;box-sizing:border-box;padding:9px 12px 9px 34px;border:1.5px solid var(--accent);border-radius:8px;
+  background:var(--card);color:var(--text);font-size:13px;font-weight:500;font-family:inherit;outline:none}
+.hist-search input::placeholder{color:var(--text2)}
+.hist-filtres select:focus,.hist-search input:focus{box-shadow:0 0 0 3px var(--accent-bg);border-color:var(--accent)}
+.hist-compte{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;min-height:14px}
 .hist-liste{overflow-y:auto;flex:1;min-height:200px;padding-right:4px}
 .hist-vide{padding:40px 0;text-align:center;color:var(--muted);font-size:13px}
 .hist-jour{position:sticky;top:0;background:var(--card);z-index:1;padding:12px 0 6px;font-size:11px;font-weight:700;
   text-transform:uppercase;letter-spacing:.5px;color:var(--accent);border-bottom:1px solid var(--border2)}
-.hist-item{display:flex;gap:12px;padding:12px 10px 12px 12px;margin:6px 0;border-radius:10px;
-  background:var(--bg);border:1px solid var(--border2);border-left:3px solid var(--hist-c)}
+.hist-item{display:flex;gap:12px;padding:12px 12px 12px 12px;margin:6px 0;border-radius:10px;
+  background:var(--bg);border:1px solid var(--border2);border-left:4px solid var(--hist-u)}
 .hist-item--inchange{opacity:.55}
-.hist-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-  background:var(--hist-u);color:white;font-size:12px;font-weight:700;letter-spacing:.3px}
+.hist-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:var(--hist-u);color:white;font-size:13px;font-weight:800;letter-spacing:.3px}
 .hist-corps{flex:1;min-width:0}
-.hist-tete{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.hist-qui{font-size:14px;font-weight:700;color:var(--text)}
-.hist-heure{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--hist-u)}
-.hist-type{font-size:11px;font-weight:600;color:var(--hist-c);display:inline-flex;align-items:center;gap:5px}
-.hist-type::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--hist-c)}
+.hist-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hist-qui{font-size:15px;font-weight:800;color:var(--hist-u)}
+.hist-heure{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text2)}
+.hist-type{margin-left:auto;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--hist-c);
+  padding:2px 8px;border-radius:999px;border:1px solid var(--hist-c)}
 .hist-machine{font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--accent-bg);color:var(--accent)}
+.hist-quoi{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
+.hist-geste{font-size:14px;font-weight:700;color:var(--text);overflow-wrap:anywhere}
+.hist-dossier{font-family:var(--mono);font-size:13px;font-weight:700;padding:2px 8px;border-radius:6px;
+  background:var(--card);color:var(--text);border:1.5px solid var(--text2)}
 .hist-inch{font-size:11px;color:var(--muted)}
-.hist-titre{font-size:13px;color:var(--text2);margin:3px 0 4px;overflow-wrap:anywhere}
-.hist-det{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:12px;color:var(--text2);padding-left:2px}
-.hist-champ{color:var(--muted);min-width:110px}
-.hist-avant{color:var(--muted);text-decoration:line-through}
-.hist-fleche{color:var(--muted)}
-.hist-apres{color:var(--text);font-weight:600}
+.hist-diff{display:grid;grid-template-columns:minmax(110px,auto) auto auto 1fr;align-items:center;gap:4px 8px;
+  margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--border2);font-size:12.5px}
+.hist-col{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.hist-champ{color:var(--text2);font-weight:600}
+.hist-val{grid-column:2 / -1;color:var(--text);font-weight:600;overflow-wrap:anywhere}
+.hist-avant{color:var(--danger);text-decoration:line-through;font-weight:600;padding:1px 6px;border-radius:5px;
+  background:color-mix(in srgb,var(--danger) 12%,transparent);justify-self:start}
+.hist-fleche{color:var(--muted);font-weight:700}
+.hist-apres{color:var(--success);font-weight:800;padding:1px 6px;border-radius:5px;
+  background:color-mix(in srgb,var(--success) 14%,transparent);justify-self:start;overflow-wrap:anywhere}
 .hist-plus{text-align:center;padding:14px 0}
-@media (max-width:640px){.md.md--hist{padding:18px 16px}.hist-filtres select{flex:1 1 45%}.hist-champ{min-width:0}}
+@media (max-width:640px){.md.md--hist{padding:18px 16px}.hist-filtres select{flex:1 1 45%}
+  .hist-diff{grid-template-columns:1fr auto 1fr}.hist-diff .hist-champ{grid-column:1 / -1}.hist-diff .hist-col,.hist-diff>span:empty{display:none}
+  .hist-type{margin-left:0}}
 .ds-section{margin:20px 0 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .ds-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px}
 .ds-stat{background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 14px}
@@ -930,7 +959,10 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .plan-agenda-slot.fsc{box-shadow:0 0 0 2px rgba(16,185,129,.95)}
 .plan-agenda-slot.hatch::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:repeating-linear-gradient(135deg,transparent 0 7px,rgba(15,23,42,.14) 7px 14px)}
-.plan-agenda-slot.canc{outline:2px solid var(--danger);outline-offset:-2px}
+.plan-agenda-slot.canc{outline:2px solid var(--danger);outline-offset:-2px;animation:relanceLigne 1.4s ease-in-out infinite}
+.perf-eco .plan-agenda-slot.canc,.reduce-anim .plan-agenda-slot.canc{animation:none}
+.plan-agenda-slot .exig.relance{background:var(--danger);border-color:var(--danger);color:white}
+.plan-agenda-slot.short .exig.relance{display:block}
 .plan-agenda-slot.canc::before{
   content:"";position:absolute;top:8px;bottom:8px;left:50%;width:2px;
   background:var(--danger);opacity:.35;transform:rotate(-8deg);
@@ -1042,7 +1074,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <!-- Adresse de la page : machine, vue, horizon, semaine, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/planning_url.js?v=3"></script>
-<script src="/static/planning_historique.js?v=3"></script>
+<script src="/static/planning_historique.js?v=4"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -1757,6 +1789,15 @@ function colorForId(id){
   if(custom) return custom;
   const n=(id*2654435761)>>>0;
   return CC[n%CC.length];
+}
+// Couleur d'un dossier du planning. Une relance après annulation prend celle
+// du passage annulé (annulation_source_id), sauf couleur choisie à la main
+// sur la relance elle-même.
+function couleurDossier(s,repli){
+  const id=Number(s&&(s.entry_id||s.id))||repli||0;
+  const src=Number(s&&s.annulation_source_id)||0;
+  if(!src||localStorage.getItem("mysifa.slot.color."+id)) return colorForId(id);
+  return colorForId(src);
 }
 
 // ── Color picker ─────────────────────────────────────────────────
@@ -2577,7 +2618,7 @@ function planAgendaSlotClass(s){
   if(activeNo && noOf && activeNo===noOf) cls+=' live';
   if((s.fsc_requis===1||s.fsc_requis===true)) cls+=' fsc';
   if(Number(s.a_placer||0)===1 || Number(s.valide||0)===0) cls+=' hatch';
-  if(typeof isAnnuleEntry==='function' && isAnnuleEntry(s)) cls+=' canc';
+  if(typeof isRelanceAnnulation==='function' && isRelanceAnnulation(s)) cls+=' canc';
   return cls;
 }
 
@@ -2600,7 +2641,7 @@ function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
     const top=Math.round((hStart-col.s)*pxParHeure);
     const rawH=(hEnd-hStart)*pxParHeure;
     const height=Math.max(minHeightSlot, Math.round(rawH));
-    const co=colorForId(s.entry_id||idx+1);
+    const co=couleurDossier(s,idx+1);
     _SLOTS_PAR_ID[s.entry_id||idx]=s;
     const cli=(s.client||'').trim()||(s.numero_of||s.reference||'—');
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:'';
@@ -2626,6 +2667,7 @@ function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
       ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
       <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
       ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
+      ${relanceAnnulationHtml(s,"exig relance")}
     </div>`;
   }).join('');
   let grid='', times='';
@@ -3286,7 +3328,7 @@ function buildLegend(sl, m1, nw){
   });
   if(!visible.length){ lgEl.innerHTML=""; return; }
   lgEl.innerHTML=visible.map(s=>{
-    const co=colorForId(s.entry_id||0);
+    const co=couleurDossier(s,0);
     const lb=escAttr(s.client||s.numero_of||s.reference||"—");
     return`<div class="lg-i">
       <div class="lg-d" style="background:${co}" title="Changer la couleur"
@@ -3443,7 +3485,7 @@ function mkTL(mon,slots){
     // On n'applique pas le seuil de masquage sur les terminés (affichage uniquement).
     if(spansMultipleWeeks && (s.statut!=="termine") && visibleWorkH < TL_MIN_VISIBLE_H_WHEN_SPLIT) return;
     const l=(sp/tot)*100,w=Math.max(.5,((ep-sp)/tot)*100);
-    const co=colorForId(s.entry_id||idx+1);
+    const co=couleurDossier(s,idx+1);
     _SLOTS_PAR_ID[s.entry_id||idx]=s;
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
     const lz=s.laize?`${s.laize} mm`:"";
@@ -3479,7 +3521,7 @@ function mkTL(mon,slots){
     const canResizeSlot=CAN_EDIT&&s.statut!=="termine"&&(s.statut==="en_cours"||(s.statut==="attente"&&reelForDrag));
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
     const annuleSlot=isAnnuleEntry(s);
-    const annuleCls=annuleSlot?"slot-annule":"";
+    const annuleCls=isRelanceAnnulation(s)?"slot-annule":"";
     // Anneau vert animé sur les dossiers certifiés. Rendu par un ::after et
     // non par `border` / `box-shadow` : ces deux propriétés sont posées en
     // style INLINE sur le slot (couleur du dossier, pulsation du dossier
@@ -3529,7 +3571,7 @@ function mkTL(mon,slots){
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}${relanceAnnulationHtml(s)}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -3557,7 +3599,7 @@ function mkRow(e,i,slots){
   const sl={run:"En cours",ter:"Terminé",att:"En attente"}[sc];
   const isLocked=(e.statut==="en_cours"||e.statut==="termine");
   const isAnchor = (S._scrollAnchorIdx!=null) && (i===S._scrollAnchorIdx);
-  const co=colorForId(e.id||i+1);
+  const co=couleurDossier(e,i+1);
   const cli=(e.client||"").trim()||"—";
   const of=escAttr(e.numero_of||e.reference||"—");
   const rfp=escAttr(e.ref_produit||"")||"—";
@@ -3582,12 +3624,12 @@ function mkRow(e,i,slots){
     if(r==="reellement_en_saisie") return`<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(52,211,153,.12);color:var(--success);font-weight:600;letter-spacing:.5px;white-space:nowrap">⚙ en saisie</span>`;
     return"";
   })();
-  return`<div class="tr ${aplacerRowCls} ${reelTermineRowCls}" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
+  return`<div class="tr ${aplacerRowCls} ${reelTermineRowCls} ${isRelanceAnnulation(e)?"tr-relance-annul":""}" draggable="true" data-eid="${e.id}" data-idx="${i}" ${isAnchor?'data-scroll-anchor="1"':''}
     data-statut="${escAttr(e.statut||'attente')}"
     style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
     <span class="dh-handle">⠿</span>
     <div><div class="cd" style="background:${co}"></div></div>
-    <span class="lbl-main">${escAttr(cli)}${fscBadgeHtml(e)}${annuleBadgeHtml(e)}${reelBadge?`<br><span style="display:inline-block;margin-top:2px">${reelBadge}</span>`:""}</span>
+    <span class="lbl-main">${escAttr(cli)}${fscBadgeHtml(e)}${annuleBadgeHtml(e)}${isRelanceAnnulation(e)?`<br>${relanceAnnulationHtml(e,"tr-relance")}`:""}${reelBadge?`<br><span style="display:inline-block;margin-top:2px">${reelBadge}</span>`:""}</span>
     <span class="cell-mini">${escAttr(fm)}${fm!=="—"?" mm":""}</span>
     <span class="cell-mini">${of}</span>
     <span class="cell-mini">${rfp}</span>
@@ -3812,7 +3854,7 @@ function ouvrirResumeDossier(eid){
   const s=_SLOTS_PAR_ID[eid];
   if(!s){ openEdit(eid); return; }
   const sec=infosDossierSections(s);
-  const co=colorForId(s.entry_id||eid);
+  const co=couleurDossier(s,eid);
   const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
   const quand=iso=>{ if(!iso) return ""; const d=new Date(iso);
     return d.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit",month:"2-digit"})+" "
@@ -4505,6 +4547,16 @@ function isAnnuleEntry(e){
   if(e.statut==="termine") return false;
   const r=e.statut_reel||"reellement_en_attente";
   return r==="reellement_en_attente";
+}
+/* Relance après annulation, pas encore replacée : cadre rouge clignotant et
+   mention « Ajout auto ». Tout tombe dès que « À placer au planning » est
+   décoché (le serveur éteint annulation_a_revoir au même moment). */
+function isRelanceAnnulation(e){
+  return !!e && Number(e.annulation_a_revoir||0)===1 && Number(e.a_placer||0)===1 && e.statut!=="termine";
+}
+function relanceAnnulationHtml(e,cls){
+  if(!isRelanceAnnulation(e)) return "";
+  return `<span class="${cls||"line-relance"}" title="${escAttr(annuleTitle(e))}">Ajout auto suite à annulation dossier</span>`;
 }
 function annuleTitle(e){
   if(!e) return "";

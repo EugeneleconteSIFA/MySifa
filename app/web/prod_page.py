@@ -10,16 +10,25 @@ Strategie de migration (Phase 2 - extraction du monolithe html.py) :
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_VERSION, ENV_NAME, IS_STAGING, PROD_STANDALONE
+from config import APP_VERSION, ENV_NAME, IS_STAGING, PROD_ARRIVEE_PLANNING_ROLES, PROD_STANDALONE
 from frontend.html import render_frontend_html
-from services.auth_service import get_current_user, user_has_app_access
+from services.auth_service import effective_role, get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 
 
 router = APIRouter()
 
 
-def _build_prod_html() -> str:
+# Arrivée sur le Planning de production pour les rôles qui pilotent. Côté
+# navigateur, pas en redirection serveur : le serveur ne voit pas le #onglet
+# des liens anciens (/prod#retour), qu'une redirection enverrait au planning.
+# `replace` : le bouton Retour ne ramène pas sur /prod, qui renverrait ici.
+_ARRIVEE_PLANNING = (
+    '<script>if(!location.search&&!location.hash)location.replace("/planning");</script>'
+)
+
+
+def _build_prod_html(arrivee_planning: bool = False) -> str:
     """Construit le HTML standalone /prod en injectant les variables runtime
     (APP_VERSION, ENV_NAME). Le bandeau et son sélecteur d'impersonation sont
     injectés par /static/mysifa_impersonate.js — self-contained."""
@@ -31,6 +40,7 @@ def _build_prod_html() -> str:
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__ENV_NAME_VALUE__", ENV_NAME)
         .replace("__STAGING_BODY_CLASS__", staging_class)
+        .replace("__ARRIVEE_PLANNING__", _ARRIVEE_PLANNING if arrivee_planning else "")
     )
 
 
@@ -47,7 +57,7 @@ def prod_page(request: Request):
 
     if PROD_STANDALONE:
         return HTMLResponse(
-            content=_build_prod_html(),
+            content=_build_prod_html(effective_role(user) in PROD_ARRIVEE_PLANNING_ROLES),
             headers={
                 "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
                 "Pragma": "no-cache",
@@ -66,6 +76,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+__ARRIVEE_PLANNING__
 <meta name="theme-color" content="#0a0e17">
 <title>MyProd - MySifa</title>
 <link rel="icon" href="/static/favicon.ico" sizes="any">

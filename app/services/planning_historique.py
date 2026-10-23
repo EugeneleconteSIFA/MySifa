@@ -296,7 +296,144 @@ def _machine_de(detail: Any, objet: str, machines: Dict[int, str]) -> Optional[i
     return None
 
 
-def mettre_en_forme(row: dict, machines: Dict[int, str]) -> dict:
+# ── Dossier visé et geste ───────────────────────────────────────────────────
+# La fenêtre met en avant trois choses (retour du 23/10/2026) : le geste, le
+# dossier sur lequel il porte, et la valeur avant → après. Le titre du journal
+# mélange les trois (« Statut dossier 9932757 → termine ») : on les sépare.
+
+_RE_DOSSIER = re.compile(
+    r"^(?:Statut dossier|Scission dossier|Parametrage carton dossier|Dossier)\s+(.+?)"
+    r"(?:\s·\s.*|\s→\s.*)?$")
+_GESTE_DOSSIER = {
+    "CREATE": "Ajout au planning",
+    "DELETE": "Retrait du planning",
+    "UPDATE": "Modification du dossier",
+    "CLOSE": "Changement de statut",
+    "REORDER": "Déplacement",
+}
+
+
+def _plus_longue_sous_suite(seq: List[int]) -> set:
+    """Indices d'une plus longue sous-suite croissante de `seq`.
+
+    Dans une réorganisation, les dossiers qui la composent n'ont pas bougé les
+    uns par rapport aux autres : ce sont les AUTRES qui ont été déplacés."""
+    if not seq:
+        return set()
+    fins: List[int] = []          # indice de fin de la meilleure sous-suite de longueur k+1
+    prec = [-1] * len(seq)
+    import bisect
+    for i, v in enumerate(seq):
+        k = bisect.bisect_left([seq[j] for j in fins], v)
+        if k > 0:
+            prec[i] = fins[k - 1]
+        if k == len(fins):
+            fins.append(i)
+        else:
+            fins[k] = i
+    garde, i = set(), fins[-1]
+    while i != -1:
+        garde.add(i)
+        i = prec[i]
+    return garde
+
+
+def _ref(refs: Dict[int, str], eid: Any) -> str:
+    try:
+        return refs.get(int(eid)) or f"n° {eid}"
+    except (TypeError, ValueError):
+        return str(eid)
+
+
+def _deplaces(avant: List[int], apres: List[int], refs: Dict[int, str]) -> List[dict]:
+    rang_avant = {int(e): i + 1 for i, e in enumerate(avant)}
+    seq = [rang_avant.get(int(e), 0) for e in apres]
+    fixes = _plus_longue_sous_suite(seq)
+    return [{"champ": _ref(refs, e), "avant": f"rang {seq[i]}", "apres": f"rang {i + 1}"}
+            for i, e in enumerate(apres) if i not in fixes and seq[i]]
+
+
+def _preciser(sortie: dict, detail: Any, refs: Dict[int, str], machines: Dict[int, str]) -> None:
+    """Dossier visé, geste, et lignes avant → après là où le journal les permet."""
+    titre = sortie["titre"]
+    action = sortie["action"]
+    m = _RE_DOSSIER.match(titre)
+    sortie["dossier"] = m.group(1).strip() if m else None
+    sortie["geste"] = None
+    if not isinstance(detail, dict):
+        if sortie["dossier"]:
+            sortie["geste"] = _GESTE_DOSSIER.get(action)
+        return
+    lignes = sortie["lignes"]
+
+    if titre.startswith("Statut dossier"):
+        sortie["geste"] = "Changement de statut"
+    elif titre.startswith("Scission dossier"):
+        sortie["geste"] = "Scission"
+    elif titre.startswith("Parametrage carton dossier"):
+        sortie["geste"] = "Étiquettes par carton"
+    elif detail.get("geste"):
+        sortie["geste"] = _GESTES.get(str(detail["geste"]), str(detail["geste"]))
+    elif sortie["dossier"]:
+        sortie["geste"] = _GESTE_DOSSIER.get(action)
+
+    a_retirer = {_LIBELLES["geste"]}
+    # Changement de machine : une seule ligne Machine, origine → cible.
+    if "machine_source" in detail and "machine_cible" in detail:
+        a_retirer |= {_LIBELLES["machine_source"], _LIBELLES["machine_cible"]}
+        lignes.insert(0, {"champ": "Machine",
+                          "avant": _valeur("machine_source", detail["machine_source"], machines),
+                          "apres": _valeur("machine_cible", detail["machine_cible"], machines)})
+    # Rang dans la file : avant → après quand le journal connaît l'ancien.
+    if detail.get("rang") is not None:
+        a_retirer |= {_LIBELLES["rang"], "rang_avant"}
+        lignes.append({"champ": "Rang dans la file",
+                       "avant": "—" if detail.get("rang_avant") is None else str(detail["rang_avant"]),
+                       "apres": str(detail["rang"])})
+    if detail.get("apres_id") is not None:
+        a_retirer.add(_LIBELLES["apres_id"])
+        lignes.append({"champ": "Placé après", "valeur": _ref(refs, detail["apres_id"])})
+    if isinstance(detail.get("ordre_avant"), list) and isinstance(detail.get("entry_ids"), list):
+        a_retirer |= {_LIBELLES["entry_ids"], "ordre_avant"}
+        bouges = _deplaces(detail["ordre_avant"], detail["entry_ids"], refs)
+        if bouges:
+            lignes.extend(bouges[:12])
+            if len(bouges) > 12:
+                lignes.append({"champ": "", "valeur": f"et {len(bouges) - 12} autre(s) dossier(s)"})
+            if len(bouges) <= 3:
+                sortie["dossier"] = " · ".join(b["champ"] for b in bouges)
+        else:
+            lignes.append({"champ": "Dossiers", "valeur": "ordre inchangé"})
+        sortie["geste"] = "Réorganisation de la file"
+    elif titre.startswith("Réorganisation"):
+        sortie["geste"] = "Réorganisation de la file"
+    sortie["lignes"] = [l for l in lignes if l.get("champ") not in a_retirer]
+
+
+def _refs_utiles(rows: List[dict]) -> set:
+    ids: set = set()
+    for r in rows:
+        try:
+            d = json.loads(r.get("detail") or "null")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        if d.get("apres_id") is not None:
+            ids.add(d["apres_id"])
+        if isinstance(d.get("ordre_avant"), list):
+            ids.update(d.get("entry_ids") or [])
+    out = set()
+    for x in ids:
+        try:
+            out.add(int(x))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def mettre_en_forme(row: dict, machines: Dict[int, str],
+                    refs: Optional[Dict[int, str]] = None) -> dict:
     objet = str(row.get("objet") or "")
     brut = row.get("detail")
     try:
@@ -333,7 +470,7 @@ def mettre_en_forme(row: dict, machines: Dict[int, str]) -> dict:
         titre = titre[: -(len(nom_m) + 1)]
     jour, quand = _quand(row.get("created_at"))
     action = str(row.get("action") or "")
-    return {
+    sortie = {
         "id": row.get("id"),
         "jour": jour,
         "quand": quand,
@@ -350,6 +487,8 @@ def mettre_en_forme(row: dict, machines: Dict[int, str]) -> dict:
         )),
         "lignes": lignes,
     }
+    _preciser(sortie, detail, refs or {}, machines)
+    return sortie
 
 
 # ── Lecture ─────────────────────────────────────────────────────────────────
@@ -407,6 +546,21 @@ def lister(conn, *, machine_id: Optional[int] = None, utilisateur: str = "",
         params + [limite, max(0, int(offset or 0))],
     ).fetchall()
 
+    rows = [dict(r) for r in rows]
+    # Numéros de dossier des identifiants cités (« placé après », réorganisation).
+    refs: Dict[int, str] = {}
+    ids = sorted(_refs_utiles(rows))
+    for i in range(0, len(ids), 500):
+        lot = ids[i:i + 500]
+        try:
+            trouves = conn.execute(
+                f"SELECT id, COALESCE(NULLIF(trim(numero_of), ''), reference) AS ref "
+                f"FROM planning_entries WHERE id IN ({','.join('?' * len(lot))})", lot).fetchall()
+        except Exception:
+            trouves = []        # dossier supprimé depuis, ou base sans planning : l'id reste affiché
+        for r in trouves:
+            refs[int(r["id"])] = str(r["ref"] or "").strip() or f"n° {r['id']}"
+
     # Listes des filtres : ce qui existe pour la machine et la période choisies,
     # sans le filtre lui-même (sinon la liste se réduirait à la valeur cochée).
     w_fac, p_fac = _filtres(machines, machine_id, "", "", jours, "")
@@ -418,7 +572,7 @@ def lister(conn, *, machine_id: Optional[int] = None, utilisateur: str = "",
 
     return {
         "total": total,
-        "lignes": [mettre_en_forme(dict(r), machines) for r in rows],
+        "lignes": [mettre_en_forme(r, machines, refs) for r in rows],
         "machines": [{"id": k, "nom": v} for k, v in machines.items()],
         "utilisateurs": utilisateurs,
         "actions": sorted(({"valeur": a, "libelle": action_label(a)} for a in actions),

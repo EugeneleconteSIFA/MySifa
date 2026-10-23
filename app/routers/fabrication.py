@@ -2674,6 +2674,8 @@ async def annuler_dossier(request: Request):
                           annule_motif       = ?,
                           annule_par         = ?,
                           annule_le          = ?,
+                          a_placer           = 1,
+                          annulation_a_revoir = 1,
                           updated_at         = ?
                     WHERE id = ?""",
                 (motif, operateur, now_iso, now_iso, pe_id),
