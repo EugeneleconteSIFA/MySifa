@@ -56,7 +56,7 @@ const TOOLS_OUTILS = [
     desc: 'Envoyer un PDF à signer à une ou plusieurs personnes, dans un ordre défini, avec relances et certificat.',
     icon: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 16.5c1.4 0 1.9-3.5 3-3.5s-.1 3.3 1 3.3c.8 0 1.1-1.2 1.8-1.2.6 0 .5.9 1.2.9"/>' },
   { id: 'image', label: 'Image et BAT', titre: 'Image et BAT',
-    desc: 'Agrandir, nettoyer, détourer une image ; la vectoriser en SVG ou PDF. Les fichiers restent sur le poste.',
+    desc: 'Agrandir, nettoyer, détourer une image ; la vectoriser en SVG ou PDF. Projets enregistrés pour y revenir.',
     icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>' },
   { id: 'convertir', label: 'Convertir', titre: 'Convertir', onglet: 'Convertir',
     desc: 'Plus de 50 formats ; renommer des fichiers en lot, créer ou ouvrir un zip, comparer deux textes ou tableaux.',
@@ -455,8 +455,16 @@ function toolsParams() {
   } else if (S.outil === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
     const e = window.MyToolsCalculs.adresse.etat();
     if (e.calcul && e.calcul !== 'metrage') { p.calcul = e.calcul; nav += '/' + e.calcul; }
-  } else if (S.outil === 'image' && window.MyToolsImage) {
-    if (window.MyToolsImage.adresse.etat().mode === 'vectoriser') { p.mode = 'vectoriser'; nav += '/vectoriser'; }
+    // Matière du métrage : couches choisies (couches=frontal:12,glassine:40) ou épaisseur type.
+    const co = Object.keys(e.couches || {}).filter(k => /^[a-z_]{1,20}$/.test(k) && /^\d{1,9}$/.test(String(e.couches[k])));
+    if (co.length) p.couches = co.map(k => k + ':' + e.couches[k]).join(',');
+    else if (/^\d{1,9}$/.test(String(e.type || ''))) p.epaisseur = String(e.type);
+  } else if (S.outil === 'image') {
+    // Module pas encore chargé : l'adresse demandée fait foi en attendant.
+    const e = window.MyToolsImage ? window.MyToolsImage.adresse.etat() : (_toolsAttente.image || {});
+    if (e.mode === 'vectoriser') { p.mode = 'vectoriser'; nav += '/vectoriser'; }
+    if (e.projet) { p.projet = String(e.projet); nav += ':' + e.projet; }
+    if (e.projets === 'liste') { p.projets = 'liste'; nav += '/projets'; }
   } else if (S.outil === 'traduction' && window.MyToolsTraduction) {
     const e = window.MyToolsTraduction.adresse.etat();
     if (e.de && e.de !== 'auto') p.de = e.de;
@@ -567,11 +575,27 @@ async function toolsLireUrl(u, complet) {
     if (m && document.querySelector('.tools-util-seul .tut')) m.adresse.aller(a);
     else _toolsAttente.utilitaires = a;
   } else if (cible === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
-    if (complet || u.a('calcul')) window.MyToolsCalculs.adresse.aller({ calcul: u.get('calcul', 'metrage', ['metrage', 'fronts', 'etiquettes', 'carton']) });
+    const a = {};
+    if (complet || u.a('calcul')) a.calcul = u.get('calcul', 'metrage', ['metrage', 'fronts', 'etiquettes', 'carton']);
+    if (complet || u.a('couches') || u.a('epaisseur')) {
+      const co = {};
+      String(u.get('couches') || '').split(',').forEach(x => { const m = /^([a-z_]{1,20}):(\d{1,9})$/.exec(x); if (m) co[m[1]] = m[2]; });
+      const ep = String(u.get('epaisseur') || '');
+      a.couches = co;
+      a.type = /^\d{1,9}$/.test(ep) ? ep : '';
+    }
+    if (Object.keys(a).length) window.MyToolsCalculs.adresse.aller(a);
   } else if (cible === 'image') {
-    const a = { mode: u.get('mode', 'ameliorer', ['ameliorer', 'vectoriser']) };
-    if (window.MyToolsImage) { if (complet || u.a('mode')) window.MyToolsImage.adresse.aller(a); }
-    else if (complet || u.a('mode')) _toolsAttente.image = a;
+    // Clé absente au démarrage : undefined, rien n'est touché ; au retour : null, on ferme.
+    const pid = u.get('projet'), vide = complet ? null : undefined;
+    const a = { mode: (complet || u.a('mode')) ? u.get('mode', 'ameliorer', ['ameliorer', 'vectoriser']) : undefined,
+                projet: /^\d{1,10}$/.test(String(pid || '')) ? Number(pid) : vide,
+                projets: u.get('projets', null, ['liste']) || vide, complet: complet };
+    if (complet || u.a('mode') || u.a('projet') || u.a('projets')) {
+      // Sans attendre : rouvrir un projet peut demander une confirmation.
+      if (window.MyToolsImage) window.MyToolsImage.adresse.aller(a);
+      else _toolsAttente.image = a;
+    }
   }
   // Fenêtre de création du Parapheur, sur tout outil.
   const pn = u.get('parapheur', null, ['nouvelle']);

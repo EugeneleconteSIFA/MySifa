@@ -69,5 +69,40 @@ class Liste(unittest.TestCase):
         self.assertEqual(raisons.get("Couvercle 213 x 128 x 80 mm"), "sans volume utile")
 
 
+class Couches(unittest.TestCase):
+    """GET /api/tools/couches : frontaux, adhésifs, glassines et leur épaisseur."""
+
+    def test_epaisseurs_et_sources(self):
+        from app.services import couches_matieres
+        with get_db() as c:
+            ids = {}
+            for cat, des, ep, gsm in [
+                ("frontal", "Thermique test 70g", 72, 70),
+                ("adhesif", "Adhésif test 20g", None, 20),
+                ("glassine", "Glassine test 62g", None, 62),
+                ("frontal", "Couché test", None, None),
+                ("carton", "Carton 100 x 100 x 100 mm", None, None),
+            ]:
+                cur = c.execute("INSERT INTO matieres_premieres (categorie, reference, designation, actif, epaisseur_um, weight_gsm) "
+                                "VALUES (?,?,?,1,?,?)", (cat, des, des, ep, gsm))
+                ids[des] = cur.lastrowid
+            # La fiche technique l'emporte sur MyStock.
+            c.execute("INSERT INTO mp_fiche_technique (objet, objet_id, data) VALUES ('matiere', ?, ?)",
+                      (ids["Glassine test 62g"], '{"epaisseur_um": "52"}'))
+            c.commit()
+            d = couches_matieres.liste(c)
+        cats = [x["categorie"] for x in d["couches"]]
+        self.assertEqual(cats, ["frontal", "adhesif", "glassine"])
+        tout = {m["libelle"]: m for x in d["couches"] for m in x["matieres"]}
+        self.assertNotIn("Carton 100 x 100 x 100 mm", tout)
+        self.assertEqual(tout["Thermique test 70g"]["epaisseur_um"], 72)
+        self.assertEqual(tout["Thermique test 70g"]["source"], "MyStock")
+        self.assertEqual(tout["Glassine test 62g"]["epaisseur_um"], 52)
+        self.assertEqual(tout["Glassine test 62g"]["source"], "Fiche technique")
+        # Aucune déduction depuis le grammage : inconnue, grammage rendu pour l'écran.
+        self.assertIsNone(tout["Adhésif test 20g"]["epaisseur_um"])
+        self.assertEqual(tout["Adhésif test 20g"]["grammage_gsm"], 20)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

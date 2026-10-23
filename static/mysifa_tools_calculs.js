@@ -19,11 +19,23 @@
  *   carton       bobines rangées en grille, debout (axe vertical) ou couchées
  *                (axe le long d'un côté) ; dimensions du carton diminuées du jeu.
  *
+ * Épaisseur : une épaisseur type (GET /api/stock/metrage-epaisseurs), ou la
+ * somme des couches choisies parmi les matières MyStock — frontal + adhésif +
+ * glassine (GET /api/tools/couches : fiche technique, sinon MyStock, sinon
+ * RVGI). Aucune règle ne déduit une épaisseur du grammage : une couche sans
+ * épaisseur connue se saisit. Le total remplit le champ Épaisseur, qui reste
+ * modifiable.
+ *
+ * Retour du 23/10/2026 : Réglages fins dans une carte à part, résumé visible
+ * replié ; un schéma à l'échelle à droite de chaque calcul
+ * (static/mysifa_tools_calculs_schemas.js).
+ *
  * La saisie du métrage est partagée avec le widget de MyStock (clé
  * `mysifa_mtr_saisie_v1`). Rien n'est enregistré côté serveur.
  *
  *   MyToolsCalculs.mount(root, ctx)
- *   MyToolsCalculs.adresse = { etat() → {calcul}, aller({calcul}) }
+ *   MyToolsCalculs.adresse = { etat() → {calcul, couches, type}, aller({…}) }
+ *     couches = { <catégorie>: <id matière> }, type = id d'épaisseur type
  */
 (function () {
   'use strict';
@@ -85,16 +97,28 @@
     return Math.ceil(q / f) * (h + n0(espace)) / 1000;
   }
 
+  // Épaisseur d'une matière composée : somme des couches choisies.
+  // `couches` : [{ libelle, microns }] (microns vide = inconnue). Rend null si
+  // aucune couche n'est choisie ; `complet` = toutes les épaisseurs connues.
+  function epaisseurCouches(couches) {
+    const ch = (couches || []).filter(Boolean);
+    if (!ch.length) return null;
+    let total = 0;
+    const manquantes = [];
+    ch.forEach(c => { const e = n(c.microns); if (e > 0) total += e; else manquantes.push(c.libelle); });
+    return { total, manquantes, complet: !manquantes.length, nb: ch.length };
+  }
+
   // Rangement de bobines (Ø D, largeur L) dans un carton (l × w × h, intérieur),
   // en grille. `sens` : { debout, couche }.
   function rangement(D, L, carton, jeu, sens) {
     const j = n0(jeu), l = carton.l - j, w = carton.w - j, h = carton.h - j;
     if (!(D > 0) || !(L > 0) || l <= 0 || w <= 0 || h <= 0) return null;
     const essais = [];
-    if (sens.debout) essais.push({ sens: 'debout', a: Math.floor(l / D), b: Math.floor(w / D), c: Math.floor(h / L) });
+    if (sens.debout) essais.push({ sens: 'debout', axe: 'v', a: Math.floor(l / D), b: Math.floor(w / D), c: Math.floor(h / L) });
     if (sens.couche) {
-      essais.push({ sens: 'couchées', a: Math.floor(l / L), b: Math.floor(w / D), c: Math.floor(h / D) });
-      essais.push({ sens: 'couchées', a: Math.floor(l / D), b: Math.floor(w / L), c: Math.floor(h / D) });
+      essais.push({ sens: 'couchées', axe: 'l', a: Math.floor(l / L), b: Math.floor(w / D), c: Math.floor(h / D) });
+      essais.push({ sens: 'couchées', axe: 'w', a: Math.floor(l / D), b: Math.floor(w / L), c: Math.floor(h / D) });
     }
     let mieux = null;
     essais.forEach(e => { e.nb = e.a * e.b * e.c; if (e.nb > 0 && (!mieux || e.nb > mieux.nb)) mieux = e; });
@@ -134,14 +158,22 @@
 
   // ── Interface ──────────────────────────────────────────────────────
   let CTX = { toast: () => {}, surChange: null };
-  const C = { host: null, onglet: 'metrage', epaisseurs: null, cartons: null, ecartes: [], tousCartons: false };
+  const C = {
+    host: null, onglet: 'metrage', epaisseurs: null, cartons: null, ecartes: [], tousCartons: false,
+    couches: null,      // [{categorie, libelle, matieres:[{id, libelle, epaisseur_um, source, grammage_gsm}]}]
+    choix: {},          // { categorie: id matière }
+    umCouche: {},       // { categorie: µm saisis pour la couche }
+    adresseAttente: null,
+  };
   const fmt = (x, dec) => Number(x).toLocaleString('fr-FR', { minimumFractionDigits: dec || 0, maximumFractionDigits: dec || 0 });
+  const fmtL = x => Number(x).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function lire(cle) { try { return JSON.parse(localStorage.getItem(cle) || '{}') || {}; } catch (e) { return {}; } }
   function ecrire(cle, v) { try { localStorage.setItem(cle, JSON.stringify(v)); } catch (e) {} }
   function signaler() { if (typeof CTX.surChange === 'function') { try { CTX.surChange(); } catch (e) {} } }
   const $ = id => C.host.querySelector('#' + id);
   const val = id => ($(id) ? $(id).value : '');
+  const SCH = () => window.MyToolsCalculsSchemas || null;
 
   const CHAMPS = ['ep', 'dm', 'db', 'lm', 'laize', 'larg', 'espl', 'rive', 'nbv', 'haut', 'espa', 'nbf', 'l3m', 'qte', 'cd', 'cl', 'cq', 'jeu'];
   function champ(id, label, attrs, bulle) {
@@ -158,8 +190,20 @@
   const seg = (nom, choix) => '<div class="tcal-seg" role="group" data-seg="' + nom + '">'
     + choix.map(c => '<button type="button" class="tcal-seg-b" data-v="' + c[0] + '"' + (c[2] ? ' data-bulle="' + esc(c[2]) + '"' : '') + '>' + esc(c[1]) + '</button>').join('') + '</div>';
   const res = id => '<div class="tcal-res tcal-res--vide" id="tcal-r-' + id + '"><div class="tcal-res-v">—</div><div class="tcal-res-l"></div></div>';
-  // Ouverts par défaut (retour d'Eugène du 21/10) : on peut toujours les replier.
-  const fins = (contenu, bulle) => '<details class="tcal-fins" open><summary data-bulle="' + esc(bulle || 'Valeurs par défaut sinon') + '">Réglages fins</summary><div class="tcal-grille">' + contenu + '</div></details>';
+  // Réglages fins : une carte à part, ouverte par défaut (retours d'Eugène du
+  // 21 et du 23/10) ; repliée, elle résume ce qui est réglé.
+  const IC_FINS = '<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>';
+  const fins = (id, contenu, aide) => '<section class="tcal-carte tcal-fins-carte"><details class="tcal-fins" id="tcal-f-' + id + '" open>'
+    + '<summary data-bulle="Replier"><span class="tcal-fins-ic">' + svg(IC_FINS, 18) + '</span>'
+    + '<span class="tcal-fins-tx"><span class="tcal-fins-t">Réglages fins</span><span class="tcal-fins-aide">' + esc(aide) + '</span>'
+    + '<span class="tcal-fins-resume" id="tcal-fr-' + id + '"></span></span>'
+    + '<svg class="tcal-fins-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>'
+    + '<div class="tcal-fins-corps">' + contenu + '</div></details></section>';
+  const schema = id => '<aside class="tcal-schema" aria-label="Schéma"><div class="tcal-schema-tete"><span class="tcal-schema-t">Schéma</span>'
+    + '<span class="tcal-schema-ex" id="tcal-sx-' + id + '" hidden>Exemple</span></div>'
+    + '<div class="tcal-schema-dessin" id="tcal-s-' + id + '"></div><div class="tcal-schema-leg" id="tcal-sl-' + id + '"></div></aside>';
+  const panneau = (id, carte, reglages) => '<section class="tcal-panneau" data-panneau="' + id + '"' + (id === 'metrage' ? '' : ' hidden') + '>'
+    + '<div class="tcal-gauche"><div class="tcal-carte">' + tete(id) + carte + '</div>' + reglages + '</div>' + schema(id) + '</section>';
 
   function tete(id) {
     const o = ONGLETS.find(x => x[0] === id);
@@ -173,48 +217,50 @@
         '<button type="button" role="tab" class="tcal-onglet" data-onglet="' + o[0] + '">'
         + '<span class="tcal-onglet-ic">' + svg(o[3]) + '</span><span class="tcal-onglet-t">' + esc(o[1]) + '</span>'
         + '<span class="tcal-onglet-d">' + esc(o[2]) + '</span></button>').join('') + '</div>'
-      + '<section class="tcal-carte" data-panneau="metrage">' + tete('metrage')
-      + question('sens', 'Ce que je cherche', [['metrage', 'Le métrage', 'Je mesure le Ø de la bobine → j\'obtiens les mètres'],
-        ['diametre', 'Le diamètre', 'Je connais les mètres → j\'obtiens le Ø de la bobine']])
-      + '<div class="tcal-grille">' + champ('ep', 'Épaisseur (µm)', { placeholder: '145' }, 'Matière + adhésif + glassine')
-      + champ('dm', 'Ø mandrin (mm)', { placeholder: '76' }, 'Diamètre extérieur')
-      + champ('db', 'Ø bobine (mm)', { placeholder: '1000' }, 'Diamètre extérieur')
-      + champ('lm', 'Métrage (m)', { placeholder: '2000' }) + '</div>'
-      + res('metrage')
-      + '<div class="tcal-err" id="tcal-e-metrage"></div>'
-      + fins('<label class="tcal-champ" for="tcal-type"><span>Matière</span><select id="tcal-type" class="tcal-in"><option value="">Saisie libre</option></select></label>',
-        'Épaisseurs types de MyStock')
-      + '</section>'
-      + '<section class="tcal-carte" data-panneau="fronts" hidden>' + tete('fronts')
-      + '<div class="tcal-grille">' + champ('laize', 'Laize bobine (mm)', { placeholder: '440' }) + champ('larg', 'Largeur étiquette (mm)', { placeholder: '104,5' }) + '</div>'
-      + res('fronts') + '<div class="tcal-detail" id="tcal-d-fronts"></div><div class="tcal-err" id="tcal-e-fronts"></div>'
-      + fins(champ('espl', 'Espace entre fronts (mm)', { placeholder: '0' }) + champ('rive', 'Rive par bord (mm)', { placeholder: '0' })
-        + champ('nbv', 'Fronts voulus', { placeholder: '4', step: '1', min: '1', inputmode: 'numeric' }, 'Donne la laize minimale'))
-      + '<div class="tcal-detail" id="tcal-d-fronts2"></div>'
-      + '</section>'
-      + '<section class="tcal-carte" data-panneau="etiquettes" hidden>' + tete('etiquettes')
-      + question('sens3', 'Ce que je cherche', [['qte', 'Le nombre d\'étiquettes', 'Je connais le métrage → j\'obtiens la quantité'],
-        ['metres', 'Le métrage', 'Je connais la quantité → j\'obtiens les mètres']])
-      + '<div class="tcal-grille">' + champ('haut', 'Hauteur étiquette (mm)', { placeholder: '148,4' }, 'Dans le sens de déroulement')
-      + champ('nbf', 'Fronts', { placeholder: '1', step: '1', min: '1', inputmode: 'numeric' })
-      + champ('l3m', 'Métrage (m)', { placeholder: '2000' })
-      + champ('qte', 'Quantité visée', { placeholder: '10000', step: '1', inputmode: 'numeric' }, 'Étiquettes') + '</div>'
-      + '<div class="tcal-liens" id="tcal-l-etiquettes"></div>'
-      + res('etiquettes') + '<div class="tcal-detail" id="tcal-d-etiquettes"></div>'
-      + fins(champ('espa', 'Espace entre étiquettes (mm)', { placeholder: '0' }))
-      + '</section>'
-      + '<section class="tcal-carte" data-panneau="carton" hidden>' + tete('carton')
-      + '<div class="tcal-grille">' + champ('cd', 'Ø bobine (mm)', { placeholder: '200' }, 'Diamètre extérieur')
-      + champ('cl', 'Largeur bobine (mm)', { placeholder: '110' }, 'Laize de la bobine')
-      + champ('cq', 'Nombre de bobines', { placeholder: 'facultatif', step: '1', inputmode: 'numeric' }, 'Pour compter les cartons') + '</div>'
-      + '<div data-si-quantite>' + seg('priorite', [['vide', 'Moins de vide', 'Le moins d\'air au total'], ['cartons', 'Moins de cartons', 'Le moins de colis']]) + '</div>'
-      + '<div class="tcal-liens" id="tcal-l-carton"></div>'
-      + '<div id="tcal-cartons"></div>'
-      + fins(champ('jeu', 'Jeu (mm)', { placeholder: '4' }, 'Retiré de chaque dimension du carton')
-        + '<label class="tcal-case" data-bulle="Axe vertical"><input type="checkbox" id="tcal-debout"> Bobines debout</label>'
-        + '<label class="tcal-case" data-bulle="Axe horizontal"><input type="checkbox" id="tcal-couche"> Bobines couchées</label>',
-        'Jeu et sens de rangement')
-      + '</section>';
+      + panneau('metrage',
+        question('sens', 'Ce que je cherche', [['metrage', 'Le métrage', 'Je mesure le Ø de la bobine → j\'obtiens les mètres'],
+          ['diametre', 'Le diamètre', 'Je connais les mètres → j\'obtiens le Ø de la bobine']])
+        + '<div class="tcal-grille">' + champ('ep', 'Épaisseur (µm)', { placeholder: '145' }, 'Matière + adhésif + glassine')
+        + champ('dm', 'Ø mandrin (mm)', { placeholder: '76' }, 'Diamètre extérieur')
+        + champ('db', 'Ø bobine (mm)', { placeholder: '1000' }, 'Diamètre extérieur')
+        + champ('lm', 'Métrage (m)', { placeholder: '2000' }) + '</div>'
+        + res('metrage')
+        + '<div class="tcal-err" id="tcal-e-metrage"></div>',
+        fins('metrage',
+          '<div class="tcal-fins-bloc"><div class="tcal-titre">Épaisseur type</div>'
+          + '<label class="tcal-champ" for="tcal-type"><span class="tcal-sr">Épaisseur type</span><select id="tcal-type" class="tcal-in"><option value="">Aucune — saisie libre ou couches</option></select></label></div>'
+          + '<div class="tcal-fins-bloc"><div class="tcal-titre">Ou la matière couche par couche</div>'
+          + '<div class="tcal-couches" id="tcal-couches"><div class="tcal-aide">Chargement des matières MyStock…</div></div>'
+          + '<div class="tcal-couches-total" id="tcal-c-total"></div></div>',
+          'Matière : épaisseur type, ou frontal + adhésif + glassine'))
+      + panneau('fronts',
+        '<div class="tcal-grille">' + champ('laize', 'Laize bobine (mm)', { placeholder: '440' }) + champ('larg', 'Largeur étiquette (mm)', { placeholder: '104,5' }) + '</div>'
+        + res('fronts') + '<div class="tcal-detail" id="tcal-d-fronts"></div><div class="tcal-err" id="tcal-e-fronts"></div>'
+        + '<div class="tcal-detail" id="tcal-d-fronts2"></div>',
+        fins('fronts', '<div class="tcal-grille">' + champ('espl', 'Espace entre fronts (mm)', { placeholder: '0' }) + champ('rive', 'Rive par bord (mm)', { placeholder: '0' })
+          + champ('nbv', 'Fronts voulus', { placeholder: '4', step: '1', min: '1', inputmode: 'numeric' }, 'Donne la laize minimale') + '</div>',
+          'Espace entre fronts, rive, laize minimale'))
+      + panneau('etiquettes',
+        question('sens3', 'Ce que je cherche', [['qte', 'Le nombre d\'étiquettes', 'Je connais le métrage → j\'obtiens la quantité'],
+          ['metres', 'Le métrage', 'Je connais la quantité → j\'obtiens les mètres']])
+        + '<div class="tcal-grille">' + champ('haut', 'Hauteur étiquette (mm)', { placeholder: '148,4' }, 'Dans le sens de déroulement')
+        + champ('nbf', 'Fronts', { placeholder: '1', step: '1', min: '1', inputmode: 'numeric' })
+        + champ('l3m', 'Métrage (m)', { placeholder: '2000' })
+        + champ('qte', 'Quantité visée', { placeholder: '10000', step: '1', inputmode: 'numeric' }, 'Étiquettes') + '</div>'
+        + '<div class="tcal-liens" id="tcal-l-etiquettes"></div>'
+        + res('etiquettes') + '<div class="tcal-detail" id="tcal-d-etiquettes"></div>',
+        fins('etiquettes', '<div class="tcal-grille">' + champ('espa', 'Espace entre étiquettes (mm)', { placeholder: '0' }) + '</div>', 'Espace entre étiquettes'))
+      + panneau('carton',
+        '<div class="tcal-grille">' + champ('cd', 'Ø bobine (mm)', { placeholder: '200' }, 'Diamètre extérieur')
+        + champ('cl', 'Largeur bobine (mm)', { placeholder: '110' }, 'Laize de la bobine')
+        + champ('cq', 'Nombre de bobines', { placeholder: 'facultatif', step: '1', inputmode: 'numeric' }, 'Pour compter les cartons') + '</div>'
+        + '<div data-si-quantite>' + seg('priorite', [['vide', 'Moins de vide', 'Le moins d\'air au total'], ['cartons', 'Moins de cartons', 'Le moins de colis']]) + '</div>'
+        + '<div class="tcal-liens" id="tcal-l-carton"></div>'
+        + '<div id="tcal-cartons"></div>',
+        fins('carton', '<div class="tcal-grille">' + champ('jeu', 'Jeu (mm)', { placeholder: '4' }, 'Retiré de chaque dimension du carton')
+          + '<label class="tcal-case" data-bulle="Axe vertical"><input type="checkbox" id="tcal-debout"> Bobines debout</label>'
+          + '<label class="tcal-case" data-bulle="Axe horizontal"><input type="checkbox" id="tcal-couche"> Bobines couchées</label></div>',
+          'Jeu et sens de rangement'));
 
     const m = lire(LS_MTR), c = lire(LS_CALC);
     $('tcal-ep').value = m.ep != null ? m.ep : '';
@@ -227,7 +273,11 @@
     $('tcal-debout').checked = c.debout !== false;
     $('tcal-couche').checked = c.couche !== false;
     if (!C.ongletAdresse && ONGLETS.some(o => o[0] === c.onglet)) C.onglet = c.onglet;
-    C.typeMem = m.type || '';
+    if (!C.adresseAttente) {
+      C.typeMem = m.type || '';
+      C.choix = (c.choix && typeof c.choix === 'object') ? c.choix : {};
+      C.umCouche = (c.umCouche && typeof c.umCouche === 'object') ? c.umCouche : {};
+    }
 
     h.addEventListener('click', e => {
       const o = e.target.closest('[data-onglet]');
@@ -238,13 +288,34 @@
       if (r) { $(r.getAttribute('data-reprendre')).value = r.getAttribute('data-valeur'); maj(); return; }
       if (e.target.closest('[data-tous-cartons]')) { C.tousCartons = !C.tousCartons; maj(); }
     });
-    $('tcal-type').addEventListener('change', () => {
-      const t = (C.epaisseurs || []).find(x => String(x.id) === $('tcal-type').value);
-      if (t) $('tcal-ep').value = String(t.microns);
+    h.addEventListener('change', e => {
+      const t = e.target;
+      if (t.id === 'tcal-type') {
+        const ty = (C.epaisseurs || []).find(x => String(x.id) === t.value);
+        if (ty) { $('tcal-ep').value = String(ty.microns); C.choix = {}; C.umCouche = {}; (C.couches || []).forEach(co => majLigne(co.categorie)); }
+        C.typeMem = t.value;
+        maj();
+      } else if (t.hasAttribute('data-couche')) {
+        const cat = t.getAttribute('data-couche');
+        if (t.value) C.choix[cat] = t.value; else delete C.choix[cat];
+        const mat = matiere(cat, t.value);
+        C.umCouche[cat] = mat && mat.epaisseur_um ? String(mat.epaisseur_um) : '';
+        if (t.value) { C.typeMem = ''; $('tcal-type').value = ''; }
+        majLigne(cat);
+        reporterEpaisseur();
+        maj();
+      }
+    });
+    h.addEventListener('input', e => {
+      const t = e.target;
+      if (t.hasAttribute('data-couche-um')) { C.umCouche[t.getAttribute('data-couche-um')] = t.value; reporterEpaisseur(); }
       maj();
     });
-    h.addEventListener('input', maj);
+    h.querySelectorAll('details.tcal-fins').forEach(d => d.addEventListener('toggle', () => {
+      const s = d.querySelector('summary'); if (s) s.setAttribute('data-bulle', d.open ? 'Replier' : 'Déplier');
+    }));
     remplirTypes();
+    rendreCouches();
     maj();
   }
 
@@ -257,8 +328,103 @@
       o.value = String(t.id); o.textContent = t.libelle + ' — ' + fmt(t.microns, t.microns % 1 ? 1 : 0) + ' µm';
       sel.appendChild(o);
     });
-    if (C.typeMem && C.epaisseurs.some(t => String(t.id) === String(C.typeMem))) sel.value = String(C.typeMem);
+    sel.value = C.typeMem && C.epaisseurs.some(t => String(t.id) === String(C.typeMem)) ? String(C.typeMem) : '';
   }
+
+  // ── Couches : frontal + adhésif + glassine ─────────────────────────
+  const matiere = (cat, id) => {
+    const co = (C.couches || []).find(x => x.categorie === cat);
+    return co && id ? co.matieres.find(mm => String(mm.id) === String(id)) || null : null;
+  };
+  function couchesChoisies() {
+    return (C.couches || []).filter(co => C.choix[co.categorie] && matiere(co.categorie, C.choix[co.categorie]))
+      .map(co => ({ categorie: co.categorie, libelle: co.libelle, matiere: matiere(co.categorie, C.choix[co.categorie]), microns: C.umCouche[co.categorie] }));
+  }
+  // Le total remplit Épaisseur, dès que toutes les couches choisies ont la leur.
+  function reporterEpaisseur() {
+    const t = epaisseurCouches(couchesChoisies());
+    if (t && t.complet && t.total > 0) $('tcal-ep').value = String(Math.round(t.total * 100) / 100);
+  }
+  function rendreCouches() {
+    const z = $('tcal-couches');
+    if (!z) return;
+    if (C.couches === null) return;
+    if (!C.couches.length) { z.innerHTML = '<div class="tcal-aide">Aucune couche déclarée.</div>'; return; }
+    const actif = document.activeElement, focusId = actif && actif.id, deb = actif && actif.selectionStart, fin = actif && actif.selectionEnd;
+    z.innerHTML = '';
+    C.couches.forEach(co => {
+      const cat = co.categorie;
+      const ligne = document.createElement('div');
+      ligne.className = 'tcal-couche';
+      const nom = document.createElement('span'); nom.className = 'tcal-couche-nom'; nom.textContent = co.libelle;
+      const sel = document.createElement('select');
+      sel.className = 'tcal-in'; sel.id = 'tcal-c-' + cat; sel.setAttribute('data-couche', cat); sel.setAttribute('aria-label', co.libelle);
+      const o0 = document.createElement('option'); o0.value = ''; o0.textContent = co.matieres.length ? 'Aucun' : 'Aucune matière dans MyStock'; sel.appendChild(o0);
+      co.matieres.forEach(mm => {
+        const o = document.createElement('option'); o.value = String(mm.id);
+        o.textContent = mm.libelle + (mm.epaisseur_um ? ' — ' + fmtL(mm.epaisseur_um) + ' µm' : ' — épaisseur inconnue');
+        sel.appendChild(o);
+      });
+      const um = document.createElement('label'); um.className = 'tcal-couche-um';
+      const inp = document.createElement('input');
+      Object.assign(inp, { type: 'number', min: '0', step: 'any', className: 'tcal-in', id: 'tcal-cu-' + cat });
+      inp.setAttribute('inputmode', 'decimal'); inp.setAttribute('data-couche-um', cat); inp.setAttribute('aria-label', 'Épaisseur ' + co.libelle + ' (µm)');
+      const u = document.createElement('span'); u.textContent = 'µm';
+      um.append(inp, u);
+      const src = document.createElement('span'); src.className = 'tcal-couche-src'; src.id = 'tcal-cs-' + cat;
+      ligne.append(nom, sel, um, src);
+      z.appendChild(ligne);
+      majLigne(cat);
+    });
+    if (focusId) { const el = $(focusId); if (el) { el.focus(); try { if (deb != null) el.setSelectionRange(deb, fin); } catch (e) {} } }
+  }
+  // Une ligne de couche mise à jour sur place (le select garde le focus).
+  function majLigne(cat) {
+    const sel = $('tcal-c-' + cat), inp = $('tcal-cu-' + cat), src = $('tcal-cs-' + cat);
+    if (!sel || !inp || !src) return;
+    const mat = matiere(cat, C.choix[cat]);
+    sel.value = mat ? String(mat.id) : '';
+    inp.value = mat ? (C.umCouche[cat] != null ? C.umCouche[cat] : '') : '';
+    inp.disabled = !mat;
+    inp.placeholder = mat ? 'à saisir' : '—';
+    majSource(cat);
+  }
+  function majSource(cat) {
+    const src = $('tcal-cs-' + cat), mat = matiere(cat, C.choix[cat]);
+    if (!src) return;
+    src.classList.remove('tcal-couche-src--manque');
+    if (!mat) { src.textContent = ''; return; }
+    if (mat.epaisseur_um) {
+      src.textContent = n(C.umCouche[cat]) === mat.epaisseur_um ? 'Épaisseur : ' + mat.source : 'Modifiée (' + mat.source + ' : ' + fmtL(mat.epaisseur_um) + ' µm)';
+    } else {
+      const g = mat.grammage_gsm ? 'grammage ' + fmtL(mat.grammage_gsm) + ' g/m²' : '';
+      if (n(C.umCouche[cat]) > 0) src.textContent = 'Épaisseur saisie — inconnue dans MyStock' + (g ? ' (' + g + ')' : '');
+      else { src.textContent = 'Épaisseur inconnue' + (g ? ' (' + g + ')' : '') + ' — à saisir'; src.classList.add('tcal-couche-src--manque'); }
+    }
+  }
+  function majCouches() {
+    const z = $('tcal-c-total');
+    if (!z) return;
+    const ch = couchesChoisies(), t = epaisseurCouches(ch);
+    (C.couches || []).forEach(co => majSource(co.categorie));
+    if (!t) { z.textContent = ''; z.className = 'tcal-couches-total'; return; }
+    const parts = ch.map(c => c.libelle + ' ' + (n(c.microns) > 0 ? fmtL(n(c.microns)) : '?'));
+    const ep = n(val('tcal-ep'));
+    let txt = parts.join(' + ') + ' = ' + fmtL(t.total) + ' µm';
+    if (!t.complet) txt += ' — épaisseur à saisir : ' + t.manquantes.join(', ') + ' (aucune règle ne la déduit du grammage)';
+    else if (ep > 0 && Math.abs(ep - t.total) > 0.005) txt += ' — Épaisseur modifiée à la main : ' + fmtL(ep) + ' µm retenus';
+    else txt += ' → reporté dans Épaisseur';
+    z.textContent = txt;
+    z.className = 'tcal-couches-total' + (t.complet ? '' : ' tcal-couches-total--manque');
+  }
+  function resumeMetrage() {
+    const ch = couchesChoisies(), t = epaisseurCouches(ch), ep = n(val('tcal-ep'));
+    if (t) return ch.map(c => c.matiere.libelle).join(' · ') + ' = ' + fmtL(t.total) + ' µm' + (t.complet ? '' : ' (incomplet)');
+    const ty = (C.epaisseurs || []).find(x => String(x.id) === String(val('tcal-type')));
+    if (ty) return ty.libelle + ' — ' + fmtL(ty.microns) + ' µm';
+    return ep > 0 ? 'Épaisseur saisie : ' + fmtL(ep) + ' µm' : 'Aucune matière choisie';
+  }
+  function resume(id, txt) { const z = $('tcal-fr-' + id); if (z) z.textContent = txt; }
 
   function resultat(id, valeur, libelle, vide) {
     const r = $('tcal-r-' + id);
@@ -266,12 +432,22 @@
     r.querySelector('.tcal-res-v').textContent = valeur;
     r.querySelector('.tcal-res-l').textContent = libelle;
   }
-  const lien = (cible, valeur, texte) => '<button type="button" class="tcal-lien" data-reprendre="' + cible + '" data-valeur="' + valeur + '" data-bulle="Copier ici">' + esc(texte) + '</button>';
+  const lien = (cible, valeur, texte) => '<button type="button" class="tcal-lien" data-reprendre="' + cible + '" data-valeur="' + valeur + '" data-bulle="Copier">' + esc(texte) + '</button>';
   const montrer = (id, oui) => { const e = $(id); if (e) e.closest('.tcal-champ').hidden = !oui; };
+  function dessiner(id, r) {
+    const z = $('tcal-s-' + id);
+    if (!z || !r) return;
+    if (z._svg !== r.svg) { z.innerHTML = r.svg; z._svg = r.svg; }
+    z.classList.toggle('tcal-schema--exemple', !!r.exemple);
+    $('tcal-sx-' + id).hidden = !r.exemple;
+    const l = $('tcal-sl-' + id);
+    if (l._html !== r.legende) { l.innerHTML = r.legende; l._html = r.legende; }
+  }
 
   function maj() {
     if (!C.host) return;
-    const c = { sens: C.sens, sens3: C.sens3, priorite: C.priorite, onglet: C.onglet, debout: $('tcal-debout').checked, couche: $('tcal-couche').checked };
+    const c = { sens: C.sens, sens3: C.sens3, priorite: C.priorite, onglet: C.onglet, debout: $('tcal-debout').checked, couche: $('tcal-couche').checked,
+      choix: C.choix, umCouche: C.umCouche };
     CHAMPS.forEach(k => { if (!['ep', 'dm', 'db'].includes(k)) c[k] = val('tcal-' + k); });
     ecrire(LS_CALC, c);
     ecrire(LS_MTR, Object.assign(lire(LS_MTR), { type: $('tcal-type').value, ep: val('tcal-ep'), dm: val('tcal-dm'), db: val('tcal-db') }));
@@ -282,6 +458,7 @@
       const on = b.getAttribute('data-v') === C[g.getAttribute('data-seg')];
       b.classList.toggle('active', on); if (b.getAttribute('role') === 'radio') b.setAttribute('aria-checked', on ? 'true' : 'false');
     }));
+    const S = SCH();
 
     // Métrage ↔ diamètre
     montrer('tcal-db', C.sens === 'metrage'); montrer('tcal-lm', C.sens === 'diametre');
@@ -297,6 +474,9 @@
       if (r.mm != null) { metres = n(val('tcal-lm')); diam = r.mm; resultat('metrage', '≈ Ø ' + fmt(r.mm) + ' mm', 'diamètre extérieur de la bobine'); }
       else resultat('metrage', '—', 'Épaisseur, mandrin et métrage à renseigner', true);
     }
+    majCouches();
+    resume('metrage', resumeMetrage());
+    if (S && C.onglet === 'metrage') dessiner('metrage', S.metrage({ dm: val('tcal-dm'), db: diam, ep: val('tcal-ep'), metres }));
 
     // Fronts
     const f = fronts(val('tcal-laize'), val('tcal-larg'), val('tcal-espl'), val('tcal-rive'));
@@ -307,6 +487,12 @@
     } else { resultat('fronts', '—', 'Laize et largeur d\'étiquette à renseigner', true); $('tcal-d-fronts').textContent = ''; }
     const lmin = laizeMini(val('tcal-nbv'), val('tcal-larg'), val('tcal-espl'), val('tcal-rive'));
     $('tcal-d-fronts2').textContent = lmin != null ? 'Laize minimale pour ' + Math.floor(n(val('tcal-nbv'))) + ' fronts : ' + fmt(lmin, 2) + ' mm' : '';
+    const rf = [];
+    if (n(val('tcal-espl')) > 0) rf.push('espace ' + fmtL(n(val('tcal-espl'))) + ' mm');
+    if (n(val('tcal-rive')) > 0) rf.push('rive ' + fmtL(n(val('tcal-rive'))) + ' mm');
+    if (n(val('tcal-nbv')) >= 1) rf.push(Math.floor(n(val('tcal-nbv'))) + ' fronts voulus');
+    resume('fronts', rf.length ? rf.join(' · ') : 'Espace et rive à 0');
+    if (S && C.onglet === 'fronts') dessiner('fronts', S.fronts({ laize: val('tcal-laize'), larg: val('tcal-larg'), espl: val('tcal-espl'), rive: val('tcal-rive'), nb: f.nb || 0, haut: val('tcal-haut'), espa: val('tcal-espa') }));
 
     // Étiquettes / bobine
     montrer('tcal-l3m', C.sens3 === 'qte'); montrer('tcal-qte', C.sens3 === 'metres');
@@ -315,26 +501,33 @@
     if (C.sens3 === 'qte' && metres != null && Math.round(metres) !== Math.round(n(val('tcal-l3m')))) liens.push(lien('tcal-l3m', String(Math.round(metres)), 'Métrage : ' + fmt(metres) + ' m'));
     if (f.nb && f.nb !== Math.floor(n(val('tcal-nbf')))) liens.push(lien('tcal-nbf', String(f.nb), 'Fronts : ' + f.nb));
     $('tcal-l-etiquettes').innerHTML = liens.join('');
+    let schEt = { total: null, metres: null };
     if (C.sens3 === 'qte') {
       const e = etiquettes(val('tcal-l3m'), val('tcal-haut'), val('tcal-espa'), nbf);
       if (e.total != null) {
+        schEt = { total: e.total, metres: n(val('tcal-l3m')) };
         resultat('etiquettes', fmt(e.total) + ' étiquettes', 'sur ' + fmt(n(val('tcal-l3m'))) + ' m');
         $('tcal-d-etiquettes').textContent = nbf > 1 ? fmt(e.parFront) + ' par front × ' + nbf : '';
       } else { resultat('etiquettes', '—', 'Hauteur d\'étiquette et métrage à renseigner', true); $('tcal-d-etiquettes').textContent = ''; }
     } else {
       const b = metragePour(val('tcal-qte'), val('tcal-haut'), val('tcal-espa'), nbf);
       if (b != null) {
+        schEt = { total: Math.floor(n(val('tcal-qte'))), metres: b };
         resultat('etiquettes', fmt(b, b < 100 ? 1 : 0) + ' m', 'pour ' + fmt(n(val('tcal-qte'))) + ' étiquettes');
         const d = diametre(val('tcal-ep'), val('tcal-dm'), b);
         $('tcal-d-etiquettes').textContent = d.mm != null ? 'Ø bobine ≈ ' + fmt(d.mm) + ' mm' : '';
       } else { resultat('etiquettes', '—', 'Hauteur d\'étiquette et quantité à renseigner', true); $('tcal-d-etiquettes').textContent = ''; }
     }
+    resume('etiquettes', n(val('tcal-espa')) > 0 ? 'Espace ' + fmtL(n(val('tcal-espa'))) + ' mm' : 'Espace à 0');
+    if (S && C.onglet === 'etiquettes') dessiner('etiquettes', S.etiquettes(Object.assign({ haut: val('tcal-haut'), espa: val('tcal-espa'), nbf: val('tcal-nbf'), larg: val('tcal-larg'), espl: val('tcal-espl') }, schEt)));
 
     // Carton
     const lc = [];
     if (diam != null && Math.round(diam) !== Math.round(n(val('tcal-cd')))) lc.push(lien('tcal-cd', String(Math.round(diam)), 'Ø : ' + fmt(diam) + ' mm'));
     if (f.nb && Math.abs(f.module - n(val('tcal-cl'))) > 0.05) lc.push(lien('tcal-cl', String(Math.round(f.module * 10) / 10), 'Largeur : ' + fmt(f.module, 1) + ' mm'));
     $('tcal-l-carton').innerHTML = lc.join('');
+    const sensTxt = [$('tcal-debout').checked ? 'debout' : '', $('tcal-couche').checked ? 'couchées' : ''].filter(Boolean).join(' et ');
+    resume('carton', 'Jeu ' + fmtL(val('tcal-jeu') === '' ? 4 : n0(val('tcal-jeu'))) + ' mm · ' + (sensTxt ? 'bobines ' + sensTxt : 'aucun sens coché'));
     rendreCartons();
     signaler();
   }
@@ -342,16 +535,17 @@
   function rendreCartons() {
     const z = $('tcal-cartons');
     if (C.onglet !== 'carton') return;
-    if (C.cartons === null) { z.innerHTML = '<div class="tcal-res tcal-res--vide"><div class="tcal-res-l">Chargement des références carton…</div></div>'; return; }
+    const S = SCH(), vide = () => S && dessiner('carton', S.carton({}));
+    if (C.cartons === null) { z.innerHTML = '<div class="tcal-res tcal-res--vide"><div class="tcal-res-l">Chargement des références carton…</div></div>'; vide(); return; }
     const D = n(val('tcal-cd')), L = n(val('tcal-cl'));
     const sens = { debout: $('tcal-debout').checked, couche: $('tcal-couche').checked };
-    if (!(D > 0) || !(L > 0)) { z.innerHTML = '<div class="tcal-res tcal-res--vide"><div class="tcal-res-v">—</div><div class="tcal-res-l">Diamètre et largeur de bobine à renseigner — ' + C.cartons.length + ' références carton</div></div>'; return; }
-    if (!sens.debout && !sens.couche) { z.innerHTML = '<div class="tcal-err">Cocher au moins un sens de rangement (Réglages fins).</div>'; return; }
+    if (!(D > 0) || !(L > 0)) { z.innerHTML = '<div class="tcal-res tcal-res--vide"><div class="tcal-res-v">—</div><div class="tcal-res-l">Diamètre et largeur de bobine à renseigner — ' + C.cartons.length + ' références carton</div></div>'; vide(); return; }
+    if (!sens.debout && !sens.couche) { z.innerHTML = '<div class="tcal-err">Cocher au moins un sens de rangement (Réglages fins).</div>'; vide(); return; }
     const jeu = val('tcal-jeu') === '' ? 4 : val('tcal-jeu');
     const Q = Math.floor(n(val('tcal-cq'))) || 0;
     C.host.querySelector('[data-si-quantite]').hidden = !Q;
     const lignes = classerCartons(C.cartons, D, L, Q, jeu, sens, C.priorite);
-    if (!lignes.length) { z.innerHTML = '<div class="tcal-err">Aucune de nos ' + C.cartons.length + ' références ne contient une bobine de Ø ' + fmt(D) + ' × ' + fmt(L) + ' mm.</div>'; return; }
+    if (!lignes.length) { z.innerHTML = '<div class="tcal-err">Aucune de nos ' + C.cartons.length + ' références ne contient une bobine de Ø ' + fmt(D) + ' × ' + fmt(L) + ' mm.</div>'; vide(); return; }
     const m = lignes[0], c = m.carton;
     let h = '<div class="tcal-res"><div class="tcal-res-v">' + esc(c.libelle) + '</div><div class="tcal-res-l">'
       + m.parCarton + ' bobine' + (m.parCarton > 1 ? 's' : '') + ' par carton · ' + m.rang.a + ' × ' + m.rang.b + ' × ' + m.rang.c + ' ' + m.rang.sens
@@ -363,24 +557,54 @@
         '<div class="tcal-carton"><span class="tcal-carton-nom">' + esc(x.carton.libelle) + '</span>'
         + '<span class="tcal-carton-chiffres">' + x.parCarton + ' / carton' + (Q ? ' · ' + x.nbCartons + ' carton' + (x.nbCartons > 1 ? 's' : '') : '') + '</span>'
         + '<span class="tcal-jauge" data-bulle="Remplissage ' + fmt((Q ? x.remplissageTotal : x.remplissage) * 100) + ' %"><i style="width:' + Math.round((Q ? x.remplissageTotal : x.remplissage) * 100) + '%"></i></span></div>').join('') + '</div>';
-      if (lignes.length > 5) h += '<button type="button" class="tcal-lien" data-tous-cartons>' + (C.tousCartons ? 'Moins de cartons' : 'Les ' + lignes.length + ' cartons possibles') + '</button>';
+      if (lignes.length > 5) h += '<button type="button" class="tcal-lien" data-tous-cartons data-bulle="' + (C.tousCartons ? 'Réduire' : 'Tout') + '">' + (C.tousCartons ? 'Moins de cartons' : 'Les ' + lignes.length + ' cartons possibles') + '</button>';
     }
     h += '<p class="tcal-aide">Rangement en grille, jeu de ' + fmt(n0(jeu)) + ' mm retiré de chaque dimension. Dimensions lues dans les désignations MyStock (' + C.cartons.length + ' références' + (C.ecartes.length ? ', ' + C.ecartes.length + ' écartées' : '') + ').</p>';
     z.innerHTML = h;
+    if (S) dessiner('carton', S.carton({ meilleur: m, D, L, jeu, dm: n(val('tcal-dm')) }));
+  }
+
+  // Choix de l'adresse en attente des matières : appliqués à leur arrivée.
+  function appliquerAdresse() {
+    const a = C.adresseAttente;
+    if (!a || C.couches === null || C.epaisseurs === null) return;
+    C.adresseAttente = null;
+    if (a.couches !== undefined) {
+      // Même matière qu'avant : l'épaisseur saisie pour la couche est gardée.
+      const avant = C.choix, umAvant = C.umCouche;
+      C.choix = {}; C.umCouche = {};
+      Object.keys(a.couches || {}).forEach(cat => {
+        const mat = matiere(cat, a.couches[cat]);
+        if (!mat) return;
+        C.choix[cat] = String(mat.id);
+        const garde = String(avant[cat] || '') === String(mat.id) && n(umAvant[cat]) > 0;
+        C.umCouche[cat] = garde ? String(umAvant[cat]) : (mat.epaisseur_um ? String(mat.epaisseur_um) : '');
+      });
+    }
+    if (a.type !== undefined) C.typeMem = a.type && (C.epaisseurs || []).some(t => String(t.id) === String(a.type)) ? String(a.type) : '';
+    if (Object.keys(C.choix).length) { C.typeMem = ''; reporterEpaisseur(); }
+    else if (C.typeMem) { const ty = C.epaisseurs.find(t => String(t.id) === String(C.typeMem)); if (ty) $('tcal-ep').value = String(ty.microns); }
+    remplirTypes();
+    rendreCouches();
   }
 
   async function charger() {
-    try {
-      const r = await fetch('/api/stock/metrage-epaisseurs', { credentials: 'include', cache: 'no-store' });
-      C.epaisseurs = r.ok ? await r.json() : [];
-      if (!Array.isArray(C.epaisseurs)) C.epaisseurs = [];
-    } catch (e) { C.epaisseurs = []; }
+    const lireJson = async (url, defaut) => {
+      try { const r = await fetch(url, { credentials: 'include', cache: 'no-store' }); return r.ok ? await r.json() : defaut; } catch (e) { return defaut; }
+    };
+    const [ep, co, ca] = await Promise.all([
+      lireJson('/api/stock/metrage-epaisseurs', []),
+      lireJson('/api/tools/couches', { couches: [] }),
+      lireJson('/api/tools/cartons', { cartons: [], ecartes: [] }),
+    ]);
+    C.epaisseurs = Array.isArray(ep) ? ep : [];
+    C.couches = (co && Array.isArray(co.couches)) ? co.couches : [];
+    // Une matière disparue de MyStock ne reste pas choisie.
+    Object.keys(C.choix).forEach(cat => { if (!matiere(cat, C.choix[cat])) { delete C.choix[cat]; delete C.umCouche[cat]; } });
+    C.cartons = (ca && ca.cartons) || []; C.ecartes = (ca && ca.ecartes) || [];
     remplirTypes();
-    try {
-      const r = await fetch('/api/tools/cartons', { credentials: 'include', cache: 'no-store' });
-      const d = r.ok ? await r.json() : { cartons: [], ecartes: [] };
-      C.cartons = d.cartons || []; C.ecartes = d.ecartes || [];
-    } catch (e) { C.cartons = []; }
+    rendreCouches();
+    appliquerAdresse();
     maj();
   }
 
@@ -394,13 +618,28 @@
   window.MyToolsCalculs = {
     mount,
     adresse: {
-      etat: () => ({ calcul: C.onglet }),
+      // Ce que l'adresse porte : le calcul, et la matière du métrage (couches
+      // choisies, ou épaisseur type). Les valeurs saisies restent des saisies.
+      etat: () => {
+        const a = C.adresseAttente;
+        const couches = a && a.couches !== undefined ? Object.assign({}, a.couches || {}) : Object.assign({}, C.choix);
+        const type = a && a.type !== undefined ? a.type || '' : (Object.keys(C.choix).length ? '' : (C.host ? val('tcal-type') : C.typeMem || ''));
+        return { calcul: C.onglet, couches, type };
+      },
+      // a.couches / a.type : undefined = ne pas toucher, null ou {} = aucun.
       aller: a => {
-        const o = a && ONGLETS.some(x => x[0] === a.calcul) ? a.calcul : 'metrage';
-        C.onglet = o; C.ongletAdresse = true;
+        a = a || {};
+        if (a.calcul !== undefined) {
+          C.onglet = ONGLETS.some(x => x[0] === a.calcul) ? a.calcul : 'metrage';
+          C.ongletAdresse = true;
+        }
+        if (a.couches !== undefined || a.type !== undefined) {
+          C.adresseAttente = Object.assign(C.adresseAttente || {}, a.couches !== undefined ? { couches: a.couches || {} } : {}, a.type !== undefined ? { type: a.type || '' } : {});
+          if (C.host) appliquerAdresse();
+        }
         if (C.host) maj();
       },
     },
-    _interne: { metrage, diametre, fronts, laizeMini, etiquettes, metragePour, rangement, classerCartons },
+    _interne: { metrage, diametre, fronts, laizeMini, etiquettes, metragePour, rangement, classerCartons, epaisseurCouches },
   };
 })();

@@ -1303,6 +1303,10 @@ ETIQ_IA_MODELES = (
 CARTONS_CATEGORIE = os.getenv("CARTONS_CATEGORIE", "carton")
 CARTONS_EXCLUS = tuple(m.strip().lower() for m in os.getenv("CARTONS_EXCLUS", "couvercle,intercalaire").split(",") if m.strip())
 
+# Couches d'une matière enduite, de haut en bas : (catégorie MyStock, libellé).
+# Calculs bobine › Métrage additionne leurs épaisseurs (GET /api/tools/couches).
+COUCHES_MATIERE = (("frontal", "Frontal"), ("adhesif", "Adhésif"), ("glassine", "Glassine"))
+
 # ─── MyTools — convertisseur (repris de Prismix) ──────────────────
 # Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et
 # ffmpeg sont gourmands), quota par utilisateur et par heure.
@@ -1928,6 +1932,15 @@ MONITORING_RAPPROCHEMENT_JOURS = int(os.getenv("MONITORING_RAPPROCHEMENT_JOURS",
 # Expédition : une sortie de stock est rapprochée du BL RVGI de même référence
 # le plus proche dans le temps, à N jours près, période affichée ou non.
 MONITORING_EXPE_FENETRE_JOURS = int(os.getenv("MONITORING_EXPE_FENETRE_JOURS", "7"))
+
+# ─── MyTools — Image et BAT : projets enregistrés ─────────────────
+# Image d'origine et vignette de chaque projet : hors de UPLOADS_ROOT (servi
+# publiquement sous /uploads/*), lues par l'API seulement, auteur revérifié.
+# Surcharge TOOLS_IMAGE_DIR pour que v1 et v2 partagent le même dossier.
+TOOLS_IMAGE_DIR = os.getenv("TOOLS_IMAGE_DIR", os.path.join(DATA_DIR, "tools_image"))
+TOOLS_IMAGE_TAILLE_MAX_MO = int(os.getenv("TOOLS_IMAGE_TAILLE_MAX_MO", "40"))
+TOOLS_IMAGE_VIGNETTE_MAX_KO = int(os.getenv("TOOLS_IMAGE_VIGNETTE_MAX_KO", "400"))
+TOOLS_IMAGE_PROJETS_MAX = int(os.getenv("TOOLS_IMAGE_PROJETS_MAX", "300"))
 
 # ─── MyTools — Parapheur (envoi de PDF à signer) ──────────────────
 # Documents d'origine et documents scellés : hors de UPLOADS_ROOT, qui est

@@ -435,9 +435,9 @@
       '<div class="tconv-fichier"><span class="tconv-nom">' + esc(f.name) + '</span><small>' + taille(f.size) + '</small>'
       + '<button type="button" class="tconv-x" data-retirer="' + i + '" data-bulle="Retirer" aria-label="Retirer">×</button></div>').join('')
       + '<button type="button" class="tconv-lien" data-a="vider">Tout retirer</button></div>';
-    if (vide) { ['cibles', 'options', 'action', 'resultats'].forEach(k => { z(k).innerHTML = ''; }); }
     const dep = h.querySelector('.tconv-depot');
     if (dep) dep.classList.toggle('tconv-depot--compact', !vide);
+    if (vide) { ['cibles', 'options', 'action', 'resultats'].forEach(k => { z(k).innerHTML = ''; }); }
     else {
       z('cibles').innerHTML = '<div class="tconv-titre">' + esc(FAMILLES[C.fam].lib) + ' → convertir en</div><div class="tconv-pastilles">'
         + CIBLES[C.fam].filter(c => !c.min || C.fichiers.length >= c.min).map(c => {

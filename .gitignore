@@ -32,6 +32,8 @@ mysifa.db
 data/uploads/
 # Parapheur : PDF signés et originaux (config.PARAPHEUR_DIR).
 data/parapheur/
+# MyTools › Image : projets enregistrés (config.TOOLS_IMAGE_DIR).
+data/tools_image/
 production.db
 
 # Widget Electron (build local — upload via deploy.sh --widget)

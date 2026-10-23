@@ -1,7 +1,8 @@
 /* MyTools › Image — améliorer et vectoriser une image, dans le navigateur.
  *
  * Monté dans MyTools (/tools?outil=image) et dans MyBAT (bouton « Images » de
- * la barre latérale). Rien n'est envoyé au serveur : l'image reste sur le poste.
+ * la barre latérale). Les traitements se font dans le navigateur ; rien ne
+ * part au serveur, sauf quand l'utilisateur enregistre un projet.
  *
  *   Améliorer   agrandir (×2 à ×4), débruiter, netteté, niveaux automatiques,
  *               luminosité / contraste / saturation, noir et blanc, fond rendu
@@ -13,9 +14,17 @@
  * La vectorisation part de l'image améliorée : on nettoie d'abord, on trace
  * ensuite. Un PDF en entrée est rendu page par page (pdf.js) à 300 dpi.
  *
+ * Projets (app/routers/tools_image.py) : image d'origine + réglages + vignette,
+ * gardés sur le serveur, visibles de leur seul auteur. « Enregistrer » écrase
+ * le projet ouvert, « Enregistrer sous » en crée un autre, « Nouveau » revient
+ * à l'écran de dépôt (confirmation si des changements ne sont pas enregistrés).
+ *
  *   MyToolsImage.mount(root, ctx)   ctx = { toast(msg, type), surChange() }
  *   MyToolsImage.demonter()
- *   MyToolsImage.adresse = { etat() → {mode}, aller({mode}) }
+ *   MyToolsImage.adresse = { etat() → {mode, projet, projets},
+ *                            aller({mode, projet, projets, complet}) }
+ *     projet  id du projet ouvert ; projets  'liste' quand « Mes projets » est ouvert.
+ *     Une clé `undefined` ne touche à rien ; `null` ferme (retour du navigateur).
  *
  * Bibliothèques chargées au premier besoin, versions figées :
  *   imagetracerjs 1.2.6, pdf-lib 1.17.1, pdf.js 4.4.168.
@@ -31,12 +40,21 @@
   const MAX_PIXELS = 40e6;          // au-delà, l'agrandissement est plafonné
   const MAX_TRACE_COTE = 2000;      // la vectorisation travaille au plus sur 2000 px de côté
   const LS = 'mysifa_tools_image_v1';
+  const API = '/api/tools/image/projets';
+  // Types gardés tels quels côté serveur ; tout autre format part en PNG.
+  const TYPES_SOURCE = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp'];
+  const VIGNETTE_COTE = 320;
 
   let CTX = { toast: () => {}, surChange: null };
   const I = {
     host: null, nom: 'image', original: null, resultat: null, mode: 'ameliorer',
     r: null, v: null, svg: null, traceInfo: null, enCours: false, comparaison: 50,
     pdf: null, pdfPage: 1, minuteur: 0, clavier: null,
+    // Projet : ouvert (id, nom), nom saisi, modifications non enregistrées,
+    // fichier d'origine à envoyer, fenêtre « Mes projets », projet demandé
+    // par l'adresse et en cours d'ouverture.
+    projet: null, nomProjet: '', sale: false, source: null, sourceChange: false,
+    fen: null, projets: null, demandeProjet: null, enregistrement: false,
   };
   const DEFAUT_R = { echelle: 1, bruit: 0, nettete: 0, auto: false, lum: 0, contraste: 0, satur: 100,
     nb: 'couleur', seuil: 128, transparent: false, tolerance: 12, rogner: false, dpi: 300, format: 'png', qualite: 92 };
@@ -75,6 +93,45 @@
     a.href = URL.createObjectURL(blob); a.download = nom;
     document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  async function api(chemin, opts) {
+    const r = await fetch(API + chemin, Object.assign({ credentials: 'same-origin' }, opts || {}));
+    let d = null;
+    try { d = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error((d && typeof d.detail === 'string' && d.detail) || 'Serveur indisponible — réessayer.');
+    return d;
+  }
+
+  // Réglages relus d'un projet : chaque clé connue, du type attendu, sinon le
+  // défaut. Un projet enregistré par une version antérieure s'ouvre donc tel quel.
+  // Valeurs admises (boutons) et bornes (curseurs), reprises de l'interface.
+  const ADMIS = { echelle: [1, 2, 3, 4], bruit: [0, 1, 2], nb: ['couleur', 'gris', 'seuil'], format: ['png', 'jpg', 'webp'],
+    couleurs: [2, 3, 4, 6, 8, 16] };
+  const BORNES = { nettete: [0, 200], lum: [-100, 100], contraste: [-100, 100], satur: [0, 200], seuil: [1, 254],
+    tolerance: [1, 60], qualite: [50, 100], dpi: [72, 4800], lissage: [0.1, 5], details: [0, 60] };
+  function reglagesValides(defaut, brut) {
+    const o = Object.assign({}, defaut);
+    if (!brut || typeof brut !== 'object') return o;
+    Object.keys(defaut).forEach(k => {
+      const v = brut[k], d = defaut[k];
+      if (typeof v !== typeof d || (typeof v === 'number' && !isFinite(v))) return;
+      if (ADMIS[k]) { if (ADMIS[k].indexOf(v) !== -1) o[k] = v; return; }
+      if (BORNES[k]) { o[k] = Math.min(BORNES[k][1], Math.max(BORNES[k][0], v)); return; }
+      if (typeof v === 'boolean') o[k] = v;
+    });
+    return o;
+  }
+  function etatReglages() {
+    return { mode: I.mode, r: Object.assign({}, I.r), v: Object.assign({}, I.v), comparaison: I.comparaison };
+  }
+  function appliquerReglages(g) {
+    g = g || {};
+    I.mode = g.mode === 'vectoriser' ? 'vectoriser' : 'ameliorer';
+    I.r = reglagesValides(DEFAUT_R, g.r);
+    I.v = reglagesValides(DEFAUT_V, g.v);
+    const c = +g.comparaison;
+    I.comparaison = isFinite(c) && c >= 0 && c <= 100 ? c : 50;
   }
 
   // ── Filtres (sur ImageData, en place ou en copie) ──────────────────
@@ -284,7 +341,9 @@
   async function vectoriser() {
     await etape('Chargement du traceur…');
     const IT = await tracer();
-    let c = I.resultat;
+    const src = I.resultat;
+    if (!src) return;
+    let c = src;
     const f = Math.min(1, MAX_TRACE_COTE / Math.max(c.width, c.height));
     if (f < 1) { const n = toile(c.width * f, c.height * f); const x = ctx2d(n); x.imageSmoothingQuality = 'high'; x.drawImage(c, 0, 0, n.width, n.height); c = n; }
     const d = ctx2d(c).getImageData(0, 0, c.width, c.height);
@@ -310,6 +369,7 @@
     }
     let nbTraces = 0;
     td.layers = td.layers.map((couche, i) => { if (!garder[i]) return []; nbTraces += couche.length; return couche; });
+    if (I.resultat !== src) return;
     let svg = IT.getsvgstring(td, opts);
     // Dimensions réelles de l'image d'origine, viewBox à la taille tracée.
     svg = svg.replace(/<svg /, '<svg width="' + I.resultat.width + '" height="' + I.resultat.height + '" ').replace(/ desc="[^"]*"/, '');
@@ -343,20 +403,22 @@
   // ── Chargement d'un fichier ────────────────────────────────────────
   async function ouvrirFichier(f) {
     if (!f) return;
-    I.nom = (f.name || 'image').replace(/\.[^.]+$/, '').replace(/[^\w\- ]+/g, '').trim() || 'image';
+    if (!(await abandonnerSiSale('Ouvrir une autre image'))) return;
+    const nom = (f.name || 'image').replace(/\.[^.]+$/, '').replace(/[^\w\- ]+/g, '').trim() || 'image';
     try {
       if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
         const lib = await pdfjs();
-        I.pdf = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
-        I.pdfPage = 1;
+        const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+        nouvelleImage(nom, null);
+        I.pdf = doc; I.pdfPage = 1;
         await rendrePagePdf();
         return;
       }
       if (!/^image\//.test(f.type)) { toast('Fichier non lu — image (PNG, JPG, WebP, GIF, BMP) ou PDF attendu.', 'danger'); return; }
-      I.pdf = null;
       const bmp = await createImageBitmap(f);
       const c = toile(bmp.width, bmp.height);
       ctx2d(c).drawImage(bmp, 0, 0);
+      nouvelleImage(nom, TYPES_SOURCE.includes(f.type) ? f : null);
       I.original = c;
       await recalculer(true);
     } catch (e) {
@@ -373,7 +435,285 @@
     const x = ctx2d(c); x.fillStyle = 'white'; x.fillRect(0, 0, c.width, c.height);
     await page.render({ canvasContext: x, viewport: v2 }).promise;
     I.original = c;
+    // Une autre page : c'est elle qui sera gardée (en PNG) au prochain enregistrement.
+    I.source = null; I.sourceChange = true; marquer();
     await recalculer(true);
+  }
+
+  // Une image ouverte depuis le poste : travail neuf, détaché de tout projet.
+  function nouvelleImage(nom, source) {
+    I.nom = nom; I.pdf = null; I.source = source; I.sourceChange = true;
+    I.projet = null; I.nomProjet = nom; I.sale = true;
+    signaler();
+  }
+
+  // ── Projets ────────────────────────────────────────────────────────
+  function marquer() { I.sale = true; majProjet(); }
+
+  // Changements non enregistrés : demander avant de les perdre.
+  async function abandonnerSiSale(titre) {
+    if (!I.original || !I.sale) return true;
+    return !!(await dialogue({ titre: titre, ok: 'Continuer sans enregistrer', danger: true,
+      texte: I.projet ? 'Les modifications du projet « ' + (I.nomProjet || I.projet.nom) + ' » ne sont pas enregistrées.'
+        : 'Cette image n\'est pas enregistrée en projet. Ses réglages seront perdus.' }));
+  }
+
+  // Page neuve : écran de dépôt, réglages de départ (ceux d'une première ouverture).
+  async function nouveau(sansConfirmer) {
+    if (!sansConfirmer && !(await abandonnerSiSale('Nouveau'))) return false;
+    clearTimeout(I.minuteur);
+    const p = lirePrefs();
+    I.r = Object.assign({}, DEFAUT_R, { dpi: (p.r && p.r.dpi) || 300, format: (p.r && p.r.format) || 'png', qualite: (p.r && p.r.qualite) || 92 });
+    I.v = Object.assign({}, DEFAUT_V);
+    Object.assign(I, { original: null, resultat: null, svg: null, traceInfo: null, pdf: null, pdfPage: 1, nom: 'image',
+      comparaison: 50, projet: null, nomProjet: '', sale: false, source: null, sourceChange: false, demandeProjet: null });
+    const g = I.host && I.host.querySelector('[data-glissiere]');
+    if (g) g.value = 50;
+    majInterface(); signaler();
+    return true;
+  }
+
+  function versBlob(c, type, q) { return new Promise(ok => c.toBlob(ok, type, q)); }
+  async function sourceBlob() {
+    if (I.source) return I.source;
+    return versBlob(I.original, 'image/png');
+  }
+  async function vignetteBlob() {
+    const src = I.resultat || I.original;
+    if (!src) return null;
+    const f = Math.min(1, VIGNETTE_COTE / Math.max(src.width, src.height));
+    const c = toile(src.width * f, src.height * f);
+    const x = ctx2d(c); x.imageSmoothingQuality = 'high';
+    x.drawImage(src, 0, 0, c.width, c.height);
+    // WebP quand le navigateur sait l'écrire, sinon il rend du PNG.
+    return versBlob(c, 'image/webp', 0.82);
+  }
+
+  async function enregistrer(sous) {
+    if (!I.original || I.enregistrement) return;
+    let nom = (I.nomProjet || '').trim() || I.nom;
+    if (sous) {
+      const n = await dialogue({ titre: 'Enregistrer sous', ok: 'Enregistrer', champ: nom + ' (copie)',
+        texte: 'Un nouveau projet est créé ; « ' + (I.projet ? I.projet.nom : nom) + ' » reste tel quel.' });
+      if (n == null) return;
+      nom = String(n).trim() || nom;
+    }
+    const neuf = sous || !I.projet;
+    I.enregistrement = true; majProjet();
+    try {
+      const fd = new FormData();
+      fd.append('donnees', JSON.stringify({ nom: nom, nom_source: I.nom, reglages: etatReglages() }));
+      const vig = await vignetteBlob();
+      if (vig) fd.append('vignette', vig, 'vignette');
+      if (neuf || I.sourceChange) fd.append('fichier', await sourceBlob(), 'image');
+      const d = await api(neuf ? '' : '/' + I.projet.id, { method: neuf ? 'POST' : 'PUT', body: fd });
+      I.projet = { id: d.id, nom: d.nom }; I.nomProjet = d.nom;
+      I.sale = false; I.sourceChange = false; I.projets = null;
+      toast(neuf ? 'Projet enregistré.' : 'Projet mis à jour.', 'success');
+      signaler();
+    } catch (e) {
+      toast(e.message || 'Enregistrement impossible.', 'danger');
+    } finally {
+      I.enregistrement = false; majProjet();
+    }
+  }
+
+  async function ouvrirProjet(id, sansConfirmer) {
+    if (I.projet && I.projet.id === id && !I.demandeProjet) { fermerListe(true); return true; }
+    if (!sansConfirmer && !(await abandonnerSiSale('Ouvrir un projet'))) return false;
+    I.demandeProjet = id; signaler();
+    occupe(true, 'Ouverture du projet…');
+    try {
+      const d = await api('/' + id);
+      const r = await fetch(API + '/' + id + '/fichier', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('Image du projet introuvable.');
+      const blob = await r.blob();
+      const bmp = await createImageBitmap(blob);
+      if (I.demandeProjet !== id) return false;          // une autre demande est passée devant
+      const c = toile(bmp.width, bmp.height);
+      ctx2d(c).drawImage(bmp, 0, 0);
+      clearTimeout(I.minuteur);
+      appliquerReglages(d.reglages);
+      Object.assign(I, { original: c, resultat: null, svg: null, traceInfo: null, pdf: null, nom: d.nom_source || 'image',
+        source: new Blob([blob], { type: d.mime }), sourceChange: false, projet: { id: d.id, nom: d.nom }, nomProjet: d.nom, sale: false });
+      const g = I.host && I.host.querySelector('[data-glissiere]');
+      if (g) g.value = I.comparaison;
+      fermerListe(true);
+      occupe(false);
+      await recalculer(true);
+      return true;
+    } catch (e) {
+      toast(e.message || 'Projet illisible.', 'danger');
+      return false;
+    } finally {
+      if (I.demandeProjet === id) I.demandeProjet = null;
+      occupe(false);
+      if (I.host) majInterface();
+      signaler();
+    }
+  }
+
+  // ── Fenêtre « Mes projets » et boîte de dialogue ───────────────────
+  // Posées sur body : l'outil vit aussi dans la fenêtre plein écran de MyBAT.
+  let _voileListe = null, _dlg = null;
+  const dateFr = t => { const d = new Date(String(t || '').replace(' ', 'T')); return isNaN(d) ? '' : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); };
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+  function ouvrirListe() {
+    I.fen = 'liste';
+    if (!_voileListe) {
+      _voileListe = el('div', 'timg-voile');
+      _voileListe.addEventListener('mousedown', e => { if (e.target === _voileListe) fermerListe(); });
+      document.body.appendChild(_voileListe);
+    }
+    rendreListe();
+    signaler();
+    if (!I.projets) chargerListe();
+  }
+  function fermerListe(sansAdresse) {
+    if (_voileListe) { _voileListe.remove(); _voileListe = null; }
+    if (I.fen) { I.fen = null; if (!sansAdresse) signaler(); }
+  }
+  async function chargerListe() {
+    try { I.projets = (await api('')).projets || []; }
+    catch (e) { I.projets = []; toast(e.message, 'danger'); }
+    rendreListe();
+  }
+
+  function rendreListe() {
+    if (!_voileListe) return;
+    _voileListe.innerHTML = '';
+    const m = el('div', 'timg-modale timg-modale--large');
+    m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', 'Mes projets');
+    const t = el('div', 'timg-modale-tete');
+    t.appendChild(el('h3', null, 'Mes projets'));
+    const f = el('button', 'timg-btn', 'Fermer'); f.type = 'button'; f.setAttribute('data-bulle', 'Fermer'); f.setAttribute('data-bulle-touche', 'Échap');
+    f.addEventListener('click', () => fermerListe());
+    t.appendChild(f); m.appendChild(t);
+    const corps = el('div', 'timg-projets');
+    if (!I.projets) corps.appendChild(el('div', 'timg-note', 'Chargement…'));
+    else if (!I.projets.length) corps.appendChild(el('div', 'timg-vide', 'Aucun projet enregistré. Ouvrir une image, la régler, puis « Enregistrer le projet ».'));
+    else I.projets.forEach(p => corps.appendChild(carteProjet(p)));
+    m.appendChild(corps);
+    _voileListe.appendChild(m);
+  }
+
+  function carteProjet(p) {
+    const c = el('div', 'timg-pcarte' + (I.projet && I.projet.id === p.id ? ' actif' : ''));
+    const v = el('button', 'timg-pvig'); v.type = 'button'; v.setAttribute('aria-label', 'Ouvrir ' + p.nom);
+    if (p.vignette) { const im = el('img'); im.alt = ''; im.loading = 'lazy'; im.src = API + '/' + p.id + '/vignette?t=' + encodeURIComponent(p.maj_le); v.appendChild(im); }
+    v.addEventListener('click', () => ouvrirProjet(p.id));
+    c.appendChild(v);
+    const i = el('div', 'timg-pinfo');
+    i.appendChild(el('div', 'timg-pnom', p.nom));
+    const meta = el('div', 'timg-pmeta');
+    meta.appendChild(el('span', 'timg-pmode', p.mode === 'vectoriser' ? 'Vectoriser' : 'Améliorer'));
+    meta.appendChild(el('span', null, dateFr(p.maj_le)));
+    i.appendChild(meta);
+    c.appendChild(i);
+    const a = el('div', 'timg-pactions');
+    const btn = (txt, bulle, cls, fn) => { const b = el('button', 'timg-btn' + (cls ? ' ' + cls : ''), txt); b.type = 'button'; b.setAttribute('data-bulle', bulle); b.addEventListener('click', fn); a.appendChild(b); };
+    btn('Ouvrir', 'Ouvrir', 'timg-btn-accent', () => ouvrirProjet(p.id));
+    btn('Renommer', 'Renommer', '', () => renommer(p));
+    btn('Dupliquer', 'Dupliquer', '', () => dupliquer(p));
+    btn('Supprimer', 'Supprimer', 'timg-btn-danger', () => supprimer(p));
+    c.appendChild(a);
+    return c;
+  }
+
+  async function renommer(p) {
+    const n = await dialogue({ titre: 'Renommer le projet', ok: 'Renommer', champ: p.nom });
+    if (n == null || !String(n).trim() || String(n).trim() === p.nom) return;
+    try {
+      const d = await api('/' + p.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nom: String(n) }) });
+      if (I.projet && I.projet.id === p.id) { I.projet.nom = d.nom; I.nomProjet = d.nom; majProjet(); }
+      toast('Projet renommé.', 'success');
+      await chargerListe();
+    } catch (e) { toast(e.message, 'danger'); }
+  }
+  async function dupliquer(p) {
+    try { await api('/' + p.id + '/dupliquer', { method: 'POST' }); toast('Projet dupliqué.', 'success'); await chargerListe(); }
+    catch (e) { toast(e.message, 'danger'); }
+  }
+  async function supprimer(p) {
+    const ok = await dialogue({ titre: 'Supprimer le projet', ok: 'Supprimer', danger: true,
+      texte: '« ' + p.nom + ' » sera supprimé, avec son image d\'origine. Les fichiers déjà exportés ne sont pas touchés.' });
+    if (!ok) return;
+    try {
+      await api('/' + p.id, { method: 'DELETE' });
+      // Le projet ouvert reste à l'écran, mais n'existe plus : il redevient un travail non enregistré.
+      if (I.projet && I.projet.id === p.id) { I.projet = null; I.sale = true; I.sourceChange = true; majProjet(); signaler(); }
+      toast('Projet supprimé.', 'success');
+      await chargerListe();
+    } catch (e) { toast(e.message, 'danger'); }
+  }
+
+  // Confirmation ou saisie d'un nom. Rend true / le texte saisi, ou null.
+  function dialogue(o) {
+    if (_dlg) _dlg.fermer(null);
+    return new Promise(ok => {
+      const voile = el('div', 'timg-voile timg-voile--dlg');
+      const m = el('div', 'timg-modale');
+      m.setAttribute('role', 'alertdialog'); m.setAttribute('aria-label', o.titre);
+      m.appendChild(el('h3', null, o.titre));
+      if (o.texte) m.appendChild(el('p', 'timg-note', o.texte));
+      let champ = null;
+      if (o.champ != null) {
+        champ = el('input', 'timg-in'); champ.type = 'text'; champ.maxLength = 120; champ.value = o.champ;
+        champ.setAttribute('aria-label', 'Nom du projet');
+        champ.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); valider(); } });
+        m.appendChild(champ);
+      }
+      const act = el('div', 'timg-actions');
+      const ann = el('button', 'timg-btn', 'Annuler'); ann.type = 'button';
+      const val = el('button', 'timg-btn ' + (o.danger ? 'timg-btn-danger' : 'timg-btn-accent'), o.ok || 'Valider'); val.type = 'button';
+      act.appendChild(ann); act.appendChild(val); m.appendChild(act);
+      voile.appendChild(m);
+      document.body.appendChild(voile);
+      const fermer = v => { voile.remove(); _dlg = null; ok(v); };
+      function valider() { fermer(champ ? champ.value : true); }
+      ann.addEventListener('click', () => fermer(null));
+      val.addEventListener('click', valider);
+      voile.addEventListener('mousedown', e => { if (e.target === voile) fermer(null); });
+      _dlg = { fermer: fermer };
+      if (champ) { champ.focus(); champ.select(); } else val.focus();
+    });
+  }
+
+  // Échap ferme d'abord la boîte de dialogue, puis « Mes projets » — sans
+  // laisser passer la touche à la page (MyBAT fermerait tout l'outil).
+  function clavier(e) {
+    if (e.key !== 'Escape' || (!_dlg && !_voileListe)) return;
+    e.stopPropagation(); e.preventDefault();
+    if (_dlg) _dlg.fermer(null); else fermerListe();
+  }
+  function avantDepart(e) {
+    if (I.host && I.host.isConnected && I.original && I.sale) { e.preventDefault(); e.returnValue = ''; }
+  }
+
+  function occupe(oui, texte) {
+    if (!I.host) return;
+    if (texte) $('[data-etape]').textContent = texte;
+    $('[data-occupe]').hidden = !oui;
+    $('[data-vue]').classList.toggle('timg-vue--occupe', !!oui);
+  }
+
+  function majProjet() {
+    if (!I.host) return;
+    const b = $('[data-projet]');
+    if (!b) return;
+    b.hidden = !I.original;
+    const inp = $('[data-nom-projet]');
+    if (document.activeElement !== inp) inp.value = I.nomProjet || '';
+    const e = $('[data-etat-projet]');
+    const etat = !I.projet ? 'neuf' : I.sale ? 'modifie' : 'ok';
+    e.textContent = { neuf: 'Non enregistré', modifie: 'Modifications non enregistrées', ok: 'Enregistré' }[etat];
+    e.setAttribute('data-etat', etat);
+    const s = $('[data-act="enregistrer"]');
+    s.textContent = I.enregistrement ? 'Enregistrement…' : I.projet ? 'Enregistrer' : 'Enregistrer le projet';
+    s.disabled = I.enregistrement || (!!I.projet && !I.sale);
+    const ss = $('[data-act="enregistrer-sous"]');
+    ss.hidden = !I.projet; ss.disabled = I.enregistrement;
   }
 
   // ── Interface ──────────────────────────────────────────────────────
@@ -400,13 +740,21 @@
       + '<button type="button" data-mode="ameliorer" data-bulle="Retoucher">Améliorer</button>'
       + '<button type="button" data-mode="vectoriser" data-bulle="Tracer en SVG">Vectoriser</button></div>'
       + '<button type="button" class="timg-btn" data-act="ouvrir" data-bulle="Image ou PDF">Ouvrir une image</button>'
+      + '<button type="button" class="timg-btn" data-act="nouveau" data-bulle="Vierge">Nouveau</button>'
+      + '<button type="button" class="timg-btn" data-act="projets" data-bulle="Projets">Mes projets</button>'
       + '<span class="timg-pdfnav" hidden><button type="button" class="timg-btn" data-act="pdf-prec" aria-label="Page précédente" data-bulle="Page précédente">‹</button>'
       + '<span data-pdfpage></span><button type="button" class="timg-btn" data-act="pdf-suiv" aria-label="Page suivante" data-bulle="Page suivante">›</button></span>'
       + '<span class="timg-info" data-info></span>'
       + '<input type="file" accept="image/*,application/pdf" hidden data-fichier></div>'
+      + '<div class="timg-projet" data-projet hidden>'
+      + '<label class="timg-projet-nom"><span>Projet</span><input type="text" class="timg-in" data-nom-projet maxlength="120" placeholder="Nom du projet" aria-label="Nom du projet"></label>'
+      + '<span class="timg-etat" data-etat-projet></span>'
+      + '<button type="button" class="timg-btn timg-btn-accent" data-act="enregistrer" data-bulle="Conserver">Enregistrer le projet</button>'
+      + '<button type="button" class="timg-btn" data-act="enregistrer-sous" data-bulle="Copie" hidden>Enregistrer sous</button></div>'
       + '<div class="timg-corps">'
       + '<div class="timg-vue" data-vue>'
-      + '<div class="timg-depot" data-depot><strong>Déposer une image ou un PDF</strong><span>ou cliquer pour choisir. Le fichier reste sur ce poste.</span></div>'
+      + '<div class="timg-depot" data-depot><strong>Déposer une image ou un PDF</strong><span>ou cliquer pour choisir. Le fichier reste sur ce poste tant qu\'il n\'est pas enregistré en projet.</span>'
+      + '<button type="button" class="timg-btn" data-act="projets" data-bulle="Projets">Rouvrir un projet</button></div>'
       + '<div class="timg-compare" data-compare hidden>'
       + '<div class="timg-damier"><canvas data-apres></canvas><div class="timg-avant" data-avant-clip><canvas data-avant></canvas></div>'
       + '<img data-svg alt="Aperçu vectoriel" hidden></div>'
@@ -454,7 +802,7 @@
 
     const fichier = $('[data-fichier]');
     fichier.addEventListener('change', () => { ouvrirFichier(fichier.files[0]); fichier.value = ''; });
-    $('[data-depot]').addEventListener('click', () => fichier.click());
+    $('[data-depot]').addEventListener('click', e => { if (!e.target.closest('[data-act]')) fichier.click(); });
     const vue = $('[data-vue]');
     vue.addEventListener('dragover', e => { e.preventDefault(); vue.classList.add('timg-survol'); });
     vue.addEventListener('dragleave', () => vue.classList.remove('timg-survol'));
@@ -463,13 +811,14 @@
 
     h.addEventListener('click', async e => {
       const m = e.target.closest('[data-mode]');
-      if (m) { I.mode = m.getAttribute('data-mode'); garderPrefs(); majInterface(); if (I.mode === 'vectoriser' && I.resultat && !I.svg) relancer('v'); signaler(); return; }
+      if (m) { if (I.mode !== m.getAttribute('data-mode') && I.original) I.sale = true; I.mode = m.getAttribute('data-mode'); garderPrefs(); majInterface(); if (I.mode === 'vectoriser' && I.resultat && !I.svg) relancer('v'); signaler(); return; }
       const ch = e.target.closest('[data-choix] [data-v]');
       if (ch) {
         const cle = ch.parentElement.getAttribute('data-choix');
         const brut = ch.getAttribute('data-v');
         const cible = cle in I.r ? I.r : I.v;
         cible[cle] = isNaN(+brut) ? brut : +brut;
+        if (I.original) I.sale = true;
         majInterface(); relancer(cible === I.v ? 'v' : 'r');
         return;
       }
@@ -477,7 +826,11 @@
       if (!a) return;
       const act = a.getAttribute('data-act');
       if (act === 'ouvrir') fichier.click();
-      else if (act === 'reinit') { I.r = Object.assign({}, DEFAUT_R, { dpi: I.r.dpi, format: I.r.format }); majInterface(); relancer('r'); }
+      else if (act === 'nouveau') nouveau();
+      else if (act === 'projets') ouvrirListe();
+      else if (act === 'enregistrer') enregistrer(false);
+      else if (act === 'enregistrer-sous') enregistrer(true);
+      else if (act === 'reinit') { I.r = Object.assign({}, DEFAUT_R, { dpi: I.r.dpi, format: I.r.format }); I.sale = true; majInterface(); relancer('r'); }
       else if (act === 'exporter') exporterImage();
       else if (act === 'svg') { if (I.svg) telecharger(new Blob([I.svg], { type: 'image/svg+xml' }), I.nom + '-vectoriel.svg'); }
       else if (act === 'pdf') { try { await exporterPdf(); } catch (err) { toast(err.message || 'Export PDF impossible.', 'danger'); } }
@@ -488,14 +841,19 @@
       else if (act === 'pdf-suiv' && I.pdf && I.pdfPage < I.pdf.numPages) { I.pdfPage++; await rendrePagePdf(); }
     });
     h.addEventListener('input', e => {
+      if (e.target.hasAttribute('data-nom-projet')) { I.nomProjet = e.target.value; if (I.original) marquer(); return; }
       const k = e.target.getAttribute('data-r');
       if (!k) return;
       const cible = k in I.r ? I.r : I.v;
       cible[k] = e.target.type === 'checkbox' ? e.target.checked : +e.target.value;
-      majValeurs();
+      if (I.original) I.sale = true;
+      majValeurs(); majProjet();
       if (k === 'dpi' || k === 'qualite') { garderPrefs(); majTaille(); return; }
       relancer(cible === I.v ? 'v' : 'r');
     });
+    $('[data-nom-projet]').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); enregistrer(false); } });
+    window.addEventListener('keydown', clavier, true);
+    window.addEventListener('beforeunload', avantDepart);
     majInterface();
   }
 
@@ -529,7 +887,7 @@
     I.host.querySelectorAll('[data-act="exporter"],[data-act="svg"],[data-act="pdf"],[data-act="copier-svg"],[data-act="reinit"]').forEach(b => {
       b.disabled = !a || ((b.dataset.act === 'svg' || b.dataset.act === 'pdf' || b.dataset.act === 'copier-svg') && !I.svg);
     });
-    majApercu(); majTaille();
+    majApercu(); majTaille(); majProjet();
   }
 
   function majTaille() {
@@ -546,7 +904,7 @@
   }
 
   function majApercu() {
-    if (!I.resultat) return;
+    if (!I.resultat || !I.original) { $('[data-trace]').textContent = ''; return; }
     const avant = $('[data-avant]'), apres = $('[data-apres]'), img = $('[data-svg]');
     // Même cadre pour les deux : l'avant est mis à l'échelle de l'après.
     apres.width = I.resultat.width; apres.height = I.resultat.height;
@@ -583,8 +941,14 @@
     $('[data-etape]').textContent = 'Traitement…';
     $('[data-occupe]').hidden = false;
     $('[data-vue]').classList.add('timg-vue--occupe');
+    // « Nouveau » ou un autre projet pendant le calcul : son résultat est jeté.
+    const orig = I.original;
     try {
-      if (depuisImage === true || !I.resultat) { I.resultat = await traiter(); I.svg = null; I.traceInfo = null; }
+      if (depuisImage === true || !I.resultat) {
+        const res = await traiter();
+        if (I.original !== orig) return;
+        I.resultat = res; I.svg = null; I.traceInfo = null;
+      }
       if (I.mode === 'vectoriser') await vectoriser();
     } catch (e) {
       toast(e.message || 'Traitement impossible.', 'danger');
@@ -607,12 +971,15 @@
       root.appendChild(I.host);
       construire();
       signaler();
+      if (I.demandeProjet) { const id = I.demandeProjet; I.demandeProjet = null; ouvrirProjet(id, true); }
       return;
     }
     root.appendChild(I.host);
   }
 
   function demonter() {
+    fermerListe(true);
+    if (_dlg) _dlg.fermer(null);
     const img = I.host && I.host.querySelector('[data-svg]');
     if (img && img.dataset.svgUrl) { URL.revokeObjectURL(img.dataset.svgUrl); delete img.dataset.svgUrl; }
   }
@@ -620,13 +987,30 @@
   window.MyToolsImage = {
     mount, demonter,
     adresse: {
-      etat: () => ({ mode: I.mode }),
-      aller: a => {
-        const m = a && a.mode === 'vectoriser' ? 'vectoriser' : 'ameliorer';
-        I.modeAdresse = true;
-        if (m !== I.mode) { I.mode = m; if (I.host) { majInterface(); if (m === 'vectoriser' && I.resultat && !I.svg) recalculer(false); } }
+      etat: () => ({
+        mode: I.mode,
+        projet: I.demandeProjet || (I.projet && I.projet.id) || null,
+        projets: I.fen === 'liste' ? 'liste' : null,
+      }),
+      aller: async a => {
+        a = a || {};
+        // Le projet d'abord : il apporte son propre mode.
+        const pid = a.projet == null ? a.projet : (/^\d{1,10}$/.test(String(a.projet)) ? Number(a.projet) : undefined);
+        const cour = I.demandeProjet || (I.projet && I.projet.id) || null;
+        if (pid && pid !== cour) {
+          if (!I.host) I.demandeProjet = pid;
+          else if (!(await ouvrirProjet(pid))) signaler();
+        } else if (pid === null && I.projet && a.complet) {
+          if (!(await nouveau())) signaler();
+        } else if (a.mode !== undefined) {
+          const m = a.mode === 'vectoriser' ? 'vectoriser' : 'ameliorer';
+          I.modeAdresse = true;
+          if (m !== I.mode) { I.mode = m; if (I.host) { majInterface(); if (m === 'vectoriser' && I.resultat && !I.svg) recalculer(false); } }
+        }
+        if (a.projets === 'liste' && !I.fen && I.host) ouvrirListe();
+        else if (a.projets === null && I.fen) fermerListe(true);
       },
     },
-    _interne: { pngAvecDpi, jpgAvecDpi, crc32, boiteUtile, fondTransparent, niveauxAuto },
+    _interne: { pngAvecDpi, jpgAvecDpi, crc32, boiteUtile, fondTransparent, niveauxAuto, reglagesValides, DEFAUT_R, DEFAUT_V },
   };
 })();

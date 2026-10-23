@@ -9,11 +9,22 @@
  * colonnes, aussi mémorisé par le navigateur) ; fenêtres : nouveau BAT, ajout
  * d'un PDF, modification, changement de statut, liste des PDF d'un BAT.
  * Hors adresse : la recherche texte, les deux confirmations de suppression.
+ * Outil Image (`outil=image`) : son mode, le projet ouvert (`projet`) et la
+ * fenêtre « Mes projets » (`projets=liste`), lus dans MyToolsImage.adresse.
  *
  * Les fenêtres de MyBAT sont des blocs fixes de la page, affichés en
  * changeant leur `style` : l'observateur suit donc aussi les attributs.
  */
 let _batUrlPrete = false;
+let _batImageAttente = null;
+// Adresse de l'outil Image : clé absente au démarrage = undefined (rien ne
+// bouge), au retour du navigateur = null (on ferme).
+function _batImageAdresse(u, complet) {
+  const pid = u.get('projet', null), vide = complet ? null : undefined;
+  return { mode: (complet || u.a('mode')) ? u.get('mode', 'ameliorer', ['ameliorer', 'vectoriser']) : undefined,
+           projet: /^[0-9]{1,10}$/.test(String(pid || '')) ? Number(pid) : vide,
+           projets: u.get('projets', null, ['liste']) || vide, complet: !!complet };
+}
 const _batVisible = id => { const el = document.getElementById(id); return !!(el && el.style.display && el.style.display !== 'none'); };
 const _batDefautTri = () => (typeof DEFAULT_SORT !== 'undefined' ? DEFAULT_SORT : []).map(s => s.key + ':' + s.dir).join(',');
 
@@ -35,6 +46,13 @@ function batParams() {
   let nav = 'liste';
   const mo = _batModale();
   if (mo) { p[mo.cle] = String(mo.id); nav += '/' + mo.cle; }
+  if (mo && mo.cle === 'outil') {
+    // Module pas encore chargé : l'adresse demandée fait foi en attendant.
+    const e = window.MyToolsImage ? window.MyToolsImage.adresse.etat() : (_batImageAttente || {});
+    if (e.mode === 'vectoriser') { p.mode = 'vectoriser'; nav += '/vectoriser'; }
+    if (e.projet) { p.projet = String(e.projet); nav += ':' + e.projet; }
+    if (e.projets === 'liste') { p.projets = 'liste'; nav += '/projets'; }
+  }
   return { params: p, nav };
 }
 
@@ -75,11 +93,24 @@ async function batAllerUrl(complet) {
   ['nouveau', 'ajout_pdf', 'modifier', 'statut_bat', 'pdfs', 'outil'].forEach(k => { const v = u.get(k, null); if (v) voulue = { cle: k, id: v }; });
   const cour = _batModale();
   if (cour && (!voulue || cour.cle !== voulue.cle || String(cour.id) !== String(voulue.id))) _batFermer(cour);
+  // Outil Image déjà ouvert : projet, mode et « Mes projets » suivent l'adresse.
+  if (voulue && voulue.cle === 'outil' && cour && cour.cle === 'outil' && window.MyToolsImage) {
+    window.MyToolsImage.adresse.aller(_batImageAdresse(u, complet));
+  }
   if (voulue && !_batModale()) {
     const id = /^[0-9]+$/.test(voulue.id) ? Number(voulue.id) : voulue.id;
     const e = (S.entries || []).find(x => String(x.id) === String(voulue.id));
     if (voulue.cle === 'nouveau') openCreateModal();
-    else if (voulue.cle === 'outil') { if (voulue.id === 'image') openImageOutil(); }
+    else if (voulue.cle === 'outil') {
+      if (voulue.id === 'image') {
+        _batImageAttente = _batImageAdresse(u, complet);
+        Promise.resolve(openImageOutil()).then(() => {
+          const a = _batImageAttente; _batImageAttente = null;
+          if (a && window.MyToolsImage) window.MyToolsImage.adresse.aller(a);
+          batSyncUrl();
+        });
+      }
+    }
     else if (!e) return;
     else if (voulue.cle === 'ajout_pdf') openUploadModal(id, e.reference);
     else if (voulue.cle === 'modifier') openEditModal(id);

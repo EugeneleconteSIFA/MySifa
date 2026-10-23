@@ -9,7 +9,10 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'static', 'mysifa_tools_c
 const ctx = { window: {}, document: {}, localStorage: { getItem() { return null; }, setItem() {} } };
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'mysifa_tools_calculs_schemas.js'), 'utf8'), ctx);
 const F = ctx.window.MyToolsCalculs._interne;
+const SCH = ctx.window.MyToolsCalculsSchemas;
+const G = SCH._geo;
 
 let echecs = 0;
 function ok(nom, v) { if (v) console.log('ok  ', nom); else { echecs++; console.log('ECHEC', nom); } }
@@ -66,6 +69,38 @@ ok('un grand box presque vide passe en dernier', avecBox[avecBox.length - 1].car
 const sansQ = F.classerCartons(cartons, 90, 100, 0, 4, sens);
 ok('sans quantité : meilleur remplissage d\'abord', sansQ[0].remplissage >= sansQ[1].remplissage);
 ok('carton trop petit écarté', !cl.some(x => x.carton.libelle === 'petit' && x.parCarton < 1));
+
+ok('rangement : axe du rangement retenu (v, l ou w)', r1.axe === 'v' && ['l', 'w'].includes(r2.axe));
+
+// Épaisseur d'une matière composée : frontal + adhésif + glassine.
+const ec = F.epaisseurCouches([{ libelle: 'Frontal', microns: 72 }, { libelle: 'Adhésif', microns: '20,5' }, { libelle: 'Glassine', microns: 52 }]);
+ok('couches : 72 + 20,5 + 52 = 144,5 µm', proche(ec.total, 144.5, 1e-9) && ec.complet && ec.nb === 3);
+const ei = F.epaisseurCouches([{ libelle: 'Frontal', microns: 72 }, { libelle: 'Adhésif', microns: '' }]);
+ok('couches : épaisseur manquante signalée, pas devinée', !ei.complet && ei.total === 72 && ei.manquantes.length === 1 && ei.manquantes[0] === 'Adhésif');
+ok('couches : aucune couche choisie → null', F.epaisseurCouches([]) === null && F.epaisseurCouches(null) === null);
+
+// Schémas : géométrie à l'échelle.
+const gb = G.geoBobine(76, 1000, 145, 120);
+ok('bobine : mandrin à l\'échelle (76/1000 du rayon)', proche(gb.r, 120 * 76 / 1000, 1e-9) && proche(gb.enroule, 462, 1e-9));
+ok('bobine : tours = enroulé ÷ épaisseur', proche(gb.tours, 462 * 1000 / 145, 1e-6));
+ok('bobine : Ø inférieur au mandrin → pas de schéma', G.geoBobine(76, 70, 145, 120) === null);
+const gf = G.geoFronts(440, 104.5, 3.25, 0, 4);
+ok('fronts : 4 étiquettes centrées, chute 4,5 par bord', gf.etiquettes.length === 4 && proche(gf.chuteCote, 4.5, 1e-9));
+ok('fronts : première étiquette après chute + demi-espace', proche(gf.etiquettes[0].x, 4.5 + 1.625, 1e-9));
+ok('fronts : symétrie (même marge à droite)', proche(440 - (gf.etiquettes[3].x + 104.5), gf.etiquettes[0].x, 1e-9));
+ok('fronts : pas entre deux étiquettes = module', proche(gf.etiquettes[1].x - gf.etiquettes[0].x, 107.75, 1e-9));
+const gd = G.geoBande(148.4, 4, 4);
+ok('bande : pas 152,4, 6,56 / m par front, 26,25 / m en tout', proche(gd.pas, 152.4, 1e-9) && proche(gd.parMetre, 1000 / 152.4, 1e-9) && proche(gd.parMetreTotal, 4000 / 152.4, 1e-9));
+const gc = G.geoCarton(c385, 90, 100, 4, r1);
+ok('carton debout : 16 bobines vues de dessus, 4 × 2 vues de côté', gc.dessus.length === 16 && gc.cote.length === 8 && gc.dessus.every(x => x.rond));
+ok('carton : bobines dans le carton (jeu/2 de marge)', gc.dessus.every(x => x.x >= 2 && x.y >= 2 && x.x + x.w <= 385 - 2 + 1e-9 && x.y + x.h <= 385 - 2 + 1e-9));
+ok('carton : reste 21 × 21 × 4 mm (381 − 4 × 90, 204 − 2 × 100)', proche(gc.videL, 21, 1e-9) && proche(gc.videW, 21, 1e-9) && proche(gc.videH, 4, 1e-9));
+const gc2 = G.geoCarton(c385, 90, 100, 4, r2);
+ok('carton couchées : rectangles de dessus, côté rond si axe en largeur', gc2.dessus.every(x => !x.rond) && gc2.dessus.length === r2.a * r2.b);
+const sv = SCH.carton({ meilleur: { carton: c385, rang: r1, parCarton: 32 }, D: 90, L: 100, jeu: 4, dm: 76 });
+ok('carton : schéma SVG produit, deux vues quand 2 couches', /<svg/.test(sv.svg) && /Vue de côté/.test(sv.svg) && !sv.exemple);
+ok('métrage sans valeurs : exemple', SCH.metrage({}).exemple === true && /<svg/.test(SCH.metrage({}).svg));
+ok('fronts : schéma sans couleur en dur', !/#[0-9a-f]{3,6}\b/i.test(SCH.fronts({ laize: 440, larg: 104.5, espl: 3.25, nb: 4 }).svg));
 
 if (echecs) { console.log('\n' + echecs + ' cas en échec'); process.exit(1); }
 console.log('\nTous les cas passent.');
