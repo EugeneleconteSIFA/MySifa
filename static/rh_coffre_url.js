@@ -11,6 +11,8 @@
  *              notes de frais : filtre d'année (toutes par défaut)
  *   mois       bulletins : mois du tableau mensuel (mois en cours par défaut)
  *   statut     notes de frais : soumise par défaut, « tous » pour aucun filtre
+ *   mois       notes de frais : filtre de mois, seulement avec une année (23/10/2026)
+ *   grouper    notes de frais : « salarie » pour les sous-totaux par salarié
  *   note       fiche d'une note de frais ouverte
  *   apercu     bulletin ou justificatif affiché (chemin /api/coffre/…)
  *   reglages   ndf : réglages des notes de frais (static/mysifa_ndf_reglages.js)
@@ -31,6 +33,8 @@ function rhCoffreParams() {
     const st = v('ndf-statut');
     if (st !== 'soumise') p.statut = st || 'tous';
     if (v('ndf-annee')) p.annee = v('ndf-annee');
+    if (v('ndf-annee') && v('ndf-mois')) p.mois = v('ndf-mois');
+    if (NDF_GROUPE) p.grouper = 'salarie';
   } else {
     p.onglet = 'bulletins';
     if (v('upl-annee') && Number(v('upl-annee')) !== curYear) p.annee = v('upl-annee');
@@ -69,8 +73,14 @@ async function rhCoffreAllerUrl() {
     const st = u.get('statut', 'soumise', RHC_STATUTS);
     const a = rhCoffreSelect('ndf-statut', st === 'tous' ? '' : st);
     const b = rhCoffreSelect('ndf-annee', anneeOk);
+    majFiltreMois();
+    const m = u.get('mois', '');
+    const c = rhCoffreSelect('ndf-mois', anneeOk && /^\d{1,2}$/.test(m) ? String(Number(m)) : '');
+    const groupe = u.get('grouper', '') === 'salarie';
+    const d = groupe !== NDF_GROUPE;
+    if (d) { NDF_GROUPE = groupe; document.getElementById('ndf-grouper').setAttribute('aria-pressed', String(groupe)); }
     if (onglet !== CURRENT_TAB) showTab('ndf', { silent: true });
-    else if (a || b) await loadNdf();
+    else if (a || b || c || d) await loadNdf();
   } else {
     const mois = u.get('mois', String(curMonth));
     const a = rhCoffreSelect('upl-annee', anneeOk || String(curYear));

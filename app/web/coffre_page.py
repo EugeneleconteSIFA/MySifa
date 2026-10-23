@@ -317,7 +317,7 @@ html.perf-eco .scan-barre,html.reduce-anim .scan-barre,html.perf-eco .justif-ape
 
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_confirm.js?v=3"></script>
-<script src="/static/mysifa_ndf_fiche.js?v=6"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=7"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='coffre';</script>
@@ -325,7 +325,7 @@ html.perf-eco .scan-barre,html.reduce-anim .scan-barre,html.perf-eco .justif-ape
 const DOC_TYPE_LABELS={bulletin_paie:'Bulletin de paie',contrat:'Contrat',attestation:'Attestation',autre:'Autre'};
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-let ME=null;let CURRENT_TAB='ndf';let NDF_CATS=[];let NDF_TAUX=[20,10,5.5,0];let NDF_NOTES=[];
+let ME=null;let CURRENT_TAB='ndf';let NDF_CATS=[];let NDF_TAUX=[20,10,5.5,2.1,0];let NDF_NOTES=[];
 // Fenêtres ouvertes, lues par static/coffre_url.js : {id|url, fermer(technique)}.
 let NDF_OUVERTE=null;let NDF_EDITION=null;let APERCU=null;let bulData={documents:[],annees_disponibles:[]};
 

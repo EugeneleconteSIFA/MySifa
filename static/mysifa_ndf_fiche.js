@@ -15,7 +15,9 @@
  *
  *   MySifaNdfFiche.cartes(notes, {salarie: true, ouvrir: 'ouvrirNoteRh'})
  *
- * rend la liste en cartes regroupées par mois (téléphone). La page enveloppe
+ * rend la liste en cartes regroupées par mois (téléphone), ou par salarié avec
+ * `grouper: 'salarie'`. `compter(note)` dit quelles notes entrent dans le
+ * total de chaque groupe (toutes par défaut). La page enveloppe
  * son tableau dans .ndf-tableau : sous 640 px, le tableau se masque et les
  * cartes prennent sa place. `ouvrir` est le nom de la fonction de la page qui
  * ouvre la fiche d'une note.
@@ -275,18 +277,20 @@
     opts = opts || {};
     injecterStyle();
     var ouvrirFn = /^[A-Za-z_$][\w$]*$/.test(opts.ouvrir || '') ? opts.ouvrir : 'void';
+    var parSalarie = opts.grouper === 'salarie';
+    var compter = typeof opts.compter === 'function' ? opts.compter : function () { return true; };
     var groupes = [];
     (liste || []).forEach(function (n) {
-      var cle = String(n.date_frais || '').slice(0, 7);
+      var cle = parSalarie ? String(n.employe_nom || '—') : String(n.date_frais || '').slice(0, 7);
       var g = groupes.find(function (x) { return x.cle === cle; });
-      if (!g) { g = { cle: cle, lignes: [], total: 0 }; groupes.push(g); }
+      if (!g) { g = { cle: cle, lignes: [], total: 0, comptees: 0 }; groupes.push(g); }
       g.lignes.push(n);
-      g.total += Number(n.montant_ttc) || 0;
+      if (compter(n)) { g.total += Number(n.montant_ttc) || 0; g.comptees++; }
     });
     return '<div class="ndf-cartes">' + groupes.map(function (g) {
       var am = g.cle.split('-');
-      var titre = am[1] ? (MOIS[Number(am[1])] || am[1]) + ' ' + am[0] : 'Sans date';
-      var resume = g.lignes.length + (g.lignes.length > 1 ? ' notes · ' : ' note · ') + montant(g.total);
+      var titre = parSalarie ? g.cle : am[1] ? (MOIS[Number(am[1])] || am[1]) + ' ' + am[0] : 'Sans date';
+      var resume = g.comptees + (g.comptees > 1 ? ' notes · ' : ' note · ') + montant(g.total);
       return '<div class="ndf-mois"><div class="ndf-mois-tete"><span>' + esc(titre) + '</span><span>' + esc(resume) + '</span></div>' +
         g.lignes.map(function (n) {
           // Coffre RH : le salarié d'abord (c'est lui que la compta cherche),
