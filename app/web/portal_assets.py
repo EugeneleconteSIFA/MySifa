@@ -2591,7 +2591,15 @@ function portalVoletPlacer(dec,pop){
     const dessus=d.top-ECART-M;
     if(p.height<=dessous)t=d.bottom+ECART;
     else if(p.height<=dessus)t=d.top-ECART-p.height;
-    else t=M;
+    else{
+      // Ni dessous ni dessus : à côté de la tuile plutôt que par-dessus —
+      // un volet qui recouvre sa tuile empêche de cliquer dessus (retour du
+      // 23/10 sur MyTools). En dernier recours seulement, au plus haut.
+      t=d.top+d.height/2-p.height/2;
+      if(vw-d.right-ECART-M>=p.width)l=d.right+ECART;
+      else if(d.left-ECART-M>=p.width)l=d.left-ECART-p.width;
+      else t=M;
+    }
   }
   pop.style.left=Math.round(Math.max(M,Math.min(l,vw-p.width-M)))+'px';
   pop.style.top=Math.round(Math.max(M,Math.min(t,vh-p.height-M)))+'px';
