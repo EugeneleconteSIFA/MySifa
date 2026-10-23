@@ -6,28 +6,21 @@ changement taux FX, export PDF) et l'audit des permissions d'écriture.
 
 from __future__ import annotations
 
-import os
+# Base jetable déjà migrée (copie de la base modèle en cache), avant tout
+# import de config / database / app.*. Le test copiait auparavant
+# data/production.db : sur un poste sans cette base (CI, clone, worktree), il
+# rejouait toute la migration depuis zéro, une douzaine de secondes.
+import _base_temporaire  # noqa: F401
+
 import sys
-import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
-_test_tmp = tempfile.mkdtemp(prefix="mysifa_pricing_api_")
-_test_db = os.path.join(_test_tmp, "test.db")
-os.environ["DB_PATH"] = _test_db
-
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-# Schéma complet requis pour les migrations — copie isolée de la base locale
-_src_db = ROOT / "data" / "production.db"
-if _src_db.is_file():
-    import shutil
-
-    shutil.copy2(_src_db, _test_db)
 
 from app.services.pricing import (  # noqa: E402
     PricingMaterial,
@@ -45,7 +38,7 @@ def _settings() -> PricingSettings:
         eur_usd_rate=D("0.85"),
         default_container_cost_usd=D("4000"),
         default_container_kg=D("26000"),
-        default_margin_eur_m2=D("0.06"),
+        default_margin_pct=D("6"),
     )
 
 
@@ -65,9 +58,7 @@ def _pricing_client(role: str = "direction"):
 
 
 class TestPricingPermissions(unittest.TestCase):
-    """Un utilisateur sans rôle admin ne peut pas écrire sur /api/pricing."""
-
-    READ_ONLY_ROLES = ("fabrication", "logistique", "commercial", "expedition")
+    """Hors Direction, /api/pricing ne s'ouvre ni en écriture ni en lecture."""
 
     @classmethod
     def setUpClass(cls):
@@ -109,7 +100,8 @@ class TestPricingPermissions(unittest.TestCase):
                     "appellation_code": "X",
                     "category_id": 1,
                     "unit_price": 1,
-                    "weight_per_m2": 0.1,
+                    "grammage_gsm": 100,
+                    "perte_pct": 0,
                 },
             )
             self._assert_write_forbidden(
@@ -127,13 +119,15 @@ class TestPricingPermissions(unittest.TestCase):
         finally:
             patcher.stop()
 
-    def test_fabrication_can_read(self):
+    def test_fabrication_cannot_read(self):
+        """L'appli Coûts matières est réservée à la Direction (config.ROLES_PRICING) :
+        un rôle sans accès ne lit pas non plus les prix."""
         client, patcher = _pricing_client("fabrication")
         try:
             r = client.get("/api/pricing/materials")
-            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.status_code, 403)
             r2 = client.get("/api/pricing/settings")
-            self.assertEqual(r2.status_code, 200)
+            self.assertEqual(r2.status_code, 403)
         finally:
             patcher.stop()
 
@@ -181,11 +175,11 @@ class TestPricingE2EFlows(unittest.TestCase):
             "name": "Adhésif import E2E",
             "appellation_code": "E2E-USD",
             "category_id": self.cat_ids["ADHESIF"],
-            "weight_per_m2": 0.05,
+            "grammage_gsm": 50,
+            "perte_pct": 0,
             "price_currency": "USD",
             "unit_price": 3,
             "price_basis": "PER_KG",
-            "tax_incidence": 1,
             "is_imported": True,
         }
         r = self.client.post("/api/pricing/materials", json=body)
@@ -200,7 +194,6 @@ class TestPricingE2EFlows(unittest.TestCase):
             weight_per_m2=D("0.05"),
             price_currency="USD",
             price_basis="PER_KG",
-            tax_incidence=D("1"),
             is_imported=True,
         )
         s_json = self.client.get("/api/pricing/settings").json()
@@ -208,7 +201,7 @@ class TestPricingE2EFlows(unittest.TestCase):
             eur_usd_rate=Decimal(str(s_json["eur_usd_rate"])),
             default_container_cost_usd=Decimal(str(s_json["default_container_cost_usd"])),
             default_container_kg=Decimal(str(s_json["default_container_kg"])),
-            default_margin_eur_m2=Decimal(str(s_json["default_margin_eur_m2"])),
+            default_margin_pct=Decimal(str(s_json["default_margin_pct"])),
         )
         expected = compute_material_price_per_m2(pm, live_settings).price_eur_per_m2
         self.assertEqual(got, expected)
@@ -217,23 +210,23 @@ class TestPricingE2EFlows(unittest.TestCase):
         """Produit avec 4 composants → breakdown à 4 lignes, parts ≈ 100 %."""
         mats = []
         specs = [
-            ("FRONTAL", "F-E2E", 2.0, 0.10),
-            ("ADHESIF", "A-E2E", 1.0, 0.05),
-            ("SILICONE", "S-E2E", 0.5, 0.02),
-            ("GLASSINE", "G-E2E", 0.8, 0.09),
+            ("FRONTAL", "F-E2E", 2.0, 100),
+            ("ADHESIF", "A-E2E", 1.0, 50),
+            ("SILICONE", "S-E2E", 0.5, 20),
+            ("GLASSINE", "G-E2E", 0.8, 90),
         ]
-        for cat, app, price, w in specs:
+        for cat, app, price, gsm in specs:
             r = self.client.post(
                 "/api/pricing/materials",
                 json={
                     "name": f"Matière {app}",
                     "appellation_code": app,
                     "category_id": self.cat_ids[cat],
-                    "weight_per_m2": w,
+                    "grammage_gsm": gsm,
+                    "perte_pct": 0,
                     "price_currency": "EUR",
                     "unit_price": price,
                     "price_basis": "PER_KG",
-                    "tax_incidence": 1,
                     "is_imported": False,
                 },
             )
@@ -267,7 +260,6 @@ class TestPricingE2EFlows(unittest.TestCase):
                 weight_per_m2=D("0.10"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
             ),
             mats[1]["id"]: PricingMaterial(
                 id=mats[1]["id"],
@@ -276,7 +268,6 @@ class TestPricingE2EFlows(unittest.TestCase):
                 weight_per_m2=D("0.05"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
             ),
             mats[2]["id"]: PricingMaterial(
                 id=mats[2]["id"],
@@ -285,7 +276,6 @@ class TestPricingE2EFlows(unittest.TestCase):
                 weight_per_m2=D("0.02"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
             ),
             mats[3]["id"]: PricingMaterial(
                 id=mats[3]["id"],
@@ -294,7 +284,6 @@ class TestPricingE2EFlows(unittest.TestCase):
                 weight_per_m2=D("0.09"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
             ),
         }
         expected = compute_product_cost(
@@ -323,11 +312,11 @@ class TestPricingE2EFlows(unittest.TestCase):
                 "name": "Film USD FX",
                 "appellation_code": "USD-FX",
                 "category_id": self.cat_ids["FRONTAL"],
-                "weight_per_m2": 0.05,
+                "grammage_gsm": 50,
+                "perte_pct": 0,
                 "price_currency": "USD",
                 "unit_price": 4,
                 "price_basis": "PER_KG",
-                "tax_incidence": 1,
                 "is_imported": False,
             },
         )
@@ -360,14 +349,13 @@ class TestPricingE2EFlows(unittest.TestCase):
             weight_per_m2=D("0.05"),
             price_currency="USD",
             price_basis="PER_KG",
-            tax_incidence=D("1"),
             is_imported=False,
         )
         s2 = PricingSettings(
             eur_usd_rate=D("0.75"),
             default_container_cost_usd=D("4000"),
             default_container_kg=D("26000"),
-            default_margin_eur_m2=D("0.06"),
+            default_margin_pct=D("6"),
         )
         expected_after = compute_material_price_per_m2(pm, s2).price_eur_per_m2
         self.assertEqual(total_after, expected_after)
@@ -380,11 +368,11 @@ class TestPricingE2EFlows(unittest.TestCase):
                 "name": "Pour PDF",
                 "appellation_code": "PDF1",
                 "category_id": self.cat_ids["FRONTAL"],
-                "weight_per_m2": 0.1,
+                "grammage_gsm": 100,
+                "perte_pct": 0,
                 "price_currency": "EUR",
                 "unit_price": 2,
                 "price_basis": "PER_KG",
-                "tax_incidence": 1,
             },
         )
         mid = r.json()["id"]
