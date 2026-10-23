@@ -269,3 +269,7 @@ select.tcal-in{font-size:15px}
 .tools-onglet:hover{background:var(--bg);color:var(--text)}
 .tools-onglet.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .tools-util-seul .tut-onglets{display:none}
+
+/* Accueil : tuiles rangées par section (mêmes sections que le menu). */
+.tools-section{margin-top:22px}
+.tools-section-t{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px}

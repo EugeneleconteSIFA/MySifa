@@ -83,12 +83,38 @@ def famille(ext: str) -> Optional[str]:
 
 
 _presents: dict[str, bool] = {}
+_chemins: dict[str, Optional[str]] = {}
+
+# Le service systemd peut tourner avec un PATH réduit au virtualenv : les
+# outils installés par apt (/usr/bin) y sont alors introuvables. On cherche
+# aussi dans les dossiers système, et on lance l'outil par son chemin complet.
+_DOSSIERS_SYSTEME = ("/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/snap/bin",
+                     "/opt/homebrew/bin")
+# Nom de remplacement d'un outil (ImageMagick 7 n'installe plus que `magick`).
+_ALIAS = {"convert": ("magick",)}
+
+
+def _chemin_recherche() -> str:
+    actuel = [d for d in (os.environ.get("PATH") or "").split(os.pathsep) if d]
+    return os.pathsep.join(actuel + [d for d in _DOSSIERS_SYSTEME if d not in actuel])
+
+
+def chemin_outil(o: str) -> Optional[str]:
+    """Chemin complet de l'outil, ou None s'il n'est pas installé."""
+    if o not in _chemins:
+        trouve = None
+        for nom in (o,) + _ALIAS.get(o, ()):
+            trouve = shutil.which(nom, path=_chemin_recherche())
+            if trouve:
+                break
+        _chemins[o] = trouve
+    return _chemins[o]
 
 
 def outils_disponibles() -> dict:
     for o in OUTILS:
         if o not in _presents:
-            _presents[o] = shutil.which(o) is not None
+            _presents[o] = chemin_outil(o) is not None
     return {"outils": dict(_presents), "paquets": dict(OUTILS)}
 
 
@@ -132,7 +158,10 @@ def liberer() -> None:
 
 # ── Exécution ─────────────────────────────────────────────────────────
 def _lancer(args: list[str], cwd: str, delai: int = 15 * 60) -> None:
-    env = dict(os.environ, HOME=cwd, LANG="fr_FR.UTF-8")
+    env = dict(os.environ, HOME=cwd, LANG="fr_FR.UTF-8", PATH=_chemin_recherche())
+    complet = chemin_outil(args[0]) if args and os.sep not in args[0] else None
+    if complet:
+        args = [complet] + list(args[1:])
     try:
         p = subprocess.run(args, cwd=cwd, env=env, capture_output=True, timeout=delai)
     except subprocess.TimeoutExpired:

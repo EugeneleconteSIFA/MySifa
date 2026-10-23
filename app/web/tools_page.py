@@ -76,6 +76,8 @@ def tools_page(request: Request):
         "user": {"nom": user.get("nom") or "", "role": user.get("role") or ""},
         "org": APP_ORG_NAME,
         "version": APP_VERSION,
+        # Sections du menu, reprises par les tuiles de l'accueil.
+        "sections": [[titre, [o[0] for o in outils]] for titre, outils in _NAV],
     }
     formulaires = ""
     if droits["formulaires"]:
@@ -127,34 +129,43 @@ _ASSETS = (
 # (clé, libellé, icône, infobulle) ; IA_OUTILS : outils qui font appel à l'IA
 # (pastille violette, static/mysifa_ia.css).
 IA_OUTILS = {"etiquettes", "formulaires", "traduction"}
+# Sections du menu : (titre, [(clé, libellé, icône, infobulle)]).
 _NAV = [
-    ("etiquettes", "Étiquettes",
-     '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>', "Traçabilité"),
-    ("formulaires", "Formulaires",
-     '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>', "Questionnaires"),
-    ("pdf", "Éditeur PDF",
-     '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>', "Éditer, scanner, signer"),
-    ("image", "Image et BAT",
-     '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>', "Vectoriser"),
-    ("convertir", "Convertir",
-     '<path d="M4 7h11.5"/><path d="M12.5 3.5L16 7l-3.5 3.5"/><path d="M20 17H8.5"/><path d="M11.5 13.5L8 17l3.5 3.5"/>', "Changer de format"),
-    ("calculs", "Calculs bobine",
-     '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>', "Métrage, fronts"),
-    ("traduction", "Traducteur",
-     '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>', "DeepL"),
+    ("Technique", [
+        ("calculs", "Calculs bobine",
+         '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>', "Métrage, fronts"),
+        ("etiquettes", "Étiquettes",
+         '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>', "Traçabilité"),
+    ]),
+    ("Imagerie", [
+        ("image", "Image et BAT",
+         '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>', "Vectoriser"),
+        ("convertir", "Convertir",
+         '<path d="M4 7h11.5"/><path d="M12.5 3.5L16 7l-3.5 3.5"/><path d="M20 17H8.5"/><path d="M11.5 13.5L8 17l3.5 3.5"/>', "Changer de format"),
+    ]),
+    ("Documents", [
+        ("pdf", "Éditeur PDF",
+         '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>', "Éditer, scanner, signer"),
+        ("formulaires", "Formulaires",
+         '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>', "Questionnaires"),
+        ("traduction", "Traducteur",
+         '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>', "DeepL"),
+    ]),
 ]
 
 
 def _nav_html() -> str:
     lignes = []
-    for cle, label, svg, bulle in _NAV:
-        lignes.append(
-            f'      <button type="button" class="nav-btn" data-outil="{cle}" data-bulle="{bulle}" onclick="toolsAller(\'{cle}\')">'
-            f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
-            f'stroke-linecap="round" stroke-linejoin="round">{svg}</svg>{label}'
-            + ('<span class="ia-badge" style="margin-left:auto">IA</span>' if cle in IA_OUTILS else '')
-            + '</button>'
-        )
+    for titre, outils in _NAV:
+        lignes.append(f'      <div class="nav-section-label msb-section" data-section-outils="{" ".join(o[0] for o in outils)}"><span>{titre}</span></div>')
+        for cle, label, svg, bulle in outils:
+            lignes.append(
+                f'      <button type="button" class="nav-btn" data-outil="{cle}" data-bulle="{bulle}" onclick="toolsAller(\'{cle}\')">'
+                f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+                f'stroke-linecap="round" stroke-linejoin="round">{svg}</svg>{label}'
+                + ('<span class="ia-badge" style="margin-left:auto">IA</span>' if cle in IA_OUTILS else '')
+                + '</button>'
+            )
     return "\n".join(lignes)
 
 
