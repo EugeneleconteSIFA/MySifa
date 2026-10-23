@@ -26,9 +26,3 @@ test_stock_reception_rvgi.py  # Playwright — wait_for_selector timeout 15s
 #   - le role `fabrication` recoit 403 la ou le test attend 200 (permission
 #     volontairement resserree, ou regression ?)
 test_pricing_api.py
-#
-# test_fournisseurs_merge.py — la fausse requete n'a pas de session : l'appel
-#   direct a `fournisseurs_doublons` leve 401. Le test doit simuler un
-#   utilisateur authentifie (patcher get_current_user), ce qui suppose de
-#   choisir quel role il represente.
-test_fournisseurs_merge.py

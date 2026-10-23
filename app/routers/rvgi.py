@@ -420,6 +420,34 @@ def rvgi_reprendre(request: Request):
     return res
 
 
+@router.post("/produits/synchroniser")
+def rvgi_produits_synchroniser(request: Request):
+    """Crée dans MyStock les articles RVGI commandés qui y manquent.
+
+    Tourne seule après chaque import du miroir ; ce bouton sert à ne pas
+    attendre la synchro suivante. Les produits existants sont liés, jamais
+    réécrits.
+    """
+    user = require_admin(request)
+    from app.services import erp_mirror as miroir
+    from app.services import rvgi_produits
+    from app.services.audit_service import log_action
+
+    if not miroir.miroir_present():
+        raise HTTPException(status_code=503, detail="Miroir RVGI absent — lancer la synchro.")
+    with get_db() as conn, miroir.get_erp_db() as erp:
+        res = rvgi_produits.synchroniser(conn, erp)
+        conn.commit()
+    log_action(
+        user=user, action="SYNC", module="stock",
+        objet="Produits enrichis depuis RVGI : %d créé(s), %d lié(s)"
+              % (res["crees"], res["lies"]),
+        detail={k: res[k] for k in ("crees", "lies", "nb_conflits")},
+        request=request,
+    )
+    return res
+
+
 # ── Articles ─────────────────────────────────────────────────────────────────
 
 @router.get("/articles")

@@ -1088,6 +1088,10 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str,
         "annule_motif": (e.get("annule_motif") or "").strip(),
         "annule_par": (e.get("annule_par") or "").strip(),
         "annule_le": (e.get("annule_le") or "").strip(),
+        # Relance après annulation : couleur du passage annulé, et signal
+        # « ajout auto » tant que « À placer au planning » reste coché.
+        "annulation_source_id": e.get("annulation_source_id"),
+        "annulation_a_revoir": int(e.get("annulation_a_revoir") or 0),
         "duree_heures": e["duree_heures"],
         # Un dossier terminé en DB reste terminé même si planned_end est dans le futur
         # (cas : durée modifiée → planned_end recalculé en heures ouvrées machine)
@@ -2218,6 +2222,7 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
         if not row:
             raise HTTPException(status_code=404, detail="Entrée introuvable.")
         ref_audit = (row["reference"] or "").strip()
+        statut_avant = row["statut"]
 
         current_reel = row["statut_reel"] or "reellement_en_attente"
 
@@ -2295,7 +2300,9 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
         action="CLOSE" if statut == "termine" else "UPDATE",
         module="planning",
         objet=f"Statut dossier {ref_audit} → {statut}",
-        detail={"statut": statut, "override": override, "machine_id": machine_id},
+        # avant / apres : l'Historique des modifications montre l'ancien statut.
+        detail={"avant": {"statut": statut_avant}, "apres": {"statut": statut},
+                "override": override, "machine_id": machine_id},
         ip=request.client.host if request.client else None,
     )
     return {"ok": True, "saisie_found": saisie_found}
@@ -3310,6 +3317,8 @@ async def reorder_entries(machine_id: int, request: Request):
         objet=f"Réorganisation planning {machine_nom}",
         detail={
             "entry_ids": entry_ids,
+            # Ordre d'avant : l'Historique en déduit les dossiers réellement déplacés.
+            "ordre_avant": cur_ids,
             # Forçage du gel : ce que le planificateur a assumé, et pourquoi.
             # Le journal doit pouvoir répondre « qui a repoussé ce camion ».
             **({"gel_force": {
@@ -3473,6 +3482,7 @@ async def deplacer_entry(machine_id: int, entry_id: int, request: Request):
         machine_nom = (mac["nom"] or "") if mac else ""
         e = _entree_deplacable(conn, machine_id, entry_id)
         cur_ids, statuts = _ordre_machine(conn, machine_id)
+        rang_avant = cur_ids.index(int(entry_id)) + 1 if int(entry_id) in cur_ids else None
         reste = [i for i in cur_ids if i != int(entry_id)]
         idx = _index_placement(reste, statuts, apres_id, en_tete)
         wanted = reste[:idx] + [int(entry_id)] + reste[idx:]
@@ -3499,6 +3509,7 @@ async def deplacer_entry(machine_id: int, entry_id: int, request: Request):
         detail={
             "geste": "en_tete" if en_tete else "apres",
             "apres_id": apres_id,
+            "rang_avant": rang_avant,
             "rang": idx + 1,
             **({"gel_force": {
                 "motif": _gel_confirme(request, body)[1],

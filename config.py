@@ -186,6 +186,10 @@ MIGRATIONS_DISABLED = os.getenv("MIGRATIONS_DISABLED", _migrations_default) in {
 # Sera retiré complètement en phase 2n (suppression du code Prod du monolithe).
 PROD_STANDALONE = os.getenv("PROD_STANDALONE", "1") in {"1", "true", "True", "yes", "YES"}
 
+# Rôles qui arrivent sur le Planning de production quand ils ouvrent MyProd
+# (adresse /prod nue : un lien qui vise un onglet précis y mène toujours).
+PROD_ARRIVEE_PLANNING_ROLES = ("superadmin", "direction", "administration")
+
 # MAINTENANCE_OPEN_BETA : ouvre l'accès du module Maintenance aux opérateurs
 # (rôle `fabrication`) pendant la phase de test. Quand désactivé (0, défaut),
 # seuls les rôles admin (superadmin, direction, administration) peuvent y

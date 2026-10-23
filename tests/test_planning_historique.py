@@ -106,8 +106,12 @@ verifier("avant/après : aucun réglage → valeur", (l2["lignes"][0]["avant"], 
          ("aucun réglage enregistré", "05:25–20:35"))
 verifier("avant/après : ce qu'affichait la timeline", l2["lignes"][1],
          {"champ": "Affiché avant", "valeur": "05:00–13:00"})
-verifier("changement de machine : noms, pas des ids",
-         [x["valeur"] for x in par_id[4]["lignes"]], ["Changé de machine", "Cohésio 1", "Cohésio 2"])
+verifier("changement de machine : une ligne origine → cible, par les noms",
+         par_id[4]["lignes"], [{"champ": "Machine", "avant": "Cohésio 1", "apres": "Cohésio 2"}])
+verifier("changement de machine : geste et dossier visé",
+         (par_id[4]["geste"], par_id[4]["dossier"]), ("Changé de machine", "9932757"))
+verifier("création : dossier visé", (par_id[3]["geste"], par_id[3]["dossier"]),
+         ("Ajout au planning", "9932723 - L1"))
 verifier("réorganisation : un compte, pas la liste", par_id[7]["lignes"][0]["valeur"], "3 dossier(s)")
 verifier("parité : seule la plage changée sort", par_id[8]["lignes"],
          [{"champ": "Paire lun–jeu", "avant": "05:00–13:00", "apres": "05:25–20:35"}])
@@ -146,6 +150,31 @@ vide = ph.mettre_en_forme({"id": 2, "objet": "Dossier X", "action": "UPDATE", "u
                            "created_at": "2026-10-22T08:00:00",
                            "detail": json.dumps({"avant": {}, "apres": {}, "machine_id": 3})}, {3: "C2"})
 verifier("diff vide : marqué sans changement", (vide["inchange"], vide["lignes"]), (True, []))
+
+print("Geste, dossier, avant → après")
+statut = ph.mettre_en_forme({"id": 11, "objet": "Statut dossier 9932448 → termine", "action": "CLOSE",
+                             "user_nom": "G", "created_at": "2026-10-22T08:00:00",
+                             "detail": json.dumps({"avant": {"statut": "attente"}, "apres": {"statut": "termine"},
+                                                   "override": False, "machine_id": 1})}, {1: "Cohésio 1"})
+verifier("statut : dossier et geste", (statut["dossier"], statut["geste"]),
+         ("9932448", "Changement de statut"))
+verifier("statut : avant → après", statut["lignes"][0],
+         {"champ": "Statut", "avant": "En attente", "apres": "Terminé"})
+dep = ph.mettre_en_forme({"id": 12, "objet": "Dossier 9932500 · Cohésio 1", "action": "REORDER",
+                          "user_nom": "G", "created_at": "2026-10-22T08:00:00",
+                          "detail": json.dumps({"geste": "apres", "apres_id": 40, "rang_avant": 9, "rang": 3})},
+                         {1: "Cohésio 1"}, {40: "9932499"})
+verifier("déplacement : rang avant → après, dossier cité par son numéro", dep["lignes"], [
+    {"champ": "Rang dans la file", "avant": "9", "apres": "3"},
+    {"champ": "Placé après", "valeur": "9932499"}])
+reorg = ph.mettre_en_forme({"id": 13, "objet": "Réorganisation planning Cohésio 1", "action": "REORDER",
+                            "user_nom": "G", "created_at": "2026-10-22T08:00:00",
+                            "detail": json.dumps({"ordre_avant": [1, 2, 3, 4, 5], "entry_ids": [1, 4, 2, 3, 5]})},
+                           {1: "Cohésio 1"}, {4: "9932004"})
+verifier("réorganisation : seul le dossier déplacé sort", reorg["lignes"],
+         [{"champ": "9932004", "avant": "rang 4", "apres": "rang 2"}])
+verifier("réorganisation : dossier visé", (reorg["dossier"], reorg["geste"]),
+         ("9932004", "Réorganisation de la file"))
 
 print("Filtre machine")
 verifier("Cohésio 2 : chemin, objet, machine cible",

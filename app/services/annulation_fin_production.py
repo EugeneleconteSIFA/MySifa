@@ -271,6 +271,7 @@ _COLONNES_NON_COPIEES = {
     "destockage", "destockage_at", "destockage_reserve",
     "destockage_par", "destockage_relu_par", "destockage_relu_at",
     "destockage_rvgi", "destockage_rvgi_at", "destockage_rvgi_par",
+    "annulation_source_id", "annulation_a_revoir",
 }
 
 
@@ -287,6 +288,14 @@ def _creer_second_creneau(conn, source_id: int, auteur: str, now_iso: str) -> in
     valeurs.update({"statut": "attente", "statut_force": 0, "position": 0,
                     "created_at": now_iso, "updated_at": now_iso})
     toutes = _colonnes(conn, "planning_entries")
+    # La relance garde la couleur du passage annulé et reste signalée, à
+    # replacer, tant que « À placer au planning » n'est pas décoché
+    # (migration planning_relance_apres_annulation).
+    if "annulation_source_id" in toutes:
+        valeurs["annulation_source_id"] = source_id
+        valeurs["annulation_a_revoir"] = 1
+    if "a_placer" in toutes:
+        valeurs["a_placer"] = 1
     if "statut_reel" in toutes:
         valeurs["statut_reel"] = "reellement_en_attente"
     if "created_by" in toutes:

@@ -33,7 +33,9 @@ if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
 import database  # noqa: E402  (le chemin de base est posé par le test)
+import app.core.database as _dbmod  # noqa: E402
 from app.routers import settings as S  # noqa: E402
+from unittest.mock import patch  # noqa: E402
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -118,7 +120,6 @@ def base_neuve() -> str:
     conn.executescript(SCHEMA)
     conn.commit()
     conn.close()
-    database.CHEMIN = chemin
     return chemin
 
 
@@ -347,7 +348,12 @@ def test_doublons():
     conn.commit()
     conn.close()
 
-    r = S.fournisseurs_doublons(_requete())
+    # L'endpoint ouvre sa connexion par get_db(), qui lit DB_PATH du module
+    # réel. La permission n'est pas l'objet du test : require_settings est
+    # neutralisé, la détection est appelée telle que l'écran l'appelle.
+    with patch.object(_dbmod, "DB_PATH", chemin), \
+         patch.object(S, "require_settings", return_value={"id": 1}):
+        r = S.fournisseurs_doublons(None)
     groups = r["groups"]
     print(f"  {len(groups)} groupe(s) : "
           + " | ".join(f"{g['reason']}×{g['count']}" for g in groups))
@@ -437,20 +443,6 @@ def _conn(chemin: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.isolation_level = None
     return conn
-
-
-class _Faux:
-    """Fausse requête. `get_current_user` lit le cookie de session : sans
-    l'attribut, le test tombe sur un AttributeError sans rapport avec ce
-    qu'il vérifie. Reste à lui donner une vraie session — voir
-    tests/CI_QUARANTAINE.txt."""
-    client = None
-    headers: dict = {}
-    cookies: dict = {}
-
-
-def _requete():
-    return _Faux()
 
 
 def main() -> int:
