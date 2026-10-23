@@ -1120,7 +1120,7 @@ function renderExpeTranspList(){
 
 function renderExpeTranspPanel(){
   const overlay=h('div',{className:'expe-trp-overlay'+(T.panelOpen?' open':'')});
-  overlay.addEventListener('click',e=>{if(e.target===overlay)closeExpeTranspPanel();});
+  fermerSurFond(overlay,closeExpeTranspPanel);
   const panel=h('div',{className:'expe-trp-panel'+(T.panelOpen?' open':'')});
   const search=h('input',{
     id:'expe-trp-search',
@@ -1155,7 +1155,7 @@ function renderExpeTransporteurModal(){
   const isEdit=T.editId!=null;
   const f=T.form||{};
   const overlay=h('div',{className:'expe-trp-modal-overlay'});
-  overlay.addEventListener('click',e=>{if(e.target===overlay)closeTransporteurModal();});
+  fermerSurFond(overlay,closeTransporteurModal);
   const box=h('div',{className:'expe-trp-modal'});
   const mkText=(label,key,opts)=>{
     const o=opts||{};
@@ -2680,7 +2680,7 @@ function ouvrirEditionDemande(d,detail){
   box.appendChild(h('div',{className:'expe-devis-modal-foot'},
     h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Annuler'),btnOk));
   ov.appendChild(box);
-  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  fermerSurFond(ov,close);
   document.body.appendChild(ov);
 }
 
@@ -2733,7 +2733,7 @@ function ouvrirRelanceDevis(r,demandeId){
       }catch(e){ showToast(e.message||'Relance impossible','danger'); }
     }},'Envoyer la relance')));
   ov.appendChild(box);
-  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  fermerSurFond(ov,close);
   document.body.appendChild(ov);
 }
 
@@ -2752,7 +2752,7 @@ async function ouvrirTimelineDevis(reponseId){
   box.appendChild(h('div',{className:'expe-devis-modal-foot'},
     h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Fermer')));
   ov.appendChild(box);
-  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  fermerSurFond(ov,close);
   document.body.appendChild(ov);
   // Le contenu est redessiné après chaque reclassement : rouvrir la modale
   // empilerait un second overlay et ferait perdre le fil de la lecture.
@@ -2832,7 +2832,7 @@ function renderExpeDevisModal(){
   const m=S.expeDevisModal;
   if(!m)return null;
   const overlay=h('div',{className:'expe-devis-modal-overlay'});
-  overlay.addEventListener('click',e=>{if(e.target===overlay)fermerExpeDevisModal();});
+  fermerSurFond(overlay,fermerExpeDevisModal);
   // Le détail porte un comparatif à sept colonnes : à 720 px il faut faire
   // défiler pour atteindre les actions. On l'élargit, sans toucher aux autres
   // modales qui, elles, n'ont qu'un formulaire à afficher.
@@ -4771,7 +4771,7 @@ function renderExpeContactModal(){
     }},'Enregistrer')
   ));
   overlay.appendChild(box);
-  overlay.addEventListener('click',e=>{if(e.target===overlay)set({expeShowContacts:false});});
+  fermerSurFond(overlay,()=>set({expeShowContacts:false}));
   return overlay;
 }
 function renderExpeComparateur(){
@@ -5734,7 +5734,7 @@ function renderExpeDepartModal(){
   majPalTotal();
 
   const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
-  overlay.addEventListener('click',e=>{if(e.target===overlay)expeCloseDepartModal();});
+  fermerSurFond(overlay,expeCloseDepartModal);
 
   const box=h('div',{className:'add-row-form',style:{maxWidth:'920px'}});
   const closeBtn=h('button',{type:'button',className:'add-row-close',onClick:expeCloseDepartModal},'×');
@@ -6272,7 +6272,7 @@ async function ouvrirJournalPalettes(t){
       onClick:()=>{close(); ouvrirSaisieMouvementPalettes(t);}},iconEl('plus',13),' Saisir un mouvement'):null,
     h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Fermer')));
   ov.appendChild(box);
-  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  fermerSurFond(ov,close);
   document.body.appendChild(ov);
   try{
     const d = await api('/api/expe/palettes-europe/journal?'+_expePalTrpParams(t));
@@ -6450,7 +6450,7 @@ function ouvrirSaisieMouvementPalettes(t){
       }catch(e){ toast(e.message||'Enregistrement impossible','error'); }
     }},'Enregistrer')));
   ov.appendChild(box);
-  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  fermerSurFond(ov,close);
   document.body.appendChild(ov);
 }
 
@@ -6503,7 +6503,7 @@ function ouvrirSaisieContestation(prefill){
       }catch(e){ toast(e.message||'Enregistrement impossible','error'); }
     }},'Enregistrer')));
   ov.appendChild(box);
-  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  fermerSurFond(ov,close);
   document.body.appendChild(ov);
 }
 

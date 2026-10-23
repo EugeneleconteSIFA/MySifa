@@ -2547,6 +2547,9 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<!-- Reprendre une réception de RVGI : fournisseur, BL, matière, laize.
+     Les bobines restent scannées une par une — voir le fichier. -->
+<script src="/static/mysifa_rvgi_reception.js?v=2"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
@@ -2661,6 +2664,10 @@ let S = {
   recepLaizeCustomMm: '',  // valeur saisie manuellement
   recepModalMode: false,   // true = modal simplifié depuis fiche matière
   recepModalMatiere: null, // matière verrouillée en mode modal
+  // La réception RVGI reprise, s'il y en a une. Elle ne remplace rien : elle
+  // préremplit l'entête et sert de point de comparaison au comptage.
+  recepRvgi: null,         // {cde, bl, fournisseur_id, qte_totale, lignes[]}
+  recepRvgiChamp: null,    // la poignée rendue par MysRvgiReception.champ()
   // Inventaire matière (par référence)
   matInvList: null,        // [{ id, reference, designation, categorie, statut, jours_depuis, ... }]
   matInvLoading: false,
@@ -20835,6 +20842,10 @@ function recepAddCode(code) {
     laize_valeur_mm: laizeValeurMm,
   };
   S.recepItems = [...S.recepItems, item];
+  // Le contrôle « scannés / annoncés par RVGI » suit le comptage en direct.
+  // Il ne bloque rien : les deux chiffres ne sont pas dans la même unité, et
+  // c'est celui qui reçoit qui juge.
+  if (S.recepRvgiChamp) S.recepRvgiChamp.controle(S.recepItems.length);
   recepPersisterSiChange();
   // Ce que MySifa sait déjà de ce code — répondu après coup, pour ne pas
   // faire attendre la douchette entre deux bobines.
@@ -21239,7 +21250,13 @@ async function recepValider() {
         // La ligne de livraison RVGI désignée à l'écran : c'est la clé exacte
         // vers le registre, et c'est elle qui décide de l'allégation.
         rvgi_lif_id: ligneRegistre ? ligneRegistre.lif_id : null,
-        rvgi_bl: ligneRegistre ? (ligneRegistre.num_bl || null) : null,
+        // La réception RVGI reprise, si elle l'a été : n° de commande, BL et
+        // quantité annoncée par l'ERP, gardée à côté du comptage réel. Le BL
+        // de la ligne du registre, quand il y en a une, passe en premier.
+        rvgi_bl: (ligneRegistre && ligneRegistre.num_bl)
+          || (S.recepRvgi && S.recepRvgi.bl) || null,
+        rvgi_cde: S.recepRvgi ? String(S.recepRvgi.cde || '') : null,
+        rvgi_qte_attendue: S.recepRvgi ? (S.recepRvgi.qte_totale || null) : null,
       }),
     });
     if (d && d.success) {
@@ -21396,6 +21413,7 @@ function renderReceptionMiniModal() {
     }, '✕'),
   );
   modal.appendChild(head);
+  modal.appendChild(buildRecepRvgi());
 
   // ── Picker (matière verrouillée) ──
   modal.appendChild(buildReceptionPicker(true));
@@ -22831,6 +22849,68 @@ function rvgiLigne(l) {
 // ── Sous-onglet : Faire une réception ─────────────────────────────
 // ── Picker Catégorie/Matière/Laize partagé entre onglet et modal simplifié ──
 // lockedMatiere = true → matière verrouillée (mode modal fiche matière)
+// ── Reprendre une réception de RVGI ─────────────────────────────────────────
+//
+// Le formulaire ne change pas de nature : on scanne toujours les bobines une
+// par une, et c'est ce comptage qui fait la traçabilité FSC. Ce bloc remplit
+// seulement ce que l'ERP sait déjà — le fournisseur, le n° de BL, la matière
+// et sa laize — et rappelle la quantité que RVGI annonce, comme point de
+// comparaison. Les deux chiffres sont dans des unités différentes : on les
+// montre côte à côte, on ne les soustrait pas.
+function buildRecepRvgi() {
+  const zone = el('div');
+  if (!window.MysRvgiReception) return zone;
+  setTimeout(() => {
+    S.recepRvgiChamp = MysRvgiReception.champ(zone, {
+      ecran: 'matiere',
+      // MyStock re-rend tout l'onglet à chaque scan : la réception reprise
+      // doit vivre dans `S`, pas dans le module, sinon elle disparaîtrait à
+      // la première bobine.
+      reception: () => S.recepRvgi,
+      onReception: (r) => {
+        S.recepRvgi = r;
+        if (!r) return;
+        // Le fournisseur : seulement s'il est relié dans MySifa. Écrire un nom
+        // que l'annuaire ne connaît pas rendrait la réception non certifiable.
+        if (r.fournisseur_id && !S.recepFournisseurId) {
+          S.recepFournisseurId = r.fournisseur_id;
+          S.recepFournisseur = r.fournisseur_mysifa || r.fournisseur || '';
+        }
+        // Le BL dans la note, seulement si elle est vide : ce que quelqu'un a
+        // écrit à la main vaut mieux que ce qu'on devine.
+        if (r.bl && !String(S.recepNote || '').trim()) {
+          S.recepNote = 'BL ' + r.bl;
+        }
+        renderContent();
+      },
+      appliquer: (r, ligne) => {
+        // La matière et la laize de la ligne choisie, pour la PROCHAINE bobine
+        // scannée. On ne touche pas aux bobines déjà saisies.
+        if (ligne.matiere_id) {
+          S.recepMatiereId = ligne.matiere_id;
+          S.recepMatiereRef = ligne.article || '';
+          S.recepMatiereDes = ligne.matiere_nom || ligne.designation || '';
+          S.recepCategorie = ligne.categorie || S.recepCategorie;
+          if (ligne.laize_mm) {
+            S.recepLaizeCustomOn = true;
+            S.recepLaizeCustomMm = String(ligne.laize_mm);
+            S.recepLaizeValeurMm = ligne.laize_mm;
+            S.recepLaizeLabel = ligne.laize_mm + ' mm';
+          }
+          showToast('Matière reprise de RVGI : ' + (ligne.article || ''));
+        } else {
+          showToast('RVGI connaît « ' + (ligne.article || '?') +
+                    ' » mais MySifa n\'a pas cette matière — à créer ou à saisir à la main.',
+                    'error');
+        }
+        renderContent();
+      },
+    });
+    if (S.recepRvgiChamp) S.recepRvgiChamp.controle((S.recepItems || []).length);
+  }, 0);
+  return zone;
+}
+
 function buildReceptionPicker(lockedMatiere) {
   const wrap = el('div', { cls: 'recep-picker-card' });
   wrap.appendChild(el('div', { cls: 'recep-picker-title' },
@@ -22978,6 +23058,7 @@ function buildReceptionNouvelle() {
     },
   }, iconEl('scan', 12), ' Quel code scanner ?');
   block.appendChild(tracaGuideBtn);
+  block.appendChild(buildRecepRvgi());
 
   // ── Picker Catégorie / Matière / Laize (mode structuré) ──
   if (!S.recepModalMode) {
