@@ -13,6 +13,10 @@ Ticket à plusieurs taux (restaurant : 10 % sur la nourriture, 20 % sur
 l'alcool) : une ligne par taux, avec son TTC et sa TVA, comme sur le ticket.
 Si la somme des lignes ne retombe pas sur le total du ticket, la remarque le
 dit au salarié au lieu de corriger en silence.
+
+Ticket étranger : sa TVA ne se récupère pas sur la déclaration française. La
+note est proposée « Sans TVA » et la remarque le dit. Si le total n'est pas en
+euros, il n'est pas reporté : le salarié saisit le montant converti.
 """
 from __future__ import annotations
 
@@ -27,6 +31,10 @@ from typing import Optional
 
 from app.services import ia_usage
 from config import NDF_SCAN_IA_ACTIVE, NDF_SCAN_IA_MODELE, NDF_TAUX_TVA
+
+# Pays dont la TVA est la TVA française : Monaco, et les DOM qui ont leur
+# propre code ISO.
+_PAYS_TVA_FRANCAISE = {"FR", "MC", "GP", "MQ", "RE", "GF", "YT"}
 
 # Au-delà, l'image est réduite avant l'envoi : l'API refuse les images de plus
 # de 5 Mo, et un ticket se lit très bien à 2 000 px de long.
@@ -54,7 +62,9 @@ def _schema(codes: list[str]) -> dict:
             "date": _texte_ou_nul("Date de la dépense, AAAA-MM-JJ."),
             "commerce": _texte_ou_nul("Nom du commerce ou du fournisseur."),
             "ville": _texte_ou_nul("Ville du commerce."),
-            "montant_ttc": _nombre_ou_nul("Total payé TTC, en euros."),
+            "pays": _texte_ou_nul("Pays du commerce, code ISO à 2 lettres (FR, DE, BE…)."),
+            "devise": _texte_ou_nul("Devise du total, code ISO à 3 lettres (EUR, CHF, GBP…)."),
+            "montant_ttc": _nombre_ou_nul("Total payé TTC, dans la devise du ticket."),
             "tva": {
                 "type": "array",
                 "description": "Une ligne par taux de TVA imprimé sur le ticket.",
@@ -62,7 +72,7 @@ def _schema(codes: list[str]) -> dict:
                     "type": "object",
                     "properties": {
                         "taux": {"type": "number", "description": "Taux en %, ex. 10 ou 5.5."},
-                        "montant": {"type": "number", "description": "Montant de TVA à ce taux, en euros."},
+                        "montant": {"type": "number", "description": "Montant de TVA à ce taux, dans la devise du ticket."},
                         "base_ht": _nombre_ou_nul("Montant HT à ce taux, s'il est imprimé."),
                         "ttc": _nombre_ou_nul("Montant TTC à ce taux, s'il est imprimé."),
                     },
@@ -73,7 +83,7 @@ def _schema(codes: list[str]) -> dict:
             "categorie": {"type": "string", "enum": codes + ["inconnue"]},
             "remarque": _texte_ou_nul("Ce qui est illisible ou douteux, en une phrase."),
         },
-        "required": ["lisible", "date", "commerce", "ville", "montant_ttc", "tva", "categorie", "remarque"],
+        "required": ["lisible", "date", "commerce", "ville", "pays", "devise", "montant_ttc", "tva", "categorie", "remarque"],
         "additionalProperties": False,
     }
 
@@ -85,6 +95,7 @@ def _consigne(categories: list[dict]) -> str:
 Relève uniquement ce qui est imprimé sur le document :
 - la date de la dépense ;
 - le nom du commerce et sa ville ;
+- le pays du commerce (d'après l'adresse, la langue, le numéro de TVA) et la devise du total ;
 - le total payé TTC ;
 - la TVA, une ligne par taux imprimé : le taux en %, le montant de TVA, et le montant HT (base) et TTC à ce taux s'ils sont imprimés. Un restaurant a souvent deux taux (10 % et 20 %) : relève les deux lignes séparément.
 
@@ -94,7 +105,7 @@ Réponds « inconnue » si aucune ne convient clairement.
 
 Règles :
 1. N'invente rien. Une valeur absente ou illisible vaut null ; une TVA non imprimée donne une liste vide.
-2. Les montants sont en euros, avec un point décimal.
+2. Les montants sont relevés tels qu'imprimés, dans la devise du ticket, avec un point décimal.
 3. Si le document n'est pas un justificatif de dépense, mets lisible à false."""
 
 
@@ -160,10 +171,25 @@ def interpreter(brut: dict, categories: list[dict]) -> dict:
         return {"ok": False, "erreur": (brut.get("remarque") or "Justificatif illisible — saisissez la note à la main.")}
 
     ttc = _montant(brut.get("montant_ttc"))
+    pays = (brut.get("pays") or "").strip().upper()[:2]
+    devise = (brut.get("devise") or "").strip().upper()[:3]
+    etranger = bool(pays) and pays not in _PAYS_TVA_FRANCAISE
+    autre_devise = bool(devise) and devise != "EUR"
+    remarques = []
+    if autre_devise:
+        # Un montant en francs suisses posé comme des euros fausserait le
+        # remboursement : on le montre, on ne le reporte pas.
+        if ttc is not None:
+            remarques.append(f"Total de {ttc:.2f} {devise} : saisissez le montant converti en euros.".replace(".", ",", 1))
+        else:
+            remarques.append(f"Ticket en {devise} : saisissez le montant converti en euros.")
+        ttc = None
+    if etranger:
+        remarques.append(f"Ticket étranger ({pays}) : TVA non récupérable en France, note proposée sans TVA.")
 
     # Lignes de TVA : une par taux légal, au centime près.
     par_taux: dict = {}
-    for l in brut.get("tva") or []:
+    for l in ([] if etranger or autre_devise else brut.get("tva") or []):
         try:
             taux = float(l.get("taux"))
             tva_l = round(float(l.get("montant")), 2)
@@ -185,8 +211,8 @@ def interpreter(brut: dict, categories: list[dict]) -> dict:
         else:
             d["ttc"] = round(d["ttc"] + ttc_l, 2)
     lignes = sorted(par_taux.values(), key=lambda d: -d["taux"])
-
-    remarques = []
+    if etranger and ttc is not None:
+        lignes = [{"taux": 0.0, "ttc": ttc, "tva": 0.0, "complet": True}]
     if len(lignes) == 1 and ttc is not None:
         # Un seul taux : le total du ticket fait foi pour le TTC de la ligne.
         lignes[0]["ttc"], lignes[0]["complet"] = ttc, True
@@ -221,7 +247,8 @@ def interpreter(brut: dict, categories: list[dict]) -> dict:
     }
     lus = [k for k, v in champs.items() if v is not None]
     if not lus:
-        return {"ok": False, "erreur": "Rien de lisible sur le justificatif — saisissez la note à la main."}
+        # Ticket en devise sans autre champ lisible : la remarque dit quoi faire.
+        return {"ok": False, "erreur": " ".join(remarques) or "Rien de lisible sur le justificatif — saisissez la note à la main."}
     return {"ok": True, "champs": champs, "lus": lus, "remarque": " ".join(remarques) or None}
 
 

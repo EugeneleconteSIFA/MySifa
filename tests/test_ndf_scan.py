@@ -67,6 +67,33 @@ check("TVA supérieure au TTC ignorée", r["champs"]["tva_lignes"] is None)
 r = interpreter(brut(montant_ttc=-5), CATS)
 check("rien de lisible : échec explicite", not r["ok"] and "à la main" in r["erreur"])
 
+r = interpreter(brut(montant_ttc=8.17, tva=[{"taux": 2.1, "montant": 0.17, "base_ht": None, "ttc": None}]), CATS)
+check("2,1 % (pharmacie) reconnu", r["champs"]["tva_lignes"] == [{"taux": 2.1, "ttc": 8.17, "tva": 0.17}])
+
+r = interpreter(brut(pays="BE", devise="EUR", montant_ttc=30.25, ville="Bruxelles",
+                     tva=[{"taux": 21, "montant": 5.25, "base_ht": 25, "ttc": None}]), CATS)
+check("ticket étranger en euros : une ligne sans TVA au total du ticket",
+      r["champs"]["tva_lignes"] == [{"taux": 0.0, "ttc": 30.25, "tva": 0.0}] and r["champs"]["montant_tva"] == 0)
+check("ticket étranger : la remarque le dit", "étranger (BE)" in (r["remarque"] or ""))
+
+r = interpreter(brut(pays="DE", devise="EUR", montant_ttc=11.9,
+                     tva=[{"taux": 20, "montant": 1.9, "base_ht": None, "ttc": None}]), CATS)
+check("ticket étranger à un taux qui existe en France : pas de TVA récupérée",
+      r["champs"]["tva_lignes"][0]["taux"] == 0)
+
+r = interpreter(brut(pays="CH", devise="CHF", montant_ttc=45.5, date="2026-10-20",
+                     tva=[{"taux": 8.1, "montant": 3.41, "base_ht": None, "ttc": None}]), CATS)
+check("autre devise : le montant n'est pas reporté en euros",
+      r["ok"] and r["champs"]["montant_ttc"] is None and r["champs"]["tva_lignes"] is None)
+check("autre devise : la remarque donne le montant lu", "45,50 CHF" in (r["remarque"] or ""))
+
+r = interpreter(brut(pays="GB", devise="GBP", montant_ttc=20), CATS)
+check("autre devise sans autre champ : échec avec la consigne", not r["ok"] and "GBP" in r["erreur"])
+
+r = interpreter(brut(pays="MC", devise="EUR", montant_ttc=12,
+                     tva=[{"taux": 20, "montant": 2, "base_ht": None, "ttc": None}]), CATS)
+check("Monaco : TVA française gardée", r["champs"]["tva_lignes"] == [{"taux": 20, "ttc": 12, "tva": 2}])
+
 r = interpreter({"lisible": False, "remarque": "Photo floue."}, CATS)
 check("document illisible : remarque du modèle rendue", not r["ok"] and r["erreur"] == "Photo floue.")
 
