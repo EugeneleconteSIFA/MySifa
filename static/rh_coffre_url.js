@@ -12,7 +12,7 @@
  *   mois       bulletins : mois du tableau mensuel (mois en cours par défaut)
  *   statut     notes de frais : soumise par défaut, « tous » pour aucun filtre
  *   mois       notes de frais : filtre de mois, seulement avec une année (23/10/2026)
- *   grouper    notes de frais : « salarie » pour les sous-totaux par salarié
+ *   grouper    notes de frais : « salarie » pour le récapitulatif par salarié
  *   note       fiche d'une note de frais ouverte
  *   apercu     bulletin ou justificatif affiché (chemin /api/coffre/…)
  *   reglages   ndf : réglages des notes de frais (static/mysifa_ndf_reglages.js)
@@ -78,7 +78,7 @@ async function rhCoffreAllerUrl() {
     const c = rhCoffreSelect('ndf-mois', anneeOk && /^\d{1,2}$/.test(m) ? String(Number(m)) : '');
     const groupe = u.get('grouper', '') === 'salarie';
     const d = groupe !== NDF_GROUPE;
-    if (d) { NDF_GROUPE = groupe; document.getElementById('ndf-grouper').setAttribute('aria-pressed', String(groupe)); }
+    if (d) NDF_GROUPE = groupe;
     if (onglet !== CURRENT_TAB) showTab('ndf', { silent: true });
     else if (a || b || c || d) await loadNdf();
   } else {

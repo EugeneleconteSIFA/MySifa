@@ -106,13 +106,22 @@ tr:hover td{background:var(--accent-bg)}
 .b-distribue{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .b-consulte{background:rgba(52,211,153,.15);color:var(--ok)}
 tr.ndf-row{cursor:pointer}
-/* Totaux de la liste : bandeau au-dessus, total et sous-totaux dans le tableau. */
+/* Totaux de la liste : bandeau au-dessus, récapitulatif par salarié, total en pied de tableau. */
 .ndf-totaux{margin-bottom:10px}
 .ndf-totaux .stat-val{font-size:20px;font-variant-numeric:tabular-nums}
-.ndf-rappel{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin:0 0 14px}
+.ndf-totaux-barre{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 16px;margin:0 0 14px}
+.ndf-rappel{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted)}
+#ndf-grouper{margin-left:auto}
+.ndf-par-salarie{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:0 0 16px;font-size:13px}
+.ndf-ps-ligne{display:grid;grid-template-columns:minmax(0,1fr) 90px 130px 130px 120px;gap:12px;align-items:baseline;padding:9px 14px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums}
+.ndf-ps-ligne>span:not(:first-child){text-align:right}
+.ndf-ps-ligne.tete{border-top:none;background:var(--bg);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.ndf-ps-ligne.pied{background:var(--bg);font-weight:700}
+.ndf-ps-nom{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ndf-ps-nb,.ndf-ps-tva,.ndf-ps-ht{color:var(--text2)}
+.ndf-ps-ttc{font-weight:700;color:var(--text)}
 .ndf-rappel strong{color:var(--text);font-weight:600}
 .ndf-detail{font-size:10px;color:var(--muted);font-weight:400}
-tr.ndf-sous-total td,tr.ndf-sous-total:hover td{background:var(--bg);color:var(--text);font-size:12px;font-weight:600}
 tr.ndf-total td,tr.ndf-total:hover td{background:none;color:var(--text);font-weight:700;border-top:2px solid var(--border);border-bottom:none}
 #ndf-grouper[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 #ndf-mois:disabled{opacity:.5}
@@ -122,10 +131,14 @@ tr.ndf-total td,tr.ndf-total:hover td{background:none;color:var(--text);font-wei
   #ndf-bloc .toolbar select{grid-column:2/-1;width:100%}
   #ndf-bloc .toolbar .btn{justify-content:center}
   #ndf-bloc .toolbar .btn:first-of-type{grid-column:1/3}
-  #ndf-bloc .toolbar #ndf-grouper{grid-column:1/-1}
   #ndf-bloc .ndf-totaux{grid-template-columns:1fr 1fr;gap:8px}
   #ndf-bloc .ndf-totaux .stat{padding:10px 12px}
   #ndf-bloc .ndf-totaux .stat-val{font-size:17px}
+  .ndf-ps-ligne{grid-template-columns:minmax(0,1fr) auto;gap:2px 12px}
+  .ndf-ps-tva,.ndf-ps-ht{display:none}
+  .ndf-ps-ttc{order:2}
+  .ndf-ps-nb{order:3;grid-column:1/-1;font-size:11px;text-align:left!important}
+  .ndf-ps-ligne.tete{display:none}
 }
 .statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent}
 .statut.brouillon{background:transparent;border:1px dashed var(--border);color:var(--muted)}
@@ -281,7 +294,6 @@ tr.ndf-total td,tr.ndf-total:hover td{background:none;color:var(--text);font-wei
             <select id="ndf-mois" disabled title="Choisissez d'abord une année"><option value="">Tous</option></select>
             <button type="button" class="btn ghost" onclick="exportNdf()">Export CSV</button>
             <button type="button" class="btn ghost" onclick="ouvrirReglagesRh()">Réglages</button>
-            <button type="button" class="btn ghost" id="ndf-grouper" aria-pressed="false" onclick="basculerGroupeNdf()">Grouper par salarié</button>
           </div>
           <div style="overflow-x:auto" id="ndf-container"></div>
         </div>
@@ -297,7 +309,7 @@ tr.ndf-total td,tr.ndf-total:hover td{background:none;color:var(--text);font-wei
 <script src="/static/mysifa_confirm.js?v=3"></script>
 <script src="/static/mysifa_ndf_fiche.js?v=7"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/rh_coffre_url.js?v=3"></script>
+<script src="/static/rh_coffre_url.js?v=4"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
 <script>
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -553,7 +565,6 @@ async function loadNdf(){
     // explicitement, ils le sont.
     const compte=n=>!!statut||(n.statut!=='refusee'&&n.statut!=='brouillon');
     const exclues=NDF_RH.filter(n=>!compte(n)).length;
-    const liste=NDF_GROUPE?NDF_RH.slice().sort((a,b)=>String(a.employe_nom||'').localeCompare(String(b.employe_nom||''),'fr')):NDF_RH;
     const ligneNdf=n=>`
         <tr class="ndf-row" onclick="if(!event.target.closest('a,button'))ouvrirNoteRh(${n.id})" title="Consulter">
           <td><strong>${esc(n.employe_nom)}</strong><br><span style="font-size:11px;color:var(--muted)">${esc(n.matricule||'')}</span></td>
@@ -569,20 +580,9 @@ async function loadNdf(){
             ${n.statut==='validee'?`<button class="btn ok small" onclick="marquerPayee(${n.id})">Marquer payée</button>`:''}
           </td>
         </tr>`;
-    let corps='';
-    if(NDF_GROUPE){
-      let i=0;
-      while(i<liste.length){
-        const nom=liste[i].employe_nom;let k=i;
-        while(k<liste.length&&liste[k].employe_nom===nom)k++;
-        const g=liste.slice(i,k);
-        corps+=g.map(ligneNdf).join('')+ligneTotalNdf('ndf-sous-total',(nom||'—')+' — ',g.filter(compte));
-        i=k;
-      }
-    }else corps=liste.map(ligneNdf).join('');
-    // Téléphone : cartes par mois (ou par salarié) à la place du tableau
-    // (static/mysifa_ndf_fiche.js).
-    const cartes=MySifaNdfFiche.cartes(liste,{salarie:true,ouvrir:'ouvrirNoteRh',grouper:NDF_GROUPE?'salarie':'',compter:compte});
+    const corps=NDF_RH.map(ligneNdf).join('');
+    // Téléphone : cartes par mois à la place du tableau (static/mysifa_ndf_fiche.js).
+    const cartes=MySifaNdfFiche.cartes(NDF_RH,{salarie:true,ouvrir:'ouvrirNoteRh',compter:compte});
     c.innerHTML=bandeauTotauxNdf(NDF_RH.filter(compte),statut,exclues)+`<div class="ndf-tableau"><table>
       <thead><tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th>Actions</th></tr></thead>
       <tbody>${corps}</tbody>
@@ -595,7 +595,6 @@ document.getElementById('ndf-annee').addEventListener('change',()=>{majFiltreMoi
 document.getElementById('ndf-mois').addEventListener('change',()=>{loadNdf();rhCoffreSyncUrl();});
 function basculerGroupeNdf(force){
   NDF_GROUPE=force==null?!NDF_GROUPE:!!force;
-  document.getElementById('ndf-grouper').setAttribute('aria-pressed',String(NDF_GROUPE));
   loadNdf();rhCoffreSyncUrl();
 }
 function sommeNdf(liste){
@@ -627,7 +626,18 @@ function bandeauTotauxNdf(liste,statut,exclues){
     if(p.length)rappel=`<div class="ndf-rappel">${p.join('')}</div>`;
   }
   const tuiles=[['Notes',String(t.n)],['Total TTC',fmtMontant(t.ttc)],['TVA récupérable',fmtMontant(t.tva)],['Total HT',fmtMontant(t.ht)]].map(([l,v])=>tuile(l,v)).join('');
-  return `<div class="stats ndf-totaux">${tuiles}</div>${rappel}`;
+  const bouton=`<button type="button" class="btn ghost small" id="ndf-grouper" aria-pressed="${NDF_GROUPE}" onclick="basculerGroupeNdf()">Totaux par salarié</button>`;
+  return `<div class="stats ndf-totaux">${tuiles}</div><div class="ndf-totaux-barre">${rappel}${bouton}</div>${NDF_GROUPE?recapSalariesNdf(liste,t):''}`;
+}
+// « Totaux par salarié » : ce qu'il faut rembourser à chacun, à part du
+// tableau pour ne pas se lire comme une note de plus.
+function recapSalariesNdf(liste,total){
+  const parNom={};
+  liste.forEach(n=>{const k=n.employe_nom||'—';(parNom[k]=parNom[k]||[]).push(n);});
+  const ligne=(cls,nom,t)=>`<div class="ndf-ps-ligne ${cls}"><span class="ndf-ps-nom">${esc(nom)}</span><span class="ndf-ps-nb">${compteNdf(t.n)}</span>`+
+    `<span class="ndf-ps-tva">${fmtMontant(t.tva)}</span><span class="ndf-ps-ht">${fmtMontant(t.ht)}</span><span class="ndf-ps-ttc">${fmtMontant(t.ttc)}</span></div>`;
+  const lignes=Object.keys(parNom).sort((a,b)=>a.localeCompare(b,'fr')).map(k=>ligne('',k,sommeNdf(parNom[k]))).join('');
+  return `<div class="ndf-par-salarie"><div class="ndf-ps-ligne tete"><span>Salarié</span><span>Notes</span><span>TVA</span><span>HT</span><span>TTC</span></div>${lignes}${ligne('pied','Total',total)}</div>`;
 }
 
 // Les trois actions rendent true si elles ont abouti (la fiche se ferme alors).
