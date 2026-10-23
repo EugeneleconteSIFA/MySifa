@@ -123,6 +123,8 @@ _ASSETS = (
     "/static/mysifa_formulaire_editeur.js",
     "/static/mysifa_tools_traduction.js",
     "/static/mysifa_tools_calculs.js",
+    "/static/mysifa_tools_calculs_schemas.js",
+    "/static/mysifa_tools_calculs.css",
     "/static/mysifa_tools.js",
 )
 
@@ -182,6 +184,7 @@ TOOLS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_tools.css">
+<link rel="stylesheet" href="/static/mysifa_tools_calculs.css">
 <link rel="stylesheet" href="/static/mysifa_ia.css">
 <link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css">
 <link rel="stylesheet" href="/static/mysifa_etiq_impression.css">
@@ -245,6 +248,7 @@ __NAV__
 <script src="/static/mysifa_formulaire.js"></script>
 <script src="/static/mysifa_formulaire_editeur.js"></script>
 <script src="/static/mysifa_tools_traduction.js"></script>
+<script src="/static/mysifa_tools_calculs_schemas.js"></script>
 <script src="/static/mysifa_tools_calculs.js"></script>
 <script src="/static/mysifa_tools.js"></script>
 __FORMULAIRES__

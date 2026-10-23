@@ -118,6 +118,7 @@ from app.routers.tools_parapheur import router as tools_parapheur_router
 from app.routers.tools_parapheur import router_espace as tools_parapheur_espace_router
 from app.routers.tools_pdf_ia import router as tools_pdf_ia_router
 from app.routers.tools_pdf import router as tools_pdf_router
+from app.routers.tools_image import router as tools_image_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
 from app.routers.notifications import router as notifications_router
@@ -902,6 +903,7 @@ app.include_router(tools_parapheur_router)
 app.include_router(tools_parapheur_espace_router)
 app.include_router(tools_pdf_ia_router)
 app.include_router(tools_pdf_router)
+app.include_router(tools_image_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
 app.include_router(notifications_router)

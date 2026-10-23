@@ -56,5 +56,20 @@ const b = F.boiteUtile(image(w, h, (x, y) => (x >= 3 && x <= 5 && y >= 1 && y <=
 ok('boîte utile du dessin', b && b.x === 3 && b.y === 1 && b.w === 3 && b.h === 7);
 ok('image vide : pas de boîte', F.boiteUtile(image(4, 4, () => 255), 4, 4) === null);
 
+// Projets : réglages relus d'un projet enregistré, validés clé par clé.
+const RV = F.reglagesValides, DR = F.DEFAUT_R, DV = F.DEFAUT_V;
+const exact = { echelle: 3, bruit: 2, nettete: 40, auto: true, lum: -12, contraste: 25, satur: 140, nb: 'seuil', seuil: 90,
+  transparent: true, tolerance: 20, rogner: true, dpi: 600, format: 'webp', qualite: 80 };
+ok('réglages : restitués à l\'identique', JSON.stringify(RV(DR, exact)) === JSON.stringify(Object.assign({}, DR, exact)));
+ok('réglages : absents → défauts', JSON.stringify(RV(DR, null)) === JSON.stringify(DR));
+const r1 = RV(DR, { echelle: 7, format: 'exe', nb: 'rouge', lum: 900, dpi: -5, auto: 'oui', inconnu: 1, satur: NaN });
+ok('réglages : choix hors liste → défaut', r1.echelle === 1 && r1.format === 'png' && r1.nb === 'couleur');
+ok('réglages : curseurs bornés', r1.lum === 100 && r1.dpi === 72);
+ok('réglages : type faux → défaut', r1.auto === false && r1.satur === 100);
+ok('réglages : clé inconnue ignorée', !('inconnu' in r1));
+const v1 = RV(DV, { couleurs: 16, lissage: 9, details: 12, fond: false });
+ok('vectorisation : relue et bornée', v1.couleurs === 16 && v1.lissage === 5 && v1.details === 12 && v1.fond === false);
+ok('vectorisation : couleurs hors liste → défaut', RV(DV, { couleurs: 5 }).couleurs === DV.couleurs);
+
 if (echecs) { console.log('\n' + echecs + ' cas en échec'); process.exit(1); }
 console.log('\nTous les cas passent.');

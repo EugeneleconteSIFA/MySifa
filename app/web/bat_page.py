@@ -460,7 +460,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 
 <!-- Adresse de la page : statut, tri, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/bat_url.js?v=2"></script>
+<script src="/static/bat_url.js?v=3"></script>
 <script src="/static/mysifa_bulles.js?v=__V_LABEL__"></script>
 <script>
 'use strict';
@@ -548,8 +548,10 @@ function openImageOutil(){
       document.head.appendChild(s);
     });
   }
-  _imageOutilCharge
-    .then(()=>window.MyToolsImage.mount(document.getElementById('image-outil-corps'),{toast:(m,t)=>showToast(m,t)}))
+  // Rend la promesse : l'adresse (static/bat_url.js) rouvre ensuite le projet demandé.
+  return _imageOutilCharge
+    .then(()=>{window.MyToolsImage.mount(document.getElementById('image-outil-corps'),
+      {toast:(m,t)=>showToast(m,t),surChange:()=>{if(typeof batSyncUrl==='function') batSyncUrl();}});})
     .catch(()=>showToast('Outil image indisponible — vérifier la connexion.','danger'));
 }
 function closeImageOutil(){
