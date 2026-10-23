@@ -94,7 +94,7 @@ body.sb-open .sidebar-overlay{display:block}
 .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none}
 .btn.danger{background:var(--danger);color:#fff}
-.btn.ok{background:var(--ok);color:#0a0e17}
+.btn.ok{background:var(--ok);color:white}
 .btn.small{padding:5px 10px;font-size:11px;border-radius:7px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:10px 12px;background:var(--bg);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
@@ -180,14 +180,14 @@ tr.ndf-row{cursor:pointer}
       <div class="logo-sub">Coffre RH · Compta</div>
     </div>
 
-    <button type="button" class="nav-btn active" id="nav-bulletins" onclick="showTab('bulletins')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Bulletins
-    </button>
-    <button type="button" class="nav-btn" id="nav-ndf" onclick="showTab('ndf')">
+    <button type="button" class="nav-btn active" id="nav-ndf" onclick="showTab('ndf')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
       Notes de frais
       <span class="nav-badge" id="ndf-badge" style="display:none">0</span>
+    </button>
+    <button type="button" class="nav-btn" id="nav-bulletins" onclick="showTab('bulletins')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Bulletins
     </button>
     <button type="button" class="nav-btn" onclick="location.href='/coffre'">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -207,17 +207,17 @@ tr.ndf-row{cursor:pointer}
         </button>
         <div>
           <div class="mobile-topbar-title">Coffre RH</div>
-          <div class="mobile-topbar-sub" id="mobile-sub">Bulletins</div>
+          <div class="mobile-topbar-sub" id="mobile-sub">Notes de frais</div>
         </div>
         <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
         </button>
       </div>
 
-      <h1 id="page-title">Bulletins</h1>
-      <p class="subtitle" id="page-sub">Dépôt mensuel, dashboard et impression groupée.</p>
+      <h1 id="page-title">Notes de frais</h1>
+      <p class="subtitle" id="page-sub">Validation, marquage payées et export comptable.</p>
 
-      <div class="pane-tab active" id="pane-bulletins">
+      <div class="pane-tab" id="pane-bulletins">
         <div class="card">
           <h2>Upload des bulletins mensuels</h2>
           <div class="toolbar">
@@ -249,7 +249,7 @@ tr.ndf-row{cursor:pointer}
         </div>
       </div>
 
-      <div class="pane-tab" id="pane-ndf">
+      <div class="pane-tab active" id="pane-ndf">
         <div class="card" id="ndf-bloc" data-bloc="rh-coffre.ndf">
           <div class="toolbar" data-bloc-entete>
             <label style="font-size:12px;color:var(--muted)">Statut :</label>
@@ -277,15 +277,15 @@ tr.ndf-row{cursor:pointer}
 
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_ndf_reglages.js?v=4"></script>
-<script src="/static/mysifa_confirm.js?v=2"></script>
+<script src="/static/mysifa_confirm.js?v=3"></script>
 <script src="/static/mysifa_ndf_fiche.js?v=6"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/rh_coffre_url.js?v=1"></script>
+<script src="/static/rh_coffre_url.js?v=2"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
 <script>
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-let ME=null;let CURRENT_TAB='bulletins';
+let ME=null;let CURRENT_TAB='';
 // Liste affichée et fenêtres ouvertes, lues par static/rh_coffre_url.js.
 let NDF_RH=[];let NDF_OUVERTE=null;let APERCU=null;
 const now=new Date();const curYear=now.getFullYear();const curMonth=now.getMonth()+1;

@@ -65,12 +65,14 @@
       + 'transition:.15s}'
       + '.mysifa-cfm-ghost{border:1px solid var(--border);background:var(--card);color:var(--text2)}'
       + '.mysifa-cfm-ghost:hover{border-color:var(--accent);color:var(--accent)}'
-      + '.mysifa-cfm-ok{border:none;background:var(--accent);color:var(--accent-fg);font-weight:700}'
+      // Blanc quand la page hôte ne définit pas --accent-fg (Mon coffre,
+      // Coffre RH) : sans repli, le texte héritait de l'encre noire de la page.
+      + '.mysifa-cfm-ok{border:none;background:var(--accent);color:var(--accent-fg,white);font-weight:700}'
       // --accent-fg suit le theme : encre sombre sur le rouge clair du mode
       // sombre, blanc sur le rouge profond du mode clair. Un #fff en dur
       // donnait du blanc sur #f87171 -- illisible. C'est aussi la convention
       // deja suivie par .toast.danger dans les deux pages hotes.
-      + '.mysifa-cfm-ok.danger{background:var(--danger,#f87171);color:var(--accent-fg,#fff)}'
+      + '.mysifa-cfm-ok.danger{background:var(--danger,#f87171);color:var(--accent-fg,white)}'
       + '.mysifa-cfm-ok:hover{filter:brightness(1.08)}'
       + '.mysifa-cfm-ok:disabled{opacity:.45;cursor:default;filter:none}'
       + '.mysifa-cfm-label{display:block;margin-top:14px;margin-bottom:6px;font-size:11px;font-weight:600;'

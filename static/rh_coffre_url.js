@@ -6,7 +6,7 @@
  * des fonctions. init() appelle rhCoffreDemarrerUrl() en dernier.
  *
  * Inventaire du 21/10/2026 :
- *   onglet     ndf (bulletins par défaut)
+ *   onglet     bulletins (notes de frais par défaut depuis le 23/10/2026)
  *   annee      bulletins : année du tableau mensuel (année en cours par défaut)
  *              notes de frais : filtre d'année (toutes par défaut)
  *   mois       bulletins : mois du tableau mensuel (mois en cours par défaut)
@@ -26,13 +26,13 @@ const RHC_STATUTS = ['tous', 'soumise', 'validee', 'payee', 'refusee', 'brouillo
 function rhCoffreParams() {
   const p = {};
   const v = id => (document.getElementById(id) || {}).value || '';
-  let nav = CURRENT_TAB || 'bulletins';
-  if (CURRENT_TAB === 'ndf') {
-    p.onglet = 'ndf';
+  let nav = CURRENT_TAB || 'ndf';
+  if (nav === 'ndf') {
     const st = v('ndf-statut');
     if (st !== 'soumise') p.statut = st || 'tous';
     if (v('ndf-annee')) p.annee = v('ndf-annee');
   } else {
+    p.onglet = 'bulletins';
     if (v('upl-annee') && Number(v('upl-annee')) !== curYear) p.annee = v('upl-annee');
     if (v('upl-mois') && Number(v('upl-mois')) !== curMonth) p.mois = v('upl-mois');
   }
@@ -61,7 +61,7 @@ async function rhCoffreAllerUrl() {
   const onglet = u.get('onglet', null, RH_COFFRE_VALID_TABS)
     || (RH_COFFRE_VALID_TABS.indexOf(h) !== -1 ? h : null)
     || u.get('tab', null, RH_COFFRE_VALID_TABS)
-    || 'bulletins';
+    || 'ndf';
   const annee = u.get('annee', '');
   const anneeOk = /^\d{4}$/.test(annee) ? annee : '';
 
@@ -96,7 +96,7 @@ async function rhCoffreAllerUrl() {
 }
 
 async function rhCoffreDemarrerUrl() {
-  if (!window.MySifaUrl) { showTab('bulletins', { silent: true }); return; }
+  if (!window.MySifaUrl) { showTab('ndf', { silent: true }); return; }
   try { await rhCoffreAllerUrl(); } catch (e) {}
   _rhcUrlPrete = true;
   rhCoffreSyncUrl();
