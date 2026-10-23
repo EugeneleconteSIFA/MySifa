@@ -1,5 +1,5 @@
 /* MyTools › Convertir. Variables du thème uniquement. */
-.tconv{display:flex;flex-direction:column;gap:18px;max-width:1040px}
+.tconv{display:flex;flex-direction:column;gap:18px}
 .tconv-carte>div:empty{display:none}
 .tconv-tete{display:flex;align-items:center;gap:14px}
 .tconv-tete-ic{width:48px;height:48px;border-radius:14px;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -60,3 +60,20 @@
 .tconv-formats summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--text)}
 .tconv-formats p{font-size:12px;color:var(--text2);line-height:1.6;margin-top:8px}
 .tconv-muted{color:var(--muted)}
+
+/* Toute la largeur : travail à gauche, résultat et formats à droite. */
+.tconv-corps{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+@media(min-width:1100px){.tconv-corps{grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr)}
+  .tconv-cote{position:sticky;top:16px}}
+.tconv-cote{display:flex;flex-direction:column;gap:18px;min-width:0}
+.tconv-resultats:empty{display:none}
+.tconv-resultats{border-color:var(--success)}
+.tconv-cote .tconv-grille{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.tconv-famille.actif{border-color:var(--accent);background:var(--accent-bg)}
+.tconv-famille.actif .tconv-famille-ic{background:var(--accent);color:white}
+.tconv-depot--compact{flex-direction:row;justify-content:center;padding:16px;gap:12px}
+.tconv-depot--compact .tconv-depot-ic{width:36px;height:36px;border-radius:10px;margin:0}
+.tconv-depot--compact strong{font-size:14px}
+.tconv-travail{padding:22px;gap:18px}
+.tconv-pastille{padding:9px 14px;font-size:13px}
+.tconv-go{padding:12px 28px;font-size:15px}

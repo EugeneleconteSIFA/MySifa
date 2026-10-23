@@ -193,6 +193,10 @@ function toolsNav() {
     b.style.display = toolsPermis(id) ? '' : 'none';
     b.classList.toggle('active', id === toolsParent(S.outil));
   });
+  // Un titre de section sans outil ouvert au profil disparaît avec eux.
+  document.querySelectorAll('[data-section-outils]').forEach(t => {
+    t.style.display = t.getAttribute('data-section-outils').split(' ').some(toolsPermis) ? '' : 'none';
+  });
   const o = toolsOutil(S.outil);
   const sub = document.getElementById('mobile-sub');
   if (sub) sub.textContent = o ? o.titre : 'Boîte à outils';
@@ -200,16 +204,23 @@ function toolsNav() {
 }
 
 function toolsAccueil(root) {
-  const tuiles = TOOLS_OUTILS.filter(o => !o.parent && toolsPermis(o.id)).map(o =>
+  const tuile = o =>
     '<button type="button" class="tools-tile" onclick="toolsAller(\'' + o.id + '\')">'
     + '<span class="tools-tile-ic">' + toolsSvg(o.icon, 22) + '</span>'
     + '<span class="tools-tile-txt"><span class="tools-tile-t">' + escHtml(o.titre)
     + (o.ia ? ' <span class="ia-badge" data-bulle="Utilise l\'IA">IA</span>' : '') + '</span>'
-    + '<span class="tools-tile-d">' + escHtml(o.desc) + '</span></span></button>').join('');
+    + '<span class="tools-tile-d">' + escHtml(o.desc) + '</span></span></button>';
+  // Mêmes sections que le menu ; un outil hors section reste à la fin.
+  const sections = (TOOLS.sections || []).map(s => [s[0], s[1].map(toolsOutil).filter(o => o && toolsPermis(o.id))]);
+  const ranges = new Set(sections.flatMap(s => s[1].map(o => o.id)));
+  const reste = TOOLS_OUTILS.filter(o => !o.parent && !ranges.has(o.id) && toolsPermis(o.id));
+  if (reste.length) sections.push(['Autres', reste]);
+  const tuiles = sections.filter(s => s[1].length).map(s => '<section class="tools-section"><h2 class="tools-section-t">' + escHtml(s[0]) + '</h2>'
+    + '<div class="tools-grid">' + s[1].map(tuile).join('') + '</div></section>').join('');
   root.innerHTML = '<div class="tools-page">'
     + '<div class="tools-hero"><h1><span class="tools-hero-ic">' + toolsSvg(TOOLS_ICONE, 28) + '</span><span>My<span>Tools</span></span></h1>'
     + '<p>Les outils du quotidien, au même endroit. <span class="ia-badge">IA</span> signale les outils qui font appel à l\'intelligence artificielle.</p></div>'
-    + '<div class="tools-grid">' + (tuiles || '<div class="tools-empty">Aucun outil ouvert à votre profil.</div>') + '</div></div>';
+    + (tuiles || '<div class="tools-empty">Aucun outil ouvert à votre profil.</div>') + '</div>';
 }
 
 // Modules lourds chargés au premier usage (script + feuille de style).
@@ -276,7 +287,7 @@ function toolsRendre() {
   toolsNav();
   const content = document.getElementById('content');
   if (!content) return;
-  content.classList.toggle('content--large', ['pdf', 'etiquettes', 'image'].includes(toolsParent(S.outil)));
+  content.classList.toggle('content--large', ['pdf', 'etiquettes', 'image', 'convertir'].includes(toolsParent(S.outil)));
   toolsDemonter(S.outil);
   if (S.outil === 'formulaires') {
     if (S.view === 'formulaire-edit' && S.formu && S.formu.courant) { if (typeof formuRenderEdition === 'function') formuRenderEdition(); }

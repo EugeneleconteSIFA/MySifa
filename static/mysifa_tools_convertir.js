@@ -392,14 +392,18 @@
       + '<p>Plus de 50 formats. Ce qui peut se faire sur ce poste s\'y fait ; le reste passe par le serveur MySifa, qui efface tout aussitôt.</p></div></header>'
       + '<ol class="tconv-etapes" data-etapes>'
       + '<li data-n="1"><b>1</b><span>Déposer</span></li><li data-n="2"><b>2</b><span>Choisir le format</span></li><li data-n="3"><b>3</b><span>Convertir</span></li></ol>'
-      + '<div class="tconv-carte">'
+      // Deux colonnes sur un écran large : le travail à gauche, le résultat et
+      // les formats à droite (une seule colonne sous 1100 px).
+      + '<div class="tconv-corps"><div class="tconv-carte tconv-travail">'
       + '<div class="tconv-depot" tabindex="0" role="button" data-a="choisir" data-bulle="Choisir des fichiers">'
       + '<span class="tconv-depot-ic">' + svg('deposer', 30) + '</span>'
       + '<strong>Déposer un ou plusieurs fichiers</strong><span>ou cliquer pour les choisir · 50 fichiers d\'un même type au plus</span></div>'
       + '<input type="file" multiple hidden data-fichiers>'
-      + '<div data-zone="fichiers"></div><div data-zone="cibles"></div><div data-zone="options"></div><div data-zone="action"></div><div data-zone="resultats"></div>'
-      + '</div>'
-      + '<section class="tconv-familles" data-zone="familles"></section>';
+      + '<div data-zone="fichiers"></div><div data-zone="cibles"></div><div data-zone="options"></div><div data-zone="action"></div>'
+      + '</div><aside class="tconv-cote">'
+      + '<div class="tconv-carte tconv-resultats" data-zone="resultats"></div>'
+      + '<section class="tconv-familles" data-zone="familles"></section>'
+      + '</aside></div>';
     const inp = h.querySelector('[data-fichiers]');
     inp.addEventListener('change', () => { ajouter([...inp.files]); inp.value = ''; });
     const depot = h.querySelector('.tconv-depot');
@@ -432,6 +436,8 @@
       + '<button type="button" class="tconv-x" data-retirer="' + i + '" data-bulle="Retirer" aria-label="Retirer">×</button></div>').join('')
       + '<button type="button" class="tconv-lien" data-a="vider">Tout retirer</button></div>';
     if (vide) { ['cibles', 'options', 'action', 'resultats'].forEach(k => { z(k).innerHTML = ''; }); }
+    const dep = h.querySelector('.tconv-depot');
+    if (dep) dep.classList.toggle('tconv-depot--compact', !vide);
     else {
       z('cibles').innerHTML = '<div class="tconv-titre">' + esc(FAMILLES[C.fam].lib) + ' → convertir en</div><div class="tconv-pastilles">'
         + CIBLES[C.fam].filter(c => !c.min || C.fichiers.length >= c.min).map(c => {
@@ -451,7 +457,7 @@
         + (c.ou === 'serveur' ? 'Traité sur le serveur MySifa, puis effacé aussitôt.' : c.ou === 'nav' ? 'Converti sur ce poste : le fichier ne part nulle part.' : 'Converti sur ce poste (le serveur prend le relais si le navigateur ne lit pas ce format).')
         + '</p><button type="button" class="tconv-go" data-a="go"' + (C.enCours ? ' disabled' : '') + '>' + (C.enCours ? 'Conversion…' : 'Convertir') + '</button>'
         + '<div class="tconv-prog" data-prog hidden><span></span></div><p class="tconv-etape" data-etape></p></div>';
-      z('resultats').innerHTML = !C.resultats.length ? '' : '<div class="tconv-titre">Prêt</div>' + C.resultats.map((x, i) =>
+      z('resultats').innerHTML = !C.resultats.length ? '' : '<div class="tconv-titre">Prêt · ' + C.resultats.length + ' fichier' + (C.resultats.length > 1 ? 's' : '') + '</div>' + C.resultats.map((x, i) =>
         '<div class="tconv-fichier">' + (x.apercu ? '<img src="' + x.apercu + '" alt="">' : '') + '<span class="tconv-nom">' + esc(x.nom) + '</span><small>' + taille(x.blob.size) + '</small>'
         + '<button type="button" class="tconv-btn" data-dl="' + i + '" data-bulle="Télécharger">Télécharger</button></div>').join('')
         + (C.resultats.length > 1 ? '<button type="button" class="tconv-btn" data-a="zip" data-bulle="Un seul fichier ZIP">Tout télécharger (ZIP)</button>' : '');
@@ -462,8 +468,8 @@
       const n = Number(li.getAttribute('data-n'));
       li.classList.toggle('fait', n < etape); li.classList.toggle('actif', n === etape);
     });
-    // Familles de formats, en tuiles, tant qu'aucun fichier n'est déposé ;
-    // une fois déposé, seule la famille du fichier reste, en rappel.
+    // Familles de formats, toujours visibles à droite ; celle du fichier
+    // déposé est mise en avant.
     const fam = h.querySelector('[data-zone="familles"]');
     const tuile = (k, fa) => {
       const cibles = CIBLES[k], local = cibles.filter(c => c.ou !== 'serveur').length;
@@ -474,9 +480,8 @@
         + '<span class="tconv-famille-vers">→ ' + esc(cibles.slice(0, 4).map(c => c.lib.replace(/ \(.*\)$/, '').replace(/^Images? /, '')).join(', ')) + (cibles.length > 4 ? '…' : '') + '</span></div>'
         + '<span class="tconv-lieu' + (local === cibles.length ? ' local' : '') + '">' + lieu + '</span></div>';
     };
-    if (vide) fam.innerHTML = '<div class="tconv-titre">Ce que l\'outil sait convertir</div><div class="tconv-grille">'
+    fam.innerHTML = '<div class="tconv-titre">Ce que l\'outil sait convertir</div><div class="tconv-grille">'
       + Object.entries(FAMILLES).map(([k, fa]) => tuile(k, fa)).join('') + '</div>';
-    else fam.innerHTML = '';
   }
 
   function etape(texte, p) {
