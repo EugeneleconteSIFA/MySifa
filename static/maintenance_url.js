@@ -21,7 +21,7 @@
  *                gestion=inhabituelles
  *   Contrôles    sous=liste ; historique : type_ctrl, operateur, machine,
  *                conformite, du, au, points (filtres de checklist), page,
- *                tri, auto=1, alertes ; liste : machine, tri
+ *                tri, auto=1, anciens=1, alertes ; liste : machine, tri
  *   Mes tâches   termines=1
  *   fenêtres     voir _MT_OUVREURS (une clé chacune, empilables)
  * Les filtres d'historique écrits sont ceux APPLIQUÉS (au dernier rendu),
@@ -193,6 +193,7 @@ function maintenanceParams() {
       if (CTRL_STATE.page > 0) p.page = CTRL_STATE.page + 1;
       if (CTRL_STATE.sortBy !== 'date_saisie' || CTRL_STATE.sortDir !== 'desc') p.tri = CTRL_STATE.sortBy + ':' + CTRL_STATE.sortDir;
       if (ctrlLoadShowAutoClose()) p.auto = 1;
+      if (ctrlLoadShowAnciens()) p.anciens = 1;
       if (_alertsFilterKind && _alertsFilterKind !== 'all') p.alertes = _alertsFilterKind;
     }
   } else if (v === 'op-tasks') {
@@ -364,6 +365,8 @@ async function maintenanceAllerUrl(complet) {
       for (const [id, k] of champs) { const x = ou(k, ''); if (x !== undefined && await _mtChamp(id, x, refreshCtrlFiltersOptions)) ch = true; }
       const auto = ou('auto', '0');
       if (auto !== undefined && (auto === '1') !== ctrlLoadShowAutoClose()) { ctrlSaveShowAutoClose(auto === '1'); updateAutoCloseToggleUI(); ch = true; }
+      const anciens = ou('anciens', '0');
+      if (anciens !== undefined && (anciens === '1') !== ctrlLoadShowAnciens()) { ctrlSaveShowAnciens(anciens === '1'); updateAnciensToggleUI(); ch = true; }
       if (u.a('tri') || complet) { if (_mtTri(CTRL_STATE, u.get('tri'), 'date_saisie', 'desc')) ch = true; }
       const pts = ou('points', '');
       if (pts !== undefined) {

@@ -1017,7 +1017,7 @@ def _alertes_dossier(conn, ref: str) -> list:
     try:
         acks = conn.execute(
             """SELECT a.id, a.alert_id, a.user_nom, a.machine, a.ack_at, a.responses, a.comment,
-                      m.nom AS alerte_nom, m.params AS alerte_params, u.operateur_lie
+                      a.questionnaire, m.nom AS alerte_nom, m.params AS alerte_params, u.operateur_lie
                  FROM maintenance_alert_acks a
                  LEFT JOIN maintenance_alerts m ON m.id = a.alert_id
                  LEFT JOIN users u ON u.id = a.user_id
@@ -1032,6 +1032,7 @@ def _alertes_dossier(conn, ref: str) -> list:
         ).fetchall()
     except Exception:
         return []  # tables de maintenance absentes : le détail reste lisible
+    from app.services.alertes_questionnaire import items_de_params, lire_saisie
     out = []
     for r in acks:
         try:
@@ -1042,7 +1043,11 @@ def _alertes_dossier(conn, ref: str) -> list:
             params = json.loads(r["alerte_params"] or "{}")
         except (TypeError, ValueError):
             params = {}
-        items = ((params.get("checklist") or {}).get("items")) or []
+        items = items_de_params(params)
+        # Réponses rangées sous les questions actuelles (par identifiant) :
+        # l'écran lit toutes les validations avec les mêmes points de
+        # contrôle. Une réponse à une question retirée depuis n'y figure pas.
+        reponses = lire_saisie(reponses, r["questionnaire"], items)["responses"]
         out.append({
             "id": r["id"], "alert_id": r["alert_id"], "nom": r["alerte_nom"] or "Alerte",
             "user_nom": r["user_nom"], "operateur_lie": r["operateur_lie"],
