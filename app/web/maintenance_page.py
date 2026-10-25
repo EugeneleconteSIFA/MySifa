@@ -132,6 +132,12 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 /* Saisie faite avec un questionnaire qui a changé depuis : ses réponses sans
    question actuelle sont regroupées dans la colonne « Ancien formulaire ». */
 .ctrl-row-ancien td{color:var(--muted)}
+/* Vue « Tous les types » : chaque réponse précédée de sa question. */
+.col-comment .ctrl-rep{display:inline-block;margin:1px 14px 1px 0;white-space:nowrap}
+.col-comment .ctrl-rep-q{font-size:11px;color:var(--muted);margin-right:3px}
+.col-comment .ctrl-rep b{font-weight:600;color:var(--text)}
+.col-comment .ctrl-rep b.ctrl-rep-nc{color:var(--danger)}
+.col-comment .ctrl-rep-ancien b{font-weight:500;color:var(--muted)}
 .col-ancien{font-size:12px;color:var(--muted);min-width:220px}
 .col-ancien b{font-weight:600;color:var(--text2)}
 .ack-ancien{margin-top:14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)}
@@ -9457,9 +9463,31 @@ function toggleAnciens(){
   ctrlResetPage();
   if(typeof renderCtrl === 'function') renderCtrl();
 }
-// Réponses sans question actuelle, en une ligne « Libellé : valeur · … ».
-function _ackHorsFormulaireTexte(c){
-  return (c && c._hors_formulaire || []).map(h => (h.libelle || '') + ' : ' + (h.valeur || '')).join(' · ');
+// Réponses d'une alerte, chacune précédée de sa question, pour la vue
+// « Tous les types ». Les réponses non conformes ressortent en rouge.
+function _ackReponsesHtml(c){
+  const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)] || {};
+  const items = Array.isArray(meta.checklist_items) ? meta.checklist_items : [];
+  const resp = c._responses || {};
+  const parts = [];
+  items.forEach((it, i) => {
+    const r = resp[String(i)];
+    const vals = Array.isArray(r) ? r : ((r == null || r === '') ? [] : [r]);
+    const autre = resp[String(i) + '_other'];
+    if(!vals.length && (autre == null || autre === '')) return;
+    const ncSet = (it.type === 'value') ? [] : (Array.isArray(it.nc_responses) ? it.nc_responses.map(String) : []);
+    const nc = vals.some(v => ncSet.indexOf(String(v)) !== -1 || (it.other_is_nc && String(v) === 'Autre'));
+    let txt = vals.join(it.type === 'value' ? ' / ' : ', ');
+    if(txt && it.type === 'value' && it.unit) txt += ' ' + it.unit;
+    if(autre != null && autre !== '') txt = txt ? txt + ' — ' + autre : String(autre);
+    parts.push('<span class="ctrl-rep"><span class="ctrl-rep-q">' + escHtml(it.label || ('Question ' + (i + 1))) + '</span> '
+      + '<b' + (nc ? ' class="ctrl-rep-nc"' : '') + '>' + escHtml(txt) + '</b></span>');
+  });
+  (c._hors_formulaire || []).forEach(h => {
+    parts.push('<span class="ctrl-rep ctrl-rep-ancien"><span class="ctrl-rep-q">' + escHtml(h.libelle || '') + '</span> <b>' + escHtml(h.valeur || '') + '</b></span>');
+  });
+  if(c._raw_comment) parts.push('<span class="ctrl-rep">« ' + escHtml(c._raw_comment) + ' »</span>');
+  return parts.join('');
 }
 function ctrlIsAutoClose(c){
   const raw = (c && c._raw_comment) || '';
@@ -9903,7 +9931,15 @@ function renderCtrl(){
   // Colonnes adaptatives : si un seul type est sélectionné et qu'il correspond
   // à une alerte ayant une checklist, on affiche une colonne par point.
   let extraCols = [];
-  const singleType = f.type || '';
+  // Sans filtre Type, si toutes les lignes affichées sont la même alerte, on
+  // passe aussi en colonnes par question : c'est le cas courant (une seule
+  // alerte avec questionnaire), et la colonne Commentaires ne dit pas à quelle
+  // question répond chaque valeur.
+  let singleType = f.type || '';
+  if(!singleType && filtered.length){
+    const t0 = _displayType(filtered[0]);
+    if(t0 && filtered.every(c => c._source === 'alert' && _displayType(c) === t0)) singleType = t0;
+  }
   if(singleType){
     const ackMatch = merged.find(c => c._source === 'alert' && _displayType(c) === singleType);
     if(ackMatch && ackMatch._alert_id != null && CTRL_STATE.alerts_meta){
@@ -10025,10 +10061,16 @@ function renderCtrl(){
       }
       // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
       // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
-      const commentText = singleType
-        ? (c._source === 'alert' ? (c._raw_comment || '') : (c.commentaire || ''))
-        : (c.commentaire || '');
-      cells += '<td class="col-comment">' + escHtml(commentText) + '</td>';
+      // En vue « Tous les types », une réponse d'alerte est précédée de sa
+      // question (_ackReponsesHtml) ; en vue par type, les colonnes la portent.
+      if(!singleType && c._source === 'alert'){
+        cells += '<td class="col-comment">' + _ackReponsesHtml(c) + '</td>';
+      } else {
+        const commentText = singleType
+          ? (c._source === 'alert' ? (c._raw_comment || '') : (c.commentaire || ''))
+          : (c.commentaire || '');
+        cells += '<td class="col-comment">' + escHtml(commentText) + '</td>';
+      }
       // Actions
       let actionHtml = '';
       if(c._source === 'alert'){
