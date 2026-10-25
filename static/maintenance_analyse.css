@@ -38,7 +38,9 @@
 .an-mauvais{color:var(--danger);font-weight:700}
 
 /* Cartes par question */
-.an-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin-top:12px;align-items:start}
+/* Une question par ligne, en pleine largeur : les cartes ont toutes la même
+   largeur et ne dépendent plus de la hauteur de leur voisine. */
+.an-grille{display:flex;flex-direction:column;gap:12px;margin-top:12px}
 .an-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;min-width:0}
 .an-carte-titre{font-size:14px;font-weight:700;color:var(--text)}
 .an-carte-titre span{font-weight:500;color:var(--muted)}
@@ -46,8 +48,12 @@
 .an-sous-titre{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:14px 0 6px}
 .an-sous-titre-1{margin-top:4px}
 /* Corps d'une carte : deux blocs côte à côte quand la carte est large */
-.an-corps{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px 28px;align-items:start}
-.an-graph{width:100%;min-height:170px}
+.an-corps{display:grid;gap:8px 32px;align-items:start}
+.an-corps-choix{grid-template-columns:minmax(280px,1fr) 2fr}
+.an-corps-valeur{grid-template-columns:2fr 1fr}
+.an-corps-valeur.an-avec-multiples{grid-template-columns:2fr 1fr 1fr}
+.an-graph{width:100%;min-height:170px;overflow:hidden}
+.an-corps-valeur .an-barres{max-width:560px}
 
 .an-barres{display:flex;flex-direction:column;gap:6px}
 .an-barre-ligne{display:grid;grid-template-columns:minmax(110px,40%) 1fr auto;align-items:center;gap:10px;font-size:13px}
@@ -97,7 +103,16 @@
 .an-svg g:hover .an-point,.an-svg g:hover .an-col,.an-svg g:hover rect[class^="an-t-"]{filter:brightness(1.12)}
 
 
-@media (max-width:640px){
-  .an-grille,.an-corps{grid-template-columns:1fr}
+/* En Analyse, « Conformité » et le bandeau des filtres par question ne
+   servent pas : l'analyse porte sur toutes les réponses. */
+#ctrl-subview-historique.an-mode-analyse #ctrl-point-filters-row{display:none!important}
+#ctrl-subview-historique.an-mode-analyse .filter-group:has(#filt-controles-conformite){display:none}
+
+@media (max-width:1100px){
+  .an-corps-valeur.an-avec-multiples{grid-template-columns:2fr 1fr}
+  .an-corps-valeur.an-avec-multiples > :last-child{grid-column:1 / -1}
+}
+@media (max-width:760px){
+  .an-corps-choix,.an-corps-valeur,.an-corps-valeur.an-avec-multiples{grid-template-columns:1fr}
   .an-barre-ligne{grid-template-columns:minmax(70px,38%) 1fr auto}
 }

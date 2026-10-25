@@ -3081,8 +3081,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/maintenance_url.js?v=7"></script>
-<link rel="stylesheet" href="/static/maintenance_analyse.css?v=3">
-<script src="/static/maintenance_analyse.js?v=4"></script>
+<link rel="stylesheet" href="/static/maintenance_analyse.css?v=5">
+<script src="/static/maintenance_analyse.js?v=6"></script>
 <script>
 'use strict';
 

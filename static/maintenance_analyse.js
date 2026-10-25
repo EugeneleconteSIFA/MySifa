@@ -2,9 +2,11 @@
  * Maintenance › Alertes › Historique des saisies — affichage « Analyse ».
  *
  * Bascule Historique / Analyse dans la carte « Historique des saisies ». Les
- * filtres sont ceux de l'historique (type, opérateur, machine, conformité,
- * période, filtres par question) : à chaque rendu de l'historique, la page
- * appelle MaintAnalyse.surFiltres() et l'analyse se recalcule.
+ * filtres sont ceux de l'historique (type, opérateur, machine, période) : à
+ * chaque rendu de l'historique, la page appelle MaintAnalyse.surFiltres() et
+ * l'analyse se recalcule. « Conformité » et les filtres par question sont
+ * masqués en Analyse et n'y comptent pas : l'analyse porte sur toutes les
+ * réponses.
  *
  * Les chiffres viennent du serveur (GET /api/maintenance/alertes/stats,
  * app/services/alertes_statistiques.py), sur toute la période : la liste de
@@ -77,9 +79,6 @@
     if (f.dateTo) q.set('au', f.dateTo);
     if (f.machine) q.set('machine', f.machine);
     if (f.operateur) q.set('operateur', f.operateur);
-    if (f.conformite) q.set('conformite', f.conformite);
-    var pts = etat().pointFilters || {};
-    if (ids.length === 1 && Object.keys(pts).length) q.set('points', JSON.stringify(pts));
     return q;
   }
 
@@ -90,6 +89,8 @@
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    var vue = document.getElementById('ctrl-subview-historique');
+    if (vue) vue.classList.toggle('an-mode-analyse', A.mode === 'analyse');
     var vide = document.querySelector('#filt-controles-type option[value=""]');
     if (vide) vide.disabled = A.mode === 'analyse';
     var liste = document.querySelector('#ctrl-subview-historique .ops-list');
@@ -251,10 +252,23 @@
       if (fn) el.innerHTML = fn(Math.max(220, Math.floor(el.clientWidth)));
     });
   }
-  window.addEventListener('resize', function () {
-    clearTimeout(A.timerTaille);
-    A.timerTaille = setTimeout(dessinerGraphes, 150);
-  });
+  // Redessin quand la LARGEUR de la zone change (fenêtre, zoom, barre
+  // latérale repliée) : la fenêtre seule ne voit pas tous ces cas.
+  function suivreLargeur() {
+    var zone = document.getElementById('ctrl-analyse');
+    var redessiner = function () { clearTimeout(A.timerTaille); A.timerTaille = setTimeout(dessinerGraphes, 120); };
+    if (zone && typeof ResizeObserver !== 'undefined') {
+      var largeur = 0;
+      new ResizeObserver(function (e) {
+        var w = Math.round(e[0].contentRect.width);
+        if (w && w !== largeur) { largeur = w; redessiner(); }
+      }).observe(zone);
+    } else {
+      window.addEventListener('resize', redessiner);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', suivreLargeur, { once: true });
+  else suivreLargeur();
   function svg(W, H, label) {
     return '<svg class="an-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(label) + '">';
   }
@@ -276,7 +290,7 @@
       + '<div class="an-carte-sous">' + nb(q.repondants, 0) + ' réponse' + (q.repondants > 1 ? 's' : '') + '</div>';
     if (!q.repondants) return h + '<div class="an-vide-mini">Pas de réponse sur la période.</div></div>';
     var t = teintes(q);
-    h += '<div class="an-corps"><div>'
+    h += '<div class="an-corps an-corps-choix"><div>'
       + '<div class="an-sous-titre an-sous-titre-1">Répartition</div>'
       + '<div class="an-barres">' + q.repartition.map(function (r) {
         return '<div class="an-barre-ligne" title="' + esc(r.reponse + ' : ' + r.n + ' (' + pct(r.pct) + ')') + '">'
@@ -346,17 +360,18 @@
       + chiffre('Écart-type', nb(r.ecart_type, 3)) + chiffre('Min – max', nb(r.min, 3) + ' – ' + nb(r.max, 3))
       + (q.pct_hors_tolerance != null ? chiffre('Hors tolérance', pct(q.pct_hors_tolerance), q.hors_tolerance ? 'danger' : '') : '')
       + '</div>';
-    h += '<div class="an-corps">'
+    // Courbe large, histogramme à côté, puis l'écart entre mesures d'un même
+    // contrôle (fronts) s'il y en a : trois colonnes de largeur fixe.
+    var m = q.multiples;
+    h += '<div class="an-corps an-corps-valeur' + (m ? ' an-avec-multiples' : '') + '">'
       + '<div><div class="an-sous-titre">Dans le temps</div>' + graphe(function (W) { return courbe(q, W); }) + '</div>'
-      + '<div><div class="an-sous-titre">Répartition des valeurs</div>' + graphe(function (W) { return histogramme(q, W); }) + '</div>'
-      + '</div>';
-    if (q.multiples) {
-      var m = q.multiples;
-      h += '<div class="an-sous-titre">Écart entre ' + esc(m.libelle.toLowerCase()) + 's d\'un même contrôle</div>'
+      + '<div><div class="an-sous-titre">Répartition des valeurs</div>' + graphe(function (W) { return histogramme(q, W); }) + '</div>';
+    if (m) {
+      h += '<div><div class="an-sous-titre">Écart entre ' + esc(m.libelle.toLowerCase()) + 's d\'un même contrôle</div>'
         + '<div class="an-chiffres">' + chiffre('Écart moyen', nb(m.ecart.moyenne, 3) + u) + chiffre('Écart max', nb(m.ecart.max, 3) + u) + '</div>'
-        + positions(m, u);
+        + positions(m, u) + '</div>';
     }
-    return h + '</div>';
+    return h + '</div></div>';
   }
 
   function chiffre(lib, val, ton) {

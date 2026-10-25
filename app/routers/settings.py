@@ -7881,8 +7881,20 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
             raise HTTPException(404, "Alerte introuvable.")
         # Photo des questions auxquelles l'opérateur vient de répondre : ses
         # réponses restent lisibles quand le questionnaire changera.
-        from app.services.alertes_questionnaire import items_de_params, photo
-        questionnaire_json = photo(items_de_params(row["params"]))
+        from app.services.alertes_questionnaire import attribuer_ids, items_de_params, photo
+        _items = items_de_params(row["params"])
+        if any(not it.get("id") for it in _items):
+            # Questionnaire écrit sans passer par l'éditeur : on l'identifie
+            # ici, avant la photo, pour que les réponses restent rattachables.
+            try:
+                _p = _json_alerts.loads(row["params"] or "{}")
+                attribuer_ids(_items, [])
+                _p.setdefault("checklist", {})["items"] = _items
+                conn.execute("UPDATE maintenance_alerts SET params=? WHERE id=?",
+                             (_json_alerts.dumps(_p, ensure_ascii=False), alert_id))
+            except (ValueError, TypeError, AttributeError):
+                pass
+        questionnaire_json = photo(_items)
         # Machine de l'opérateur (ou vide pour superadmin sans machine)
         machine = _machine_name_from_user(conn, user) or ""
         # v163+ : fallback serveur robuste — si le client n'a pas transmis de
