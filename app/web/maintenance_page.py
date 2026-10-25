@@ -2197,8 +2197,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </div>
             <!-- Bascule Historique / Analyse : mêmes filtres, deux lectures (static/maintenance_analyse.js) -->
             <div class="an-seg an-bascule" role="group" aria-label="Affichage">
-              <button type="button" data-ctrl-affichage="historique" class="active" aria-pressed="true" onclick="MaintAnalyse.afficher('historique')">Historique</button>
-              <button type="button" data-ctrl-affichage="analyse" aria-pressed="false" onclick="MaintAnalyse.afficher('analyse')">Analyse</button>
+              <button type="button" data-ctrl-affichage="historique" aria-pressed="false" onclick="MaintAnalyse.afficher('historique')">Historique</button>
+              <button type="button" data-ctrl-affichage="analyse" class="active" aria-pressed="true" onclick="MaintAnalyse.afficher('analyse')">Analyse</button>
             </div>
           </div>
         <div id="ctrl-subview-historique">
@@ -3077,9 +3077,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/maintenance_url.js?v=5"></script>
+<script src="/static/maintenance_url.js?v=6"></script>
 <link rel="stylesheet" href="/static/maintenance_analyse.css?v=1">
-<script src="/static/maintenance_analyse.js?v=1"></script>
+<script src="/static/maintenance_analyse.js?v=2"></script>
 <script>
 'use strict';
 

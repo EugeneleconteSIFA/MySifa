@@ -402,7 +402,7 @@ BLOCS: dict[str, Bloc] = {
     # saisies (static/maintenance_analyse.js). Objet = id de l'alerte.
     "maintenance.alertes.synthese": Bloc(
         appli="maintenance", libelle="Analyse d'une alerte",
-        url="/maintenance?vue=controles&affichage=analyse",
+        url="/maintenance?vue=controles",
         type="objet", objet="alerte",
         valeurs=(("validations", "Validations"), ("taux-nc", "Non-conformité (%)"),
                  ("remplissage", "Remplissage (%)")),

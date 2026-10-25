@@ -11,7 +11,11 @@
  * l'historique ne charge que les 1 000 dernières validations. Les anciens
  * formulaires n'y entrent pas.
  *
- * Adresse (static/maintenance_url.js) : affichage=analyse, comparer=<axe>.
+ * Analyse par défaut, sur UN type de contrôle : sans type choisi, le plus
+ * validé est posé dans le filtre (« Tous les types » est grisé en Analyse).
+ *
+ * Adresse (static/maintenance_url.js) : affichage=historique (l'Analyse est
+ * le défaut, non écrit), comparer=<axe>.
  * Chaque bandeau d'alerte est un bloc capturable (maintenance.alertes.synthese).
  *
  * Ce fichier ne lit les globales de la page (CTRL_STATE, getCtrlFilters,
@@ -22,7 +26,8 @@
   if (window.MaintAnalyse) return;
 
   var AXES = { machine: 'Machine', operateur: 'Opérateur', produit: 'Produit', adhesif: 'Adhésif' };
-  var A = { mode: 'historique', comparer: 'machine', data: null, cle: '', seq: 0, timer: null, erreur: '' };
+  // Analyse par défaut ; un seul type de contrôle à la fois.
+  var A = { mode: 'analyse', comparer: 'machine', data: null, cle: '', seq: 0, timer: null, erreur: '' };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -86,6 +91,8 @@
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    var vide = document.querySelector('#filt-controles-type option[value=""]');
+    if (vide) vide.disabled = A.mode === 'analyse';
     var liste = document.querySelector('#ctrl-subview-historique .ops-list');
     var zone = document.getElementById('ctrl-analyse');
     if (liste) liste.style.display = A.mode === 'analyse' ? 'none' : '';
@@ -99,9 +106,34 @@
     if (!(opts && opts.sansRendu) && typeof window.renderCtrl === 'function') window.renderCtrl();
   }
 
+  // Sans type choisi : le type d'alerte le plus validé parmi les saisies
+  // chargées. Rend false quand le filtre vient d'être posé (le rendu qui suit
+  // relance l'analyse) ou quand il n'y a encore rien à choisir.
+  function typeParDefaut() {
+    var sel = document.getElementById('filt-controles-type');
+    if (!sel || sel.value) return true;
+    var n = {};
+    (etat().acks || []).forEach(function (a) {
+      if (a._source !== 'alert' || a._ancien || (window.ctrlIsAutoClose && window.ctrlIsAutoClose(a))) return;
+      var t = window._displayType(a);
+      if (t) n[t] = (n[t] || 0) + 1;
+    });
+    var t = Object.keys(n).sort(function (x, y) { return n[y] - n[x]; })[0];
+    var zone = document.getElementById('ctrl-analyse');
+    if (!t || ![].some.call(sel.options, function (o) { return o.value === t; })) {
+      if (zone && !(etat().acks || []).length) zone.innerHTML = '<div class="an-vide">Chargement…</div>';
+      else if (zone) zone.innerHTML = '<div class="an-vide">Aucune validation d\'alerte à analyser.</div>';
+      return false;
+    }
+    sel.value = t;
+    setTimeout(function () { window.ctrlAutoFilter({ resetPoints: true }); }, 0);
+    return false;
+  }
+
   function surFiltres() {
     majBascule();
     if (A.mode !== 'analyse') return;
+    if (!typeParDefaut()) return;
     clearTimeout(A.timer);
     A.timer = setTimeout(function () { charger(false); }, 200);
   }
@@ -419,11 +451,25 @@
       if (mach) sp.set('machine', mach); else if (mach !== null) sp.delete('machine');
       ['bloc_periode', 'bloc_du', 'bloc_au', 'bloc_ctrl_machine'].forEach(function (k) { sp.delete(k); });
       sp.set('vue', 'controles');
-      sp.set('affichage', 'analyse');
+      sp.delete('affichage');
       history.replaceState(history.state, '', u.pathname + '?' + sp.toString() + u.hash);
       window.__mysifaFiltresLus = true;
     } catch (e) { /* adresse illisible : la page s'ouvre avec ses défauts */ }
   })();
+
+  // La liste des types est reconstruite par plusieurs chemins de la page
+  // (chargement des alertes, des codes…) : « Tous les types » est regrisé à
+  // chaque reconstruction tant que l'Analyse est affichée.
+  function surveillerTypes() {
+    var sel = document.getElementById('filt-controles-type');
+    if (!sel || typeof MutationObserver === 'undefined') return;
+    new MutationObserver(function () {
+      var vide = sel.querySelector('option[value=""]');
+      if (vide && vide.disabled !== (A.mode === 'analyse')) vide.disabled = A.mode === 'analyse';
+    }).observe(sel, { childList: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', surveillerTypes, { once: true });
+  else surveillerTypes();
 
   window.MaintAnalyse = {
     afficher: afficher,
