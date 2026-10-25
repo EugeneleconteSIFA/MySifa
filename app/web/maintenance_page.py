@@ -1628,6 +1628,19 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 #view-controles .date-preset-chip{background:var(--bg)}
 #view-controles .date-preset-chip:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 #view-controles .date-preset-chip.active{background:var(--accent-bg)}
+/* Filtres de l'historique des saisies (Historique et Analyse) : une grille de
+   listes de même hauteur, puis la période et ses raccourcis sur une ligne. */
+.ctrl-filtres{display:grid;grid-template-columns:minmax(240px,2fr) repeat(3,minmax(150px,1fr));gap:12px 14px;align-items:end}
+.ctrl-filtres .filter-input{width:100%;min-width:0}
+.ctrl-periode-ligne{display:flex;align-items:flex-end;gap:10px 18px;flex-wrap:wrap;margin-top:14px}
+.ctrl-periode-dates{display:flex;align-items:center;gap:8px}
+.ctrl-periode-dates .filter-input{width:150px;min-width:0}
+.ctrl-periode-dates span{color:var(--muted);font-size:14px}
+.ctrl-presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:40px}
+.ctrl-presets .date-preset-chip{margin-top:0}
+.ctrl-filtres-panel .ctrl-point-filters-row{margin-top:14px}
+@media(max-width:1000px){.ctrl-filtres{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.ctrl-filtres{grid-template-columns:1fr}.ctrl-periode-dates .filter-input{width:auto;flex:1}}
 
 /* ═══════════════════════════════════════════════════════════ */
 /* v2.2.30 : panel Codes maintenance — CSS scopé (re-extraction propre) */
@@ -2200,15 +2213,19 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </div>
             <!-- Bascule Historique / Analyse : mêmes filtres, deux lectures (static/maintenance_analyse.js) -->
             <div class="an-seg an-bascule" role="group" aria-label="Affichage">
-              <button type="button" data-ctrl-affichage="historique" aria-pressed="false" onclick="MaintAnalyse.afficher('historique')">Historique</button>
               <button type="button" data-ctrl-affichage="analyse" class="active" aria-pressed="true" onclick="MaintAnalyse.afficher('analyse')">Analyse</button>
+              <button type="button" data-ctrl-affichage="historique" aria-pressed="false" onclick="MaintAnalyse.afficher('historique')">Historique</button>
             </div>
           </div>
         <div id="ctrl-subview-historique">
 
-        <!-- Filtres Historique des contrôles -->
-        <div class="filters-panel">
-          <div class="filters">
+        <!-- Filtres Historique des contrôles — partagés par Historique et Analyse.
+             Ligne 1 : les listes, sur une grille (le type plus large).
+             Ligne 2 : la période et ses raccourcis côte à côte.
+             « Conformité » et les filtres par question sont masqués en Analyse
+             (static/maintenance_analyse.css). -->
+        <div class="filters-panel ctrl-filtres-panel">
+          <div class="filters ctrl-filtres">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
               <select id="filt-controles-type" class="filter-input" onchange="ctrlAutoFilter({resetPoints:true})">
@@ -2231,7 +2248,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="Repiquage">Repiquage</option>
               </select>
             </div>
-            <div class="filter-group">
+            <div class="filter-group ctrl-filtre-conformite">
               <label for="filt-controles-conformite">Conformité</label>
               <select id="filt-controles-conformite" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Toutes les réponses</option>
@@ -2239,27 +2256,27 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="ok">Conformes uniquement</option>
               </select>
             </div>
-            <!-- v2.3.36 : Du/Au fusionnés — v2.3.37 : bouton Filtrer retiré, filtrage auto sur onchange -->
-            <div class="filter-group" style="flex:1 1 220px">
-              <label>Période</label>
-              <div style="display:flex;gap:6px;align-items:center">
-                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
-                <span style="color:var(--muted);font-size:14px">→</span>
-                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
+          </div>
+          <div class="ctrl-periode-ligne">
+            <div class="filter-group ctrl-periode">
+              <label for="filt-controles-date-from">Période</label>
+              <div class="ctrl-periode-dates">
+                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" onchange="ctrlAutoFilter()">
+                <span aria-hidden="true">→</span>
+                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" onchange="ctrlAutoFilter()">
               </div>
             </div>
-          </div>
-          <div class="filters-date-presets" id="ctrl-date-presets">
-            <span class="filters-date-presets-label">Période :</span>
-            <button type="button" class="date-preset-chip" data-preset="today" onclick="applyCtrlDatePreset('today')">Aujourd'hui</button>
-            <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyCtrlDatePreset('yesterday')">Hier</button>
-            <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyCtrlDatePreset('last7')">7 derniers jours</button>
-            <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
-            <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
-            <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+            <div class="ctrl-presets" id="ctrl-date-presets" role="group" aria-label="Raccourcis de période">
+              <button type="button" class="date-preset-chip" data-preset="today" onclick="applyCtrlDatePreset('today')">Aujourd'hui</button>
+              <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyCtrlDatePreset('yesterday')">Hier</button>
+              <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyCtrlDatePreset('last7')">7 derniers jours</button>
+              <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
+              <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
+              <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+            </div>
           </div>
           <div id="ctrl-point-filters-row" class="ctrl-point-filters-row" style="display:none">
-            <span class="filters-date-presets-label">Réponses :</span>
+            <span class="filters-date-presets-label">Réponses</span>
             <div id="ctrl-point-filters-inputs" class="ctrl-point-filters-inputs"></div>
             <button type="button" class="date-preset-chip" onclick="resetPointFilters()">Réinitialiser</button>
           </div>
@@ -3081,7 +3098,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/maintenance_url.js?v=7"></script>
-<link rel="stylesheet" href="/static/maintenance_analyse.css?v=5">
+<link rel="stylesheet" href="/static/maintenance_analyse.css?v=7">
 <script src="/static/maintenance_analyse.js?v=6"></script>
 <script>
 'use strict';
