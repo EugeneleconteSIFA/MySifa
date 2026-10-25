@@ -23,7 +23,9 @@ from config import (
     ROLE_ADMINISTRATION_VENTES,
     ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
+    MAINTENANCE_ANALYSE_TYPE_DEFAUT,
 )
+from html import escape as _esc_html
 
 # v2.2.46 : inclut les 2 sous-rôles administration modernes (ventes/technique)
 # qui manquaient et provoquaient un "Accès refusé" pour ces admins.
@@ -80,6 +82,7 @@ def maintenance_page(request: Request):
         MAINTENANCE_HTML
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__MAINT_ROLE__", maint_role)
+        .replace("__ANALYSE_TYPE_DEFAUT__", _esc_html(MAINTENANCE_ANALYSE_TYPE_DEFAUT, quote=True))
     )
     return HTMLResponse(
         content=html,
@@ -1938,7 +1941,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
 </head>
-<body data-maint-role="__MAINT_ROLE__">
+<body data-maint-role="__MAINT_ROLE__" data-analyse-type-defaut="__ANALYSE_TYPE_DEFAUT__">
 <div class="app">
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 
@@ -3078,8 +3081,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/maintenance_url.js?v=7"></script>
-<link rel="stylesheet" href="/static/maintenance_analyse.css?v=2">
-<script src="/static/maintenance_analyse.js?v=3"></script>
+<link rel="stylesheet" href="/static/maintenance_analyse.css?v=3">
+<script src="/static/maintenance_analyse.js?v=4"></script>
 <script>
 'use strict';
 

@@ -157,6 +157,14 @@ check("période précédente : même durée, juste avant",
 q0, q1, q3 = a["questions"][0], a["questions"][1], a["questions"][3]
 rep = {r["reponse"]: (r["n"], r["nc"]) for r in q0["repartition"]}
 check("choix : répartition", rep, {"Conforme": (1, False), "Décentré": (1, True), "Autre": (2, False)})
+ev = q0["evolution"]
+check("choix : semaines continues (lundi 19/10 seul)", [(e["semaine"], e["n"]) for e in ev], [("2026-10-19", 4)])
+check("choix : réponses par semaine", ev[0]["reponses"], {"Conforme": 1, "Décentré": 1, "Autre": 2})
+from app.services.alertes_statistiques import _semaines_continues
+trou = _semaines_continues({"2026-10-05": {"semaine": "2026-10-05", "n": 2, "nc": 1, "reponses": {}},
+                            "2026-10-19": {"semaine": "2026-10-19", "n": 1, "nc": 0, "reponses": {}}})
+check("choix : semaine sans réponse comblée", [(e["semaine"], e["n"]) for e in trou],
+      [("2026-10-05", 2), ("2026-10-12", 0), ("2026-10-19", 1)])
 check("choix : précisions « Autre » regroupées", [(o["texte"], o["n"]) for o in q0["autres"]], [("Plis", 2)])
 check("valeur : moyenne", q1["resume"]["moyenne"], round((19.5 + 20.5 + 23.0) / 3, 4))
 check("valeur : hors tolérance", (q1["hors_tolerance"], q1["pct_hors_tolerance"]), (1, round(100 / 3, 1)))
