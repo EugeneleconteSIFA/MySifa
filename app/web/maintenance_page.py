@@ -2180,13 +2180,26 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div class="page-header">
           <div>
             <div class="page-title">Alertes</div>
-            <div class="page-subtitle">Gestion des alertes maintenance et historique des saisies</div>
+            <div class="page-subtitle">Saisies des opérateurs et paramétrage des alertes</div>
           </div>
         </div>
 
-        <!-- v2.2.18 : subtabs retirés (Liste des contrôles supprimé). L'onglet Historique reste seul et sans en-tête. -->
+        <!-- Deux onglets (style des sous-onglets d'Opérations) : les saisies des
+             opérateurs (historique et analyse), puis le paramétrage des alertes.
+             Adresse : sous=gestion (static/maintenance_url.js). -->
+        <div class="ops-subtabs" role="tablist">
+          <button type="button" class="ops-subtab active" role="tab" data-ctrl-subtab="historique" onclick="setCtrlSubtab('historique')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+            Saisies des alertes
+          </button>
+          <button type="button" class="ops-subtab" role="tab" data-ctrl-subtab="gestion" onclick="setCtrlSubtab('gestion')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Gestion des alertes
+          </button>
+        </div>
 
-        <!-- v2.2.19 : panel Alertes maintenance (dup depuis settings_page) -->
+        <!-- Onglet Gestion des alertes — v2.2.19 : panel Alertes maintenance (dup depuis settings_page) -->
+        <div data-ctrl-panneau="gestion" style="display:none">
         <div class="alerts-panel-embed">
         <div id="maint-subtab-alertes" class="maint-subtab">
           <div class="card">
@@ -2203,9 +2216,10 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </div>
         </div><!-- /alerts-panel-embed -->
+        </div><!-- /onglet gestion -->
 
-        <!-- v2.2.25 : Historique dans card blanche pour équilibre visuel avec Gestion -->
-        <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+        <!-- Onglet Saisies des alertes (défaut) : historique et analyse, dans une carte blanche -->
+        <div data-ctrl-panneau="historique" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
           <div class="an-entete-carte">
             <div>
               <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des saisies</h2>
@@ -3097,7 +3111,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/maintenance_url.js?v=7"></script>
+<script src="/static/maintenance_url.js?v=8"></script>
 <link rel="stylesheet" href="/static/maintenance_analyse.css?v=7">
 <script src="/static/maintenance_analyse.js?v=6"></script>
 <script>
@@ -3144,21 +3158,25 @@ function setOpsSubtab(name){
   // v2.2.36 : force la vue Récurrentes à chaque arrivée sur l'onglet Gestion
   if(name === 'liste' && typeof switchMaintView === 'function') switchMaintView('recurrentes');
 }
-// Sous-onglet actif dans la vue Contrôles ('historique' | 'liste').
+// Onglet actif de la vue Alertes : 'historique' (Saisies des alertes, défaut)
+// ou 'gestion' (Gestion des alertes). L'ancien 'liste' (supprimé en v2.2.18)
+// des liens existants retombe sur le défaut.
 const CTRL_SUBTAB_KEY = 'mysifa_maint_ctrl_subtab_v1';
 function _getCtrlSubtab(){
   try{ return localStorage.getItem(CTRL_SUBTAB_KEY) || 'historique'; }
   catch(e){ return 'historique'; }
 }
 function setCtrlSubtab(name){
-  if(name !== 'historique' && name !== 'liste') name = 'historique';
+  if(name !== 'historique' && name !== 'gestion') name = 'historique';
   try{ localStorage.setItem(CTRL_SUBTAB_KEY, name); }catch(e){}
   document.querySelectorAll('[data-ctrl-subtab]').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-ctrl-subtab') === name);
+    const on = btn.getAttribute('data-ctrl-subtab') === name;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  document.querySelectorAll('.ctrl-subview').forEach(div => { div.style.display = 'none'; });
-  const target = document.getElementById('ctrl-subview-' + name);
-  if(target) target.style.display = '';
+  document.querySelectorAll('[data-ctrl-panneau]').forEach(div => {
+    div.style.display = div.getAttribute('data-ctrl-panneau') === name ? '' : 'none';
+  });
 }
 
 function switchView(name){
