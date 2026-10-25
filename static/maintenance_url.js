@@ -19,10 +19,10 @@
  *   Opérations   sous=liste ; historique : type_op, operateur, machine, du,
  *                au, nature (kind), tri ; liste : machine, tri,
  *                gestion=inhabituelles
- *   Contrôles    sous=liste ; historique : type_ctrl, operateur, machine,
- *                conformite, du, au, points (filtres de checklist), page,
- *                tri, auto=1, anciens=1, affichage=historique, alertes ;
- *                liste : machine, tri
+ *   Alertes      sous=gestion (onglet Gestion des alertes : alertes, filtre
+ *                de la liste) ; défaut, Saisies des alertes : type_ctrl,
+ *                operateur, machine, conformite, du, au, points (filtres de
+ *                checklist), page, tri, auto=1, anciens=1, affichage=historique
  *   Mes tâches   termines=1
  *   fenêtres     voir _MT_OUVREURS (une clé chacune, empilables)
  * Les filtres d'historique écrits sont ceux APPLIQUÉS (au dernier rendu),
@@ -177,10 +177,10 @@ function maintenanceParams() {
     }
   } else if (v === 'controles') {
     const sous = _mtActif('[data-ctrl-subtab]') || 'historique';
-    if (sous !== 'historique') {
+    if (sous === 'gestion') {
+      // Onglet Gestion des alertes : filtre de la liste des alertes.
       p.sous = sous; nav += '/' + sous;
-      p.machine = getCtrlCatMachine();
-      if (CTRL_TYPES_STATE.sortBy !== 'nom' || CTRL_TYPES_STATE.sortDir !== 'asc') p.tri = CTRL_TYPES_STATE.sortBy + ':' + CTRL_TYPES_STATE.sortDir;
+      if (_alertsFilterKind && _alertsFilterKind !== 'all') p.alertes = _alertsFilterKind;
     } else {
       const f = _mtCtrl || {};
       if (f.type) p.type_ctrl = f.type;
@@ -200,7 +200,6 @@ function maintenanceParams() {
       if (window.MaintAnalyse && MaintAnalyse.mode() !== 'analyse') {
         p.affichage = 'historique'; nav += '/historique';
       }
-      if (_alertsFilterKind && _alertsFilterKind !== 'all') p.alertes = _alertsFilterKind;
     }
   } else if (v === 'op-tasks') {
     if (_getShowTermine()) p.termines = 1;
@@ -361,9 +360,13 @@ async function maintenanceAllerUrl(complet) {
   } else if (v === 'controles') {
     const sous = ou('sous', 'historique');
     if (sous !== undefined && sous !== (_mtActif('[data-ctrl-subtab]') || 'historique')) setCtrlSubtab(sous);
-    if ((_mtActif('[data-ctrl-subtab]') || 'historique') === 'liste') {
-      const m = u.get('machine', null); if (m && m !== getCtrlCatMachine()) setCtrlCatMachine(m);
-      if (u.a('tri') || complet) { if (_mtTri(CTRL_TYPES_STATE, u.get('tri'), 'nom', 'asc')) renderCtrlTypes(); }
+    if ((_mtActif('[data-ctrl-subtab]') || 'historique') === 'gestion') {
+      const al = ou('alertes', 'all');
+      if (al !== undefined && al !== _alertsFilterKind) {
+        _alertsFilterKind = al;
+        document.querySelectorAll('[data-alerts-filter]').forEach(b => b.classList.toggle('active', b.getAttribute('data-alerts-filter') === al));
+        renderAlertsList();
+      }
     } else {
       let ch = false;
       const champs = [['filt-controles-type', 'type_ctrl'], ['filt-controles-operateur', 'operateur'], ['filt-controles-machine', 'machine'],
@@ -387,12 +390,6 @@ async function maintenanceAllerUrl(complet) {
         if (m2 !== MaintAnalyse.mode()) { MaintAnalyse.appliquer(m2); ch = true; }
       }
       if (ch) { try { renderPointFilters(); } catch (e) {} renderCtrl(); }
-      const al = ou('alertes', 'all');
-      if (al !== undefined && al !== _alertsFilterKind) {
-        _alertsFilterKind = al;
-        document.querySelectorAll('[data-alerts-filter]').forEach(b => b.classList.toggle('active', b.getAttribute('data-alerts-filter') === al));
-        renderAlertsList();
-      }
     }
   } else if (v === 'op-tasks') {
     const t = ou('termines', '0');
