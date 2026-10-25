@@ -1,0 +1,99 @@
+/* Maintenance › Alertes › Historique des saisies — affichage « Analyse »
+   (static/maintenance_analyse.js). Variables du thème uniquement. */
+
+.an-entete-carte{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+
+/* Boutons segmentés (bascule Historique / Analyse, axe de comparaison) */
+.an-seg{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg)}
+.an-seg button{border:0;background:var(--bg);color:var(--text2);font:inherit;font-size:13px;font-weight:600;padding:7px 14px;cursor:pointer;transition:background .15s,color .15s}
+.an-seg button + button{border-left:1px solid var(--border)}
+.an-seg button:hover{background:var(--card);color:var(--text)}
+.an-seg button.active{background:var(--accent-bg);color:var(--accent)}
+.an-bascule button{padding:8px 18px}
+
+.an-zone{margin-top:4px;transition:opacity .15s}
+.an-zone.an-charge{opacity:.55}
+.an-vide{padding:28px 12px;text-align:center;color:var(--muted);font-size:13px;border:1px dashed var(--border);border-radius:12px}
+.an-vide-mini{color:var(--muted);font-size:12px;padding:8px 0}
+.an-note{margin-top:8px;font-size:12px;color:var(--muted)}
+
+.an-tete{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.an-periode{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+.an-tete-droite{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.an-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.an-btn{display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text2);font-size:13px;font-weight:600;text-decoration:none;transition:border-color .15s,color .15s}
+.an-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+.an-alerte{margin-bottom:22px}
+.an-alerte + .an-alerte{padding-top:18px;border-top:1px solid var(--border)}
+.an-titre{margin:0 0 10px;font-size:15px;font-weight:700;color:var(--text)}
+
+/* Bandeau de synthèse */
+.an-tuiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.an-tuile{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.an-tuile-lib{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.an-tuile-val{font-size:26px;font-weight:700;color:var(--text);margin-top:4px;font-variant-numeric:tabular-nums}
+.an-tuile-sous{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.4}
+.an-tuile.an-danger{border-left:3px solid var(--danger)}
+.an-bon{color:var(--success);font-weight:700}
+.an-mauvais{color:var(--danger);font-weight:700}
+
+/* Cartes par question */
+.an-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-top:12px}
+.an-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;min-width:0}
+.an-carte-large{margin-top:12px}
+.an-carte-titre{font-size:14px;font-weight:700;color:var(--text)}
+.an-carte-titre span{font-weight:500;color:var(--muted)}
+.an-carte-sous{font-size:12px;color:var(--muted);margin:2px 0 10px}
+.an-sous-titre{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:14px 0 6px}
+
+.an-barres{display:flex;flex-direction:column;gap:6px}
+.an-barre-ligne{display:grid;grid-template-columns:minmax(80px,32%) 1fr auto;align-items:center;gap:10px;font-size:13px}
+.an-barre-lib{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.an-tag-nc{font-style:normal;font-size:10px;font-weight:700;color:var(--danger);letter-spacing:.4px}
+.an-barre-piste{height:10px;border-radius:5px;background:var(--bg);overflow:hidden}
+.an-barre{display:block;height:100%;border-radius:5px;background:var(--accent)}
+.an-barre.nc{background:var(--danger)}
+.an-barre-val{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.an-barre-val span{color:var(--muted);font-weight:500}
+
+.an-autres{display:flex;flex-wrap:wrap;gap:6px}
+.an-autres span{font-size:12px;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px 8px}
+.an-autres b{color:var(--text)}
+
+.an-chiffres{display:flex;flex-wrap:wrap;gap:6px 18px}
+.an-chiffre{display:flex;flex-direction:column}
+.an-chiffre span{font-size:11px;color:var(--muted)}
+.an-chiffre b{font-size:15px;color:var(--text);font-variant-numeric:tabular-nums}
+.an-chiffre.an-danger b{color:var(--danger)}
+
+/* Graphiques SVG */
+.an-svg{display:block;width:100%;height:auto;overflow:visible}
+.an-svg .an-txt{font-size:10px;fill:var(--muted)}
+.an-svg .an-axe{stroke:var(--border);stroke-width:1}
+.an-svg .an-grille{stroke:var(--border);stroke-width:1;stroke-dasharray:2 3}
+.an-svg .an-bande{fill:var(--success);opacity:.1}
+.an-svg .an-cible{stroke:var(--success);stroke-width:1.5;stroke-dasharray:5 4}
+.an-svg .an-borne{stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 3}
+.an-svg .an-ligne{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;opacity:.55}
+.an-svg .an-point{fill:var(--accent);stroke:var(--card);stroke-width:1.5}
+.an-svg .an-point.nc{fill:var(--danger)}
+.an-svg .an-col{fill:var(--accent)}
+.an-svg .an-col.nc{fill:var(--danger)}
+.an-svg .an-hit{fill:transparent;cursor:default}
+.an-svg g:hover .an-point,.an-svg g:hover .an-col{opacity:.75}
+
+/* Comparaison */
+.an-table-wrap{overflow-x:auto}
+.an-table{width:100%;border-collapse:collapse;font-size:13px}
+.an-table th{text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+.an-table th span{display:block;text-transform:none;letter-spacing:0;font-weight:500}
+.an-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.an-table tr:last-child td{border-bottom:0}
+.an-mini{display:inline-block;width:60px;height:8px;border-radius:4px;background:var(--bg);overflow:hidden;margin-right:8px;vertical-align:middle}
+.an-mini-barre{display:block;height:100%;background:var(--danger);border-radius:4px}
+
+@media (max-width:640px){
+  .an-grille{grid-template-columns:1fr}
+  .an-barre-ligne{grid-template-columns:minmax(70px,38%) 1fr auto}
+}

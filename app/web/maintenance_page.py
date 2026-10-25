@@ -2190,8 +2190,17 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 
         <!-- v2.2.25 : Historique dans card blanche pour équilibre visuel avec Gestion -->
         <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
-          <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des saisies</h2>
-          <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</p>
+          <div class="an-entete-carte">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des saisies</h2>
+              <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</p>
+            </div>
+            <!-- Bascule Historique / Analyse : mêmes filtres, deux lectures (static/maintenance_analyse.js) -->
+            <div class="an-seg an-bascule" role="group" aria-label="Affichage">
+              <button type="button" data-ctrl-affichage="historique" class="active" aria-pressed="true" onclick="MaintAnalyse.afficher('historique')">Historique</button>
+              <button type="button" data-ctrl-affichage="analyse" aria-pressed="false" onclick="MaintAnalyse.afficher('analyse')">Analyse</button>
+            </div>
+          </div>
         <div id="ctrl-subview-historique">
 
         <!-- Filtres Historique des contrôles -->
@@ -2293,6 +2302,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </table>
           </div>
         </div>
+
+        <!-- Affichage Analyse : rempli par static/maintenance_analyse.js -->
+        <div id="ctrl-analyse" class="an-zone" style="display:none"></div>
 
         </div><!-- /ctrl-subview-historique -->
         </div><!-- /section historique séparée v2.2.23 -->
@@ -3065,7 +3077,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/maintenance_url.js?v=4"></script>
+<script src="/static/maintenance_url.js?v=5"></script>
+<link rel="stylesheet" href="/static/maintenance_analyse.css?v=1">
+<script src="/static/maintenance_analyse.js?v=1"></script>
 <script>
 'use strict';
 
@@ -7847,7 +7861,10 @@ function setMaintCatFilter(c){
 // Capture d'un widget : la machine et la catégorie affichées rejoignent
 // l'adresse capturée, la source du widget les relit (mysifa_blocs_sources.js).
 window.mysifaBlocsContexte = function(){
-  return { bloc_machine: getMaintMachine(), bloc_categorie: getMaintCatFilter() };
+  // + période et machine de l'Analyse des alertes (maintenance.alertes.synthese).
+  return Object.assign(
+    { bloc_machine: getMaintMachine(), bloc_categorie: getMaintCatFilter() },
+    window.MaintAnalyse ? window.MaintAnalyse.contexteBloc() : {});
 };
 // Ouverture depuis un indicateur : machine et catégorie capturées deviennent
 // celles de l'écran (même mémoire que les boutons de la page).
@@ -10063,6 +10080,8 @@ function renderCtrl(){
       '<button type="button" ' + (nextD ? 'disabled' : '') + ' onclick="ctrlPageGo(1)" title="Page suivante" style="' + btnStyle + ';cursor:' + (nextD ? 'not-allowed' : 'pointer') + (nextD ? ';opacity:.35' : '') + '">›</button>' +
       '</div>';
   }
+  // L'affichage Analyse suit les mêmes filtres (static/maintenance_analyse.js).
+  if(window.MaintAnalyse) window.MaintAnalyse.surFiltres();
 }
 
 // =========================================================================

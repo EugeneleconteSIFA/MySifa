@@ -553,6 +553,7 @@ RECONSTITUABLES = {
     # chaque changement d'état est une saisie horodatée (matière d'une frise).
     "prod.ensemble.machines": "historique minute par minute dans les saisies de production (frise)",
     "prod.ensemble.machine": "historique minute par minute dans les saisies de production (frise)",
+    "maintenance.alertes.synthese": "recalculable sur les validations datées (/api/maintenance/alertes/stats)",
     "portail.atelier.machine": "en production : saisies horodatées (frise) ; « planifié sans saisie » vient du planning, qui ne garde pas son passé",
 }
 
