@@ -9,6 +9,7 @@
 .an-seg button + button{border-left:1px solid var(--border)}
 .an-seg button:hover{background:var(--card);color:var(--text)}
 .an-seg button.active{background:var(--accent-bg);color:var(--accent)}
+.an-bascule{margin-bottom:14px}
 .an-bascule button{padding:8px 18px}
 
 .an-zone{margin-top:4px;transition:opacity .15s}
@@ -106,7 +107,9 @@
 /* En Analyse, « Conformité » et le bandeau des filtres par question ne
    servent pas : l'analyse porte sur toutes les réponses. */
 #ctrl-subview-historique.an-mode-analyse #ctrl-point-filters-row{display:none!important}
-#ctrl-subview-historique.an-mode-analyse .filter-group:has(#filt-controles-conformite){display:none}
+/* La colonne reste réservée : les listes gardent leur largeur d'un affichage
+   à l'autre. */
+#ctrl-subview-historique.an-mode-analyse .ctrl-filtre-conformite{visibility:hidden}
 
 @media (max-width:1100px){
   .an-corps-valeur.an-avec-multiples{grid-template-columns:2fr 1fr}
