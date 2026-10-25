@@ -241,6 +241,7 @@ def _fetch_alert_acks_as_saisies(
               a.ack_at,
               a.responses,
               a.comment,
+              a.questionnaire,
               m.nom AS alert_nom,
               m.params AS alert_params,
               u.operateur_lie AS user_operateur_lie
@@ -252,6 +253,7 @@ def _fetch_alert_acks_as_saisies(
         params,
     ).fetchall()
 
+    from app.services.alertes_questionnaire import items_de_params, pour_affichage
     out: list = []
     for r in rows:
         d = dict(r)
@@ -269,6 +271,9 @@ def _fetch_alert_acks_as_saisies(
                 elif v is not None and str(v).strip() != "":
                     cmt_pieces.append(str(v))
         base_cmt = " · ".join(cmt_pieces)
+        _items_aff, _resp_aff = pour_affichage(
+            resp if isinstance(resp, dict) else {}, d.get("questionnaire"),
+            items_de_params(d.get("alert_params")))
         raw_cmt = (d.get("comment") or "").strip()
         if raw_cmt:
             base_cmt = (base_cmt + " ") if base_cmt else ""
@@ -307,8 +312,11 @@ def _fetch_alert_acks_as_saisies(
             "modifie_note": None,
             # Payload nécessaire au modal détail côté client
             "_alert_nom": nom_alerte,
-            "_alert_params": d.get("alert_params") or "{}",
-            "_alert_responses": d.get("responses") or "{}",
+            # Questions actuelles, puis celles retirées depuis la validation :
+            # chaque réponse s'affiche sous la question à laquelle
+            # l'opérateur a répondu (app/services/alertes_questionnaire.py).
+            "_alert_params": json.dumps({"checklist": {"items": _items_aff}}, ensure_ascii=False),
+            "_alert_responses": json.dumps(_resp_aff, ensure_ascii=False),
             "_alert_comment": raw_cmt,
         })
     return out

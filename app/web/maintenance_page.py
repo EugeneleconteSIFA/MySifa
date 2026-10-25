@@ -129,6 +129,15 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 .ctrl-row-nc td:first-child{border-left:3px solid var(--danger)}
 .ctrl-row-nc:hover td{background:rgba(248,113,113,0.11)}
 .ctrl-row-nc td:first-child::before{content:"⚠ ";color:var(--danger);font-weight:900;margin-right:4px}
+/* Saisie faite avec un questionnaire qui a changé depuis : ses réponses sans
+   question actuelle sont regroupées dans la colonne « Ancien formulaire ». */
+.ctrl-row-ancien td{color:var(--muted)}
+.col-ancien{font-size:12px;color:var(--muted);min-width:220px}
+.col-ancien b{font-weight:600;color:var(--text2)}
+.ack-ancien{margin-top:14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)}
+.ack-ancien-kv{display:flex;gap:10px;font-size:12px;padding:3px 0}
+.ack-ancien-k{color:var(--muted);flex:0 0 45%}
+.ack-ancien-v{color:var(--text2)}
 .ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
 tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ctrl-dossier-empty{color:var(--muted);font-size:12px}
@@ -2249,6 +2258,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <span class="ctrl-extra-toggle-dot" id="ctrl-autoclose-toggle-dot"></span>
                 <span class="ctrl-extra-toggle-state" id="ctrl-autoclose-toggle-state">OFF</span>
               </button>
+              <button type="button" class="ctrl-extra-toggle" id="ctrl-anciens-toggle" onclick="toggleAnciens()" title="Afficher ou masquer les saisies faites avec une version précédente du questionnaire (réponses à des questions retirées depuis).">
+                <span class="ctrl-extra-toggle-label">Anciens formulaires</span>
+                <span class="ctrl-extra-toggle-dot"></span>
+                <span class="ctrl-extra-toggle-state" id="ctrl-anciens-toggle-state">OFF</span>
+              </button>
               <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (référence produit, adhésif, glassine)">
                 <span class="ctrl-extra-toggle-label">Colonnes produit</span>
                 <span class="ctrl-extra-toggle-dot" id="ctrl-extra-toggle-dot"></span>
@@ -3045,7 +3059,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/maintenance_url.js?v=3"></script>
+<script src="/static/maintenance_url.js?v=4"></script>
 <script>
 'use strict';
 
@@ -9265,6 +9279,7 @@ function _formatAckComment(ack){
       }
     });
   }
+  (ack.hors_formulaire || []).forEach(h => { if(h && h.valeur) parts.push(h.libelle + ' : ' + h.valeur); });
   if(ack.comment){ parts.push((parts.length ? '« ' + ack.comment + ' »' : ack.comment)); }
   return parts.join(' · ');
 }
@@ -9287,6 +9302,10 @@ async function loadCtrlAcks(){
       _alert_id: a.alert_id,
       _responses: a.responses || {},
       _raw_comment: a.comment || '',
+      // Réponses déjà rangées par le serveur sous les questions actuelles ;
+      // celles dont la question a été retirée arrivent à part.
+      _hors_formulaire: Array.isArray(a.hors_formulaire) ? a.hors_formulaire : [],
+      _ancien: !!a.ancien,
       _no_dossier: a.no_dossier || '',
       _dossier_info: a.dossier_info || null,
     }));
@@ -9415,6 +9434,33 @@ function toggleAutoClose(){
   ctrlResetPage();
   if(typeof renderCtrl === 'function') renderCtrl();
 }
+// Saisies d'un questionnaire qui a changé depuis (réponses à des questions
+// retirées) : masquées par défaut, elles ne servent plus qu'en consultation.
+const CTRL_SHOW_ANCIENS_KEY = 'mysifa_ctrl_show_anciens';
+function ctrlLoadShowAnciens(){
+  try { return localStorage.getItem(CTRL_SHOW_ANCIENS_KEY) === '1'; }
+  catch(_) { return false; }
+}
+function ctrlSaveShowAnciens(v){
+  try { localStorage.setItem(CTRL_SHOW_ANCIENS_KEY, v ? '1' : '0'); } catch(_) {}
+}
+function updateAnciensToggleUI(){
+  const on = ctrlLoadShowAnciens();
+  const state = document.getElementById('ctrl-anciens-toggle-state');
+  const btn = document.getElementById('ctrl-anciens-toggle');
+  if(state) state.textContent = on ? 'ON' : 'OFF';
+  if(btn) btn.classList.toggle('ctrl-extra-toggle-on', on);
+}
+function toggleAnciens(){
+  ctrlSaveShowAnciens(!ctrlLoadShowAnciens());
+  updateAnciensToggleUI();
+  ctrlResetPage();
+  if(typeof renderCtrl === 'function') renderCtrl();
+}
+// Réponses sans question actuelle, en une ligne « Libellé : valeur · … ».
+function _ackHorsFormulaireTexte(c){
+  return (c && c._hors_formulaire || []).map(h => (h.libelle || '') + ' : ' + (h.valeur || '')).join(' · ');
+}
 function ctrlIsAutoClose(c){
   const raw = (c && c._raw_comment) || '';
   // Match tolérant : "Fermée auto" avec ou sans accents / espaces autour
@@ -9443,6 +9489,7 @@ function getCtrlFilters(){
     conformite:v('filt-controles-conformite'),
     // v2.3.35 : lu directement depuis localStorage (plus de checkbox DOM)
     showAuto:  ctrlLoadShowAutoClose(),
+    showAnciens: ctrlLoadShowAnciens(),
   };
 }
 function resetCtrlFilters(){
@@ -9641,6 +9688,15 @@ function openAckDetail(prefixedId){
   if(items.length && window.MysifaAckViewer){
     checklistHtml = window.MysifaAckViewer.checklist(items, responses);
   }
+  // Réponses à des questions retirées depuis la saisie : affichées avec leur
+  // libellé d'époque, sous les points de contrôle actuels.
+  const hors = ack._hors_formulaire || [];
+  if(hors.length){
+    checklistHtml += '<div class="ack-ancien"><span class="mav-lbl">Ancien formulaire</span>'
+      + hors.map(h => '<div class="ack-ancien-kv"><span class="ack-ancien-k">' + escHtml(h.libelle || '')
+        + '</span><span class="ack-ancien-v">' + escHtml(h.valeur || '') + '</span></div>').join('')
+      + '</div>';
+  }
 
   // Contexte : date, machine, opérateur
   const dt = fmtDate(ack.date_saisie);
@@ -9813,6 +9869,7 @@ function renderCtrl(){
   renderPointFilters();
   // v2.2.18 : legacy CTRL_STATE.list dropped — historique = acks DB uniquement
   const merged = (CTRL_STATE.acks || []).slice();
+  let anciensMasques = 0;
   let filtered = merged.filter(c => {
     if(f.type && _displayType(c) !== f.type) return false;
     if(f.operateur && c.operateur !== f.operateur) return false;
@@ -9829,6 +9886,7 @@ function renderCtrl(){
     }
     // v2.3.29 : masque les fermetures automatiques par défaut
     if(!f.showAuto && ctrlIsAutoClose(c)) return false;
+    if(!f.showAnciens && c._ancien){ anciensMasques++; return false; }
     if(!_matchPointFilters(c)) return false;
     return true;
   });
@@ -9856,6 +9914,10 @@ function renderCtrl(){
     }
   }
 
+  // Colonne « Ancien formulaire » : vue par type seulement (en vue « Tous »,
+  // la colonne Commentaires porte déjà ces réponses), et seulement si une
+  // ligne affichée en a.
+  const colAncien = !!singleType && filtered.some(c => c._hors_formulaire && c._hors_formulaire.length);
   // Reconstruire le thead
   const showExtra = getShowExtraCols();
   const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
@@ -9880,6 +9942,9 @@ function renderCtrl(){
         ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml(col.points.join(' / ')) + '</div>' : '';
       h += '<th>' + escHtml(col.label || '') + unitSuffix + ptsSuffix + '</th>';
     }
+    if(colAncien){
+      h += '<th title="Réponses à des questions retirées du questionnaire depuis la saisie">Ancien formulaire</th>';
+    }
     if(showExtra){
       h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
       h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
@@ -9891,7 +9956,7 @@ function renderCtrl(){
     thead.innerHTML = h;
   }
 
-  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
+  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (colAncien ? 1 : 0) + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
   // v2.2.27 : pagination 50/page (pattern MyProd)
   const _totalFiltered = filtered.length;
@@ -9935,6 +10000,10 @@ function renderCtrl(){
         }
         cells += '<td>' + escHtml(val) + '</td>';
       }
+      if(colAncien){
+        cells += '<td class="col-ancien">' + (c._hors_formulaire || []).map(h =>
+          '<b>' + escHtml(h.libelle || '') + '</b> ' + escHtml(h.valeur || '')).join(' · ') + '</td>';
+      }
       if(showExtra){
         // Dossier (no_dossier) : pill accent si renseigné, tiret sinon.
         const _nd = c._no_dossier || '';
@@ -9973,7 +10042,8 @@ function renderCtrl(){
       }
       cells += '<td class="col-actions">' + actionHtml + '</td>';
       const isNc = _ackHasNonConformite(c);
-      const trClass = isNc ? ' class="ctrl-row-nc"' : '';
+      const trCls = [isNc ? 'ctrl-row-nc' : '', c._ancien ? 'ctrl-row-ancien' : ''].filter(Boolean).join(' ');
+      const trClass = trCls ? ' class="' + trCls + '"' : '';
       const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
       // v2.3.44 : simple clic (au lieu du double-clic) pour ouvrir le détail
       // d'une ack. La ligne reste sélectionnable via les cellules qui ont
@@ -9991,9 +10061,10 @@ function renderCtrl(){
     const visible = _totalFiltered;
     const from = visible === 0 ? 0 : _pageStart + 1;
     const to = _pageEnd;
-    const label = visible !== n
+    let label = visible !== n
       ? (from + '-' + to + ' / ' + visible + ' filtrés (' + n + ' total)')
       : (from + '-' + to + ' / ' + n + ' contrôle' + (n > 1 ? 's' : ''));
+    if(anciensMasques) label += ' · ' + anciensMasques + ' ancien' + (anciensMasques > 1 ? 's' : '') + ' formulaire' + (anciensMasques > 1 ? 's' : '') + ' masqué' + (anciensMasques > 1 ? 's' : '');
     const prevD = CTRL_STATE.page <= 0;
     const nextD = CTRL_STATE.page >= _maxPage;
     const btnStyle = 'border:1px solid var(--border);background:var(--card);color:var(--text2);padding:3px 9px;border-radius:6px;font-size:13px;line-height:1;font-family:inherit;transition:border-color .12s,color .12s';
@@ -10293,6 +10364,7 @@ async function loadMe(){
   updateExtraToggleUI();
   // v2.3.35 : init du toggle "Fermetures auto" (relocalisé dans le header historique)
   updateAutoCloseToggleUI();
+  updateAnciensToggleUI();
   loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
@@ -10990,7 +11062,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.21"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.22"></script>
 <script src="/static/mysifa_confirm.js?v=1"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.5-confirm"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.21"></script>

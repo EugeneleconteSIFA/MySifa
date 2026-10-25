@@ -4669,7 +4669,7 @@ def operator_should_see_alert(
     return user_machine in machines
 
 
-def _validate_alert_params(params: dict) -> dict:
+def _validate_alert_params(params: dict, anciens_items: list = None) -> dict:
     """Valide et normalise les paramètres d'une alerte (déclencheur, cible,
     validation). Retourne un dict propre prêt à être stocké en JSON. Accepte
     un dict vide (valeurs par défaut)."""
@@ -4947,6 +4947,8 @@ def _validate_alert_params(params: dict) -> dict:
                 item_out["placeholder"] = placeholder.strip()[:60]
             if help_txt:
                 item_out["help"] = help_txt
+            if it.get("id"):
+                item_out["id"] = str(it["id"])
             clean_items.append(item_out)
             continue
         # type "choice" (cases à cocher)
@@ -5030,9 +5032,16 @@ def _validate_alert_params(params: dict) -> dict:
             _choice_item["required"] = True
         if help_txt:
             _choice_item["help"] = help_txt
+        if it.get("id"):
+            _choice_item["id"] = str(it["id"])
         clean_items.append(_choice_item)
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
+    # Identifiant stable par question : c'est lui, pas la position, qui relie
+    # une réponse passée à sa question quand le questionnaire change
+    # (app/services/alertes_questionnaire.py).
+    from app.services.alertes_questionnaire import attribuer_ids
+    attribuer_ids(clean_items, anciens_items or [])
     if cl_enabled and not clean_items:
         cl_enabled = False
     # all_required retiré (UX) : le mode opérateur affiche une confirmation
@@ -6553,7 +6562,11 @@ async def maintenance_alerts_update(alert_id: int, request: Request):
         action_detail_parts.append(f"nom={nom!r}")
     if "params" in body:
         params_raw = body.get("params") or {}
-        params_validated = _validate_alert_params(params_raw)
+        from app.services.alertes_questionnaire import items_de_params
+        with get_db() as _cn_av:
+            _av = _cn_av.execute("SELECT params FROM maintenance_alerts WHERE id=?", (alert_id,)).fetchone()
+        params_validated = _validate_alert_params(
+            params_raw, items_de_params(_av["params"]) if _av else [])
         try:
             params_json = _json_alerts.dumps(params_validated, ensure_ascii=False)
         except (TypeError, ValueError):
@@ -7454,7 +7467,8 @@ def maintenance_alert_acks_list(request: Request):
             f"""SELECT a.id, a.alert_id, al.nom AS alert_nom,
                        al.linked_maint_code, a.user_id, a.user_nom,
                        a.machine, a.no_dossier, a.ack_at,
-                       a.responses, a.comment, a.dismissed
+                       a.responses, a.comment, a.dismissed,
+                       a.questionnaire, al.params AS alert_params
                 FROM maintenance_alert_acks a
                 LEFT JOIN maintenance_alerts al ON al.id = a.alert_id
                 {where_sql}
@@ -7464,11 +7478,19 @@ def maintenance_alert_acks_list(request: Request):
         ).fetchall()
     items = []
     alert_ids_seen = set()
+    # Les réponses partent rangées sous les questions ACTUELLES de leur alerte
+    # (identifiant de question, pas position) ; celles dont la question
+    # n'existe plus sortent dans hors_formulaire.
+    from app.services.alertes_questionnaire import items_de_params, lire_saisie
+    questions_par_alerte: dict = {}
     for r in rows:
         try:
             responses = _json_alerts.loads(r["responses"] or "{}")
         except (ValueError, TypeError):
             responses = {}
+        if r["alert_id"] not in questions_par_alerte:
+            questions_par_alerte[r["alert_id"]] = items_de_params(r["alert_params"])
+        lu = lire_saisie(responses, r["questionnaire"], questions_par_alerte[r["alert_id"]])
         aid = int(r["alert_id"]) if r["alert_id"] is not None else None
         if aid is not None:
             alert_ids_seen.add(aid)
@@ -7481,7 +7503,9 @@ def maintenance_alert_acks_list(request: Request):
             "machine": r["machine"] or "",
             "no_dossier": r["no_dossier"] or "",
             "ack_at": r["ack_at"],
-            "responses": responses,
+            "responses": lu["responses"],
+            "hors_formulaire": lu["hors_formulaire"],
+            "ancien": lu["ancien"],
             "comment": r["comment"] or "",
             # v2.4.11 : remonté au front pour que ctrlIsAutoClose détecte
             # aussi les anciennes esquives (dismissed=1 mais comment vide,
@@ -7592,6 +7616,7 @@ def maintenance_alert_acks_list(request: Request):
                         })
                     elif isinstance(it, dict):
                         entry = {
+                            "id": it.get("id") or "",
                             "label": (it.get("label") or "").strip(),
                             "type": (it.get("type") or "choice"),
                         }
@@ -7850,10 +7875,14 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
     with get_db() as conn:
         # Vérifier que l'alerte existe et est active
         row = conn.execute(
-            "SELECT id, active FROM maintenance_alerts WHERE id=?", (alert_id,)
+            "SELECT id, active, params FROM maintenance_alerts WHERE id=?", (alert_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Alerte introuvable.")
+        # Photo des questions auxquelles l'opérateur vient de répondre : ses
+        # réponses restent lisibles quand le questionnaire changera.
+        from app.services.alertes_questionnaire import items_de_params, photo
+        questionnaire_json = photo(items_de_params(row["params"]))
         # Machine de l'opérateur (ou vide pour superadmin sans machine)
         machine = _machine_name_from_user(conn, user) or ""
         # v163+ : fallback serveur robuste — si le client n'a pas transmis de
@@ -7901,10 +7930,10 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
         conn.execute(
             """INSERT INTO maintenance_alert_acks
                (alert_id, user_id, user_nom, machine, no_dossier,
-                ack_at, responses, comment)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                ack_at, responses, comment, questionnaire)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (alert_id, user.get("id"), user.get("nom") or user.get("email") or "",
-             machine, no_dossier, now_paris, responses_json, comment),
+             machine, no_dossier, now_paris, responses_json, comment, questionnaire_json),
         )
         # Met à jour le last_ack_at sur l'alerte (cache utilisé en /settings)
         conn.execute(
