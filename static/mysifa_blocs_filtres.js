@@ -75,6 +75,21 @@
                       ["parti", "Partis"], ["tout", "Tout"]])
     }],
 
+    // Analyse des alertes (static/maintenance_analyse.js) : période et machine
+    // des filtres de l'historique des saisies.
+    "maintenance.alertes.synthese": [
+      { cle: "bloc_periode", libelle: "Période", type: "periode", defaut: "last30",
+        options: liste([["today", "Aujourd'hui"], ["yesterday", "Hier"], ["last7", "7 derniers jours"],
+                        ["last30", "30 derniers jours"], ["thisMonth", "Mois en cours"],
+                        ["prevMonth", "Mois dernier"], ["dates", "Dates choisies"]]) },
+      { cle: "bloc_ctrl_machine", libelle: "Machine", type: "choix", defaut: null,
+        options: function (api) {
+          return api("/api/maintenance/statuts").then(function (d) {
+            return ((d && d.machines) || []).map(function (m) { return { v: m, l: m }; });
+          });
+        } }
+    ],
+
     // Boutons machine et catégorie de l'accueil Maintenance
     "maintenance.statuts": [{
       cle: "bloc_machine", libelle: "Machine", type: "choix", defaut: null,

@@ -398,6 +398,15 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("en-retard", "Opérations en retard"), ("bientot", "Dues bientôt"),
                  ("jamais", "Jamais saisies"), ("a-jour", "À jour")),
     ),
+    # Bandeau d'une alerte dans l'affichage Analyse de l'historique des
+    # saisies (static/maintenance_analyse.js). Objet = id de l'alerte.
+    "maintenance.alertes.synthese": Bloc(
+        appli="maintenance", libelle="Analyse d'une alerte",
+        url="/maintenance?vue=controles&affichage=analyse",
+        type="objet", objet="alerte",
+        valeurs=(("validations", "Validations"), ("taux-nc", "Non-conformité (%)"),
+                 ("remplissage", "Remplissage (%)")),
+    ),
     # ── MyAO (app/web/ao_page.py) ──
     "ao.appels": Bloc(
         appli="ao", libelle="Appels d'offres", url="/ao",
