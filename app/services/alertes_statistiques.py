@@ -181,10 +181,12 @@ def _stats_choix(it, lignes, idx):
             cle = re.sub(r"\s+", " ", precision.lower())
             e = autres.setdefault(cle, {"texte": precision, "n": 0})
             e["n"] += 1
-        s = semaines.setdefault(_semaine(l["jour"]), {"semaine": _semaine(l["jour"]), "n": 0, "nc": 0})
+        s = semaines.setdefault(_semaine(l["jour"]), {"semaine": _semaine(l["jour"]), "n": 0, "nc": 0, "reponses": {}})
         s["n"] += 1
         if nc_question(it, r):
             s["nc"] += 1
+        for v in vals:
+            s["reponses"][v] = s["reponses"].get(v, 0) + 1
     nc_set = set(str(x) for x in (it.get("nc_responses") or []))
     ordre = [str(x) for x in (it.get("responses") or [])]
     cles = ordre + sorted(k for k in rep if k not in ordre)
@@ -194,8 +196,22 @@ def _stats_choix(it, lignes, idx):
                          "nc": k in nc_set or (k == "Autre" and bool(it.get("other_is_nc")))}
                         for k in cles if rep.get(k) or k in ordre],
         "autres": sorted(autres.values(), key=lambda e: -e["n"])[:10],
-        "evolution": [dict(s, taux_nc=_pct(s["nc"], s["n"])) for _, s in sorted(semaines.items())],
+        "evolution": _semaines_continues(semaines),
     }
+
+
+def _semaines_continues(semaines: dict) -> list:
+    """Semaines de la première à la dernière réponse, les semaines sans
+    réponse comprises (n = 0) : un trou dans les contrôles doit se voir."""
+    if not semaines:
+        return []
+    cles = sorted(semaines)
+    j, fin, out = date.fromisoformat(cles[0]), date.fromisoformat(cles[-1]), []
+    while j <= fin:
+        s = semaines.get(j.isoformat()) or {"semaine": j.isoformat(), "n": 0, "nc": 0, "reponses": {}}
+        out.append(dict(s, taux_nc=_pct(s["nc"], s["n"])))
+        j += timedelta(days=7)
+    return out
 
 
 def _stats_valeur(it, lignes, idx):

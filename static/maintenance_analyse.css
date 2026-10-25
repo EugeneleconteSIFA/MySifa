@@ -38,20 +38,33 @@
 .an-mauvais{color:var(--danger);font-weight:700}
 
 /* Cartes par question */
-.an-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-top:12px}
+.an-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin-top:12px;align-items:start}
 .an-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;min-width:0}
 .an-carte-titre{font-size:14px;font-weight:700;color:var(--text)}
 .an-carte-titre span{font-weight:500;color:var(--muted)}
 .an-carte-sous{font-size:12px;color:var(--muted);margin:2px 0 10px}
 .an-sous-titre{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:14px 0 6px}
+.an-sous-titre-1{margin-top:4px}
+/* Corps d'une carte : deux blocs côte à côte quand la carte est large */
+.an-corps{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px 28px;align-items:start}
+.an-graph{width:100%;min-height:170px}
 
 .an-barres{display:flex;flex-direction:column;gap:6px}
-.an-barre-ligne{display:grid;grid-template-columns:minmax(80px,32%) 1fr auto;align-items:center;gap:10px;font-size:13px}
-.an-barre-lib{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.an-barre-ligne{display:grid;grid-template-columns:minmax(110px,40%) 1fr auto;align-items:center;gap:10px;font-size:13px}
+.an-barre-lib{color:var(--text);line-height:1.25;overflow-wrap:anywhere}
 .an-tag-nc{font-style:normal;font-size:10px;font-weight:700;color:var(--danger);letter-spacing:.4px}
 .an-barre-piste{height:10px;border-radius:5px;background:var(--bg);overflow:hidden}
 .an-barre{display:block;height:100%;border-radius:5px;background:var(--accent)}
 .an-barre.nc{background:var(--danger)}
+/* Teinte d'une réponse (répartition, légende, barres par semaine) */
+.an-t-ok0{background:var(--accent);fill:var(--accent)}
+.an-t-ok1{background:var(--accent);fill:var(--accent);opacity:.55}
+.an-t-ok2{background:var(--accent);fill:var(--accent);opacity:.3}
+.an-t-nc0{background:var(--danger);fill:var(--danger)}
+.an-t-nc1{background:var(--danger);fill:var(--danger);opacity:.55}
+.an-legende{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text2);margin-bottom:6px}
+.an-legende span{display:inline-flex;align-items:center;gap:6px}
+.an-legende i{display:inline-block;width:10px;height:10px;border-radius:3px}
 .an-barre-val{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .an-barre-val span{color:var(--muted);font-weight:500}
 
@@ -66,8 +79,10 @@
 .an-chiffre.an-danger b{color:var(--danger)}
 
 /* Graphiques SVG */
-.an-svg{display:block;width:100%;height:auto;overflow:visible}
-.an-svg .an-txt{font-size:10px;fill:var(--muted)}
+.an-svg{display:block;overflow:visible}
+.an-svg .an-txt{font-size:11px;fill:var(--muted)}
+.an-svg .an-txt-nc{fill:var(--danger);font-weight:700}
+.an-svg .an-vide-trait{stroke:var(--muted);stroke-width:2;stroke-dasharray:3 3}
 .an-svg .an-axe{stroke:var(--border);stroke-width:1}
 .an-svg .an-grille{stroke:var(--border);stroke-width:1;stroke-dasharray:2 3}
 .an-svg .an-bande{fill:var(--success);opacity:.1}
@@ -79,10 +94,10 @@
 .an-svg .an-col{fill:var(--accent)}
 .an-svg .an-col.nc{fill:var(--danger)}
 .an-svg .an-hit{fill:transparent;cursor:default}
-.an-svg g:hover .an-point,.an-svg g:hover .an-col{opacity:.75}
+.an-svg g:hover .an-point,.an-svg g:hover .an-col,.an-svg g:hover rect[class^="an-t-"]{filter:brightness(1.12)}
 
 
 @media (max-width:640px){
-  .an-grille{grid-template-columns:1fr}
+  .an-grille,.an-corps{grid-template-columns:1fr}
   .an-barre-ligne{grid-template-columns:minmax(70px,38%) 1fr auto}
 }

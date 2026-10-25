@@ -198,6 +198,11 @@ PROD_ARRIVEE_PLANNING_ROLES = ("superadmin", "direction", "administration")
 # vérifient ce flag côté serveur — inutile de patcher la sidebar seule.
 MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "0") in {"1", "true", "True", "yes", "YES"}
 
+# Type de contrôle ouvert d'office par l'Analyse de l'historique des alertes
+# (Maintenance › Alertes). Nom tel qu'affiché dans le filtre « Type de
+# contrôle » ; absent de la liste, l'Analyse prend le type le plus validé.
+MAINTENANCE_ANALYSE_TYPE_DEFAUT = os.getenv("MAINTENANCE_ANALYSE_TYPE_DEFAUT", "Inspection des produits finis")
+
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d'envoyer un message au support via un endpoint FastAPI.
 # Configuration SMTP via variables d'environnement (prod).
