@@ -15,7 +15,7 @@
  * validé est posé dans le filtre (« Tous les types » est grisé en Analyse).
  *
  * Adresse (static/maintenance_url.js) : affichage=historique (l'Analyse est
- * le défaut, non écrit), comparer=<axe>.
+ * le défaut, non écrit).
  * Chaque bandeau d'alerte est un bloc capturable (maintenance.alertes.synthese).
  *
  * Ce fichier ne lit les globales de la page (CTRL_STATE, getCtrlFilters,
@@ -25,9 +25,8 @@
   'use strict';
   if (window.MaintAnalyse) return;
 
-  var AXES = { machine: 'Machine', operateur: 'Opérateur', produit: 'Produit', adhesif: 'Adhésif' };
   // Analyse par défaut ; un seul type de contrôle à la fois.
-  var A = { mode: 'analyse', comparer: 'machine', data: null, cle: '', seq: 0, timer: null, erreur: '' };
+  var A = { mode: 'analyse', data: null, cle: '', seq: 0, timer: null, erreur: '' };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -178,12 +177,6 @@
       + '<div class="an-periode">' + esc(d.du && d.au ? ('Du ' + dateCourte(d.du) + ' au ' + dateCourte(d.au)) : 'Toute la période')
       + ' · anciens formulaires exclus</div>'
       + '<div class="an-tete-droite">'
-      +   '<span class="an-lbl">Comparer par</span>'
-      +   '<div class="an-seg" role="group" aria-label="Comparer par">'
-      +     Object.keys(AXES).map(function (k) {
-              return '<button type="button" class="' + (A.comparer === k ? 'active' : '') + '" onclick="MaintAnalyse.setComparer(\'' + k + '\')">' + AXES[k] + '</button>';
-            }).join('')
-      +   '</div>'
       +   '<a class="an-btn" href="/api/maintenance/alertes/stats?' + esc(A.cle) + (A.cle ? '&' : '') + 'format=csv" download>Exporter CSV</a>'
       + '</div></div>';
     d.alertes.forEach(function (a) { h += rendreAlerte(a); });
@@ -233,7 +226,6 @@
     h += '<div class="an-grille">' + (a.questions || []).map(function (q) {
       return q.type === 'value' ? carteValeur(q) : carteChoix(q);
     }).join('') + '</div>';
-    h += carteComparaison(a);
     return h + '</section>';
   }
 
@@ -384,36 +376,6 @@
     }).join('') + '</div>';
   }
 
-  // Comparaison par machine / opérateur / produit / adhésif : taux de NC et
-  // moyenne de chaque question chiffrée.
-  function carteComparaison(a) {
-    var lignes = (a.comparaisons || {})[A.comparer] || [];
-    var vq = (a.questions || []).filter(function (q) { return q.type === 'value'; });
-    var h = '<div class="an-carte an-carte-large"><div class="an-carte-titre">Par ' + esc(AXES[A.comparer].toLowerCase()) + '</div>';
-    if (!lignes.length) {
-      return h + '<div class="an-vide-mini">' + (A.comparer === 'produit' || A.comparer === 'adhesif'
-        ? 'Aucune validation rattachée à un dossier du planning.' : 'Rien à comparer.') + '</div></div>';
-    }
-    var maxNc = Math.max.apply(null, lignes.map(function (l) { return l.taux_nc || 0; }).concat([1]));
-    h += '<div class="an-table-wrap"><table class="an-table"><thead><tr><th>' + esc(AXES[A.comparer]) + '</th><th>Validations</th><th>Non-conformité</th>'
-      + vq.map(function (q) { return '<th>' + esc(q.label) + (q.unit ? ' (' + esc(q.unit) + ')' : '') + '<span>moyenne</span></th>'; }).join('')
-      + '</tr></thead><tbody>';
-    lignes.forEach(function (l) {
-      h += '<tr><td>' + esc(l.cle || '—') + '</td><td>' + nb(l.n, 0) + '</td>'
-        + '<td><span class="an-mini"><span class="an-mini-barre" style="width:' + ((l.taux_nc || 0) / maxNc * 100) + '%"></span></span>' + pct(l.taux_nc) + '</td>'
-        + vq.map(function (q) { var v = (l.moyennes || {})[String(q.index)]; return '<td>' + (v == null ? '—' : nb(v, 3)) + '</td>'; }).join('')
-        + '</tr>';
-    });
-    return h + '</tbody></table></div></div>';
-  }
-
-  function setComparer(k) {
-    if (!AXES[k]) return;
-    A.comparer = k;
-    rendre();
-    if (typeof window.renderCtrl === 'function') window.renderCtrl();  // l'adresse suit
-  }
-
   // Filtres d'un indicateur d'accueil : période glissante et machine.
   function contexteBloc() {
     var f = window.getCtrlFilters ? window.getCtrlFilters() : {};
@@ -474,12 +436,9 @@
   window.MaintAnalyse = {
     afficher: afficher,
     surFiltres: surFiltres,
-    setComparer: setComparer,
     mode: function () { return A.mode; },
-    comparer: function () { return A.comparer; },
     // Lecture de l'adresse (maintenance_url.js) : pas de rendu, la page suit.
-    appliquer: function (mode, comparer) {
-      if (comparer && AXES[comparer]) A.comparer = comparer;
+    appliquer: function (mode) {
       A.mode = mode === 'analyse' ? 'analyse' : 'historique';
       majBascule();
       if (A.mode === 'analyse') charger(true);

@@ -233,29 +233,10 @@ def _stats_valeur(it, lignes, idx):
     return out
 
 
-def _comparaison(lignes, items, cle):
-    groupes = {}
-    for l in lignes:
-        k = l.get(cle) or ""
-        g = groupes.setdefault(k, {"cle": k, "n": 0, "nc": 0, "_v": {}})
-        g["n"] += 1
-        if l["nc"]:
-            g["nc"] += 1
-        for i, it in enumerate(items):
-            if it.get("type") != "value":
-                continue
-            vals = [v for v in (_nombre(x) for x in _valeurs(l["responses"].get(str(i)))) if v is not None]
-            if vals:
-                g["_v"].setdefault(i, []).extend(vals)
-    out = []
-    for g in groupes.values():
-        moy = {str(i): round(sum(v) / len(v), 4) for i, v in g.pop("_v").items()}
-        out.append(dict(g, taux_nc=_pct(g["nc"], g["n"]), moyennes=moy))
-    return sorted(out, key=lambda g: (-g["n"], g["cle"]))
-
 
 def _produits(conn, dossiers: set) -> dict:
-    """{no_dossier: {ref_produit, adhesif}} depuis le planning et la fiche technique."""
+    """{no_dossier: {ref_produit, adhesif}} depuis le planning et la fiche
+    technique : colonne Produit de l'export CSV."""
     dossiers = sorted(d for d in dossiers if d)
     if not dossiers:
         return {}
@@ -274,7 +255,7 @@ def _produits(conn, dossiers: set) -> dict:
             tuple(dossiers) * 2,
         ).fetchall()
     except Exception:
-        return {}  # planning ou fiches absents : comparaison produit vide
+        return {}  # planning ou fiches absents : colonne Produit vide
     for r in rows:
         for k in (r["reference"], r["numero_of"]):
             if k in dossiers and (k not in out or not out[k]["ref_produit"]):
@@ -377,12 +358,6 @@ def statistiques(conn, alerte_ids, du=None, au=None, machine=None, operateur=Non
             questions.append(q)
         alertes.append({
             "id": al["id"], "nom": al["nom"] or "", "synthese": synthese, "questions": questions,
-            "comparaisons": {
-                "machine": _comparaison(lignes, items, "machine"),
-                "operateur": _comparaison(lignes, items, "operateur"),
-                "produit": _comparaison([l for l in lignes if l["produit"]], items, "produit"),
-                "adhesif": _comparaison([l for l in lignes if l["adhesif"]], items, "adhesif"),
-            },
             "_lignes": lignes, "_items": items,
         })
     return {"du": du.isoformat() if du else None, "au": au.isoformat() if au else None, "alertes": alertes}

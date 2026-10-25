@@ -21,7 +21,7 @@
  *                gestion=inhabituelles
  *   Contrôles    sous=liste ; historique : type_ctrl, operateur, machine,
  *                conformite, du, au, points (filtres de checklist), page,
- *                tri, auto=1, anciens=1, affichage=historique, comparer, alertes ;
+ *                tri, auto=1, anciens=1, affichage=historique, alertes ;
  *                liste : machine, tri
  *   Mes tâches   termines=1
  *   fenêtres     voir _MT_OUVREURS (une clé chacune, empilables)
@@ -196,11 +196,9 @@ function maintenanceParams() {
       if (ctrlLoadShowAutoClose()) p.auto = 1;
       if (ctrlLoadShowAnciens()) p.anciens = 1;
       // Affichage (static/maintenance_analyse.js) : Analyse par défaut, non
-      // écrite. Un endroit, il s'empile ; l'axe de comparaison remplace.
+      // écrite. Un endroit : il s'empile.
       if (window.MaintAnalyse && MaintAnalyse.mode() !== 'analyse') {
         p.affichage = 'historique'; nav += '/historique';
-      } else if (window.MaintAnalyse && MaintAnalyse.comparer() !== 'machine') {
-        p.comparer = MaintAnalyse.comparer();
       }
       if (_alertsFilterKind && _alertsFilterKind !== 'all') p.alertes = _alertsFilterKind;
     }
@@ -384,10 +382,9 @@ async function maintenanceAllerUrl(complet) {
       const pg = ou('page', '1');
       if (pg !== undefined) { const n = Math.max(0, (parseInt(pg, 10) || 1) - 1); if (n !== CTRL_STATE.page) { CTRL_STATE.page = n; ch = true; } }
       if (window.MaintAnalyse) {
-        const aff = ou('affichage', 'analyse'), cmp = ou('comparer', 'machine');
+        const aff = ou('affichage', 'analyse');
         const m2 = aff === undefined ? MaintAnalyse.mode() : (aff === 'historique' ? 'historique' : 'analyse');
-        const c2 = cmp === undefined ? MaintAnalyse.comparer() : cmp;
-        if (m2 !== MaintAnalyse.mode() || c2 !== MaintAnalyse.comparer()) { MaintAnalyse.appliquer(m2, c2); ch = true; }
+        if (m2 !== MaintAnalyse.mode()) { MaintAnalyse.appliquer(m2); ch = true; }
       }
       if (ch) { try { renderPointFilters(); } catch (e) {} renderCtrl(); }
       const al = ou('alertes', 'all');
