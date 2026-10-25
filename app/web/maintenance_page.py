@@ -129,10 +129,10 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 .ctrl-row-nc td:first-child{border-left:3px solid var(--danger)}
 .ctrl-row-nc:hover td{background:rgba(248,113,113,0.11)}
 .ctrl-row-nc td:first-child::before{content:"⚠ ";color:var(--danger);font-weight:900;margin-right:4px}
-/* Saisie faite avec un questionnaire qui a changé depuis : ses réponses sans
-   question actuelle sont regroupées dans la colonne « Ancien formulaire ». */
+/* Saisie faite avec un questionnaire qui a changé depuis (bouton « Anciens
+   formulaires ») : ligne grisée, réponses avec leur libellé d'époque. */
 .ctrl-row-ancien td{color:var(--muted)}
-/* Vue « Tous les types » : chaque réponse précédée de sa question. */
+/* Colonne Réponses : chaque réponse précédée de sa question. */
 .col-comment .ctrl-rep{display:inline-block;margin:1px 14px 1px 0;white-space:nowrap}
 .col-comment .ctrl-rep-q{font-size:11px;color:var(--muted);margin-right:3px}
 .col-comment .ctrl-rep b{font-weight:600;color:var(--text)}
@@ -140,8 +140,6 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 .col-comment .ctrl-rep-ancien b{font-weight:500;color:var(--muted)}
 .col-comment .ctrl-rep-com{color:var(--text2);font-style:italic;white-space:normal}
 .col-comment .ctrl-rep-fin{display:block;white-space:normal}
-.col-ancien{font-size:12px;color:var(--muted);min-width:220px}
-.col-ancien b{font-weight:600;color:var(--text2)}
 .ack-ancien{margin-top:14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)}
 .ack-ancien-kv{display:flex;gap:10px;font-size:12px;padding:3px 0}
 .ack-ancien-k{color:var(--muted);flex:0 0 45%}
@@ -9465,8 +9463,8 @@ function toggleAnciens(){
   ctrlResetPage();
   if(typeof renderCtrl === 'function') renderCtrl();
 }
-// Réponses d'une alerte, chacune précédée de sa question, pour la vue
-// « Tous les types ». Les réponses non conformes ressortent en rouge.
+// Réponses d'une alerte, chacune précédée de sa question (colonne Réponses
+// de l'historique). Les réponses non conformes ressortent en rouge.
 function _ackReponsesHtml(c){
   const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)] || {};
   const items = Array.isArray(meta.checklist_items) ? meta.checklist_items : [];
@@ -9934,32 +9932,16 @@ function renderCtrl(){
     if(av > bv) return  1 * dir;
     return 0;
   });
-  // Colonnes adaptatives : si un seul type est sélectionné et qu'il correspond
-  // à une alerte ayant une checklist, on affiche une colonne par point.
-  let extraCols = [];
-  // Sans filtre Type, si toutes les lignes affichées sont la même alerte, on
-  // passe aussi en colonnes par question : c'est le cas courant (une seule
-  // alerte avec questionnaire), et la colonne Commentaires ne dit pas à quelle
-  // question répond chaque valeur.
+  // Les réponses d'une alerte vont toutes dans la colonne Réponses, chacune
+  // précédée de sa question (_ackReponsesHtml), quel que soit le filtre : une
+  // ligne se lit d'un coup d'œil sans faire défiler une colonne par question.
+  // Un seul type affiché (filtre, ou toutes les lignes de la même alerte) :
+  // la colonne Type est masquée.
   let singleType = f.type || '';
   if(!singleType && filtered.length){
     const t0 = _displayType(filtered[0]);
     if(t0 && filtered.every(c => c._source === 'alert' && _displayType(c) === t0)) singleType = t0;
   }
-  if(singleType){
-    const ackMatch = merged.find(c => c._source === 'alert' && _displayType(c) === singleType);
-    if(ackMatch && ackMatch._alert_id != null && CTRL_STATE.alerts_meta){
-      const meta = CTRL_STATE.alerts_meta[String(ackMatch._alert_id)];
-      if(meta && Array.isArray(meta.checklist_items)){
-        extraCols = meta.checklist_items;
-      }
-    }
-  }
-
-  // Colonne « Ancien formulaire » : vue par type seulement (en vue « Tous »,
-  // la colonne Commentaires porte déjà ces réponses), et seulement si une
-  // ligne affichée en a.
-  const colAncien = !!singleType && filtered.some(c => c._hors_formulaire && c._hors_formulaire.length);
   // Reconstruire le thead
   const showExtra = getShowExtraCols();
   const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
@@ -9976,32 +9958,18 @@ function renderCtrl(){
     if(!singleType){
       h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
     }
-    for(const col of extraCols){
-      const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
-      const ptsSuffix = (col.type === 'value' && col.points_libres)
-        ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml((col.libelle_point || 'Mesure') + ' 1 / 2 / …') + '</div>'
-        : (col.type === 'value' && Array.isArray(col.points) && col.points.length > 1)
-        ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml(col.points.join(' / ')) + '</div>' : '';
-      h += '<th>' + escHtml(col.label || '') + unitSuffix + ptsSuffix + '</th>';
-    }
-    if(colAncien){
-      h += '<th title="Réponses à des questions retirées du questionnaire depuis la saisie">Ancien formulaire</th>';
-    }
     if(showExtra){
       h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
       h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
       h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
       h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
     }
-    // Vue mélangée : toutes les réponses, commentaires compris. Vue par
-    // alerte : les réponses ont leurs colonnes, il ne reste que le
-    // commentaire de fin de questionnaire.
-    h += '<th>' + (singleType ? 'Commentaire' : 'Réponses') + '</th>';
+    h += '<th>Réponses</th>';
     h += '<th aria-label="Actions"></th>';
     thead.innerHTML = h;
   }
 
-  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (colAncien ? 1 : 0) + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
+  const totalCols = 3 + (singleType ? 0 : 1) + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
   // v2.2.27 : pagination 50/page (pattern MyProd)
   const _totalFiltered = filtered.length;
@@ -10027,33 +9995,6 @@ function renderCtrl(){
       if(!singleType){
         cells += '<td>' + escHtml(_displayType(c)) + '</td>';
       }
-      for(let i = 0; i < extraCols.length; i++){
-        let val = '';
-        if(c._source === 'alert' && c._responses){
-          const r = c._responses[String(i)];
-          if(Array.isArray(r)){
-            val = (extraCols[i] && extraCols[i].type === 'value')
-              ? r.map(x => (x == null || x === '') ? '—' : String(x)).join(' / ')
-              : r.join(', ');
-          }
-          else if(r != null && r !== ''){ val = String(r); }
-          // Si "Autre" a été coché avec une précision, on l'ajoute au texte du cell.
-          const otherTxt = c._responses[String(i) + '_other'];
-          if(otherTxt != null && String(otherTxt).trim() !== ''){
-            val = val ? val + ' — ' + String(otherTxt) : String(otherTxt);
-          }
-          // Commentaire demandé par la réponse (case COM de l'éditeur).
-          const comTxt = c._responses[String(i) + '_comment'];
-          if(comTxt != null && String(comTxt).trim() !== ''){
-            val = val ? val + ' « ' + String(comTxt).trim() + ' »' : '« ' + String(comTxt).trim() + ' »';
-          }
-        }
-        cells += '<td>' + escHtml(val) + '</td>';
-      }
-      if(colAncien){
-        cells += '<td class="col-ancien">' + (c._hors_formulaire || []).map(h =>
-          '<b>' + escHtml(h.libelle || '') + '</b> ' + escHtml(h.valeur || '')).join(' · ') + '</td>';
-      }
       if(showExtra){
         // Dossier (no_dossier) : pill accent si renseigné, tiret sinon.
         const _nd = c._no_dossier || '';
@@ -10075,16 +10016,8 @@ function renderCtrl(){
       }
       // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
       // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
-      // En vue « Tous les types », une réponse d'alerte est précédée de sa
-      // question (_ackReponsesHtml) ; en vue par type, les colonnes la portent.
-      if(!singleType && c._source === 'alert'){
-        cells += '<td class="col-comment">' + _ackReponsesHtml(c) + '</td>';
-      } else {
-        const commentText = singleType
-          ? (c._source === 'alert' ? (c._raw_comment || '') : (c.commentaire || ''))
-          : (c.commentaire || '');
-        cells += '<td class="col-comment">' + escHtml(commentText) + '</td>';
-      }
+      cells += '<td class="col-comment">'
+        + (c._source === 'alert' ? _ackReponsesHtml(c) : escHtml(c.commentaire || '')) + '</td>';
       // Actions
       let actionHtml = '';
       if(c._source === 'alert'){
