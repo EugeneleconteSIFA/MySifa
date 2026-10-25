@@ -138,6 +138,8 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 .col-comment .ctrl-rep b{font-weight:600;color:var(--text)}
 .col-comment .ctrl-rep b.ctrl-rep-nc{color:var(--danger)}
 .col-comment .ctrl-rep-ancien b{font-weight:500;color:var(--muted)}
+.col-comment .ctrl-rep-com{color:var(--text2);font-style:italic;white-space:normal}
+.col-comment .ctrl-rep-fin{display:block;white-space:normal}
 .col-ancien{font-size:12px;color:var(--muted);min-width:220px}
 .col-ancien b{font-weight:600;color:var(--text2)}
 .ack-ancien{margin-top:14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)}
@@ -2285,7 +2287,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                   <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">↕</span></th>
                   <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">Opérateur<span class="sort-ico">↕</span></th>
                   <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">↕</span></th>
-                  <th>Commentaires</th>
+                  <th>Réponses</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -9474,19 +9476,23 @@ function _ackReponsesHtml(c){
     const r = resp[String(i)];
     const vals = Array.isArray(r) ? r : ((r == null || r === '') ? [] : [r]);
     const autre = resp[String(i) + '_other'];
-    if(!vals.length && (autre == null || autre === '')) return;
+    const com = String(resp[String(i) + '_comment'] == null ? '' : resp[String(i) + '_comment']).trim();
+    if(!vals.length && (autre == null || autre === '') && !com) return;
     const ncSet = (it.type === 'value') ? [] : (Array.isArray(it.nc_responses) ? it.nc_responses.map(String) : []);
     const nc = vals.some(v => ncSet.indexOf(String(v)) !== -1 || (it.other_is_nc && String(v) === 'Autre'));
     let txt = vals.join(it.type === 'value' ? ' / ' : ', ');
     if(txt && it.type === 'value' && it.unit) txt += ' ' + it.unit;
     if(autre != null && autre !== '') txt = txt ? txt + ' — ' + autre : String(autre);
     parts.push('<span class="ctrl-rep"><span class="ctrl-rep-q">' + escHtml(it.label || ('Question ' + (i + 1))) + '</span> '
-      + '<b' + (nc ? ' class="ctrl-rep-nc"' : '') + '>' + escHtml(txt) + '</b></span>');
+      + '<b' + (nc ? ' class="ctrl-rep-nc"' : '') + '>' + escHtml(txt) + '</b>'
+      + (com ? ' <span class="ctrl-rep-com">« ' + escHtml(com) + ' »</span>' : '') + '</span>');
   });
   (c._hors_formulaire || []).forEach(h => {
     parts.push('<span class="ctrl-rep ctrl-rep-ancien"><span class="ctrl-rep-q">' + escHtml(h.libelle || '') + '</span> <b>' + escHtml(h.valeur || '') + '</b></span>');
   });
-  if(c._raw_comment) parts.push('<span class="ctrl-rep">« ' + escHtml(c._raw_comment) + ' »</span>');
+  // Commentaire de fin de questionnaire, sur sa propre ligne : c'est une
+  // phrase, pas une valeur courte.
+  if(c._raw_comment) parts.push('<span class="ctrl-rep ctrl-rep-fin"><span class="ctrl-rep-q">Commentaire</span> <span class="ctrl-rep-com">« ' + escHtml(c._raw_comment) + ' »</span></span>');
   return parts.join('');
 }
 function ctrlIsAutoClose(c){
@@ -9987,7 +9993,10 @@ function renderCtrl(){
       h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
       h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
     }
-    h += '<th>Commentaires</th>';
+    // Vue mélangée : toutes les réponses, commentaires compris. Vue par
+    // alerte : les réponses ont leurs colonnes, il ne reste que le
+    // commentaire de fin de questionnaire.
+    h += '<th>' + (singleType ? 'Commentaire' : 'Réponses') + '</th>';
     h += '<th aria-label="Actions"></th>';
     thead.innerHTML = h;
   }
@@ -10032,6 +10041,11 @@ function renderCtrl(){
           const otherTxt = c._responses[String(i) + '_other'];
           if(otherTxt != null && String(otherTxt).trim() !== ''){
             val = val ? val + ' — ' + String(otherTxt) : String(otherTxt);
+          }
+          // Commentaire demandé par la réponse (case COM de l'éditeur).
+          const comTxt = c._responses[String(i) + '_comment'];
+          if(comTxt != null && String(comTxt).trim() !== ''){
+            val = val ? val + ' « ' + String(comTxt).trim() + ' »' : '« ' + String(comTxt).trim() + ' »';
           }
         }
         cells += '<td>' + escHtml(val) + '</td>';
