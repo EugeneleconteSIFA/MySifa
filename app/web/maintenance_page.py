@@ -3077,9 +3077,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/maintenance_url.js?v=6"></script>
-<link rel="stylesheet" href="/static/maintenance_analyse.css?v=1">
-<script src="/static/maintenance_analyse.js?v=2"></script>
+<script src="/static/maintenance_url.js?v=7"></script>
+<link rel="stylesheet" href="/static/maintenance_analyse.css?v=2">
+<script src="/static/maintenance_analyse.js?v=3"></script>
 <script>
 'use strict';
 

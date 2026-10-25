@@ -7,7 +7,7 @@ Analyse des alertes (onglet Analyse de l'historique des saisies).
    `est_non_conforme`.
 2. Statistiques sur une base en mémoire : fermetures auto et esquives hors
    des chiffres, anciens formulaires écartés, filtres (conformité, question,
-   machine), valeurs, mesures multiples, comparaisons, période précédente.
+   machine), valeurs, mesures multiples, produit de l'export, période précédente.
 
 Lancer : python3 tests/test_alertes_statistiques.py
 """
@@ -164,10 +164,8 @@ check("valeur : cible", q1["cible"], 20.0)
 check("mesures multiples : toutes les mesures comptées", q3["resume"]["n"], 4)
 check("mesures multiples : écart moyen entre fronts", round(q3["multiples"]["ecart"]["moyenne"], 3), round((0.10 + 0.02) / 2, 3))
 check("mesures multiples : moyenne du front 1", round(q3["multiples"]["par_position"][0]["moyenne"], 3), 1.725)
-mach = {g["cle"]: (g["n"], g["taux_nc"]) for g in a["comparaisons"]["machine"]}
-check("comparaison par machine", mach, {"C1": (2, 50.0), "C2": (2, 50.0)})
-check("comparaison par produit (planning)", [(g["cle"], g["n"]) for g in a["comparaisons"]["produit"]], [("ETQ-A", 2)])
-check("comparaison par adhésif (fiche technique)", [g["cle"] for g in a["comparaisons"]["adhesif"]], ["Acrylique"])
+check("export : produit et adhésif du dossier (planning, fiche)",
+      sorted({(l["produit"], l["adhesif"]) for l in a["_lignes"]}), [("", ""), ("ETQ-A", "Acrylique")])
 
 nc = statistiques(conn, [1], du=date(2026, 10, 18), au=date(2026, 10, 24), conformite="nc")["alertes"][0]["synthese"]
 check("filtre conformité NC", nc["validations"], 2)
