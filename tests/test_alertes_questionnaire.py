@@ -143,6 +143,11 @@ doublon = [dict(v4[0]), dict(v4[0], label="Copie")]
 attribuer_ids(doublon, v4)
 check("identifiant en double : le second est renouvelé", doublon[0]["id"] != doublon[1]["id"], True)
 
+# Questionnaire sans identifiants des deux côtés : lu par position.
+sans = [{"type": "choice", "label": "A", "responses": ["Oui"]}, {"type": "value", "label": "B"}]
+lu = lire_saisie({"0": ["Oui"], "1": 3}, photo(sans), sans)
+check("sans identifiants : lu par position", (lu["responses"], lu["ancien"]), ({"0": ["Oui"], "1": 3}, False))
+
 print()
 print("ÉCHEC : " + ", ".join(FAIL) if FAIL else "Tous les contrôles passent.")
 sys.exit(1 if FAIL else 0)

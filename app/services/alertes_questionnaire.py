@@ -220,6 +220,10 @@ def _ranger(responses, questionnaire, items_actuels: list):
             continue
         q = q if isinstance(q, dict) else {}
         cible = ou_actuel.get(q.get("id"))
+        if cible is None and not q.get("id") and j < len(items_actuels) and not items_actuels[j].get("id"):
+            # Ni la photo ni le questionnaire n'ont d'identifiants : on retombe
+            # sur la position, comme avant les identifiants.
+            cible = (j, _type(items_actuels[j]))
         if cible and cible[1] == _type(q):
             i = cible[0]
             for suffixe, v in parts.items():
