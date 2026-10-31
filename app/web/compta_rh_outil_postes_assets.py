@@ -24,7 +24,9 @@ RH_OUTIL_POSTES_CSS = r"""
 .rho-chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .rho-chips-vide{font-size:12px;color:var(--muted)}
 /* « Exigé pour » : un service et ses postes forment un seul bloc */
-.rho-svc-bloc{border:1px solid var(--border);border-radius:9px;background:var(--bg);overflow:hidden}
+/* flex-shrink:0 : la liste est une colonne flex de hauteur limitée ; sans lui
+   le bloc est comprimé et ses derniers postes disparaissent. */
+.rho-svc-bloc{flex-shrink:0;border:1px solid var(--border);border-radius:9px;background:var(--bg)}
 .rho-svc-bloc:hover{border-color:var(--accent)}
 .rho-svc-bloc>.rho-check-row{border:0;border-radius:0;background:transparent}
 .rho-svc-postes{margin:0 10px 8px 19px;padding:2px 0 2px 14px;border-left:2px solid var(--border)}
