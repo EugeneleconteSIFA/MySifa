@@ -14,6 +14,7 @@ RH_OUTIL_CATALOGUES_CSS = r"""
 .rho-cv-tab:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
 .rho-cv-tab.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .rho-cv-body{padding:16px 20px 20px}
+.rho-cv .rho-list{max-height:none;overflow:visible}
 .rho-cv .rho-cat-add{margin:0 0 12px}
 .rho-cv .rho-cat-legend{margin:0 0 16px}
 .rho-cv .rho-input,.rho-cv .rho-select,.rho-cv .rho-cat-row .rho-select{background:var(--card)}
