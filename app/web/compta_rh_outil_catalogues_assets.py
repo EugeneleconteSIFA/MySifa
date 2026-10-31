@@ -104,8 +104,12 @@ function rhOutilExigePour(L,x,apres){
   const peindre=()=>{
     liste.classList.toggle('off',tousBox.checked);
     cases.forEach(b=>{b.disabled=tousBox.checked;});
+    // Service coché : tous ses postes s'affichent cochés (ils sont couverts),
+    // leur choix individuel est mis de côté et rendu si on décoche le service.
     casesPostes.forEach(c=>{
       const couvert=cases.get(c.service).checked;
+      if(couvert&&c.choix===undefined){c.choix=c.box.checked;c.box.checked=true;}
+      else if(!couvert&&c.choix!==undefined){c.box.checked=c.choix;delete c.choix;}
       c.box.disabled=tousBox.checked||couvert;
       c.ligne.classList.toggle('couvert',couvert);
     });
