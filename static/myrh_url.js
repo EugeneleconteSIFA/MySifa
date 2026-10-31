@@ -8,7 +8,8 @@
  *
  * Inventaire du 18/10/2026, par nom d'état : filtres du tableau (dossier
  * complet / incomplet, service, contrat) ; fenêtres : nouvel employé,
- * contrat d'un employé, pièces d'un élément, catégories de formations,
+ * contrat d'un employé (`nouvel_employe=existant|nouveau` : suivre un compte
+ * ou en créer un), pièces d'un élément, catégories de formations,
  * justificatifs d'une formation, « exigé pour ».
  * 31/10/2026 : onglet Catalogues (`onglet=catalogues`, `liste=documents` ;
  * formations par défaut), qui remplace la fenêtre du catalogue. L'ancien
@@ -29,6 +30,12 @@ function myrhFenetreOuverte(cle, id) {
   _myrhPile.push({ cle, id: String(id), el: null, essais: 0, avant: new Set(document.querySelectorAll('.rho-ov')) });
   myrhSyncUrl();
 }
+// Une fenêtre change d'état sans se fermer (Ajouter un employé : compte
+// existant / nouveau compte) : l'entrée du dessus suit.
+function myrhFenetreChange(cle, id) {
+  const f = [..._myrhPile].reverse().find(x => x.cle === cle);
+  if (f) { f.id = String(id); myrhSyncUrl(); }
+}
 function _myrhDessus() {
   // Repère l'élément des fenêtres qui viennent de s'ouvrir, oublie les fermées.
   _myrhPile.forEach(f => {
@@ -42,7 +49,7 @@ function _myrhDessus() {
 }
 
 const _MYRH_OUVREURS = [
-  ['rhOutilNouvelEmploye',   'nouvel_employe', () => 'formulaire'],
+  ['rhOutilNouvelEmploye',   'nouvel_employe', a => (a[0] === 'nouveau' && S.rhOutilPeutCreer) ? 'nouveau' : 'existant'],
   ['rhOutilModifierContrat', 'contrat',        a => a[0] && a[0].id],
   ['rhOutilPieces',          'pieces',         a => (a[0] && a[1] && a[2]) ? a[0].cle + ':' + a[1].id + ':' + a[2].id : null],
   ['rhOutilGererCategories', 'categories',     () => 'formations'],
@@ -114,7 +121,8 @@ const _myrhRafraichir = () => {
 };
 
 const _MYRH_REOUVRIR = {
-  nouvel_employe: () => rhOutilNouvelEmploye(),
+  // `formulaire` : lien d'avant le 31/10/2026, quand la fenêtre ne faisait que créer.
+  nouvel_employe: v => rhOutilNouvelEmploye(v === 'nouveau' || v === 'formulaire' ? 'nouveau' : 'existant'),
   contrat: v => { const m = _myrhMembre(v); if (m) rhOutilModifierContrat(m); },
   pieces: v => {
     const [cle, mid, xid] = v.split(':'); const L = _myrhListe(cle), m = _myrhMembre(mid);

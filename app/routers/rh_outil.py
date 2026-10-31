@@ -133,7 +133,12 @@ def _effacer_lignes_pieces(conn, rows) -> list:
 
 
 class MembreIn(BaseModel):
+    """Suivi d'un compte existant. Arrivée et contrat facultatifs : le
+    contrat déjà dans la fiche Paie reste tel quel s'il n'est pas fourni."""
     user_id: int
+    date_arrivee: Optional[str] = None
+    contrat_type: Optional[str] = None
+    contrat_fin: Optional[str] = None
 
 
 class MembrePatch(BaseModel):
@@ -393,20 +398,26 @@ def _doublon(conn, cfg: dict, libelle: str, sauf_id: Optional[int] = None) -> bo
 
 @router.get("/employes")
 def list_employes(request: Request):
-    """Tous les comptes, actifs ou non, pour le sélecteur d'ajout."""
+    """Tous les comptes, actifs ou non, pour suivre un compte existant (et
+    signaler un doublon avant d'en créer un). Contrat lu dans la fiche Paie."""
     _require(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT u.id, u.nom, u.email, u.role, u.actif,
-                      (m.id IS NOT NULL) AS deja_ajoute
+                      (m.id IS NOT NULL) AS deja_ajoute,
+                      pe.contrat_type, pe.date_debut AS contrat_debut, pe.date_fin AS contrat_fin
                  FROM users u
                  LEFT JOIN rh_outil_membres m ON m.user_id = u.id
+                 LEFT JOIN paie_employes pe ON pe.user_id = u.id
                 WHERE LOWER(COALESCE(u.nom,'')) != 'administrateur'
                 ORDER BY u.nom COLLATE NOCASE"""
         ).fetchall()
     return {"employes": [
         {"user_id": r["id"], "nom": r["nom"], "email": r["email"], "role": r["role"],
-         "actif": bool(r["actif"]), "deja_ajoute": bool(r["deja_ajoute"])}
+         "service_label": role_label(r["role"] or ""),
+         "actif": bool(r["actif"]), "deja_ajoute": bool(r["deja_ajoute"]),
+         "contrat_type": r["contrat_type"] or None,
+         "contrat_debut": r["contrat_debut"], "contrat_fin": r["contrat_fin"]}
         for r in rows
     ]}
 
@@ -561,24 +572,59 @@ def list_membres(request: Request):
 
 @router.post("/membres")
 def add_membre(payload: MembreIn, request: Request):
+    """Inscrit au suivi un compte MySifa qui existe déjà (aucun compte créé).
+    Contrat fourni : écrit dans la fiche Paie AVANT les attributions, pour que
+    les documents exigés pour ce contrat arrivent tout de suite."""
     user = _require(request)
+    arrivee = _date(payload.date_arrivee)
+    contrat = (payload.contrat_type or "").strip() or None
+    if contrat and contrat not in CONTRATS_TYPES:
+        raise HTTPException(400, "Type de contrat invalide.")
+    fin = None if (not contrat or contrat in CONTRATS_DUREE_INDETERMINEE) else _date(payload.contrat_fin)
+    if arrivee and fin and fin < arrivee:
+        raise HTTPException(400, "La fin de contrat précède la date d'arrivée.")
     with get_db() as conn:
         emp = conn.execute("SELECT id, nom FROM users WHERE id=?", (payload.user_id,)).fetchone()
         if not emp:
             raise HTTPException(404, "Employé introuvable.")
         cur = conn.execute(
-            "INSERT OR IGNORE INTO rh_outil_membres (user_id, ajoute_le, ajoute_par) VALUES (?,?,?)",
-            (emp["id"], _now(), user.get("nom")),
+            "INSERT OR IGNORE INTO rh_outil_membres (user_id, ajoute_le, ajoute_par, date_arrivee) VALUES (?,?,?,?)",
+            (emp["id"], _now(), user.get("nom"), arrivee),
         )
         if not cur.rowcount:
             raise HTTPException(409, "Employé déjà dans la liste.")
-        _attribuer_obligatoires(conn, membre_id=cur.lastrowid)
-        _attribuer_par_cible(conn, membre_id=cur.lastrowid)
-        _justificatifs_lies(conn, _formations_du_membre(conn, cur.lastrowid))
+        membre_id = cur.lastrowid
+        if contrat:
+            # Seules les trois colonnes du contrat : le reste de la fiche Paie
+            # appartient à la comptabilité. Début gardé si le type ne change pas.
+            avant = conn.execute("SELECT contrat_type, date_debut FROM paie_employes WHERE user_id=?",
+                                 (emp["id"],)).fetchone()
+            debut = (avant["date_debut"] if avant and avant["contrat_type"] == contrat and avant["date_debut"]
+                     else arrivee)
+            now = datetime.now().isoformat()
+            if avant:
+                conn.execute(
+                    """UPDATE paie_employes SET contrat_type=?, date_debut=?, date_fin=?,
+                              updated_at=?, updated_by=? WHERE user_id=?""",
+                    (contrat, debut, fin, now, user.get("email"), emp["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO paie_employes (user_id, contrat_type, date_debut, date_fin, updated_at, updated_by)
+                       VALUES (?,?,?,?,?,?)""",
+                    (emp["id"], contrat, debut, fin, now, user.get("email")),
+                )
+        n = _attribuer_obligatoires(conn, membre_id=membre_id)
+        n += _attribuer_par_cible(conn, membre_id=membre_id)
+        n += _justificatifs_lies(conn, _formations_du_membre(conn, membre_id))
         conn.commit()
     log_action(user=user, action="CREATE", module="rh_outil",
-               objet=f"Outil RH · ajout de {emp['nom']}", request=request)
-    return {"success": True}
+               objet=f"Outil RH · suivi du compte existant {emp['nom']}"
+                     + (f", arrivée le {_jour_fr(arrivee)}" if arrivee else "")
+                     + (f" ({contrat})" if contrat else "")
+                     + (f" · {n} élément(s) attribué(s)" if n else ""),
+               request=request)
+    return {"success": True, "membre_id": membre_id, "attribues": n}
 
 
 @router.patch("/membres/{membre_id}")
