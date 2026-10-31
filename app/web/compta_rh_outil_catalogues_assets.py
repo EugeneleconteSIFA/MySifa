@@ -14,11 +14,34 @@ RH_OUTIL_CATALOGUES_CSS = r"""
 .rho-cv-tab:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
 .rho-cv-tab.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .rho-cv-body{padding:16px 20px 20px}
-.rho-cv .rho-list{max-height:none;overflow:visible}
-.rho-cv .rho-cat-add{margin:0 0 12px}
+.rho-cv .rho-cat-add{margin:0 0 10px}
 .rho-cv .rho-cat-legend{margin:0 0 16px}
-.rho-cv .rho-input,.rho-cv .rho-select,.rho-cv .rho-cat-row .rho-select{background:var(--card)}
-.rho-cv .rho-cat-add .rho-select{max-width:220px}
+.rho-cv .rho-input,.rho-cv .rho-select{background:var(--card)}
+.rho-cv .rho-cat-add .rho-select{max-width:240px}
+/* Le catalogue est un tableau : un cadre, un en-tête, une ligne par élément */
+.rho-cv .rho-list{max-height:none;overflow:visible;gap:0}
+.rho-cv-table{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.rho-cv .rho-cat-row{gap:12px;padding:6px 12px;border-bottom:1px solid var(--border);transition:background .15s}
+.rho-cv .rho-list .rho-list>.rho-cat-row:last-child{border-bottom:0}
+.rho-cv .rho-sect:last-child .rho-cat-row:last-child,.rho-cv-table>.rho-cat-row:last-child{border-bottom:0}
+.rho-cv .rho-cat-row:not(.rho-cat-head):hover{background:var(--bg)}
+.rho-cv .rho-cat-head{padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
+.rho-cv .rho-sect{margin:0}
+.rho-cv .rho-sect-t{margin:0;padding:12px 12px 6px;color:var(--accent);border-bottom:1px solid var(--border)}
+.rho-cv .rho-sect+.rho-sect .rho-sect-t{border-top:1px solid var(--border)}
+/* Intitulé : du texte qu'on édite sur place, encadré seulement au survol et à la saisie */
+.rho-cv .rho-cat-row .rho-input{border-color:transparent;background:transparent;padding:7px 8px;margin-left:-8px;width:calc(100% + 8px);font-size:13px;font-weight:600;color:var(--text)}
+.rho-cv .rho-cat-row:hover .rho-input{border-color:var(--border);background:var(--card)}
+.rho-cv .rho-cat-row .rho-input:focus{border-color:var(--accent);background:var(--card)}
+.rho-cv .rho-cat-row .rho-select{background:var(--card)}
+.rho-cv .rho-cat-row .rho-mini{background:var(--card);padding:6px 9px}
+.rho-cv .rho-cat-row .rho-mini.on{background:var(--accent-bg)}
+@media (min-width:821px){
+  .rho-cv .rho-cat-row.form{grid-template-columns:minmax(220px,2.2fr) minmax(140px,1fr) minmax(140px,1fr) minmax(130px,1fr) 84px 34px}
+  .rho-cv .rho-cat-row.doc{grid-template-columns:minmax(220px,2.2fr) minmax(150px,1fr) minmax(150px,1fr) 84px 34px}
+}
+/* MyRH : pages plus larges que le gabarit commun (tableaux à nombreuses colonnes) */
+.container.rho-large{max-width:1480px}
 """
 
 RH_OUTIL_CATALOGUES_JS = r"""
@@ -259,7 +282,7 @@ const _rhoCatVues={};
 function rhOutilCatalogueVue(L){
   if(_rhoCatVues[L.cle])return _rhoCatVues[L.cle];
   const base='/api/rh-outil/'+L.cle+'/catalogue';
-  const listEl=h('div',{className:'rho-list'},h('div',{className:'rho-empty'},'Chargement…'));
+  const listEl=h('div',{className:'rho-list rho-cv-table'},h('div',{className:'rho-empty'},'Chargement…'));
   const titre=h('h3',null,L.catalogue);
   const nouvCat=L.categories?h('select',{className:'rho-select','aria-label':'Catégorie de la nouvelle formation'}):null;
   // Catégories : elles changent dans leur fenêtre, la liste d'ajout suit.
