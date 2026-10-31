@@ -11,8 +11,8 @@
  * contrat d'un employé (`nouvel_employe=existant|nouveau` : suivre un compte
  * ou en créer un), pièces d'un élément, catégories de formations,
  * justificatifs d'une formation, « exigé pour ».
- * 31/10/2026 : onglet Catalogues (`onglet=catalogues`, `liste=documents|postes` ;
- * formations par défaut), qui remplace la fenêtre du catalogue. L'ancien
+ * 31/10/2026 : onglet Catalogues (`onglet=catalogues`, `liste=formations|postes` ;
+ * documents administratifs par défaut, premier sous-onglet), qui remplace la fenêtre du catalogue. L'ancien
  * `catalogue=<liste>` mène à l'onglet. Fenêtre `postes=<membre>` : postes
  * occupés par un employé.
  * Hors adresse : les confirmations et le petit sélecteur d'ajout (sous-étape
@@ -74,8 +74,9 @@ function myrhEnvelopper() {
 }
 
 const _MYRH_ONGLETS = ['employes', 'catalogues'];
-// Sous-onglets de Catalogues : les deux catalogues, puis les postes.
-const _myrhListes = () => (typeof RH_OUTIL_LISTES !== 'undefined' ? RH_OUTIL_LISTES : []).map(L => L.cle).concat(['postes']);
+// Sous-onglets de Catalogues, dans l'ordre de l'écran (RHO_CATALOGUES_ORDRE) :
+// le premier est le défaut, jamais écrit dans l'adresse.
+const _myrhListes = () => (typeof RHO_CATALOGUES_ORDRE !== 'undefined' ? RHO_CATALOGUES_ORDRE : ['documents', 'formations', 'postes']);
 
 function myrhParams() {
   const p = {};

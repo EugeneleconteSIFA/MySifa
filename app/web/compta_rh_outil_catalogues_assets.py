@@ -438,12 +438,16 @@ function rhOutilCataloguesRafraichir(){Object.values(_rhoCatVues).forEach(v=>v.r
 // Ancien point d'entrée (fenêtre du catalogue) : mène à l'onglet.
 function rhOutilCatalogue(L){set({rhOnglet:'catalogues',rhCatalogue:L.cle});}
 
+// Ordre des sous-onglets de Catalogues, de gauche à droite ; le premier est
+// celui par défaut (absent de l'adresse). Lu aussi par static/myrh_url.js.
+const RHO_CATALOGUES_ORDRE=['documents','formations','postes'];
 function renderRhOutilCatalogues(){
   // Arrivée directe sur l'onglet : catégories, services et employés d'abord.
   if(!S.rhOutilLoaded&&!S._rhOutilAutoLoad){S._rhOutilAutoLoad=true;rhOutilLoad();}
-  // Sous-onglets : les deux catalogues, puis les postes (compta_rh_outil_postes_assets.py).
-  const choix=RH_OUTIL_LISTES.map(x=>({cle:x.cle,titre:x.titre,icone:x.categories?'layers':'file-text',L:x}))
+  // Sous-onglets : les deux catalogues et les postes (compta_rh_outil_postes_assets.py).
+  const tous=RH_OUTIL_LISTES.map(x=>({cle:x.cle,titre:x.titre,icone:x.categories?'layers':'file-text',L:x}))
     .concat([{cle:'postes',titre:'Postes',icone:'tag',L:null}]);
+  const choix=RHO_CATALOGUES_ORDRE.map(c=>tous.find(x=>x.cle===c)).filter(Boolean);
   const actif=choix.find(x=>x.cle===S.rhCatalogue)||choix[0];
   const onglets=h('div',{className:'rho-cv-tabs',role:'tablist'},...choix.map(x=>
     h('button',{type:'button',role:'tab','aria-selected':String(x===actif),className:'rho-cv-tab'+(x===actif?' on':''),
