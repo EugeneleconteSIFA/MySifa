@@ -1708,7 +1708,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/portail_url.js?v=2"></script>
 <script src="/static/expe_url.js?v=3"></script>
 <script src="/static/compta_url.js?v=1"></script>
-<script src="/static/myrh_url.js?v=1"></script>
+<script src="/static/myrh_url.js?v=2"></script>
 <script src="/static/motion.js" defer></script>
 <script>
 const API=window.location.origin;
@@ -10780,7 +10780,7 @@ function __restoreScroll(pos){
 // saisie perd le focus et la fenetre revient en haut — la frappe part dans le
 // vide. On note le chemin du champ actif et le defilement des modals avant le
 // rendu, puis on les reapplique si l'element au meme chemin est le meme champ.
-const MODAL_KEEP_SEL='.add-row-modal,.expe-devis-modal-overlay,.expe-trp-overlay,.expe-trp-modal-overlay,.contact-modal-overlay,[role="dialog"]';
+const MODAL_KEEP_SEL='.rho-cv,.add-row-modal,.expe-devis-modal-overlay,.expe-trp-overlay,.expe-trp-modal-overlay,.contact-modal-overlay,[role="dialog"]';
 function __domPath(el,root){
   const path=[];
   while(el&&el!==root){
