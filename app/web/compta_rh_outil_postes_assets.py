@@ -23,8 +23,20 @@ RH_OUTIL_POSTES_CSS = r"""
 .rho-chip:hover{border-color:var(--accent);color:var(--accent)}
 .rho-chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .rho-chips-vide{font-size:12px;color:var(--muted)}
-.rho-check-row.sous{margin-left:26px;padding:4px 10px;font-size:12.5px}
-.rho-check-row.sous.couvert{opacity:.5}
+/* « Exigé pour » : un service et ses postes forment un seul bloc */
+.rho-svc-bloc{border:1px solid var(--border);border-radius:9px;background:var(--bg);overflow:hidden}
+.rho-svc-bloc:hover{border-color:var(--accent)}
+.rho-svc-bloc>.rho-check-row{border:0;border-radius:0;background:transparent}
+.rho-svc-postes{margin:0 10px 8px 19px;padding:2px 0 2px 14px;border-left:2px solid var(--border)}
+.rho-svc-postes-t{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 2px 2px}
+.rho-check-row.sous{border:0;border-radius:7px;background:transparent;padding:4px 8px;font-size:12.5px;color:var(--text2)}
+.rho-check-row.sous:hover{background:var(--card)}
+.rho-check-row.sous.couvert{opacity:.55;cursor:default}
+.rho-inclus{display:none;font-size:11px;font-style:italic;color:var(--muted)}
+.rho-check-row.sous.couvert .rho-inclus{display:inline}
+.rho-cv .rho-sect.vide .rho-sect-t{color:var(--muted)}
+.rho-cv .rho-cat-row.rho-poste-vide{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12.5px;font-style:italic;color:var(--muted)}
+.rho-cv .rho-cat-row.rho-poste-vide .rho-mini{width:auto;font-style:normal}
 .rho-poste-grp{margin-top:12px}
 .rho-poste-grp:first-child{margin-top:0}
 """
@@ -157,11 +169,21 @@ function rhOutilPostesVue(){
     };
     const entete=h('div',{className:'rho-cat-row poste rho-cat-head','aria-hidden':'true'},
       h('span',null,'Intitulé'),h('span',null,'Service'),h('span',null,'Formations'),h('span',null,'Employés'),h('span',null,''));
-    if(!postes.length){listEl.replaceChildren(h('div',{className:'rho-empty'},'Aucun poste. Ajoutez le premier ci-dessus.'));return;}
-    const groupes=(S.rhOutilServices||[]).map(s=>({libelle:s.label,items:postes.filter(p=>p.service===s.code)})).filter(g=>g.items.length);
-    listEl.replaceChildren(entete,...groupes.map(g=>h('div',{className:'rho-sect'},
-      h('div',{className:'rho-sect-t'},g.libelle+' · '+g.items.length),
-      h('div',{className:'rho-list'},...g.items.map(ligne)))));
+    // Tous les services : ceux qui ont des postes d'abord, puis ceux qui n'en
+    // ont aucun, pour montrer ce qui reste à décrire.
+    const groupes=(S.rhOutilServices||[]).map(s=>({code:s.code,libelle:s.label,items:postes.filter(p=>p.service===s.code)}));
+    const pleins=groupes.filter(g=>g.items.length),vides=groupes.filter(g=>!g.items.length);
+    // Raccourci : préremplit le service dans la ligne d'ajout.
+    const ajouterDans=code=>{nouvSvc.value=code;nouv.focus();nouv.scrollIntoView({block:'center',behavior:'smooth'});};
+    listEl.replaceChildren(entete,
+      ...pleins.map(g=>h('div',{className:'rho-sect'},
+        h('div',{className:'rho-sect-t'},g.libelle+' · '+g.items.length),
+        h('div',{className:'rho-list'},...g.items.map(ligne)))),
+      ...vides.map(g=>h('div',{className:'rho-sect vide'},
+        h('div',{className:'rho-sect-t'},g.libelle+' · 0'),
+        h('div',{className:'rho-cat-row rho-poste-vide'},
+          h('span',null,'Aucun poste'),
+          h('button',{type:'button',className:'rho-mini',onClick:()=>ajouterDans(g.code)},iconEl('plus',11),'Ajouter un poste')))));
   };
   const nouv=h('input',{type:'text',className:'rho-input',placeholder:'Nouveau poste…',maxlength:'120',...RHO_NO_AUTOFILL});
   const ajouter=async()=>{
