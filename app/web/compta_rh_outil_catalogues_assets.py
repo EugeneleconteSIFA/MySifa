@@ -82,15 +82,22 @@ function rhOutilExigePour(L,x,apres){
     const nb=membres.filter(sv.membre).length;
     const ligneSvc=h('label',{className:'rho-check-row'},box,h('span',{style:{flex:1}},sv.label),
       h('span',{className:'rho-sub'},nb?nb+' employé'+(nb>1?'s':'')+' suivi'+(nb>1?'s':''):''));
-    if(!parPoste)return [ligneSvc];
-    return [ligneSvc,...rhOutilPostesDe(sv.code).map(p=>{
-      const b=rhOutilCase(!x.obligatoire&&postesAvant.has(p.id),p.libelle);
-      const n=nbPoste(p.id);
-      const ligne=h('label',{className:'rho-check-row sous'},b,h('span',{style:{flex:1}},p.libelle),
-        h('span',{className:'rho-sub'},n?n+' employé'+(n>1?'s':''):''));
-      casesPostes.set(p.id,{box:b,service:sv.code,ligne});
-      return ligne;
-    })];
+    const postesSvc=parPoste?rhOutilPostesDe(sv.code):[];
+    if(!postesSvc.length)return [ligneSvc];
+    // Service et postes dans un même bloc : les postes, rattachés par un
+    // trait, se lisent comme des subdivisions du service.
+    return [h('div',{className:'rho-svc-bloc'},ligneSvc,
+      h('div',{className:'rho-svc-postes'},
+        h('div',{className:'rho-svc-postes-t'},'Postes'),
+        ...postesSvc.map(p=>{
+          const b=rhOutilCase(!x.obligatoire&&postesAvant.has(p.id),p.libelle);
+          const n=nbPoste(p.id);
+          const ligne=h('label',{className:'rho-check-row sous'},b,h('span',{style:{flex:1}},p.libelle),
+            h('span',{className:'rho-inclus'},'compris dans le service'),
+            h('span',{className:'rho-sub'},n?n+' employé'+(n>1?'s':''):''));
+          casesPostes.set(p.id,{box:b,service:sv.code,ligne});
+          return ligne;
+        })))];
   }));
   // « Tous les employés » coché : les cibles sont grisées et ne comptent pas.
   // Un service coché couvre déjà ses postes : ils sont grisés.
