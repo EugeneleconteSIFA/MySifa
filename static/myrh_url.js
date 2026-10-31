@@ -11,9 +11,10 @@
  * contrat d'un employé (`nouvel_employe=existant|nouveau` : suivre un compte
  * ou en créer un), pièces d'un élément, catégories de formations,
  * justificatifs d'une formation, « exigé pour ».
- * 31/10/2026 : onglet Catalogues (`onglet=catalogues`, `liste=documents` ;
+ * 31/10/2026 : onglet Catalogues (`onglet=catalogues`, `liste=documents|postes` ;
  * formations par défaut), qui remplace la fenêtre du catalogue. L'ancien
- * `catalogue=<liste>` mène à l'onglet.
+ * `catalogue=<liste>` mène à l'onglet. Fenêtre `postes=<membre>` : postes
+ * occupés par un employé.
  * Hors adresse : les confirmations et le petit sélecteur d'ajout (sous-étape
  * d'un geste).
  *
@@ -51,6 +52,7 @@ function _myrhDessus() {
 const _MYRH_OUVREURS = [
   ['rhOutilNouvelEmploye',   'nouvel_employe', a => (a[0] === 'nouveau' && S.rhOutilPeutCreer) ? 'nouveau' : 'existant'],
   ['rhOutilModifierContrat', 'contrat',        a => a[0] && a[0].id],
+  ['rhOutilPostesEmploye',   'postes',         a => a[0] && a[0].id],
   ['rhOutilPieces',          'pieces',         a => (a[0] && a[1] && a[2]) ? a[0].cle + ':' + a[1].id + ':' + a[2].id : null],
   ['rhOutilGererCategories', 'categories',     () => 'formations'],
   ['rhOutilJustificatifs',   'justificatifs',  a => a[0] && a[0].id],
@@ -72,7 +74,8 @@ function myrhEnvelopper() {
 }
 
 const _MYRH_ONGLETS = ['employes', 'catalogues'];
-const _myrhListes = () => (typeof RH_OUTIL_LISTES !== 'undefined' ? RH_OUTIL_LISTES : []).map(L => L.cle);
+// Sous-onglets de Catalogues : les deux catalogues, puis les postes.
+const _myrhListes = () => (typeof RH_OUTIL_LISTES !== 'undefined' ? RH_OUTIL_LISTES : []).map(L => L.cle).concat(['postes']);
 
 function myrhParams() {
   const p = {};
@@ -124,6 +127,7 @@ const _MYRH_REOUVRIR = {
   // `formulaire` : lien d'avant le 31/10/2026, quand la fenêtre ne faisait que créer.
   nouvel_employe: v => rhOutilNouvelEmploye(v === 'nouveau' || v === 'formulaire' ? 'nouveau' : 'existant'),
   contrat: v => { const m = _myrhMembre(v); if (m) rhOutilModifierContrat(m); },
+  postes: v => { const m = _myrhMembre(v); if (m) rhOutilPostesEmploye(m); },
   pieces: v => {
     const [cle, mid, xid] = v.split(':'); const L = _myrhListe(cle), m = _myrhMembre(mid);
     const x = m && (m[cle] || []).find(i => String(i.id) === xid);
