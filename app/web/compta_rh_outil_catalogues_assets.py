@@ -1,10 +1,23 @@
 """MyCompta — Outil RH : catalogues (formations, documents administratifs).
 
 « Exigé pour » (tous / services / contrats), catégories et justificatifs des
-formations, fenêtres de catalogue. Concaténé après RH_OUTIL_JS dans
+formations, onglet Catalogues de MyRH. Concaténé après RH_OUTIL_JS dans
 COMPTA_MAIN_JS (app/web/compta_assets.py) ; utilise ses fonctions communes
 (rhOutilFenetre, rhOutilDialogue, rhOutilConfirmer, rhOutilCase…).
 API : app/routers/rh_outil.py, app/routers/rh_outil_formations.py.
+"""
+
+RH_OUTIL_CATALOGUES_CSS = r"""
+/* MyRH — onglet Catalogues */
+.rho-cv-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.rho-cv-tab{display:inline-flex;align-items:center;gap:7px;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;background:var(--card);color:var(--text2);border:1px solid var(--border);transition:background .15s,border-color .15s,color .15s}
+.rho-cv-tab:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.rho-cv-tab.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.rho-cv-body{padding:16px 20px 20px}
+.rho-cv .rho-cat-add{margin:0 0 12px}
+.rho-cv .rho-cat-legend{margin:0 0 16px}
+.rho-cv .rho-input,.rho-cv .rho-select,.rho-cv .rho-cat-row .rho-select{background:var(--card)}
+.rho-cv .rho-cat-add .rho-select{max-width:220px}
 """
 
 RH_OUTIL_CATALOGUES_JS = r"""
@@ -236,18 +249,34 @@ function rhOutilJustificatifs(x,apres){
   requestAnimationFrame(()=>nouv.focus());
 }
 
-// ── Catalogues ────────────────────────────────────────────────────
-function rhOutilCatalogue(L){
-  const {ov,fermer}=rhOutilFenetre();
+// ── Catalogues (onglet « Catalogues » de MyRH) ────────────────────
+// Une vue par liste, construite une fois puis gardée : render() reconstruit
+// toute la page à chaque set() (toast compris), la vue gardée est replacée
+// telle quelle, saisie en cours comprise. Le focus est rendu par
+// __restoreModalState (html.py), qui suit aussi .rho-cv.
+const _rhoCatVues={};
+function rhOutilCatalogueVue(L){
+  if(_rhoCatVues[L.cle])return _rhoCatVues[L.cle];
   const base='/api/rh-outil/'+L.cle+'/catalogue';
   const listEl=h('div',{className:'rho-list'},h('div',{className:'rho-empty'},'Chargement…'));
-  // Après chaque changement : le catalogue se redessine seul, le tableau
-  // dessous est rechargé (intitulés et éléments supprimés).
+  const titre=h('h3',null,L.catalogue);
+  const nouvCat=L.categories?h('select',{className:'rho-select','aria-label':'Catégorie de la nouvelle formation'}):null;
+  // Catégories : elles changent dans leur fenêtre, la liste d'ajout suit.
+  const peindreNouvCat=()=>{
+    if(!nouvCat)return;
+    const v=nouvCat.value;
+    nouvCat.replaceChildren(...(S.rhOutilCategories||[]).map(c=>h('option',{value:String(c.id)},c.libelle)),h('option',{value:''},'Sans catégorie'));
+    if(v&&[...nouvCat.options].some(o=>o.value===v))nouvCat.value=v;
+  };
+  // Après chaque changement : le catalogue se redessine seul, la liste des
+  // employés est rechargée (intitulés et éléments supprimés).
   const rafraichir=async()=>{
     let d;
     try{d=await api(base);}catch(e){toast(e.message,'error');return;}
     if(!d)return;
     const cat=d.elements||[];
+    titre.textContent=L.catalogue+' ('+cat.length+')';
+    peindreNouvCat();
     const ligne=x=>{
       const inp=h('input',{type:'text',className:'rho-input',value:x.libelle,maxlength:'120','aria-label':'Intitulé','data-rho-esc':'',...RHO_NO_AUTOFILL});
       const enregistrer=async()=>{
@@ -264,7 +293,9 @@ function rhOutilCatalogue(L){
         if(e.key==='Enter'){e.preventDefault();inp.blur();}
         else if(e.key==='Escape'){e.preventDefault();inp.value=x.libelle;inp.blur();}
       });
-      inp.addEventListener('blur',enregistrer);
+      // Un rendu de la page détache la vue un instant (perte de focus, puis
+      // focus rendu) : ce n'est pas une fin de saisie.
+      inp.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==inp)enregistrer();},0));
       const nb=x.nb_employes;
       x.__cible=L.cible;
       const exige=h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.cibles||[]).length?' on':''),
@@ -315,8 +346,6 @@ function rhOutilCatalogue(L){
       h('div',{className:'rho-list'},...g.items.map(ligne)))));
   };
   const nouv=h('input',{type:'text',className:'rho-input',placeholder:L.nouveau,maxlength:'120',...RHO_NO_AUTOFILL});
-  const nouvCat=L.categories?h('select',{className:'rho-select','aria-label':'Catégorie de la nouvelle formation'},
-    ...(S.rhOutilCategories||[]).map(c=>h('option',{value:String(c.id)},c.libelle)),h('option',{value:''},'Sans catégorie')):null;
   const ajouter=async()=>{
     const v=nouv.value.trim();
     if(!v)return;
@@ -324,21 +353,41 @@ function rhOutilCatalogue(L){
       await api(base,rhOutilJson('POST',{libelle:v,categorie_id:nouvCat&&nouvCat.value?Number(nouvCat.value):null}));
       nouv.value='';
       await rafraichir();
+      rhOutilLoad();
       nouv.focus();
     }catch(e){toast(e.message,'error');}
   };
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
-  const dlg=rhOutilDialogueLarge(L.catalogue,fermer,
-    L.categories?h('div',{className:'rho-dlg-tools'},h('button',{type:'button',className:'rho-mini',onClick:()=>rhOutilGererCategories(rafraichir)},iconEl('sliders',11),'Gérer les catégories')):null,
-    h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir.'+(L.categories?' Les justificatifs (attestations…) se déclarent dans chaque formation.':' « Pièce exigée » : le document ne compte qu’avec un fichier joint.')+' Retirable ensuite employé par employé.'),
-    h('div',{className:'rho-scroll'},listEl),
-    h('div',{className:'rho-cat-add'},nouv,nouvCat,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
+  peindreNouvCat();
+  const el=h('div',{className:'card rho-cv'},
+    h('div',{className:'card-header'},titre,
+      L.categories?h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilGererCategories(rafraichir)},iconEl('sliders',13),'Gérer les catégories'):null),
+    h('div',{className:'rho-cv-body'},
+      h('div',{className:'rho-cat-add'},nouv,nouvCat,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter')),
+      h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir.'+(L.categories?' Les justificatifs (attestations…) se déclarent dans chaque formation.':' « Pièce exigée » : le document ne compte qu’avec un fichier joint.')+' Retirable ensuite employé par employé.'),
+      listEl
+    )
   );
-  dlg.classList.add(L.categories?'xl':'doc');
-  ov.appendChild(dlg);
-  document.body.appendChild(ov);
+  const vue={el,rafraichir,nouv};
+  _rhoCatVues[L.cle]=vue;
   rafraichir();
-  requestAnimationFrame(()=>nouv.focus());
+  return vue;
+}
+// Recharge les catalogues déjà affichés une fois (arrivée sur l'onglet,
+// changement fait depuis une fenêtre rouverte par l'adresse).
+function rhOutilCataloguesRafraichir(){Object.values(_rhoCatVues).forEach(v=>v.rafraichir());}
+// Ancien point d'entrée (fenêtre du catalogue) : mène à l'onglet.
+function rhOutilCatalogue(L){set({rhOnglet:'catalogues',rhCatalogue:L.cle});}
+
+function renderRhOutilCatalogues(){
+  // Arrivée directe sur l'onglet : catégories, services et employés d'abord.
+  if(!S.rhOutilLoaded&&!S._rhOutilAutoLoad){S._rhOutilAutoLoad=true;rhOutilLoad();}
+  const L=RH_OUTIL_LISTES.find(x=>x.cle===S.rhCatalogue)||RH_OUTIL_LISTES[0];
+  const onglets=h('div',{className:'rho-cv-tabs',role:'tablist'},...RH_OUTIL_LISTES.map(x=>
+    h('button',{type:'button',role:'tab','aria-selected':String(x===L),className:'rho-cv-tab'+(x===L?' on':''),
+      onClick:()=>{if(x!==L)set({rhCatalogue:x.cle});}},iconEl(x.categories?'layers':'file-text',13),x.titre)));
+  if(!S.rhOutilLoaded)return h('div',null,onglets,h('div',{className:'card-empty'},'Chargement…'));
+  return h('div',null,onglets,rhOutilCatalogueVue(L).el);
 }
 
 """

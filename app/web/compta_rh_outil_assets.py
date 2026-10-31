@@ -203,16 +203,16 @@ RH_OUTIL_JS = r"""
 
 // Listes par employé, dans l'ordre des colonnes. `cle` = LISTES côté API.
 const RH_OUTIL_LISTES=[
-  {cle:'formations',categories:true,cible:'service',titre:'Formations',bouton:'Formation',gerer:'Gérer les formations',catalogue:'Catalogue des formations',
+  {cle:'formations',categories:true,cible:'service',titre:'Formations',bouton:'Formation',catalogue:'Catalogue des formations',
    aucun:'Aucune formation',rechercher:'Rechercher une formation…',nouveau:'Nouvelle formation…',pour:'Formation pour ',
-   deja:'Déjà attribuée',vide:'Catalogue vide — ajoutez des formations avec « Gérer les formations ».',catVide:'Aucune formation au catalogue.',
+   deja:'Déjà attribuée',vide:'Catalogue vide — ajoutez des formations dans l’onglet Catalogues.',catVide:'Aucune formation au catalogue.',
    retirerTitre:'Retirer cette formation ?',retirerTxt:'Le suivi de cette formation (case et justificatifs) sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer cette formation ?',supprTxtN:'Elle disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi, ses justificatifs et leurs pièces jointes.',supprTxt0:'Elle disparaît du catalogue.',
    renomme:'Formation renommée.',supprime:'Formation supprimée.',etat:'faite',
    il:'Elle',ajoute:'ajoutée'},
-  {cle:'documents',cible:'contrat',titre:'Documents administratifs',bouton:'Document',gerer:'Gérer les documents administratifs',catalogue:'Documents administratifs',
+  {cle:'documents',cible:'contrat',titre:'Documents administratifs',bouton:'Document',catalogue:'Documents administratifs',
    aucun:'Aucun document',rechercher:'Rechercher un document…',nouveau:'Nouveau document…',pour:'Document pour ',
-   deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents avec « Gérer les documents administratifs ».',catVide:'Aucun document administratif au catalogue.',
+   deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents dans l’onglet Catalogues.',catVide:'Aucun document administratif au catalogue.',
    retirerTitre:'Retirer ce document ?',retirerTxt:'Le document est coché comme vérifié : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer ce document ?',supprTxtN:'Il disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi et ses pièces jointes.',supprTxt0:'Il disparaît du catalogue.',
    renomme:'Document renommé.',supprime:'Document supprimé.',etat:'vérifié',
@@ -676,11 +676,16 @@ function rhOutilPieces(L,m,x,baseCible){
 
 // ── Application MyRH ──────────────────────────────────────────────
 // Même coquille que les autres applis : barre latérale, barre mobile, pied
-// commun. Un seul écran pour l'instant ; d'autres outils RH viendront se
-// ranger dans la barre latérale.
+// commun. Deux onglets : Employés (suivi) et Catalogues (formations,
+// documents administratifs), dans S.rhOnglet.
 function renderMyRH(){
-  // Premier rendu : l'adresse (filtres, fenêtre) est lue par static/myrh_url.js.
+  // Premier rendu : l'adresse (onglet, filtres, fenêtre) est lue par static/myrh_url.js.
   if(typeof myrhDemarrerUrl==='function') myrhDemarrerUrl();
+  const cats=S.rhOnglet==='catalogues';
+  const aller=onglet=>{
+    set({rhOnglet:onglet,sidebarOpen:false});
+    if(onglet==='catalogues')rhOutilCataloguesRafraichir();else rhOutilLoad();
+  };
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-row'},h('div',{className:'logo-brand'},'My',h('span',null,'RH'))),
@@ -688,7 +693,9 @@ function renderMyRH(){
     ),
     h('div',{className:'nav-scroll tabs msb-nav',style:{width:'100%',margin:0}},
       h('div',{className:'nav-group-label msb-section'},h('span',null,'Suivi')),
-      h('button',{className:'nav-btn active',onClick:()=>{rhOutilLoad();}},iconEl('users',15),'  Outil RH')
+      h('button',{className:'nav-btn'+(cats?'':' active'),onClick:()=>aller('employes')},iconEl('users',15),'  Employés'),
+      h('div',{className:'nav-group-label msb-section'},h('span',null,'Paramétrage')),
+      h('button',{className:'nav-btn'+(cats?' active':''),onClick:()=>aller('catalogues')},iconEl('sliders',15),'  Catalogues')
     ),
     window.MySifaSidebar
       ? MySifaSidebar.footer({
@@ -703,7 +710,7 @@ function renderMyRH(){
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyRH'),
-      h('div',{className:'mobile-topbar-sub'},'Suivi des nouveaux employés')
+      h('div',{className:'mobile-topbar-sub'},cats?'Catalogues':'Suivi des nouveaux employés')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
@@ -714,9 +721,15 @@ function renderMyRH(){
       h('main',{className:'main'},
         h('div',{className:'container'},
           topbar,
-          h('h1',null,'Outil RH'),
-          h('div',{className:'subtitle'},'Suivi des nouveaux employés · formations, documents administratifs, contrats'),
-          renderRhOutilTab()
+          ...(cats?[
+            h('h1',null,'Catalogues'),
+            h('div',{className:'subtitle'},'Formations et documents administratifs attendus des employés · catégories, justificatifs, « exigé pour »'),
+            renderRhOutilCatalogues()
+          ]:[
+            h('h1',null,'Outil RH'),
+            h('div',{className:'subtitle'},'Suivi des nouveaux employés · formations, documents administratifs, contrats'),
+            renderRhOutilTab()
+          ])
         )
       )
     )
@@ -798,7 +811,6 @@ function renderRhOutilTab(){
     list.length?selFiltre:null,
     list.length?selContrat:null,
     h('div',{className:'rho-bar-spacer'}),
-    ...RH_OUTIL_LISTES.map(L=>h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilCatalogue(L)},iconEl('sliders',13),L.gerer)),
     S.rhOutilPeutCreer?h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilNouvelEmploye},iconEl('plus',13),'Nouvel employé'):null
   );
   // Première ouverture de MyRH (/rh) : les données se chargent une fois ici.
