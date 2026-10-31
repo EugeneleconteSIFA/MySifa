@@ -24,17 +24,18 @@ RH_OUTIL_CATALOGUES_CSS = r"""
 .rho-cv .rho-cat-row{gap:12px;padding:6px 12px;border-bottom:1px solid var(--border);transition:background .15s}
 .rho-cv .rho-list .rho-list>.rho-cat-row:last-child{border-bottom:0}
 .rho-cv .rho-sect:last-child .rho-cat-row:last-child,.rho-cv-table>.rho-cat-row:last-child{border-bottom:0}
-.rho-cv .rho-cat-row:not(.rho-cat-head):hover{background:var(--bg)}
+.rho-cv .rho-cat-row:not(.rho-cat-head):hover{background:color-mix(in srgb,var(--accent) 5%,var(--card));box-shadow:inset 3px 0 0 var(--accent)}
 .rho-cv .rho-cat-head{padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
 .rho-cv .rho-sect{margin:0}
 .rho-cv .rho-sect-t{margin:0;padding:12px 12px 6px;color:var(--accent);border-bottom:1px solid var(--border)}
 .rho-cv .rho-sect+.rho-sect .rho-sect-t{border-top:1px solid var(--border)}
 /* Intitulé : du texte qu'on édite sur place, encadré seulement au survol et à la saisie */
 .rho-cv .rho-cat-row .rho-input{border-color:transparent;background:transparent;padding:7px 8px;margin-left:-8px;width:calc(100% + 8px);font-size:13px;font-weight:600;color:var(--text)}
-.rho-cv .rho-cat-row:hover .rho-input{border-color:var(--border);background:var(--card)}
+.rho-cv .rho-cat-row .rho-input:hover{border-color:var(--border);background:var(--card)}
 .rho-cv .rho-cat-row .rho-input:focus{border-color:var(--accent);background:var(--card)}
 .rho-cv .rho-cat-row .rho-select{background:var(--card)}
-.rho-cv .rho-cat-row .rho-mini{background:var(--card);padding:6px 9px}
+.rho-cv .rho-cat-row .rho-mini{background:var(--bg);padding:6px 9px}
+.rho-cv .rho-cat-row .rho-mini:hover{background:var(--card)}
 .rho-cv .rho-cat-row .rho-mini.on{background:var(--accent-bg)}
 @media (min-width:821px){
   .rho-cv .rho-cat-row.form{grid-template-columns:minmax(220px,2.2fr) minmax(140px,1fr) minmax(140px,1fr) minmax(130px,1fr) 84px 34px}
