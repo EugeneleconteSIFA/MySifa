@@ -862,7 +862,7 @@ function renderMyRH(){
     h('div',{className:'app'},
       sidebar,
       h('main',{className:'main'},
-        h('div',{className:'container'},
+        h('div',{className:'container rho-large'},
           topbar,
           ...(cats?[
             h('h1',null,'Catalogues'),
