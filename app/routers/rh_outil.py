@@ -139,6 +139,7 @@ class MembreIn(BaseModel):
     date_arrivee: Optional[str] = None
     contrat_type: Optional[str] = None
     contrat_fin: Optional[str] = None
+    postes: list[int] = []
 
 
 class MembrePatch(BaseModel):
@@ -154,6 +155,7 @@ class NouvelEmployeIn(BaseModel):
     date_arrivee: str
     contrat_type: str
     contrat_fin: Optional[str] = None
+    postes: list[int] = []
 
 
 class LibelleIn(BaseModel):
@@ -171,6 +173,9 @@ class ExigeIn(BaseModel):
     deux sont exclusifs : `tous` l'emporte et vide les cibles."""
     tous: bool = False
     cibles: list[str] = []
+    # Formations seulement : postes (rh_outil_poste_catalogue.id) en plus des
+    # services. Ignoré pour les documents.
+    postes: list[int] = []
 
 
 class AttributionPatch(BaseModel):
@@ -334,6 +339,63 @@ def _justificatifs_lies(conn, paires) -> int:
     return n
 
 
+# ── Postes (intitulés de poste, MyRH › Catalogues › Postes) ──
+# Un poste appartient à un service ; un employé suivi en occupe zéro, un ou
+# plusieurs ; une formation peut être exigée pour un poste.
+
+def _postes_liste(conn) -> list:
+    """Catalogue des postes, avec le nombre d'employés et de formations."""
+    return [
+        {"id": r["id"], "libelle": r["libelle"], "service": r["service"],
+         "service_label": role_label(r["service"]),
+         "nb_employes": r["nb_employes"], "nb_formations": r["nb_formations"]}
+        for r in conn.execute(
+            """SELECT p.id, p.libelle, p.service,
+                      (SELECT COUNT(*) FROM rh_outil_membre_poste mp WHERE mp.poste_id = p.id) AS nb_employes,
+                      (SELECT COUNT(*) FROM rh_outil_formation_poste fp WHERE fp.poste_id = p.id) AS nb_formations
+                 FROM rh_outil_poste_catalogue p
+                ORDER BY p.service, p.libelle COLLATE NOCASE"""
+        ).fetchall()
+    ]
+
+
+def _postes_valides(conn, ids) -> list:
+    """Identifiants de postes dédoublonnés, tous existants. Erreur 400 sinon."""
+    voulus = sorted({int(i) for i in (ids or [])})
+    for pid in voulus:
+        if not conn.execute("SELECT 1 FROM rh_outil_poste_catalogue WHERE id=?", (pid,)).fetchone():
+            raise HTTPException(400, "Poste inconnu.")
+    return voulus
+
+
+def _poser_postes(conn, membre_id: int, ids) -> None:
+    for pid in ids:
+        conn.execute("INSERT OR IGNORE INTO rh_outil_membre_poste (membre_id, poste_id, ajoute_le) VALUES (?,?,?)",
+                     (membre_id, pid, _now()))
+
+
+def _attribuer_par_poste(conn, membre_id: Optional[int] = None, element_id: Optional[int] = None,
+                         poste_id: Optional[int] = None) -> int:
+    """Attribue les formations exigées pour un poste aux employés qui
+    l'occupent et ne les ont pas encore. Ne retire jamais rien. Renvoie le
+    nombre d'attributions créées."""
+    where, params = ["1=1"], [_now()]
+    if membre_id is not None:
+        where.append("mp.membre_id = ?"); params.append(membre_id)
+    if element_id is not None:
+        where.append("fp.formation_id = ?"); params.append(element_id)
+    if poste_id is not None:
+        where.append("fp.poste_id = ?"); params.append(poste_id)
+    return conn.execute(
+        f"""INSERT OR IGNORE INTO rh_outil_membre_formations (membre_id, formation_id, fait, ajoute_le)
+            SELECT DISTINCT mp.membre_id, fp.formation_id, 0, ?
+              FROM rh_outil_formation_poste fp
+              JOIN rh_outil_membre_poste mp ON mp.poste_id = fp.poste_id
+             WHERE {' AND '.join(where)}""",
+        params,
+    ).rowcount
+
+
 def _formations_du_membre(conn, membre_id: int) -> list:
     return [(membre_id, r["formation_id"]) for r in conn.execute(
         "SELECT formation_id FROM rh_outil_membre_formations WHERE membre_id=?", (membre_id,)).fetchall()]
@@ -477,6 +539,7 @@ def create_employe(payload: NouvelEmployeIn, request: Request):
             (user_id, _now(), user.get("nom"), arrivee),
         )
         membre_id = cur.lastrowid
+        _poser_postes(conn, membre_id, _postes_valides(conn, payload.postes))
         # Fiche Paie : seulement le contrat. Salaire, taux, primes restent à
         # la comptabilité, dans la Paie.
         conn.execute(
@@ -486,6 +549,7 @@ def create_employe(payload: NouvelEmployeIn, request: Request):
         )
         n = _attribuer_obligatoires(conn, membre_id=membre_id)
         n += _attribuer_par_cible(conn, membre_id=membre_id)
+        n += _attribuer_par_poste(conn, membre_id=membre_id)
         n += _justificatifs_lies(conn, _formations_du_membre(conn, membre_id))
         conn.commit()
     # Même trace que Paramètres pour la création du compte, puis celle du suivi.
@@ -546,6 +610,14 @@ def list_membres(request: Request):
             justifs.setdefault(jj["attribution_id"], []).append(
                 {"id": jj["id"], "justificatif_id": jj["justificatif_id"], "libelle": jj["libelle"],
                  "fait": bool(jj["fait"]), "piece_exigee": bool(jj["piece_exigee"])})
+        postes_m: dict = {}
+        for pm in conn.execute(
+            """SELECT mp.membre_id, p.id, p.libelle, p.service FROM rh_outil_membre_poste mp
+                 JOIN rh_outil_poste_catalogue p ON p.id = mp.poste_id
+                ORDER BY p.libelle COLLATE NOCASE"""
+        ).fetchall():
+            postes_m.setdefault(pm["membre_id"], []).append(
+                {"id": pm["id"], "libelle": pm["libelle"], "service": pm["service"]})
     for x in par_liste.get("documents", {}).values():
         for el in x:
             el["pieces"] = pieces.get(("document", el["id"]), [])
@@ -563,7 +635,8 @@ def list_membres(request: Request):
              "date_arrivee": r["date_arrivee"],
              # Pas de fiche Paie ou type vide : « à renseigner », jamais « CDI » supposé.
              "contrat_type": r["contrat_type"] or None,
-             "contrat_debut": r["contrat_debut"], "contrat_fin": r["contrat_fin"]}
+             "contrat_debut": r["contrat_debut"], "contrat_fin": r["contrat_fin"],
+             "postes": postes_m.get(r["id"], [])}
         for liste in LISTES:
             m[liste] = par_liste[liste].get(r["id"], [])
         membres.append(m)
@@ -594,6 +667,7 @@ def add_membre(payload: MembreIn, request: Request):
         if not cur.rowcount:
             raise HTTPException(409, "Employé déjà dans la liste.")
         membre_id = cur.lastrowid
+        _poser_postes(conn, membre_id, _postes_valides(conn, payload.postes))
         if contrat:
             # Seules les trois colonnes du contrat : le reste de la fiche Paie
             # appartient à la comptabilité. Début gardé si le type ne change pas.
@@ -616,6 +690,7 @@ def add_membre(payload: MembreIn, request: Request):
                 )
         n = _attribuer_obligatoires(conn, membre_id=membre_id)
         n += _attribuer_par_cible(conn, membre_id=membre_id)
+        n += _attribuer_par_poste(conn, membre_id=membre_id)
         n += _justificatifs_lies(conn, _formations_du_membre(conn, membre_id))
         conn.commit()
     log_action(user=user, action="CREATE", module="rh_outil",
@@ -653,6 +728,7 @@ def delete_membre(membre_id: int, request: Request):
         fichiers += _retirer_justificatifs(conn, "a.membre_id = ?", (membre_id,))
         for cfg in LISTES.values():
             conn.execute(f"DELETE FROM {cfg['liaison']} WHERE membre_id=?", (membre_id,))
+        conn.execute("DELETE FROM rh_outil_membre_poste WHERE membre_id=?", (membre_id,))
         conn.execute("DELETE FROM rh_outil_membres WHERE id=?", (membre_id,))
         conn.commit()
     _supprimer_fichiers(fichiers)
@@ -671,7 +747,9 @@ def list_services(request: Request):
     Indique aussi si l'utilisateur peut créer un compte, et avec quels services."""
     user = _require(request)
     peut = can_access_settings_contacts(user)
-    return {"services": _services(), "peut_creer": peut,
+    with get_db() as conn:
+        postes = _postes_liste(conn)
+    return {"services": _services(), "postes": postes, "peut_creer": peut,
             "services_creables": _services_creables(user) if peut else [],
             "contrats": list(CONTRATS_TYPES),
             "contrats_sans_fin": sorted(CONTRATS_DUREE_INDETERMINEE),
@@ -734,16 +812,32 @@ def set_exige(liste: str, element_id: int, payload: ExigeIn, request: Request):
             conn.execute(f"INSERT OR IGNORE INTO {cfg['exigences']} ({cfg['fk']}, {cfg['cible']}) VALUES (?,?)",
                          (element_id, cb))
             n += _attribuer_par_cible(conn, liste=liste, element_id=element_id, cible=cb)
+        # Formations : postes précis, en plus des services.
+        postes_avant, postes_voulus = set(), set()
+        noms_postes: dict = {}
+        if liste == "formations":
+            postes_voulus = set() if payload.tous else set(_postes_valides(conn, payload.postes))
+            postes_avant = {r["poste_id"] for r in conn.execute(
+                "SELECT poste_id FROM rh_outil_formation_poste WHERE formation_id=?", (element_id,)).fetchall()}
+            for pid in postes_avant - postes_voulus:
+                conn.execute("DELETE FROM rh_outil_formation_poste WHERE formation_id=? AND poste_id=?",
+                             (element_id, pid))
+            for pid in postes_voulus - postes_avant:
+                conn.execute("INSERT OR IGNORE INTO rh_outil_formation_poste (formation_id, poste_id) VALUES (?,?)",
+                             (element_id, pid))
+                n += _attribuer_par_poste(conn, element_id=element_id, poste_id=pid)
+            noms_postes = {r["id"]: r["libelle"] for r in conn.execute(
+                "SELECT id, libelle FROM rh_outil_poste_catalogue").fetchall()}
         if payload.tous and not tous_avant:
             n += _attribuer_obligatoires(conn, liste=liste, element_id=element_id)
         if liste == "formations":
             nouveaux = _membres_de_formation(conn, element_id) - deja
             _justificatifs_lies(conn, [(mid, element_id) for mid in nouveaux])
         conn.commit()
-    if payload.tous != tous_avant or voulus != avant:
-        cible = ("tous les employés" if payload.tous
-                 else ", ".join(sorted(role_label(v) if cfg["cible"] == "service" else v
-                                       for v in voulus)) or "personne")
+    if payload.tous != tous_avant or voulus != avant or postes_voulus != postes_avant:
+        noms = [role_label(v) if cfg["cible"] == "service" else v for v in sorted(voulus)]
+        noms += ["poste " + noms_postes.get(p, str(p)) for p in sorted(postes_voulus)]
+        cible = "tous les employés" if payload.tous else (", ".join(noms) or "personne")
         suite = f" · attribué à {n} employé(s)" if n else ""
         log_action(user=user, action="UPDATE", module="rh_outil",
                    objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » exigé pour : {cible}{suite}",
@@ -772,6 +866,7 @@ def list_catalogue(liste: str, request: Request):
             exiges.setdefault(x["el"], []).append(x["cible"])
         lies: dict = {}
         cats: dict = {}
+        postes_el: dict = {}
         if cfg.get("categories"):
             for x in conn.execute(
                 """SELECT id, formation_id, libelle, piece_exigee FROM rh_outil_formation_justificatifs
@@ -781,10 +876,13 @@ def list_catalogue(liste: str, request: Request):
                     {"id": x["id"], "libelle": x["libelle"], "piece_exigee": bool(x["piece_exigee"])})
             cats = {x["id"]: x["categorie_id"] for x in conn.execute(
                 "SELECT id, categorie_id FROM rh_outil_formations").fetchall()}
+            for x in conn.execute("SELECT formation_id, poste_id FROM rh_outil_formation_poste").fetchall():
+                postes_el.setdefault(x["formation_id"], []).append(x["poste_id"])
     return {"elements": [
         {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"],
          "obligatoire": bool(r["obligatoire"]), "cibles": exiges.get(r["id"], []),
          "categorie_id": cats.get(r["id"]), "justificatifs": lies.get(r["id"], []),
+         "postes": postes_el.get(r["id"], []),
          "piece_exigee": bool(r["piece_exigee"])}
         for r in rows
     ]}
@@ -853,6 +951,7 @@ def delete_catalogue(liste: str, element_id: int, request: Request):
         conn.execute(f"DELETE FROM {cfg['exigences']} WHERE {cfg['fk']}=?", (element_id,))
         if liste == "formations":
             conn.execute("DELETE FROM rh_outil_formation_justificatifs WHERE formation_id=?", (element_id,))
+            conn.execute("DELETE FROM rh_outil_formation_poste WHERE formation_id=?", (element_id,))
         conn.execute(f"DELETE FROM {cfg['catalogue']} WHERE id=?", (element_id,))
         conn.commit()
     _supprimer_fichiers(fichiers)

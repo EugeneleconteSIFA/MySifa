@@ -283,7 +283,7 @@ async function rhOutilLoad(){
   try{
     const [d,sv,ca]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/services'),api('/api/rh-outil/formations/categories')]);
     if(!d||!sv||!ca)return;
-    set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],
+    set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],rhOutilPostes:sv.postes||[],
          rhOutilCategories:ca.categories||[],rhOutilContrats:sv.contrats||[],rhOutilContratsSansFin:sv.contrats_sans_fin||[],
          rhOutilAlerteJours:Number(sv.alerte_fin_contrat_jours)||15,rhOutilPeutCreer:!!sv.peut_creer,rhOutilServicesCreables:sv.services_creables||[],rhOutilLoaded:true});
   }catch(e){toast(e.message,'error');}
@@ -420,8 +420,14 @@ function rhOutilNouvelEmploye(mode){
     const err=h('div',{className:'rho-err',role:'alert'});
     const arrivee=h('input',{type:'date',className:'rho-input',value:rhOutilAujourdhui()});
     const contrat=rhOutilChampsContrat(choisi&&choisi.contrat_type||'','',choisi&&choisi.contrat_fin||'');
+    // Postes : ceux du service du compte choisi.
+    const postesChoisis=new Set();
+    const postesBox=h('div');
+    const peindrePostes=()=>postesBox.replaceChildren(choisi?rhOutilChoixPostes([choisi.role],postesChoisis).el:'');
     const form=h('div',{className:'rho-form-grid rho-suivre'},
-      champ('Date d’arrivée',arrivee),champ('Type de contrat',contrat.type),contrat.champFin);
+      champ('Date d’arrivée',arrivee),champ('Type de contrat',contrat.type),contrat.champFin,
+      champ('Postes (facultatif)',postesBox,true));
+    peindrePostes();
     const ok=h('button',{type:'button',className:'rho-btn accent'},iconEl('plus',13),'Suivre cet employé');
     let vis=[],actif=-1;
     const choisir=c=>{
@@ -429,6 +435,7 @@ function rhOutilNouvelEmploye(mode){
       choisi=c;
       contrat.type.value=c.contrat_type||'';contrat.type.dispatchEvent(new Event('change'));
       contrat.fin.value=c.contrat_fin||'';
+      postesChoisis.clear();peindrePostes();
       remplir();
     };
     const remplir=()=>{
@@ -468,7 +475,7 @@ function rhOutilNouvelEmploye(mode){
       err.textContent='';ok.disabled=true;
       let r;
       try{r=await api('/api/rh-outil/membres',rhOutilJson('POST',{user_id:choisi.user_id,date_arrivee:arrivee.value||null,
-        contrat_type:contrat.type.value||null,contrat_fin:f}));}
+        contrat_type:contrat.type.value||null,contrat_fin:f,postes:[...postesChoisis]}));}
       catch(e){err.textContent=e.message;ok.disabled=false;return;}
       fermer();
       await rhOutilLoad();
@@ -493,6 +500,13 @@ function rhOutilNouvelEmploye(mode){
       h('option',{value:''},'Choisir…'),...services.map(sv=>h('option',{value:sv.code},sv.label)));
     const arrivee=h('input',{type:'date',className:'rho-input',value:rhOutilAujourdhui()});
     const contrat=rhOutilChampsContrat('','','');
+    const postesChoisis=new Set();
+    const postesBox=h('div');
+    const peindrePostes=()=>postesBox.replaceChildren(service.value
+      ?rhOutilChoixPostes([service.value],postesChoisis).el
+      :h('div',{className:'rho-chips-vide'},'Choisissez d’abord le service.'));
+    service.addEventListener('change',()=>{postesChoisis.clear();peindrePostes();});
+    peindrePostes();
     const mdp=h('input',{type:'password',className:'rho-input',minlength:'8',autocomplete:'new-password','aria-label':'Mot de passe'});
     const oeil=h('button',{type:'button',title:'Afficher le mot de passe','aria-label':'Afficher le mot de passe',onClick:()=>{
       const vis=mdp.type==='password';mdp.type=vis?'text':'password';
@@ -519,7 +533,8 @@ function rhOutilNouvelEmploye(mode){
     const creer=h('button',{type:'button',className:'rho-btn accent'},iconEl('plus',13),'Créer le compte');
     const valider=async()=>{
       const v={prenom:prenom.value.trim(),nom:nom.value.trim(),email:email.value.trim(),service:service.value,
-               password:mdp.value,date_arrivee:arrivee.value,contrat_type:contrat.type.value,contrat_fin:contrat.finValeur()};
+               password:mdp.value,date_arrivee:arrivee.value,contrat_type:contrat.type.value,contrat_fin:contrat.finValeur(),
+               postes:[...postesChoisis]};
       const manque=!v.prenom?'Prénom':!v.nom?'Nom':!v.email?'Email':!v.service?'Service':!v.date_arrivee?'Date d’arrivée':!v.contrat_type?'Type de contrat':!v.password?'Mot de passe':'';
       if(manque){err.textContent=manque+' obligatoire.';return;}
       if(v.contrat_fin&&v.contrat_fin<v.date_arrivee){err.textContent='La fin de contrat précède la date d’arrivée.';return;}
@@ -545,6 +560,7 @@ function rhOutilNouvelEmploye(mode){
         h('div',{className:'rho-field plein'},doublonEl),
         champ('Service',service),champ('Date d’arrivée',arrivee),
         champ('Type de contrat',contrat.type),contrat.champFin,
+        champ('Postes (facultatif)',postesBox,true),
         champ('Mot de passe (8 caractères minimum)',h('div',{className:'rho-pwd'},mdp,oeil),true)
       ),
       h('div',{className:'rho-note'},'Le compte MySifa est créé comme dans Paramètres › Comptes, avec le service choisi ; le contrat est enregistré dans sa fiche Paie (début = date d’arrivée), que la comptabilité complète. Remettez le mot de passe à l’employé en main propre. Téléphone, matricule et machine se règlent ensuite dans Paramètres.'),
@@ -985,7 +1001,7 @@ function renderRhOutilTab(){
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std rho-table'},
       h('thead',null,h('tr',null,
         h('th',null,'Employé'),
-        h('th',null,'Service et contrat'),
+        h('th',null,'Service, postes et contrat'),
         ...RH_OUTIL_LISTES.map(L=>h('th',null,L.titre)),
         thDossier,
         h('th',{className:'rho-c'},'')
@@ -1002,6 +1018,7 @@ function renderRhOutilTab(){
         )),
         h('td',null,h('div',{className:'rho-svc-cell'},
           h('span',{className:'rho-svc'+(m.service_label?'':' vide')},m.service_label||'Non renseigné'),
+          rhOutilCellulePostes(m),
           rhOutilPastilleContrat(m))),
         ...RH_OUTIL_LISTES.map(L=>h('td',null,rhOutilCelluleListe(L,m))),
         h('td',{className:'rho-c','data-rho-statut':String(m.id)},rhOutilBadge(m)),

@@ -51,9 +51,12 @@ RH_OUTIL_CATALOGUES_JS = r"""
 // certains services (celui du compte de l'employé, Paramètres › Comptes).
 function rhOutilLibelleExige(x){
   if(x.obligatoire)return 'Tous les employés';
-  const n=(x.cibles||[]).length;
-  // Formations : par service ; documents administratifs : par contrat.
-  return n?n+(x.__cible==='contrat'?' contrat':' service')+(n>1?'s':''):'Personne';
+  const n=(x.cibles||[]).length,np=(x.postes||[]).length;
+  // Formations : par service et par poste ; documents administratifs : par contrat.
+  const parts=[];
+  if(n)parts.push(n+(x.__cible==='contrat'?' contrat':' service')+(n>1?'s':''));
+  if(np)parts.push(np+' poste'+(np>1?'s':''));
+  return parts.length?parts.join(' · '):'Personne';
 }
 // Cibles possibles d'une liste : services (formations) ou contrats (documents).
 // Renvoie [{code, label, membre:m=>bool}].
@@ -68,33 +71,57 @@ function rhOutilExigePour(L,x,apres){
   const avant=new Set(x.cibles||[]);
   const tousBox=rhOutilCase(!!x.obligatoire,'Tous les employés');
   const cases=new Map();
-  const liste=h('div',{className:'rho-list'},...services.map(sv=>{
+  // Formations : sous chaque service, ses postes (exigence plus précise).
+  const parPoste=L.cible==='service';
+  const postesAvant=new Set(x.postes||[]);
+  const casesPostes=new Map();   // poste_id → {box, service, ligne}
+  const nbPoste=pid=>membres.filter(m=>(m.postes||[]).some(p=>p.id===pid)).length;
+  const liste=h('div',{className:'rho-list'},...services.flatMap(sv=>{
     const box=rhOutilCase(!x.obligatoire&&avant.has(sv.code),sv.label);
     cases.set(sv.code,box);
     const nb=membres.filter(sv.membre).length;
-    return h('label',{className:'rho-check-row'},box,h('span',{style:{flex:1}},sv.label),
+    const ligneSvc=h('label',{className:'rho-check-row'},box,h('span',{style:{flex:1}},sv.label),
       h('span',{className:'rho-sub'},nb?nb+' employé'+(nb>1?'s':'')+' suivi'+(nb>1?'s':''):''));
+    if(!parPoste)return [ligneSvc];
+    return [ligneSvc,...rhOutilPostesDe(sv.code).map(p=>{
+      const b=rhOutilCase(!x.obligatoire&&postesAvant.has(p.id),p.libelle);
+      const n=nbPoste(p.id);
+      const ligne=h('label',{className:'rho-check-row sous'},b,h('span',{style:{flex:1}},p.libelle),
+        h('span',{className:'rho-sub'},n?n+' employé'+(n>1?'s':''):''));
+      casesPostes.set(p.id,{box:b,service:sv.code,ligne});
+      return ligne;
+    })];
   }));
   // « Tous les employés » coché : les cibles sont grisées et ne comptent pas.
+  // Un service coché couvre déjà ses postes : ils sont grisés.
   const peindre=()=>{
     liste.classList.toggle('off',tousBox.checked);
     cases.forEach(b=>{b.disabled=tousBox.checked;});
+    casesPostes.forEach(c=>{
+      const couvert=cases.get(c.service).checked;
+      c.box.disabled=tousBox.checked||couvert;
+      c.ligne.classList.toggle('couvert',couvert);
+    });
   };
   tousBox.addEventListener('change',peindre);
+  cases.forEach(b=>b.addEventListener('change',peindre));
   peindre();
   const enregistrer=async()=>{
     const tous=tousBox.checked;
     const voulus=tous?[]:[...cases].filter(([,b])=>b.checked).map(([c])=>c);
+    const postes=tous?[]:[...casesPostes].filter(([,c])=>c.box.checked&&!voulus.includes(c.service)).map(([pid])=>pid);
     const nouveaux=new Set(voulus.filter(c=>!avant.has(c)));
+    const nouveauxPostes=new Set(postes.filter(pid=>!postesAvant.has(pid)));
     // Combien d'employés vont le recevoir maintenant.
     const aDeja=m=>(m[L.cle]||[]).some(e=>e.element_id===x.id);
-    const dansNouvelles=m=>services.some(sv=>nouveaux.has(sv.code)&&sv.membre(m));
+    const dansNouvelles=m=>services.some(sv=>nouveaux.has(sv.code)&&sv.membre(m))
+      ||(m.postes||[]).some(p=>nouveauxPostes.has(p.id));
     const manquants=membres.filter(m=>!aDeja(m)&&(tous?!x.obligatoire:dansNouvelles(m))).length;
     const envoyer=async()=>{
       let r;
-      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/exige',rhOutilJson('PUT',{tous,cibles:voulus}));}
+      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/exige',rhOutilJson('PUT',{tous,cibles:voulus,postes}));}
       catch(e){toast(e.message,'error');throw e;}
-      x.obligatoire=tous;x.cibles=voulus;
+      x.obligatoire=tous;x.cibles=voulus;x.postes=postes;
       const n=(r&&r.attribues)||0;
       toast('Enregistré'+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':''):'')+'.');
       fermer();
@@ -103,9 +130,9 @@ function rhOutilExigePour(L,x,apres){
     };
     if(!manquants){try{await envoyer();}catch(_){}return;}
     rhOutilConfirmer({
-      ton:'info',titre:tous?'Exiger pour tous les employés ?':(L.cible==='contrat'?'Exiger pour ces contrats ?':'Exiger pour ces services ?'),nom:x.libelle,label:'Enregistrer',
+      ton:'info',titre:tous?'Exiger pour tous les employés ?':(L.cible==='contrat'?'Exiger pour ces contrats ?':'Exiger pour ces services et postes ?'),nom:x.libelle,label:'Enregistrer',
       sous:manquants+' employé'+(manquants>1?'s':'')+' concerné'+(manquants>1?'s ne l’ont':' ne l’a')+' pas encore',
-      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé '+(tous?'':(L.cible==='contrat'?'sous l’un de ces contrats ':'de ces services '))+'ajouté ensuite. Le retirer de « Exigé pour » plus tard ne retirera rien.',
+      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé '+(tous?'':(L.cible==='contrat'?'sous l’un de ces contrats ':'de ces services ou postes '))+'ajouté ensuite. Le retirer de « Exigé pour » plus tard ne retirera rien.',
       onConfirm:envoyer,
     });
   };
@@ -113,7 +140,7 @@ function rhOutilExigePour(L,x,apres){
     h('div',{className:'rho-cat-legend'},x.libelle),
     h('label',{className:'rho-check-row tous'},tousBox,h('span',{style:{flex:1}},'Tous les employés'),
       h('span',{className:'rho-sub'},membres.length+' employé'+(membres.length>1?'s':'')+' suivi'+(membres.length>1?'s':''))),
-    h('div',{className:'rho-sep'},L.cible==='contrat'?'Ou seulement certains contrats':'Ou seulement certains services'),
+    h('div',{className:'rho-sep'},L.cible==='contrat'?'Ou seulement certains contrats':'Ou seulement certains services ou postes'),
     h('div',{className:'rho-scroll'},liste),
     h('div',{className:'rho-dlg-foot'},
       h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),
@@ -323,7 +350,7 @@ function rhOutilCatalogueVue(L){
       inp.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==inp)enregistrer();},0));
       const nb=x.nb_employes;
       x.__cible=L.cible;
-      const exige=h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.cibles||[]).length?' on':''),
+      const exige=h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.cibles||[]).length||(x.postes||[]).length?' on':''),
           title:'Exigé pour : '+rhOutilLibelleExige(x)+' — cliquer pour modifier',
           onClick:()=>rhOutilExigePour(L,x,rafraichir)},iconEl('users',11),rhOutilLibelleExige(x));
       const suppr=
@@ -407,12 +434,15 @@ function rhOutilCatalogue(L){set({rhOnglet:'catalogues',rhCatalogue:L.cle});}
 function renderRhOutilCatalogues(){
   // Arrivée directe sur l'onglet : catégories, services et employés d'abord.
   if(!S.rhOutilLoaded&&!S._rhOutilAutoLoad){S._rhOutilAutoLoad=true;rhOutilLoad();}
-  const L=RH_OUTIL_LISTES.find(x=>x.cle===S.rhCatalogue)||RH_OUTIL_LISTES[0];
-  const onglets=h('div',{className:'rho-cv-tabs',role:'tablist'},...RH_OUTIL_LISTES.map(x=>
-    h('button',{type:'button',role:'tab','aria-selected':String(x===L),className:'rho-cv-tab'+(x===L?' on':''),
-      onClick:()=>{if(x!==L)set({rhCatalogue:x.cle});}},iconEl(x.categories?'layers':'file-text',13),x.titre)));
+  // Sous-onglets : les deux catalogues, puis les postes (compta_rh_outil_postes_assets.py).
+  const choix=RH_OUTIL_LISTES.map(x=>({cle:x.cle,titre:x.titre,icone:x.categories?'layers':'file-text',L:x}))
+    .concat([{cle:'postes',titre:'Postes',icone:'tag',L:null}]);
+  const actif=choix.find(x=>x.cle===S.rhCatalogue)||choix[0];
+  const onglets=h('div',{className:'rho-cv-tabs',role:'tablist'},...choix.map(x=>
+    h('button',{type:'button',role:'tab','aria-selected':String(x===actif),className:'rho-cv-tab'+(x===actif?' on':''),
+      onClick:()=>{if(x!==actif)set({rhCatalogue:x.cle});}},iconEl(x.icone,13),x.titre)));
   if(!S.rhOutilLoaded)return h('div',null,onglets,h('div',{className:'card-empty'},'Chargement…'));
-  return h('div',null,onglets,rhOutilCatalogueVue(L).el);
+  return h('div',null,onglets,(actif.L?rhOutilCatalogueVue(actif.L):rhOutilPostesVue()).el);
 }
 
 """
