@@ -1001,6 +1001,12 @@ def _ligne_du_compteur(conn, ex):
             return ex
     except Exception:
         return ex
+    return _production_qui_ferme(conn, ex) or ex
+
+
+def _production_qui_ferme(conn, ex):
+    """Le « Production » qui suit immédiatement `ex` sur la machine, s'il y
+    en a un : c'est lui qui porte le relevé de fin de calage."""
     suiv = conn.execute(
         """SELECT * FROM production_data
             WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
@@ -1011,7 +1017,7 @@ def _ligne_du_compteur(conn, ex):
     ).fetchone()
     if suiv and (suiv["operation_category"] or "") == "production":
         return suiv
-    return ex
+    return None
 
 
 def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
@@ -1184,6 +1190,19 @@ async def update_saisie(row_id: int, request: Request):
             # machine recalé sur l'état final.
             try:
                 _recaler_compteur_machine(conn, body.get("machine", _ex("machine")))
+            except Exception:
+                pass
+        # Un changement d'outil qui ferme un calage a deux relevés : le sien
+        # (au démontage) et celui du « Production » qui suit, qui fait le
+        # métrage de calage. Ce second relevé se corrige ici aussi.
+        if "compteur_fin_calage" in body and (ex["operation_category"] or "") == "calage":
+            prod = _production_qui_ferme(conn, ex)
+            if prod is None:
+                raise HTTPException(status_code=409,
+                                    detail="Aucune saisie « Production » ne ferme ce calage.")
+            _maj_compteur_releve(conn, prod["id"], prod, body.get("compteur_fin_calage"))
+            try:
+                _recaler_compteur_machine(conn, prod["machine"])
             except Exception:
                 pass
         if (str(body.get("no_dossier", _ex("no_dossier")) or "").strip() != str(_ex("no_dossier") or "").strip()
