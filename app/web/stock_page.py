@@ -3810,7 +3810,8 @@ function invV2OpenAddProductModal() {
         suggWrap.innerHTML = '';
         if (!prods.length) { suggWrap.style.display = 'none'; return; }
         prods.forEach(p => {
-          const item = el('div', { cls:'empl-suggestion-item',
+          const unite = String(p.unite || '').trim();
+          const item = el('div', { cls:'empl-suggestion-item empl-sugg-item-with-unit',
             on:{ click: () => {
               refInp.value = p.reference;
               _pid = p.id; _ref = p.reference;
@@ -3821,8 +3822,11 @@ function invV2OpenAddProductModal() {
               try { qteInp.focus(); } catch(e){}
             }}
           },
-            el('span', { style:{ fontWeight:'700', marginRight:'8px' } }, p.reference),
-            el('span', { style:{ color:'var(--muted)', fontSize:'12px' } }, p.designation || '')
+            el('span', { cls:'empl-sugg-item-label' },
+              el('span', { style:{ fontWeight:'700', marginRight:'8px' } }, p.reference),
+              el('span', { style:{ color:'var(--muted)', fontSize:'12px' } }, p.designation || '')
+            ),
+            unite ? el('span', { cls:'empl-sugg-item-unit-badge' }, unite) : null
           );
           suggWrap.appendChild(item);
         });
@@ -4816,13 +4820,17 @@ function openEmplEntreeModal(codeEmpl) {
         suggWrap.innerHTML = '';
         if (!prods.length) { suggWrap.style.display = 'none'; return; }
         prods.forEach(p => {
-          const item = el('div', { cls:'empl-suggestion-item',
+          const unite = String(p.unite || '').trim();
+          const item = el('div', { cls:'empl-suggestion-item empl-sugg-item-with-unit',
             on:{ click: () => {
               refInp.value = p.reference; _pid = p.id;
               refError.style.display = 'none';
               suggWrap.innerHTML = ''; suggWrap.style.display = 'none';
             }}
-          }, el('span',{style:{fontWeight:'600',marginRight:'8px'}},p.reference), el('span',{style:{color:'var(--muted)',fontSize:'12px'}},p.designation||''));
+          }, el('span',{cls:'empl-sugg-item-label'},
+               el('span',{style:{fontWeight:'600',marginRight:'8px'}},p.reference),
+               el('span',{style:{color:'var(--muted)',fontSize:'12px'}},p.designation||'')),
+             unite ? el('span',{cls:'empl-sugg-item-unit-badge'},unite) : null);
           suggWrap.appendChild(item);
         });
         suggWrap.style.display = '';
