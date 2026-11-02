@@ -7601,6 +7601,11 @@ async function enregistrerChangementOutil(){
       +' m — valeur saisie trop petite','danger');
     return;
   }
+  if(ctx.plafond && m > ctx.plafond.plafond){
+    showToast('Compteur invraisemblable : +'+Math.round(m - ctx.plafond.precedent).toLocaleString('fr-FR')
+      +' m depuis le relevé précédent. Vérifiez le nombre de chiffres.','danger');
+    return;
+  }
   if(!S.outilAvant || !S.outilApres){
     showToast('Indiquez la '+nature+' démontée et la '+nature+' montée.','danger');
     return;
@@ -7764,7 +7769,7 @@ function renderOutilModal(){
   const nature = String(ctx.type_label||'Outil');
   const dernier = ctx.dernier_metrage;
   const metChamp = champCompteur({id:'outil-metrage', valeur:S.outilMetrage,
-    reference:dernier, onInput:v=>{ S.outilMetrage = v; }});
+    reference:dernier, plafond:ctx.plafond, onInput:v=>{ S.outilMetrage = v; }});
 
   const metBloc = h('div',{className:'fab-field'},
     h('label',{for:'outil-metrage'},'Compteur machine au changement'),
@@ -7867,7 +7872,7 @@ function renderOpCommentModal(){
    la correction de métrage. Texte numérique avec un id : le curseur survit
    aux re-rendus (_fabRestoreUiState), et aucune flèche +/- ne recouvre le
    chiffre. Sous le champ, la valeur relue et son écart à `reference`. */
-function champCompteur({id, valeur, reference, libelleRef, onInput}){
+function champCompteur({id, valeur, reference, libelleRef, plafond, onInput}){
   const inp = h('input',{type:'text', id, inputmode:'numeric', autocomplete:'off',
     placeholder: reference!=null ? String(Math.round(reference)) : 'Ex : 14200'});
   inp.value = valeur!=null ? String(valeur) : '';
@@ -7878,6 +7883,15 @@ function champCompteur({id, valeur, reference, libelleRef, onInput}){
     lu.textContent = '';
     if(isNaN(v)) return;
     lu.appendChild(h('b',null, v.toLocaleString('fr-FR')+' m'));
+    // Plafond physique fourni par le serveur (_plafond_releve) : même refus
+    // qu'à l'enregistrement, mais dès la frappe.
+    if(plafond && v > plafond.plafond){
+      lu.classList.add('ko');
+      lu.appendChild(txt(' — impossible : +'
+        +Math.round(v - plafond.precedent).toLocaleString('fr-FR')
+        +' m depuis le relevé précédent. Vérifiez le nombre de chiffres.'));
+      return;
+    }
     if(reference==null) return;
     const ecart = v - Math.round(reference);
     if(libelleRef){
