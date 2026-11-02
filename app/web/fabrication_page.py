@@ -1502,6 +1502,8 @@ let S = {
   compteurCalageBusy: false,
   showCommentModal: false,
   metrageCorr: null,
+  releveMachine: null,          // dernier relevé du compteur (/api/fabrication/dernier-releve)
+  releveMachinePour: null,
   explicationSeuil: null,
   commentSaisieId: null,
   showTracaCommentModal: false,
@@ -2214,14 +2216,16 @@ function renderConfirmCompteurModal(){
       onClick:(e)=>{ if(e.target===e.currentTarget) fermer(); }},
     h('div',{className:'fab-modal',style:{maxWidth:'440px'}},
       h('div',{className:'fab-modal-title'},c.titre || 'Compteur à vérifier'),
-      h('div',{className:'fab-modal-sub'},
-        'Ce relevé donne une vitesse au-dessus de ce que la machine peut faire. '
-        +'Vérifiez le compteur avant de confirmer.'),
+      h('div',{className:'fab-modal-sub'}, c.bloquant
+        ? 'La machine ne peut pas avoir produit autant depuis le relevé précédent. '
+          +'Vérifiez le nombre de chiffres du compteur.'
+        : 'Ce relevé donne une vitesse au-dessus de ce que la machine peut faire. '
+          +'Vérifiez le compteur avant de confirmer.'),
       ...(c.lignes||[]).map(l => ligne(l[0], l[1], l[2])),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',style:{background:'var(--bg)'},
           onClick:fermer},'Corriger le compteur'),
-        h('button',{className:'fab-btn fab-btn-primary',style:{color:'white'},
+        c.bloquant ? null : h('button',{className:'fab-btn fab-btn-primary',style:{color:'white'},
           onClick:()=>{
             const r = c.relance;
             S[c.cle] = c.valeur;
@@ -6681,11 +6685,15 @@ function renderDebutModal(){
     // Plaque prévue par la fiche, à confirmer (static/fabrication_outils_demarrage.js).
     loadDebutOutils(refChoisie);
   }
-  const inp = h('input',{type:'number',placeholder:'Ex: 15000',step:'1',min:'0',
-    style:{textAlign:'right'}});
-  inp.value = S.metrageDebut||'';
-  inp.addEventListener('input',e=>{ S.metrageDebut=e.target.value; });
-  inp.focus();
+  if(!S.releveMachinePour) chargerDernierReleve();
+  const machDeb = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
+  const inp = champCompteur({id:'debut-metrage', valeur:S.metrageDebut,
+    reference: machDeb ? machDeb.dernier_metrage : null, plafond: plafondCompteur(),
+    onInput:v=>{ S.metrageDebut = v; }});
+  setTimeout(()=>{
+    const el = document.getElementById('debut-metrage');
+    if(el && document.activeElement?.tagName!=='INPUT') el.focus();
+  },0);
 
   const submit = async()=>{
     const dos = S._selectedDossier;
@@ -6708,6 +6716,8 @@ function renderDebutModal(){
       showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
       return;
     }
+    const plDeb = plafondCompteur();
+    if(plDeb && mDebut > plDeb.plafond){ refuserAuDelaPlafond(mDebut, plDeb); return; }
     // Plus d'une heure a pleine vitesse depuis le dernier releve : suspect.
     const ecartDebut = (dernierM != null) ? mDebut - dernierM : 0;
     if(S.vitesseMax && ecartDebut > S.vitesseMax * 60
@@ -6955,6 +6965,8 @@ function finValiderCompteur(relance){
     showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
     return null;
   }
+  const plFin = plafondCompteur();
+  if(plFin && mFin > plFin.plafond){ refuserAuDelaPlafond(mFin, plFin); return null; }
   if(S.saisies.length){
     const debutRow = S.saisies.find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
     const debutCtr = debutRow ? parseFloat(debutRow.metrage_total_debut ?? debutRow.metrage_prevu) : null;
@@ -7011,10 +7023,11 @@ function renderFinModal(){
   const termine = S.finDossierOui === true;
 
   // ── Champs du compteur ────────────────────────────────────────────────────
-  const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
-    style:{textAlign:'right'}});
-  metInp.value = S.metrageFinVal||'';
-  metInp.addEventListener('input',e=>{ S.metrageFinVal=e.target.value; });
+  if(!S.releveMachinePour) chargerDernierReleve();
+  const machFin = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
+  const metInp = champCompteur({id:'fin-metrage', valeur:S.metrageFinVal,
+    reference: machFin ? machFin.dernier_metrage : null, plafond: plafondCompteur(),
+    onInput:v=>{ S.metrageFinVal = v; }});
 
   const etiqInp = h('input',{type:'number',placeholder:'Ex: 50000',step:'1',min:'0',
     style:{textAlign:'right'}});
@@ -7601,6 +7614,11 @@ async function enregistrerChangementOutil(){
       +' m — valeur saisie trop petite','danger');
     return;
   }
+  if(ctx.plafond && m > ctx.plafond.plafond){
+    showToast('Compteur invraisemblable : +'+Math.round(m - ctx.plafond.precedent).toLocaleString('fr-FR')
+      +' m depuis le relevé précédent. Vérifiez le nombre de chiffres.','danger');
+    return;
+  }
   if(!S.outilAvant || !S.outilApres){
     showToast('Indiquez la '+nature+' démontée et la '+nature+' montée.','danger');
     return;
@@ -7764,7 +7782,7 @@ function renderOutilModal(){
   const nature = String(ctx.type_label||'Outil');
   const dernier = ctx.dernier_metrage;
   const metChamp = champCompteur({id:'outil-metrage', valeur:S.outilMetrage,
-    reference:dernier, onInput:v=>{ S.outilMetrage = v; }});
+    reference:dernier, plafond:ctx.plafond, onInput:v=>{ S.outilMetrage = v; }});
 
   const metBloc = h('div',{className:'fab-field'},
     h('label',{for:'outil-metrage'},'Compteur machine au changement'),
@@ -7867,7 +7885,7 @@ function renderOpCommentModal(){
    la correction de métrage. Texte numérique avec un id : le curseur survit
    aux re-rendus (_fabRestoreUiState), et aucune flèche +/- ne recouvre le
    chiffre. Sous le champ, la valeur relue et son écart à `reference`. */
-function champCompteur({id, valeur, reference, libelleRef, onInput}){
+function champCompteur({id, valeur, reference, libelleRef, plafond, onInput}){
   const inp = h('input',{type:'text', id, inputmode:'numeric', autocomplete:'off',
     placeholder: reference!=null ? String(Math.round(reference)) : 'Ex : 14200'});
   inp.value = valeur!=null ? String(valeur) : '';
@@ -7878,6 +7896,15 @@ function champCompteur({id, valeur, reference, libelleRef, onInput}){
     lu.textContent = '';
     if(isNaN(v)) return;
     lu.appendChild(h('b',null, v.toLocaleString('fr-FR')+' m'));
+    // Plafond physique fourni par le serveur (_plafond_releve) : même refus
+    // qu'à l'enregistrement, mais dès la frappe.
+    if(plafond && v > plafond.plafond){
+      lu.classList.add('ko');
+      lu.appendChild(txt(' — impossible : +'
+        +Math.round(v - plafond.precedent).toLocaleString('fr-FR')
+        +' m depuis le relevé précédent. Vérifiez le nombre de chiffres.'));
+      return;
+    }
     if(reference==null) return;
     const ecart = v - Math.round(reference);
     if(libelleRef){
@@ -7920,6 +7947,44 @@ function champCompteur({id, valeur, reference, libelleRef, onInput}){
    Même découpage que le serveur (_champs_metrage_permis) : début au 01, fin
    au 89, les deux au 90, le compteur ailleurs. On corrige, on n'ajoute pas :
    un relevé vide ne se propose pas. */
+/* Dernier relevé de la machine du poste, rechargé à chaque ouverture d'un
+   formulaire de compteur. Le plafond se calcule à l'heure où l'on valide —
+   le formulaire peut rester ouvert longtemps. Même règle que le serveur
+   (_plafond_au), qui reste seul juge : sans ce relevé, l'écran laisse passer
+   et c'est lui qui refuse. */
+function chargerDernierReleve(){
+  const cle = String(S.adminMachineId||'poste')+'|'+Date.now();
+  S.releveMachinePour = cle;
+  S.releveMachine = null;
+  const q = S.adminMachineId ? '?machine_id='+encodeURIComponent(S.adminMachineId) : '';
+  apiFetch('/api/fabrication/dernier-releve'+q).then(d=>{
+    if(S.releveMachinePour !== cle) return;
+    S.releveMachine = d;
+    fabRenderPreserveUi();
+  }).catch(()=>{});
+}
+
+function plafondCompteur(){
+  const d = S.releveMachine;
+  if(!d || d.precedent==null || !d.date_operation || !d.vitesse_max) return null;
+  const minutes = Math.max(finMinutesEntre(d.date_operation, nowIsoLocal()) || 0, 30);
+  return {plafond: d.precedent + d.vitesse_max*minutes, precedent: d.precedent,
+          minutes, vitesse_max: d.vitesse_max};
+}
+
+/* Fenêtre « compteur impossible » : mêmes lignes que la confirmation, sans
+   le bouton qui passe outre. */
+function refuserAuDelaPlafond(m, pl){
+  S.confirmCompteur = {bloquant:true, titre:'Compteur impossible', lignes:[
+    ['Relevé précédent de la machine', Math.round(pl.precedent).toLocaleString('fr-FR')+' m'],
+    ['Compteur saisi', Math.round(m).toLocaleString('fr-FR')+' m'],
+    ['Écart', Math.round(m - pl.precedent).toLocaleString('fr-FR')+' m', true],
+    ['Au plus, à '+Math.round(pl.vitesse_max)+' m/min en '+finDureeTxt(Math.round(pl.minutes)),
+     Math.round(pl.plafond).toLocaleString('fr-FR')+' m'],
+  ]};
+  render();
+}
+
 function relevesCorrigeables(s){
   if(!s || Number(s.est_annule||0)) return [];
   const code = String(s.operation_code||'').trim();
@@ -9868,6 +9933,7 @@ function render(){
   }
 
   if(S.showOutilModal) root.appendChild(renderOutilModal());
+  if(!S.showDebutModal && !S.showFinModal) S.releveMachinePour = null;
 
   renderOfImportModal();
   renderOpCommentModal();

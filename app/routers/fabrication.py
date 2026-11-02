@@ -834,6 +834,27 @@ def list_machines(request: Request):
             "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN}
 
 
+@router.get("/api/fabrication/dernier-releve")
+def get_dernier_releve(request: Request, machine_id: int = None):
+    """Dernier relevé du compteur de la machine du poste, avec son heure :
+    l'écran en tire le plafond (`_plafond_au`) au moment où il valide, sans
+    le figer au chargement."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    with get_db() as conn:
+        body = {"machine_id": machine_id} if machine_id else {}
+        try:
+            machine = _resolve_machine(user, body, conn)
+        except HTTPException:
+            return {"precedent": None}
+        maintenant = datetime.now(_PARIS).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+        prec = _releve_precedent(conn, machine["nom"], maintenant)
+    if not prec:
+        return {"precedent": None, "machine": machine["nom"]}
+    return {"precedent": float(prec["ctr"]), "date_operation": prec["date_operation"],
+            "machine": machine["nom"], "vitesse_max": PROD_VITESSE_MAX_M_MIN}
+
+
 @router.get("/api/fabrication/machines-du-jour")
 def get_machines_du_jour(request: Request, machine_id: int = None):
     """Machines RH planifiées aujourd'hui pour l'utilisateur courant.
@@ -1704,6 +1725,13 @@ async def create_saisie(request: Request):
                 if heure:
                     date_op = heure
 
+        # Compteur hors de portée de la machine depuis le relevé précédent :
+        # même refus qu'au changement d'outil et en correction.
+        if cl["code"] == "01":
+            _refuser_au_dela(_plafond_au(conn, machine_name, date_op), m_debut)
+        elif cl["code"] == "89":
+            _refuser_au_dela(_plafond_au(conn, machine_name, date_op), m_fin)
+
         # ── Changement d'outil ────────────────────────────────────────────────
         # Le code porte-t-il une nature d'outil ? La réponse vit dans le
         # référentiel (Paramètres › Opérations), jamais dans une liste de codes
@@ -2254,6 +2282,7 @@ async def create_saisie(request: Request):
                     conn, outil_type, machine_obj
                 )
                 contexte_outil["saisie_id"] = new_id
+                contexte_outil["plafond"] = _plafond_releve(conn, new_id)
             except Exception:
                 logger.exception("[fabrication] contexte de changement d'outil indisponible")
 
@@ -4209,6 +4238,7 @@ async def releve_compteur_fin_calage(saisie_id: int, request: Request):
                 detail=(f"Compteur invalide : le dernier relevé était à {int(dernier):,} m "
                         f"— la valeur saisie ({int(m):,} m) ne peut pas être inférieure.").replace(",", " "),
             )
+        _controler_plafond(conn, saisie_id, m)
         conn.execute("UPDATE production_data SET metrage_compteur=? WHERE id=?", (m, saisie_id))
         # Le relevé se lit aussi en commentaire, sur la ligne de calage que ce
         # « Production » ferme (calage_cloture.ecrire_mention_fin_calage).
@@ -4292,6 +4322,7 @@ def get_changement_outil(saisie_id: int, request: Request):
         ctx = _contexte_changement_outil(conn, outil_type, machine)
         ctx["saisie_id"] = saisie_id
         ctx["deja_complete"] = row["outil_apres_id"] is not None
+        ctx["plafond"] = _plafond_releve(conn, saisie_id)
         return ctx
 
 
@@ -4338,6 +4369,8 @@ async def completer_changement_outil(saisie_id: int, request: Request):
         # relevé ANTÉRIEUR à cette saisie, sinon corriger un changement de la
         # veille deviendrait impossible.
         dernier = _dernier_releve_avant(conn, saisie_id, row["date_operation"], row["machine"])
+        if m_ctr is not None:
+            _controler_plafond(conn, saisie_id, m_ctr)
 
         commentaire = _valider_changement_outil(
             conn, outil_type=outil_type, m_ctr=m_ctr,
@@ -4454,6 +4487,86 @@ async def update_commentaire(saisie_id: int, request: Request):
     )
     return {"success": True}
 
+def _releve_precedent(conn, machine, date_operation, saisie_id=None):
+    """Dernier relevé du compteur sur la machine avant `date_operation` :
+    {ctr, date_operation}. `saisie_id` exclut la saisie elle-même et départage
+    deux saisies à la même seconde ; sans lui (saisie pas encore insérée),
+    toute saisie de cette seconde compte comme antérieure."""
+    borne = saisie_id if saisie_id is not None else 2 ** 62
+    return conn.execute(
+        """SELECT ctr, date_operation FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
+                 FROM production_data
+                WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                  AND (date_operation < ? OR (date_operation = ? AND id < ?))
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (saisie_id if saisie_id is not None else -1, machine or "",
+         date_operation, date_operation, borne),
+    ).fetchone()
+
+
+def _plafond_au(conn, machine, date_operation, saisie_id=None):
+    """Le plus grand compteur qu'un relevé fait à `date_operation` peut
+    porter : le relevé précédent sur la machine, plus ce que la machine a pu
+    produire depuis, à `PROD_VITESSE_MAX_M_MIN`. Une demi-heure au moins,
+    comme le contrôle du besoin matière (`_alerte_metrage`) : une pause courte
+    entre deux relevés ne doit pas faire refuser un compteur juste.
+
+    Un chiffre de trop au clavier (7 234 444 444 au lieu de 723 444 444) fait
+    avancer le compteur de milliards de mètres : refusé ici, il ne part ni
+    dans le compteur machine, ni dans le métrage des dossiers suivants.
+    Rend None sans relevé antérieur — rien à quoi comparer."""
+    prec = _releve_precedent(conn, machine, date_operation, saisie_id)
+    if not prec:
+        return None
+    d0, d1 = parse_datetime(prec["date_operation"]), parse_datetime(date_operation)
+    if not d0 or not d1:
+        return None
+    minutes = max((d1 - d0).total_seconds() / 60.0, 30.0)
+    return {
+        "plafond": float(prec["ctr"]) + PROD_VITESSE_MAX_M_MIN * minutes,
+        "precedent": float(prec["ctr"]),
+        "minutes": minutes,
+        "vitesse_max": PROD_VITESSE_MAX_M_MIN,
+    }
+
+
+def _plafond_releve(conn, saisie_id):
+    """`_plafond_au` pour une saisie déjà enregistrée."""
+    row = conn.execute(
+        "SELECT date_operation, machine FROM production_data WHERE id=?", (saisie_id,)
+    ).fetchone()
+    if not row:
+        return None
+    return _plafond_au(conn, row["machine"], row["date_operation"], saisie_id)
+
+
+def _refuser_au_dela(pl, m):
+    """Refuse un compteur que la machine n'a pas pu atteindre."""
+    if pl is None or m is None or m <= pl["plafond"]:
+        return
+    fr = lambda v: f"{int(round(v)):,}".replace(",", " ")
+    h = pl["minutes"] / 60.0
+    duree = f"{int(round(pl['minutes']))} min" if h < 1 else f"{h:.1f} h".replace(".", ",")
+    raise HTTPException(
+        status_code=400,
+        detail=(f"Compteur invraisemblable : {fr(m - pl['precedent'])} m depuis le relevé "
+                f"précédent ({fr(pl['precedent'])} m) en {duree}, au-delà de "
+                f"{fr(pl['vitesse_max'])} m/min. Vérifiez le nombre de chiffres — "
+                f"au plus {fr(pl['plafond'])} m."),
+    )
+
+
+def _controler_plafond(conn, saisie_id, m):
+    _refuser_au_dela(_plafond_releve(conn, saisie_id), m)
+
+
 def _prochain_releve_apres(conn, saisie_id, date_operation, machine):
     """Premier relevé du compteur machine POSTÉRIEUR à une saisie — le
     pendant de `_dernier_releve_avant`, pour qu'une correction ne fasse pas
@@ -4556,6 +4669,7 @@ async def corriger_metrage_saisie(saisie_id: int, request: Request):
                 status_code=400,
                 detail=f"Métrage trop grand : le relevé suivant sur la machine est à {fr(suiv)} m.",
             )
+        _controler_plafond(conn, saisie_id, m)
 
         # Changement d'outil : la trace du commentaire cite le compteur.
         commentaire = ex["commentaire"]
