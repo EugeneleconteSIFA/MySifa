@@ -1179,6 +1179,10 @@ let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holiday
 let _allTlMatches=[];
 let ME=null;
 let PENDING_OF_COUNT=0;
+// Pastilles Production et Rentabilite : memes compteurs et memes routes que la
+// sidebar de MyProd (loadProdEcartsCount / loadDevisATraiterCount).
+let ECARTS_COUNT=0;
+let DEVIS_A_TRAITER_COUNT=0;
 let CAN_EDIT=false;
 let IS_DIR_OR_SUPER=false;
 // Rôle « commercial » : lecture seule sur le planning + accès à la modal dossier en consultation
@@ -2442,9 +2446,9 @@ function renderSidebar(){
   const items=[
     ...(canPlanningNav(ME)?[{key:"_planning",label:"Planning",icon:"calendar",href:"/planning"}]:[]),
     ...(comptaOnly?[]:[
-      {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
+      {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production",withEcartsBadge:true},
       {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
-      ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
+      ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite",withDevisBadge:true}]:[]),
       // Meme section que la barre laterale de MyProd : le Planning garde sa
       // propre implementation de sidebar, elle doit donc etre tenue a jour en
       // meme temps, sinon on repart de deux navigations differentes.
@@ -2467,8 +2471,10 @@ function renderSidebar(){
         // msb-section : format de titre commun a toutes les applis (v3.3.0).
         return `<div class="nav-section-label msb-section msb-toggle${replie?" ngl-collapsed":""}" data-section="${i.section}" onclick="toggleNavSection(this.dataset.section)"><span>${i.section}</span>${chevron}</div>`;
       }
-      const badge=(i.withPendingBadge && PENDING_OF_COUNT>0)
-        ? `<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${PENDING_OF_COUNT} OF à associer manuellement">${PENDING_OF_COUNT}</span>`
+      const pastille=(n,titre)=>`<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:white;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${titre}">${n>999?"999+":n}</span>`;
+      const badge=(i.withPendingBadge && PENDING_OF_COUNT>0) ? pastille(PENDING_OF_COUNT, PENDING_OF_COUNT+" OF à associer manuellement")
+        : (i.withEcartsBadge && ECARTS_COUNT>0) ? pastille(ECARTS_COUNT, ECARTS_COUNT+" écart"+(ECARTS_COUNT>1?"s":"")+" de saisie à traiter")
+        : (i.withDevisBadge && DEVIS_A_TRAITER_COUNT>0) ? pastille(DEVIS_A_TRAITER_COUNT, DEVIS_A_TRAITER_COUNT+" dossier"+(DEVIS_A_TRAITER_COUNT>1?"s":"")+" à venir sans devis")
         : "";
       const cache = (section && NAV_REPLIEES[section]) ? ' style="display:none"' : '';
       return `<button type="button" class="nav-btn${i.key==="_planning"?" active":""}"${cache} onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px;width:100%">${icon(i.icon,16)}<span>${i.label}</span>${badge}</span></button>`;
@@ -2508,6 +2514,20 @@ async function loadPendingOfCount(){
     PENDING_OF_COUNT=Number(data&&data.count||0);
     try{render();}catch(e){}
   }catch(e){PENDING_OF_COUNT=0;}
+}
+// Ecarts de saisie (admin) et dossiers a venir sans devis (superadmin) : un
+// echec laisse la pastille absente plutot qu'une erreur.
+async function loadNavCounts(){
+  if(!ME || !isAdmin(ME) || isComptaUser(ME)) return;
+  const lire=async url=>{ try{ const r=await fetch(url,{credentials:"include"}); return r.ok?await r.json():null; }catch(e){ return null; } };
+  const [ec,dv]=await Promise.all([
+    lire("/api/prod/ecarts/count"),
+    ME.role==="superadmin" ? lire("/api/rentabilite/a-venir-sans-devis/count") : Promise.resolve(null),
+  ]);
+  const ne=Number(ec&&ec.n||0), nd=Number(dv&&dv.total||0);
+  if(ne===ECARTS_COUNT && nd===DEVIS_A_TRAITER_COUNT) return;
+  ECARTS_COUNT=ne; DEVIS_A_TRAITER_COUNT=nd;
+  try{render();}catch(e){}
 }
 function renderPlanningOfPanel(){
   return `<div class="planning-of-panel">
@@ -6936,6 +6956,7 @@ async function boot(){
   if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
   // Badge 'Mappings OF à valider' pour admin/direction/superadmin
   try{ loadPendingOfCount(); }catch(e){}
+  try{ loadNavCounts(); }catch(e){}
   try{
     const list=await api(`/machines`);
     const byName=new Map((list||[]).map(m=>[String(m.nom||""),m]));
