@@ -166,7 +166,10 @@ CATALOGUE: list[dict[str, Any]] = [
         "aide": "Modifie une ligne de production_data (id = row_id). Pas de durée directe : on corrige "
                 "date_operation, l'opération ou les quantités/métrages. operation = libellé complet commençant "
                 "par son code (ex. « 01 Début de production »). Une opération 90 ne peut pas changer de code. "
-                "Toujours lire la ligne actuelle et citer l'ancienne valeur.",
+                "Toujours lire la ligne actuelle et citer l'ancienne valeur. Compteur machine : "
+                "metrage_total_debut sur un 01, metrage_total_fin sur un 89, metrage_compteur sur les "
+                "autres relevés (changement d'outil ou de contre-partie, fin de calage) ; le compteur "
+                "de la machine se recale seul sur le dernier relevé.",
         "params": {
             "row_id": ("int", True, "Saisie (production_data.id)", ""),
             "date_operation": ("datetime", False, "Date et heure", "AAAA-MM-JJTHH:MM:SS, heure de Paris"),
@@ -180,6 +183,8 @@ CATALOGUE: list[dict[str, Any]] = [
             "metrage_reel": ("num", False, "Métrage réel", ""),
             "metrage_total_debut": ("num", False, "Compteur début", ""),
             "metrage_total_fin": ("num", False, "Compteur fin", ""),
+            "metrage_compteur": ("num", False, "Compteur relevé",
+                                 "changement d'outil, de contre-partie, fin de calage"),
             "commentaire": ("str", False, "Commentaire", ""),
             "note": ("str", True, "Motif de la correction", "conservé dans modifie_note"),
         },

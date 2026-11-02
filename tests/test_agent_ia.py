@@ -121,6 +121,26 @@ check("boucle : modèle par défaut", appels[0]["model"], agent_ia.choisir_model
 check("boucle : outils lecture + action", "proposer_action" in [o["name"] for o in appels[0]["tools"]])
 jeton = res["actions"][0]["jeton"]
 
+# Réponse coupée en pleine série de propositions : les cartes entières sont
+# gardées, l'appel incomplet est retiré, et le modèle reprend.
+_carte = lambda i: _B(type="tool_use", id=f"c{i}", name="proposer_action", input={  # noqa: E731
+    "action": "postit_creer", "parametres": {"type": "today", "title": f"Série {i}"}, "resume": f"Post-it {i}."})
+tours = [
+    types.SimpleNamespace(stop_reason="max_tokens", content=[_carte(1), _carte(2), _B(type="tool_use", id="c3",
+                          name="proposer_action", input={})]),
+    types.SimpleNamespace(stop_reason="tool_use", content=[_carte(3)]),
+    types.SimpleNamespace(stop_reason="end_turn", content=[_B(type="text", text="Trois post-its à confirmer.")]),
+]
+appels = []
+with get_db() as conn:
+    res = agent_ia.converser(conn, sup, [{"role": "user", "content": "Trois post-its"}], {"url": "/stock"})
+check("coupure : cartes entières gardées", len(res["actions"]), 3)
+check("coupure : appel incomplet retiré", [getattr(b, "id", "") for b in appels[1]["messages"][1]["content"]],
+      ["c1", "c2"])
+check("coupure : consigne de reprise", appels[1]["messages"][2]["content"][-1]["type"], "text")
+check("coupure : réponse finale", res["reponse"], "Trois post-its à confirmer.")
+check("saisie : compteur relevé modifiable", "metrage_compteur" in aa._PAR_CLE["saisie_modifier"]["params"])
+
 # ── 4. Confirmation par l'API ────────────────────────────────────────────────
 from fastapi.testclient import TestClient  # noqa: E402
 import main  # noqa: E402
