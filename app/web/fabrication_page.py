@@ -1359,6 +1359,8 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
@@ -1381,9 +1383,19 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>if(window.MySifaProduitMemoire)window.MySifaProduitMemoire.regler({ongletParDefaut:'documents',ofUnParUn:true});</script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/fabrication_url.js?v=2"></script>
+<script src="/static/fabrication_url.js?v=3"></script>
 <!-- Plaque confirmée au démarrage du dossier. -->
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
+<!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
+<script src="/static/mysifa_pesees.js?v=1"></script>
+<script src="/static/mysifa_poids_colle.js?v=1"></script>
+<script>
+  // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
+  window.mysifaPoidsColleContexte = function () {
+    return { no_dossier: (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || '',
+             machine: (S.machine && S.machine.nom) || '' };
+  };
+</script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1950,6 +1962,7 @@ function icon(name,size=16){
     'refresh-ccw':'<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L23 14"/>',
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    scale:'<path d="M12 3v18"/><path d="M5 21h14"/><path d="M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0z"/><path d="M17 7l-3 7a3 3 0 0 0 6 0z"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -5521,6 +5534,12 @@ function renderMain(){
         isAdminView ? h('span',{style:{fontSize:'11px',fontWeight:'800',color:'var(--muted)',letterSpacing:'.4px',textTransform:'uppercase'}},'Lecture seule') : null
       ) : null,
       alert ? null : null,
+      // Pesées par front (alerte d'inspection) : historique de la machine,
+      // static/mysifa_pesees.js — ouvert par l'attribut, rien à brancher.
+      h('button',{type:'button',className:'fab-btn fab-btn-ghost fab-btn-sm',
+        'data-pesees':'1','data-pesees-machine':(S.machine && S.machine.nom) || '',
+        title:'Historique des pesées d’étiquettes, front par front'},
+        svgIcon('scale',14),' Pesées'),
       h('span',{className:'fab-etat-badge '+etatClass(S.etat)}, etatLabel(S.etat)),
       h('span',{className:'fab-main-sub'},
         (isAdminView
@@ -9952,6 +9971,7 @@ function render(){
 }
 
 function bootFabWidgets(){
+  if(window.MySifaPoidsColle) window.MySifaPoidsColle.monter();
   if(S.user){
     window.__MYSIFA_USER__={nom:S.user.nom||'',role:S.user.role||''};
   }

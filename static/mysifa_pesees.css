@@ -1,0 +1,41 @@
+/* MySifa — Historique des pesées par front (static/mysifa_pesees.js). */
+.pf-overlay{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.pf-modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:min(1100px,100%);max-height:min(90vh,100%);display:flex;flex-direction:column;color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;box-shadow:0 12px 48px rgba(0,0,0,.45)}
+.pf-tete{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+.pf-titre{font-size:15px;font-weight:700}
+.pf-fermer{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:18px;line-height:1;cursor:pointer}
+.pf-fermer:hover{color:var(--accent);border-color:var(--accent)}
+.pf-filtres{display:flex;flex-wrap:wrap;gap:8px;padding:6px 18px 12px;border-bottom:1px solid var(--border)}
+.pf-champ{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font:inherit;font-size:13px}
+.pf-champ:focus{outline:none;border-color:var(--accent)}
+.pf-dossier{flex:1;min-width:160px}
+.pf-corps{overflow:auto;padding:12px 18px 18px;display:flex;flex-direction:column;gap:10px;transition:opacity .15s}
+.pf-corps.pf-maj{opacity:.55}
+.pf-vide,.pf-erreur{font-size:13px;color:var(--muted);padding:18px 0;text-align:center}
+.pf-erreur{color:var(--danger)}
+.pf-alerte{font-size:13px;font-weight:700;color:var(--accent);margin-top:6px}
+.pf-sous-titre{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.pf-synthese{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.pf-front{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.pf-front-nom{font-size:11px;color:var(--muted);font-weight:600}
+.pf-front-val{font-size:17px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.pf-front-sous{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+.pf-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;max-height:52vh}
+.pf-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.pf-table th{position:sticky;top:0;background:var(--bg);color:var(--muted);font-weight:600;text-align:left;padding:7px 9px;white-space:nowrap;border-bottom:1px solid var(--border)}
+.pf-table td{padding:6px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+.pf-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.pf-table tbody tr:hover td{background:var(--accent-bg)}
+.pf-table .pf-col-front{color:var(--accent)}
+.pf-date{color:var(--text2);font-variant-numeric:tabular-nums}
+.pf-dos{cursor:pointer;color:var(--accent)}
+.pf-dos:hover{text-decoration:underline}
+.pf-ecart{color:var(--text2)}
+.pf-hors{color:var(--danger);font-weight:700}
+.pf-nc td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
+@media (max-width:640px){
+  .pf-overlay{padding:0;align-items:stretch}
+  .pf-modal{border-radius:0;max-height:100%;height:100%}
+  .pf-tete,.pf-filtres,.pf-corps{padding-left:14px;padding-right:14px}
+  .pf-table-wrap{max-height:none}
+}

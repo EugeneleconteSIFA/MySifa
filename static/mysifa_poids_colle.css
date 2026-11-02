@@ -1,0 +1,44 @@
+/* MySifa — Saisie prod : widget « Poids de colle » (static/mysifa_poids_colle.js). */
+.pc-panel{width:400px;max-height:calc(100dvh - 120px)}
+.pc-body{padding:12px 14px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+.pc-dossier{font-size:12px;color:var(--text2);display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px}
+.pc-dossier strong{color:var(--text)}
+.pc-dossier .pc-lien{margin-left:auto}
+.pc-seg{display:flex;gap:6px}
+.pc-seg button{flex:1;padding:7px 10px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.pc-seg button:hover{border-color:var(--accent)}
+.pc-seg button.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.pc-ligne{display:flex;gap:8px}
+.pc-ligne .pc-champ{flex:1;min-width:0}
+.pc-matiere .pc-champ:first-child{flex:2}
+.pc-champ{display:flex;flex-direction:column;gap:4px}
+.pc-lib{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-champ input,.pc-champ select{width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font:inherit;font-size:14px}
+.pc-champ input:focus,.pc-champ select:focus{outline:none;border-color:var(--accent)}
+.pc-aide{font-size:11px;color:var(--muted);line-height:1.45;margin-top:-4px}
+.pc-res{background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;padding:10px 12px;text-align:center}
+.pc-res-val{font-size:26px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.pc-res-lbl{font-size:12px;color:var(--text2);margin-top:2px}
+.pc-res-det{font-size:11px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+.pc-res.pc-vide .pc-res-val{color:var(--muted)}
+.pc-res.pc-neg{border-color:var(--danger);background:var(--bg)}
+.pc-res.pc-neg .pc-res-val{color:var(--danger)}
+.pc-err{font-size:12px;color:var(--danger)}
+.pc-liens{display:flex;flex-wrap:wrap;gap:6px 14px}
+.pc-lien{background:none;border:none;padding:0;color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.pc-lien:hover{text-decoration:underline}
+.pc-edit{display:flex;flex-direction:column;gap:6px}
+.pc-edit-ligne{display:flex;gap:6px;align-items:center}
+.pc-edit-ligne input,.pc-edit-ligne select{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font:inherit;font-size:13px;min-width:0}
+.pc-edit-lib{flex:1}
+.pc-edit-fam{width:84px;flex-shrink:0}
+.pc-edit-g{width:58px;flex-shrink:0}
+.pc-edit-x{flex-shrink:0;width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text2);cursor:pointer}
+.pc-edit-x:hover{color:var(--danger);border-color:var(--danger)}
+.pc-edit-actions{display:flex;gap:8px;justify-content:flex-end}
+.pc-btn{border-radius:10px;padding:8px 14px;font-weight:700;font:inherit;font-size:13px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
+.pc-btn:hover{border-color:var(--accent)}
+.pc-btn-accent{background:var(--accent);border-color:var(--accent);color:white}
+.pc-btn-accent:hover{filter:brightness(1.05)}
+body.mysifa-dock-hidden #pc-panel{display:none!important}
+@media (max-width:900px){.pc-panel{width:auto}}

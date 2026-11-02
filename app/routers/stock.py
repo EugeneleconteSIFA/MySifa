@@ -6630,73 +6630,135 @@ def list_sous_sections(request: Request, categorie: Optional[str] = None):
     return [r["sous_section"] for r in rows]
 
 
-# ── Métrage bobine : épaisseurs types ──────────────────────────────────
+# ── Référentiel épaisseurs matière : épaisseurs et grammages ───────────
 #
-# Référentiel du widget « Métrage bobine ». Le calcul lui-même se fait côté
-# navigateur (π × (R² − r²) / épaisseur) : il n'y a rien à stocker, seulement
-# les épaisseurs proposées.
+# Deux widgets lisent cette table. « Métrage bobine » prend les épaisseurs
+# (π × (R² − r²) / épaisseur), « Poids de colle » de la saisie prod les
+# grammages (frontal, glassine, dépôt d'encre par anilox). Une ligne porte
+# l'une, l'autre ou les deux. Les calculs se font dans le navigateur : il n'y
+# a rien à stocker, seulement les valeurs proposées.
+
+_PERIMETRES = {"epaisseur": ("microns", 1, 5000, "µm"), "grammage": ("grammage_gsm", 0.1, 1000, "g/m²")}
+
 
 def _metrage_epaisseurs(conn) -> list[dict]:
-    try:
-        rows = conn.execute(
-            "SELECT id, libelle, microns, ordre FROM mp_metrage_epaisseurs "
-            "ORDER BY ordre, libelle COLLATE NOCASE"
-        ).fetchall()
-    except sqlite3.Error:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(mp_metrage_epaisseurs)").fetchall()}
+    if not cols:
         return []
+    gsm = "grammage_gsm" if "grammage_gsm" in cols else "NULL AS grammage_gsm"
+    fam = "famille" if "famille" in cols else "NULL AS famille"
+    rows = conn.execute(
+        f"SELECT id, libelle, microns, {gsm}, {fam}, ordre FROM mp_metrage_epaisseurs "
+        "ORDER BY ordre, libelle COLLATE NOCASE"
+    ).fetchall()
     return [{"id": int(r["id"]), "libelle": r["libelle"],
-             "microns": float(r["microns"]), "ordre": int(r["ordre"] or 0)} for r in rows]
+             "microns": float(r["microns"]) if r["microns"] is not None else None,
+             "grammage_gsm": float(r["grammage_gsm"]) if r["grammage_gsm"] is not None else None,
+             "famille": r["famille"] or None, "ordre": int(r["ordre"] or 0)} for r in rows]
 
 
 @router.get("/api/stock/metrage-epaisseurs")
 def list_metrage_epaisseurs(request: Request):
     # Lecture ouverte à tout utilisateur connecté : MyTools › Calculs bobine
-    # s'en sert, et ce ne sont que des épaisseurs types de matière. La
-    # modification (PUT) reste aux administrateurs matières.
+    # et la saisie prod s'en servent, et ce ne sont que des valeurs types de
+    # matière. La modification (PUT) reste aux administrateurs matières.
     get_current_user(request)
     with get_db() as conn:
         return _metrage_epaisseurs(conn)
 
 
+def _nombre_borne(v, mini, maxi, libelle, unite):
+    try:
+        x = float(str(v if v is not None else "").replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"Valeur invalide pour {libelle}.") from None
+    if not (mini <= x <= maxi):
+        raise HTTPException(400, f"Valeur invalide pour {libelle} — entre {mini:g} et {maxi:g} {unite}.")
+    return x
+
+
 @router.put("/api/stock/metrage-epaisseurs")
 async def save_metrage_epaisseurs(request: Request):
-    """Remplace la liste. Body : { items: [{ libelle, microns }] }, dans l'ordre voulu."""
+    """Remplace la liste d'un périmètre, sans toucher à l'autre.
+
+    Body : { perimetre: "epaisseur" | "grammage", items: [{ id?, libelle,
+    microns | grammage_gsm, famille? }] }, dans l'ordre voulu. Une ligne
+    retirée de la liste perd la valeur du périmètre ; elle n'est supprimée que
+    si elle n'a plus ni épaisseur ni grammage. Sans `perimetre` : épaisseurs
+    (le widget Métrage bobine d'avant le grammage).
+    """
+    from config import MATIERE_FAMILLES
+
     user = require_stock_matieres_admin(request)
     body = await request.json() or {}
+    perimetre = body.get("perimetre") or "epaisseur"
+    if perimetre not in _PERIMETRES:
+        raise HTTPException(400, "Périmètre inconnu.")
+    champ, mini, maxi, unite = _PERIMETRES[perimetre]
+    familles = {c for c, _ in MATIERE_FAMILLES}
     items = body.get("items")
     if not isinstance(items, list):
         raise HTTPException(400, "Liste attendue.")
     propres, vus = [], set()
     for it in items:
-        libelle = str((it or {}).get("libelle") or "").strip()
+        it = it or {}
+        libelle = str(it.get("libelle") or "").strip()
         if not libelle:
             raise HTTPException(400, "Libellé manquant sur une ligne.")
         if len(libelle) > 80:
             raise HTTPException(400, f"Libellé trop long : {libelle[:30]}…")
-        try:
-            microns = float(str((it or {}).get("microns", "")).replace(",", "."))
-        except (TypeError, ValueError):
-            raise HTTPException(400, f"Épaisseur invalide pour {libelle}.") from None
-        if not (1 <= microns <= 5000):
-            raise HTTPException(400, f"Épaisseur invalide pour {libelle} — valeur entre 1 et 5000 µm.")
         if libelle.lower() in vus:
             raise HTTPException(400, f"Libellé en double : {libelle}.")
         vus.add(libelle.lower())
-        propres.append((libelle, microns))
+        valeur = _nombre_borne(it.get(champ), mini, maxi, libelle, unite)
+        famille = it.get("famille") or None
+        if famille is not None and famille not in familles:
+            raise HTTPException(400, f"Famille inconnue pour {libelle}.")
+        try:
+            rid = int(it["id"]) if it.get("id") not in (None, "") else None
+        except (TypeError, ValueError):
+            rid = None
+        propres.append((rid, libelle, valeur, famille, "famille" in it))
+
     now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
-        conn.execute("DELETE FROM mp_metrage_epaisseurs")
-        for i, (libelle, microns) in enumerate(propres):
-            conn.execute(
-                "INSERT INTO mp_metrage_epaisseurs (libelle, microns, ordre, updated_at) "
-                "VALUES (?,?,?,?)",
-                (libelle, microns, (i + 1) * 10, now),
-            )
+        existants = {r["id"]: r for r in _metrage_epaisseurs(conn)}
+        par_libelle = {r["libelle"].lower(): r["id"] for r in existants.values()}
+        gardes = set()
+        for i, (rid, libelle, valeur, famille, avec_famille) in enumerate(propres):
+            if rid not in existants:
+                rid = par_libelle.get(libelle.lower())
+            autre = par_libelle.get(libelle.lower())
+            if autre is not None and autre != rid:
+                raise HTTPException(400, f"Libellé déjà utilisé : {libelle}.")
+            ordre = (i + 1) * 10
+            if rid is None:
+                cur = conn.execute(
+                    f"INSERT INTO mp_metrage_epaisseurs (libelle, {champ}, famille, ordre, updated_at) "
+                    "VALUES (?,?,?,?,?)",
+                    (libelle, valeur, famille, ordre, now),
+                )
+                rid = cur.lastrowid
+            else:
+                fam = famille if avec_famille else existants[rid]["famille"]
+                conn.execute(
+                    f"UPDATE mp_metrage_epaisseurs SET libelle = ?, {champ} = ?, famille = ?, "
+                    "ordre = ?, updated_at = ? WHERE id = ?",
+                    (libelle, valeur, fam, ordre, now, rid),
+                )
+            par_libelle[libelle.lower()] = rid
+            gardes.add(rid)
+        for rid, r in existants.items():
+            if rid in gardes or r[champ] is None:
+                continue
+            conn.execute(f"UPDATE mp_metrage_epaisseurs SET {champ} = NULL, updated_at = ? WHERE id = ?",
+                         (now, rid))
+        conn.execute("DELETE FROM mp_metrage_epaisseurs WHERE microns IS NULL AND grammage_gsm IS NULL")
         conn.commit()
         out = _metrage_epaisseurs(conn)
     log_action(user=user, request=request, module="stock", action="UPDATE",
-               objet="metrage_epaisseurs",
-               detail=" · ".join(f"{l} {m:g} µm" for l, m in propres))
+               objet="metrage_epaisseurs" if perimetre == "epaisseur" else "grammages_matiere",
+               detail=" · ".join(f"{l} {v:g} {unite}" for _, l, v, _, _ in propres))
     return out
 
 

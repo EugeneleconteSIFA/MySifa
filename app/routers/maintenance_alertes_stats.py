@@ -4,6 +4,10 @@ GET /api/maintenance/alertes/stats : statistiques des réponses, avec les
 filtres de l'historique. `format=csv` rend les validations retenues, une
 colonne par question.
 
+GET /api/maintenance/alertes/pesees : historique des pesées par front
+(saisie prod, MyProd), filtré par machine, dossier et période. Calcul :
+app/services/alertes_pesees.py.
+
 Mêmes droits que la lecture de l'historique (`/api/maintenance/alert-acks`) :
 tout utilisateur connecté. Calcul : app/services/alertes_statistiques.py.
 """
@@ -18,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from app.core.database import get_db
+from app.services import alertes_pesees
 from app.services.alertes_statistiques import PERIODES, bornes_periode, statistiques, texte_reponse
 from app.services.auth_service import get_current_user
 
@@ -72,6 +77,23 @@ def alertes_stats(request: Request):
         a.pop("_lignes", None)
         a.pop("_items", None)
     return res
+
+
+@router.get("/pesees")
+def alertes_pesees_historique(request: Request):
+    get_current_user(request)
+    q = request.query_params
+    du, au = _date(q.get("du")), _date(q.get("au"))
+    if du and au and du > au:
+        du, au = au, du
+    try:
+        limite = max(1, min(int(q.get("limite") or 300), 2000))
+    except ValueError:
+        limite = 300
+    with get_db() as conn:
+        return alertes_pesees.historique(conn, machine=q.get("machine") or None,
+                                         no_dossier=q.get("no_dossier") or None,
+                                         du=du, au=au, limite=limite)
 
 
 def _csv(res: dict) -> Response:

@@ -11071,7 +11071,9 @@ function mtrSetOpen(v) {
 async function mtrChargerEpaisseurs() {
   try {
     const d = await api('/api/stock/metrage-epaisseurs');
-    MTR.epaisseurs = Array.isArray(d) ? d : [];
+    // Le référentiel porte aussi les grammages (Poids de colle, saisie prod) :
+    // seules les lignes avec une épaisseur servent ici.
+    MTR.epaisseurs = Array.isArray(d) ? d.filter(t => t.microns != null) : [];
   } catch (e) {
     MTR.epaisseurs = [];
   }
@@ -11183,7 +11185,7 @@ function mtrRender() {
 }
 
 function mtrRenderEdition(body) {
-  const lignes = (MTR.epaisseurs || []).map(t => ({ libelle: t.libelle, microns: t.microns }));
+  const lignes = (MTR.epaisseurs || []).map(t => ({ id: t.id, libelle: t.libelle, microns: t.microns }));
   const liste = el('div', { cls: 'mtr-edit' });
   const errEl = el('div', { cls: 'mtr-err' });
   const dessiner = () => {
@@ -11207,15 +11209,16 @@ function mtrRenderEdition(body) {
   enregistrer.addEventListener('click', async () => {
     errEl.textContent = '';
     const items = lignes
-      .map(l => ({ libelle: String(l.libelle || '').trim(), microns: String(l.microns || '').replace(',', '.') }))
+      .map(l => ({ id: l.id, libelle: String(l.libelle || '').trim(), microns: String(l.microns || '').replace(',', '.') }))
       .filter(l => l.libelle || l.microns);
     enregistrer.disabled = true;
     try {
-      MTR.epaisseurs = await api('/api/stock/metrage-epaisseurs', {
+      const d = await api('/api/stock/metrage-epaisseurs', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ perimetre: 'epaisseur', items }),
       });
+      MTR.epaisseurs = (Array.isArray(d) ? d : []).filter(t => t.microns != null);
       MTR.edit = false;
       showToast('Épaisseurs enregistrées.', 'success');
       mtrRender();

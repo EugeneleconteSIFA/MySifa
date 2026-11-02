@@ -594,7 +594,8 @@
       lireJson('/api/tools/couches', { couches: [] }),
       lireJson('/api/tools/cartons', { cartons: [], ecartes: [] }),
     ]);
-    C.epaisseurs = Array.isArray(ep) ? ep : [];
+    // Le référentiel porte aussi des grammages sans épaisseur (Poids de colle).
+    C.epaisseurs = Array.isArray(ep) ? ep.filter(t => t.microns != null) : [];
     C.couches = (co && Array.isArray(co.couches)) ? co.couches : [];
     // Une matière disparue de MyStock ne reste pas choisie.
     Object.keys(C.choix).forEach(cat => { if (!matiere(cat, C.choix[cat])) { delete C.choix[cat]; delete C.umCouche[cat]; } });
