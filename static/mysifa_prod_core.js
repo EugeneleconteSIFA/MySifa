@@ -8435,6 +8435,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const compteurAvant = releveFinCalage ? Number(prefill._fin_calage.ctr)
     : (prefill && prefill.metrage_compteur!=null && prefill.metrage_compteur!=='') ? Number(prefill.metrage_compteur) : null;
   const metrageCompteurI  = h('input', { type: 'number', placeholder: '0', min: '0', step: '1', value: compteurAvant!=null ? compteurAvant : '' });
+  // Changement d'outil qui ferme un calage : son propre compteur, plus celui
+  // du « Production » qui suit, d'où sort le métrage de calage.
+  const finCalageOutil = !!(prefill && (prefill.operation_category||'') === 'calage'
+    && prefill.changement_outil && prefill._fin_calage && prefill._fin_calage.ctr != null);
+  const finCalageAvant = finCalageOutil ? Number(prefill._fin_calage.ctr) : null;
+  const compteurFinCalageI = h('input', { type: 'number', placeholder: '0', min: '0', step: '1', value: finCalageAvant!=null ? finCalageAvant : '' });
   // Fin de production : le choix de l'opérateur (« Dossier terminé » / « À
   // reprendre plus tard ») se corrige ici ; le serveur rejoue planning et série.
   const finDossierAvant = (prefill && prefill.fin_dossier!=null && prefill.fin_dossier!=='') ? String(Number(prefill.fin_dossier)) : '';
@@ -8520,8 +8526,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
           h('label', null, releveFinCalage ? 'Compteur à la fin du calage (m)' : 'Compteur relevé (m)'),
           metrageCompteurI
         ),
-        h('div', { style:{fontSize:'12px',color:'var(--muted)',alignSelf:'end',paddingBottom:'10px'} },
-          'Compteur machine noté au changement ou à la fin du calage. Le commentaire suit la correction.')
+        finCalageOutil
+          ? h('div', null,
+              h('label', null, 'Compteur à la fin du calage (m)'),
+              compteurFinCalageI)
+          : h('div', { style:{fontSize:'12px',color:'var(--muted)',alignSelf:'end',paddingBottom:'10px'} },
+              'Compteur machine noté au changement ou à la fin du calage. Le commentaire suit la correction.')
       ),
       h('div', { className: 'form-row', 'data-role':'fin-dossier', style:{display:'none'} },
         h('div', { style:{ gridColumn:'span 2' } },
@@ -8617,6 +8627,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
               const v = brut === '' ? null : parseFloat(brut);
               if(brut !== '' && (!isFinite(v) || v < 0)){ toast('Compteur invalide — un nombre de mètres.', 'error'); return; }
               if(v !== compteurAvant) corps.metrage_compteur = v;
+              if(finCalageOutil){
+                const b2 = String(compteurFinCalageI.value||'').trim();
+                const v2 = b2 === '' ? null : parseFloat(b2);
+                if(b2 !== '' && (!isFinite(v2) || v2 < 0)){ toast('Compteur invalide — un nombre de mètres.', 'error'); return; }
+                if(v2 != null && v2 !== finCalageAvant) corps.compteur_fin_calage = v2;
+              }
             }
             // Envoyé seulement s'il change : le serveur rejoue alors planning et série.
             if(code === CODE_FIN_DOS && finDossierSel.value !== '' && finDossierSel.value !== finDossierAvant){
