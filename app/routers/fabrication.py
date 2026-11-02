@@ -4454,6 +4454,138 @@ async def update_commentaire(saisie_id: int, request: Request):
     )
     return {"success": True}
 
+def _prochain_releve_apres(conn, saisie_id, date_operation, machine):
+    """Premier relevé du compteur machine POSTÉRIEUR à une saisie — le
+    pendant de `_dernier_releve_avant`, pour qu'une correction ne fasse pas
+    passer le compteur au-dessus d'un relevé déjà saisi après elle."""
+    row = conn.execute(
+        """SELECT ctr FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
+                 FROM production_data
+                WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                  AND (date_operation > ? OR (date_operation = ? AND id > ?))
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation ASC, id ASC LIMIT 1""",
+        (saisie_id, machine, date_operation, date_operation, saisie_id),
+    ).fetchone()
+    return row[0] if row else None
+
+
+# Le relevé que porte chaque saisie, selon son code : la colonne écrite, et
+# celle qui la remplace quand elle est vide (anciennes saisies).
+_CHAMPS_METRAGE = {
+    "debut": ("metrage_total_debut", "metrage_prevu"),
+    "fin": ("metrage_total_fin", "metrage_reel"),
+    "compteur": ("metrage_compteur", None),
+}
+
+
+def _champs_metrage_permis(code: str) -> tuple:
+    code = str(code or "").strip()
+    if code == "01":
+        return ("debut",)
+    if code == "89":
+        return ("fin",)
+    if code == "90":
+        return ("debut", "fin")
+    return ("compteur",)
+
+
+@router.put("/api/fabrication/saisie/{saisie_id}/metrage")
+async def corriger_metrage_saisie(saisie_id: int, request: Request):
+    """Le conducteur corrige le compteur relevé sur une de ses saisies.
+
+    Seul le relevé bouge — ni l'heure, ni l'opération, ni le dossier : le reste
+    se corrige dans MyProd › Saisies. La valeur doit rester entre le relevé
+    précédent et le suivant sur la machine, sinon la production calculée entre
+    deux saisies deviendrait négative. La correction est marquée (modifie_*)
+    comme toute correction de donnée de production."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+    champ = str(body.get("champ") or "").strip()
+    try:
+        m = float(str(body.get("valeur")).replace(" ", "").replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Métrage invalide — un nombre de mètres.")
+    if m < 0:
+        raise HTTPException(status_code=400, detail="Métrage invalide — un nombre de mètres.")
+
+    fr = lambda v: f"{int(round(float(v))):,}".replace(",", " ")
+    with get_db() as conn:
+        ex = conn.execute("SELECT * FROM production_data WHERE id=?", (saisie_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Saisie non trouvée")
+        user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+        if not is_admin(user) and ex["operateur"] != user_operateur:
+            raise HTTPException(status_code=403, detail="Non autorisé")
+        if int(ex["est_annule"] or 0):
+            raise HTTPException(status_code=409, detail="Saisie annulée avec le dossier — modification impossible.")
+        if str(ex["operation_code"] or "").strip() == "03":
+            # La fin de calage réécrit aussi la mention de la ligne de calage.
+            raise HTTPException(status_code=409, detail="Fin de calage : passer par le relevé de fin de calage.")
+        permis = _champs_metrage_permis(ex["operation_code"])
+        if champ not in permis:
+            raise HTTPException(status_code=400, detail="Ce relevé ne se corrige pas sur cette saisie.")
+        col, repli = _CHAMPS_METRAGE[champ]
+        avant = ex[col] if ex[col] is not None else (ex[repli] if repli else None)
+
+        prec = _dernier_releve_avant(conn, saisie_id, ex["date_operation"], ex["machine"])
+        suiv = _prochain_releve_apres(conn, saisie_id, ex["date_operation"], ex["machine"])
+        # Annulation : début et fin sur la même ligne, le début doit rester dessous.
+        if champ == "fin":
+            deb = ex["metrage_total_debut"] if ex["metrage_total_debut"] is not None else ex["metrage_prevu"]
+            if deb is not None and str(ex["operation_code"] or "").strip() == "90":
+                prec = max(float(prec), float(deb)) if prec is not None else float(deb)
+        if champ == "debut" and str(ex["operation_code"] or "").strip() == "90":
+            fin = ex["metrage_total_fin"] if ex["metrage_total_fin"] is not None else ex["metrage_reel"]
+            if fin is not None:
+                suiv = min(float(suiv), float(fin)) if suiv is not None else float(fin)
+        if prec is not None and m < float(prec):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Métrage trop petit : le relevé précédent sur la machine est à {fr(prec)} m.",
+            )
+        if suiv is not None and m > float(suiv):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Métrage trop grand : le relevé suivant sur la machine est à {fr(suiv)} m.",
+            )
+
+        # Changement d'outil : la trace du commentaire cite le compteur.
+        commentaire = ex["commentaire"]
+        if champ == "compteur" and commentaire and avant is not None:
+            commentaire = commentaire.replace(f"compteur {fr(avant)} m", f"compteur {fr(m)} m", 1)
+
+        note = f"Métrage corrigé au poste : {fr(avant) if avant is not None else '—'} → {fr(m)} m"
+        conn.execute(
+            f"""UPDATE production_data SET {col}=?, commentaire=?,
+                       modifie_par=?, modifie_le=?, modifie_note=?
+                 WHERE id=?""",
+            (m, commentaire, user.get("email"), datetime.now().isoformat(), note, saisie_id),
+        )
+        try:
+            from app.routers.saisies import _recaler_compteur_machine
+            _recaler_compteur_machine(conn, ex["machine"])
+        except Exception:
+            logger.exception("[fabrication] recalage du compteur machine après correction")
+        conn.commit()
+
+    log_action(
+        user=user, action="UPDATE", module="fabrication",
+        objet=f"Métrage saisie #{saisie_id} · {ex['machine']}",
+        detail={"no_dossier": ex["no_dossier"], "operation_code": ex["operation_code"],
+                "champ": col, "avant": avant, "apres": m},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "champ": champ, "valeur": m}
+
+
 # ─── Endpoints repiquage (code 03 sur machine Repiquage) ──────────────────────
 
 

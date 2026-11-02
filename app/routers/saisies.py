@@ -1019,6 +1019,31 @@ def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
             (nouveau, com["machine"], com["machine"], nouveau))
 
 
+def _recaler_compteur_machine(conn, machine) -> None:
+    """Compteur machine = relevé de la saisie la plus récente qui en porte un."""
+    machine = str(machine or "").strip()
+    if not machine:
+        return
+    row = conn.execute(
+        """SELECT ctr FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
+                 FROM production_data
+                WHERE COALESCE(est_annule,0)=0 AND trim(machine)=?
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (machine,),
+    ).fetchone()
+    if row is None:
+        return
+    conn.execute("UPDATE machines SET dernier_metrage=? WHERE trim(nom)=? OR trim(code)=?",
+                 (float(row[0]), machine, machine))
+
+
 @router.put("/api/saisies/{row_id}")
 async def update_saisie(row_id: int, request: Request):
     user = get_current_user(request)
@@ -1069,7 +1094,7 @@ async def update_saisie(row_id: int, request: Request):
                date_operation=?,machine=?,no_dossier=?,client=?,designation=?,
                quantite_a_traiter=?,quantite_traitee=?,
                metrage_prevu=?,metrage_reel=?,
-               metrage_total_debut=?,metrage_total_fin=?,
+               metrage_total_debut=?,metrage_total_fin=?,metrage_compteur=?,
                commentaire=?,
                modifie_par=?,modifie_le=?,modifie_note=?,data=? WHERE id=?""",
             (operateur_new,
@@ -1085,10 +1110,23 @@ async def update_saisie(row_id: int, request: Request):
              body.get("metrage_reel")        if "metrage_reel"        in body else _ex("metrage_reel"),
              body.get("metrage_total_debut") if "metrage_total_debut" in body else _ex("metrage_total_debut"),
              body.get("metrage_total_fin")   if "metrage_total_fin"   in body else _ex("metrage_total_fin"),
-             body.get("commentaire")         if "commentaire"         in body else _ex("commentaire"),
+             body.get("metrage_compteur")    if "metrage_compteur"    in body else _ex("metrage_compteur"),
+             body.get("commentaire")        if "commentaire"         in body else _ex("commentaire"),
              user["email"], datetime.now().isoformat(), body.get("note", ""),
              json.dumps(new_data, default=str), row_id)
         )
+        # Un compteur corrigé recale le compteur machine sur le dernier relevé
+        # de la machine. Il ne fait que monter à la saisie : sans ce recalage,
+        # un zéro en trop corrigé après coup laissait le compteur gonflé, et
+        # chaque saisie suivante était refusée comme « inférieure ».
+        if any(k in body for k in ("metrage_prevu", "metrage_reel", "metrage_total_debut",
+                                   "metrage_total_fin", "metrage_compteur")):
+            try:
+                _recaler_compteur_machine(conn, body.get("machine", _ex("machine")))
+                if str(body.get("machine", _ex("machine")) or "").strip() != str(_ex("machine") or "").strip():
+                    _recaler_compteur_machine(conn, _ex("machine"))
+            except Exception:
+                pass
         # Dossier ou machine changés : la saisie change de créneau.
         # Compteur relevé en cours de dossier (changement d'outil, fin de
         # calage) : corrigeable ici. Le commentaire qui le cite suit.

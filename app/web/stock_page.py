@@ -265,6 +265,22 @@ body.sb-open .sidebar-overlay{display:block}
 .si-des{font-size:11px;color:var(--muted);margin-top:1px}
 .si-badge{font-family:monospace;font-size:11px;font-weight:700;color:var(--accent);
   background:var(--accent-bg);padding:3px 8px;border-radius:10px;white-space:nowrap}
+.search-item.is-active{background:var(--accent-bg)}
+.si-main{display:flex;align-items:center;gap:10px;min-width:0}
+.si-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:2px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0;
+  background:color-mix(in srgb,var(--si-c,var(--accent)) 14%,transparent);color:var(--si-c,var(--accent))}
+.si-type.t-produit{--si-c:var(--accent)}
+.si-type.t-matiere{--si-c:var(--c2)}
+.si-type.t-emplacement{--si-c:var(--c3)}
+.si-type.t-bobine{--si-c:var(--c4)}
+.search-section-head{display:flex;justify-content:space-between;align-items:center;padding-right:10px}
+.search-clear-recent{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--muted);font-size:11px;padding:3px 8px;cursor:pointer;font-family:inherit}
+.search-clear-recent:hover{color:var(--accent);border-color:var(--accent)}
+.ref-create-link{background:none;border:none;padding:0;color:var(--accent);font-weight:700;
+  font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
+.search-item.si-create{color:var(--accent);font-weight:700;font-size:13px;justify-content:flex-start;gap:8px}
 
 /* ── Content ── */
 .content{padding:16px;max-width:900px}
@@ -2324,7 +2340,7 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .btn-sec:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 32%,transparent),0 0 20px color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent);border-color:color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);color:var(--accent)}
 .btn-sec:active{transform:translateY(1px)}
 .btn-confirm{border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;
-  cursor:pointer;font-family:inherit;color:#0a0e17}
+  cursor:pointer;font-family:inherit;color:white;background:var(--accent)}
 .btn-confirm.entree{background:var(--success)}
 .btn-confirm.sortie{background:var(--danger)}
 .btn-confirm.pf-entree{background:var(--pf-entree)}
@@ -2639,7 +2655,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=7"></script>
+<script src="/static/stock_url.js?v=8"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -3324,15 +3340,71 @@ function el(tag, attrs, ...children) {
 let searchTimer = null;
 function doSearch(q) {
   S.searchQuery = q;
+  S.searchActive = -1;
   clearTimeout(searchTimer);
-  if (!q || q.length < 1) { S.searchResults = null; updateSearchResults(); return; }
+  if (!q || !q.trim()) { S.searchResults = null; updateSearchResults(); return; }
   searchTimer = setTimeout(async () => {
     try {
-      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+      const r = await api('/api/stock/search?q=' + encodeURIComponent(q.trim()) + '&limit=8&tout=1');
+      // Une réponse lente ne doit pas écraser celle d'une frappe plus récente.
+      if (S.searchQuery !== q) return;
       S.searchResults = r;
     } catch(e) {}
     updateSearchResults();
   }, 220);
+}
+
+// ── Recherches récentes (barre globale) ──────────────────────────
+// On retient ce qui a été OUVERT, pas le texte tapé : rouvrir « A121 » ou la
+// matière 2028Y en un clic, c'est ce qu'on vient chercher ici. Préférence
+// propre au poste, d'où le localStorage.
+const LS_STOCK_RECHERCHES = 'mystock_recherches_recentes';
+const STOCK_RECHERCHES_MAX = 5;
+function stockRecherchesRecentes() {
+  try {
+    const a = JSON.parse(localStorage.getItem(LS_STOCK_RECHERCHES) || '[]');
+    return Array.isArray(a) ? a.filter(x => x && x.type && x.cle != null).slice(0, STOCK_RECHERCHES_MAX) : [];
+  } catch (e) { return []; }
+}
+function stockRetenirRecherche(item) {
+  const cle = item.type + ':' + item.cle;
+  const reste = stockRecherchesRecentes().filter(x => (x.type + ':' + x.cle) !== cle);
+  const a = [{ type: item.type, cle: item.cle, libelle: item.libelle, detail: item.detail || '', negoce: !!item.negoce }, ...reste]
+    .slice(0, STOCK_RECHERCHES_MAX);
+  try { localStorage.setItem(LS_STOCK_RECHERCHES, JSON.stringify(a)); } catch (e) {}
+}
+function stockOublierRecherches() {
+  try { localStorage.removeItem(LS_STOCK_RECHERCHES); } catch (e) {}
+  updateSearchResults();
+}
+
+const STOCK_TYPES_RECHERCHE = {
+  produit: 'Produit', matiere: 'Matière', emplacement: 'Emplacement', bobine: 'Unité',
+};
+
+// Ouvre un résultat de la barre globale, quel que soit son type.
+function stockOuvrirResultat(item) {
+  stockRetenirRecherche(item);
+  S.searchResults = null;
+  const inp = document.getElementById('main-search');
+  if (inp) inp.blur();
+  if (item.type === 'produit') {
+    if (item.negoce) {
+      clearSearch();
+      if (S.tab !== 'negoce') goToTab('negoce');
+      loadNgDetail(item.libelle);
+    } else {
+      loadProduit(Number(item.cle));
+    }
+  } else if (item.type === 'matiere') {
+    loadMatiere(Number(item.cle));
+  } else if (item.type === 'emplacement') {
+    loadEmplacement(String(item.cle));
+  } else if (item.type === 'bobine') {
+    const b = bobEnsureState();
+    b.q = String(item.cle); b.etat = 'tous'; b.page = 0;
+    goToTab('bobines');
+  }
 }
 
 async function loadProduit(id) {
@@ -3980,8 +4052,13 @@ function invV2OpenAddProductModal() {
           (p.reference || '').toUpperCase() === ref.toUpperCase()
         );
         if (!match) {
-          refError.textContent = 'Référence produit introuvable.';
-          refError.style.display = '';
+          stockRefIntrouvable(refError, ref, (prod) => {
+            _pid = prod.id; _ref = prod.reference;
+            _designation = prod.designation || ''; _unite = prod.unite || '';
+            refInp.value = prod.reference;
+            refError.style.display = 'none';
+            try { qteInp.focus(); } catch (e) {}
+          });
           return;
         }
         _pid = match.id; _ref = match.reference;
@@ -4415,6 +4492,84 @@ function _checkUnitQtyRange(unite, qte){
     return `Alerte unité/quantité : pour ${r.label}, la quantité attendue est entre ${r.min} et ${r.max}.`;
   }
   return null;
+}
+
+// ── Créer une référence produit (sans stock) ─────────────────────
+// Ouverte depuis la barre de recherche, les sélecteurs de référence produit
+// (« cette référence n'existe pas ») et le Référentiel. Elle ne crée que la
+// fiche : le stock s'ajoute ensuite par une entrée, comme pour toute référence.
+// Elle se pose PAR-DESSUS la fenêtre qui l'a ouverte, sans la fermer : la
+// saisie en cours (quantité, emplacement) n'est pas perdue.
+function openCreerRefProduitModal(seedRef, apres) {
+  document.querySelector('.ref-create-overlay')?.remove();
+  const overlay = el('div', { cls: 'modal-overlay ref-create-overlay', style: { zIndex: '10050' },
+    on: { click: e => { if (e.target === overlay) overlay.remove(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '460px' } });
+  sheet.addEventListener('click', e => e.stopPropagation());
+
+  const refInp = el('input', { cls: 'field-input', type: 'text', id: 'ref-create-ref',
+    placeholder: 'Ex. 973/0019', autocomplete: 'off', style: { direction: 'ltr', textTransform: 'uppercase' } });
+  refInp.value = String(seedRef || '').trim().toUpperCase();
+  const desInp = el('input', { cls: 'field-input', type: 'text', placeholder: 'Désignation (facultatif)', autocomplete: 'off' });
+  const uniteSel = el('select', { cls: 'field-input' });
+  allUnitLabels().forEach(u => {
+    const o = el('option', null, u); o.value = u;
+    if (u === 'étiquettes') o.selected = true;
+    uniteSel.appendChild(o);
+  });
+  const err = el('div', { style: { color: 'var(--danger)', fontSize: '12px', marginTop: '4px', display: 'none' } });
+
+  const confirmBtn = el('button', { cls: 'btn-confirm', type: 'button', on: { click: async () => {
+    const ref = refInp.value.trim().toUpperCase();
+    if (!ref) { err.textContent = 'Référence obligatoire.'; err.style.display = ''; refInp.focus(); return; }
+    confirmBtn.disabled = true;
+    try {
+      const body = { reference: ref, unite: uniteSel.value };
+      const des = desInp.value.trim();
+      if (des) body.designation = des;
+      const r = await api('/api/stock/produits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r || r.id == null) { confirmBtn.disabled = false; return; }
+      showToast(r.existing ? 'Référence ' + ref + ' déjà en base.' : 'Référence ' + ref + ' créée.', r.existing ? 'info' : 'success');
+      overlay.remove();
+      if (S.dashboard && S.dashboard.stats && !r.existing && S.dashboard.stats.nb_refs != null) S.dashboard.stats.nb_refs += 1;
+      if (typeof apres === 'function') apres({ id: r.id, reference: ref, designation: des || ref, unite: uniteSel.value, existing: !!r.existing });
+    } catch (e) {
+      err.textContent = e.message || 'Création impossible.'; err.style.display = '';
+      confirmBtn.disabled = false;
+    }
+  } } }, 'Créer la référence');
+  [refInp, desInp].forEach(i => i.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
+    if (e.key === 'Escape') { e.stopPropagation(); overlay.remove(); }
+  }));
+
+  sheet.append(
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Nouvelle référence produit'),
+    el('div', { cls: 'modal-sub' }, 'Crée la fiche produit, sans stock.'),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Référence *'), refInp, err),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Désignation'), desInp),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Unité de vente'), uniteSel),
+    el('div', { cls: 'modal-actions' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: () => overlay.remove() } }, 'Annuler'),
+      confirmBtn,
+    ),
+  );
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => { (refInp.value ? desInp : refInp).focus(); });
+}
+
+// Message « référence introuvable » d'un sélecteur de produit, avec le lien
+// qui crée la référence tapée et la sélectionne aussitôt.
+function stockRefIntrouvable(errEl, ref, onCree) {
+  errEl.innerHTML = '';
+  errEl.append('Référence produit introuvable.');
+  if (!S.stockReadOnly) {
+    errEl.append(' ', el('button', { type: 'button', cls: 'ref-create-link',
+      on: { click: () => openCreerRefProduitModal(ref, onCree) } }, 'Créer la référence ' + String(ref || '').toUpperCase()));
+  }
+  errEl.style.display = '';
 }
 
 async function createProduit(ref, commentaire, quantite, emplacement, uniteVente) {
@@ -4926,8 +5081,11 @@ function openEmplEntreeModal(codeEmpl) {
         const r = await api('/api/stock/search?q=' + encodeURIComponent(ref) + '&limit=10');
         const match = (r && r.produits || []).find(p => p.reference.toUpperCase() === ref);
         if (!match) {
-          refError.textContent = 'Référence produit non existante';
-          refError.style.display = '';
+          stockRefIntrouvable(refError, ref, (prod) => {
+            _pid = prod.id; refInp.value = prod.reference;
+            refError.style.display = 'none';
+            try { qteInp.focus(); } catch (e) {}
+          });
           return;
         }
         _pid = match.id;
@@ -5234,11 +5392,25 @@ function buildSearchBar() {
 
   const inp = el('input', {
     cls:'search-input', type:'text', id:'main-search',
-    placeholder:'Rechercher…',
+    placeholder:'Rechercher (produit, matière, emplacement, unité…)',
+    autocomplete:'off',
     style:{direction:'ltr'}
   });
   inp.addEventListener('input', e => doSearch(e.target.value));
-  inp.addEventListener('keydown', e => { if (e.key === 'Escape') clearSearch(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { clearSearch(); inp.blur(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') stockNavResultats(e);
+  });
+  // Champ vide : les dernières recherches s'affichent au focus.
+  inp.addEventListener('focus', () => { if (!inp.value.trim()) updateSearchResults(); });
+  inp.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (!inp.value.trim() && document.activeElement !== inp) {
+        const w = document.getElementById('search-results-wrap');
+        if (w) w.innerHTML = '';
+      }
+    }, 180);
+  });
 
   const iconSvg = (kind) => {
     const common = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
@@ -5268,59 +5440,116 @@ function buildSearchBar() {
   return wrap;
 }
 
+function stockNavResultats(e) {
+  const items = [...document.querySelectorAll('#search-results-wrap .search-item')];
+  if (!items.length) return;
+  e.preventDefault();
+  let i = S.searchActive == null ? -1 : S.searchActive;
+  if (e.key === 'Enter') {
+    (items[i >= 0 ? i : 0]).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    return;
+  }
+  i = e.key === 'ArrowDown' ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+  S.searchActive = i;
+  items.forEach((x, k) => x.classList.toggle('is-active', k === i));
+  items[i].scrollIntoView({ block: 'nearest' });
+}
+
+// Une ligne de résultat. mousedown plutôt que click : le champ perd le focus
+// au clic, et la liste des récentes se fermerait avant que le clic n'arrive.
+function stockLigneResultat(item, badge) {
+  return el('div', { cls: 'search-item', on: { mousedown: (e) => { e.preventDefault(); stockOuvrirResultat(item); } } },
+    el('div', { cls: 'si-main' },
+      el('span', { cls: 'si-type t-' + item.type }, STOCK_TYPES_RECHERCHE[item.type] || item.type),
+      el('div', { style: { minWidth: '0' } },
+        el('div', { cls: 'si-ref' }, item.libelle),
+        item.detail ? el('div', { cls: 'si-des' }, item.detail) : null,
+      ),
+    ),
+    badge != null && badge !== '' ? el('div', { cls: 'si-badge' }, badge) : null,
+  );
+}
+
 function updateSearchResults() {
   let wrap = document.getElementById('search-results-wrap');
   if (!wrap) return;
   wrap.innerHTML = '';
-  const q = S.searchQuery;
-  const res = S.searchResults;
-  if (!res || !q) return;
-  const { produits=[], emplacements=[] } = res;
-  if (!produits.length && !emplacements.length) {
-    wrap.appendChild(el('div',{cls:'search-results'},el('div',{cls:'card-empty'},'Aucun résultat pour \"'+q+'\"')));
+  S.searchActive = -1;
+  const q = String(S.searchQuery || '').trim();
+  if (!q) {
+    const inp = document.getElementById('main-search');
+    if (!inp || document.activeElement !== inp) return;
+    const recentes = stockRecherchesRecentes();
+    if (!recentes.length) return;
+    wrap.appendChild(el('div', { cls: 'search-results' },
+      el('div', { cls: 'search-section-head' },
+        el('div', { cls: 'search-section-title' }, 'Recherches récentes'),
+        el('button', { cls: 'search-clear-recent', type: 'button',
+          on: { mousedown: (e) => { e.preventDefault(); stockOublierRecherches(); } } }, 'Effacer'),
+      ),
+      ...recentes.map(it => stockLigneResultat(it)),
+    ));
     return;
   }
-  const box = el('div',{cls:'search-results'});
+  const res = S.searchResults;
+  if (!res) return;
+  const { produits = [], emplacements = [], matieres = [], bobines = [] } = res;
+  const box = el('div', { cls: 'search-results' });
+
   if (produits.length) {
-    box.appendChild(el('div',{cls:'search-section-title'},'📦 Produits'));
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Produits'));
     produits.forEach(p => {
-      const isNegoce = (p.type === 'negoce');
-      box.appendChild(
-        el('div',{cls:'search-item',on:{click:()=>{
-          if (isNegoce) {
-            S.searchResults = null; clearSearch();
-            if (S.tab !== 'negoce') goToTab('negoce');
-            loadNgDetail(p.reference);
-          } else {
-            loadProduit(p.id);
-          }
-        }}},
-          el('div',null,
-            el('div',{cls:'si-ref'},p.reference),
-            el('div',{cls:'si-des'},p.designation + (isNegoce ? ' · négoce' : '')),
-          ),
-          el('div',{cls:'si-badge'},fU(p.stock_total, p.unite))
-        )
-      );
+      const negoce = (p.type === 'negoce');
+      box.appendChild(stockLigneResultat({
+        type: 'produit', cle: p.id, libelle: p.reference, negoce,
+        detail: (p.designation || '') + (negoce ? ' · négoce' : ''),
+      }, fU(p.stock_total, p.unite)));
+    });
+  }
+  if (matieres.length) {
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Matières premières'));
+    matieres.forEach(m => {
+      const des = (m.designation && m.designation !== m.reference) ? m.designation : '';
+      box.appendChild(stockLigneResultat({
+        type: 'matiere', cle: m.id, libelle: m.reference || m.designation || ('#' + m.id),
+        detail: [des, m.emplacement ? 'en ' + m.emplacement : ''].filter(Boolean).join(' · '),
+      }, m.categorie || ''));
     });
   }
   if (emplacements.length) {
-    box.appendChild(el('div',{cls:'search-section-title'},'📍 Emplacements'));
-    emplacements.forEach(e => box.appendChild(
-      el('div',{cls:'search-item',on:{click:()=>loadEmplacement(e.emplacement)}},
-        el('div',null,
-          el('div',{cls:'si-ref'},stockEmplLabel(e.emplacement)),
-          el('div',{cls:'si-des'},
-            isStockEmplacementAuSol(e.emplacement)
-              ? 'Stock à expédier · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-              : isStockEmplacementSortieProd(e.emplacement)
-                ? 'Sortie de prod · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-                : e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-          ),
-        ),
-        el('div',{cls:'si-badge'},fN(e.total_unites))
-      )
-    ));
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Emplacements'));
+    emplacements.forEach(e => {
+      const n = e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '');
+      const detail = isStockEmplacementAuSol(e.emplacement) ? 'Stock à expédier · ' + n
+        : isStockEmplacementSortieProd(e.emplacement) ? 'Sortie de prod · ' + n : n;
+      box.appendChild(stockLigneResultat({
+        type: 'emplacement', cle: e.emplacement, libelle: stockEmplLabel(e.emplacement), detail,
+      }, fN(e.total_unites)));
+    });
+  }
+  if (bobines.length) {
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Unités (bobines)'));
+    bobines.forEach(b => {
+      const etat = b.etat === 'stock' ? 'en stock' : b.etat === 'consommee' ? 'consommée' : (b.etat || '');
+      box.appendChild(stockLigneResultat({
+        type: 'bobine', cle: b.code_barre, libelle: b.code_barre,
+        detail: [b.matiere_reference || '', b.lot_fournisseur ? 'lot ' + b.lot_fournisseur : '', etat].filter(Boolean).join(' · '),
+      }, b.metrage_restant != null ? fN(b.metrage_restant) + ' m' : ''));
+    });
+  }
+
+  // La référence tapée n'existe pas telle quelle : on propose de la créer.
+  const refTapee = q.toUpperCase();
+  const existe = produits.some(p => String(p.reference || '').toUpperCase() === refTapee);
+  const proposerCreation = !S.stockReadOnly && !existe && refTapee.length >= 3;
+  const vide = !produits.length && !matieres.length && !emplacements.length && !bobines.length;
+  if (vide) box.appendChild(el('div', { cls: 'card-empty' }, 'Aucun résultat pour « ' + q + ' »'));
+  if (proposerCreation) {
+    box.appendChild(el('div', { cls: 'search-item si-create', on: { mousedown: (e) => {
+      e.preventDefault();
+      clearSearch();
+      openCreerRefProduitModal(refTapee, (prod) => loadProduit(prod.id));
+    } } }, iconEl('plus-circle', 14), 'Créer la référence produit « ' + refTapee + ' »'));
   }
   wrap.appendChild(box);
 }
@@ -5843,6 +6072,14 @@ function buildReferentielCard() {
   if (!S.stockReadOnly) {
     actions.appendChild(el('button', {
       cls: 'btn-ghost-sm', type: 'button',
+      on: { click: () => openCreerRefProduitModal('', async () => {
+        await loadDashboard();
+        if (String(S.refClientQ || '').trim()) await loadRefClientSearch(S.refClientQ);
+        renderReferentielView();
+      }) },
+    }, iconEl('plus-circle', 14), ' Nouvelle référence'));
+    actions.appendChild(el('button', {
+      cls: 'btn-ghost-sm', type: 'button',
       on: { click: () => { S.importRefsOpen = true; S.importRefsPreview = null; render(); } },
     }, iconEl('upload', 14), ' Importer'));
   }
@@ -5860,7 +6097,7 @@ function buildReferentielCard() {
     ),
     el('div', { cls: 'ref-card-body' },
       el('p', { cls: 'ref-card-desc' },
-        'Importez ou exportez le référentiel des références produit et de leur unité de vente (CSV ou Excel).'
+        'Créez une référence produit, ou importez et exportez le référentiel des références et de leur unité de vente (CSV ou Excel).'
       )
     )
   );
@@ -13155,7 +13392,7 @@ function renderModalInventaireMatiere(data) {
     style: { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '10px', flexWrap: 'wrap' },
   },
     el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
-    el('button', { cls: 'btn-confirm', on: { click: async () => {
+    el('button', { cls: 'btn-confirm inventaire', on: { click: async () => {
       // Construire les lignes valides (comptée renseignée)
       const payload = [];
       lignes.forEach(li => {

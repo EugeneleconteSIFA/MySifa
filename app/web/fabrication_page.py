@@ -311,6 +311,12 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-op-chip-code{font-family:monospace;font-weight:800;font-size:11px}
 .fab-metrage{font-family:monospace;font-size:11px;color:var(--muted)}
+/* Métrage corrigeable par le conducteur : la cellule entière est le bouton. */
+.fab-metrage-btn{display:inline-flex;align-items:center;gap:6px;font-family:monospace;
+  font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);
+  border-radius:6px;padding:3px 8px;cursor:pointer;transition:border-color .12s,color .12s}
+.fab-metrage-btn:hover{border-color:var(--accent);color:var(--accent)}
+.fab-metrage-btn svg{flex:none;opacity:.7}
 .fab-comment-cell{font-size:11px;color:var(--muted);max-width:200px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fab-comment-btn{
@@ -562,6 +568,19 @@ body.light table.fab-table tr.fab-row-last td{
   border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)
 }
 .fab-field textarea{resize:vertical;min-height:70px}
+/* Compteur machine : champ texte numerique, pas d'input number. Les fleches
+   +/- du navigateur mangeaient la place du chiffre, et un input number ne
+   rend pas la position du curseur — chaque re-rendu le renvoyait en fin. */
+.fab-metrage-wrap{position:relative}
+.fab-field .fab-metrage-wrap input{background:var(--card);font-size:20px;font-weight:700;
+  padding:10px 44px 10px 14px;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.fab-metrage-unite{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  font-size:14px;font-weight:700;color:var(--muted);pointer-events:none}
+.fab-metrage-lu{font-size:12px;color:var(--muted);margin-top:6px;min-height:16px;
+  font-variant-numeric:tabular-nums}
+.fab-metrage-lu b{color:var(--text)}
+.fab-metrage-lu.ok .fab-metrage-ecart{color:var(--success)}
+.fab-metrage-lu.ko{color:var(--danger)}
 /* Moteur de saisie d'outil : resultats sous le champ de recherche. La liste
    reste dans le flux (pas en absolu) — sur un ecran d'atelier, un calque qui
    recouvre le champ suivant se ferme par accident au premier effleurement. */
@@ -1482,6 +1501,7 @@ let S = {
   compteurCalageVal: '',
   compteurCalageBusy: false,
   showCommentModal: false,
+  metrageCorr: null,
   explicationSeuil: null,
   commentSaisieId: null,
   showTracaCommentModal: false,
@@ -1697,7 +1717,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.metrageCorr || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -5451,7 +5471,14 @@ function renderMain(){
             op.label||s.operation||code),
             annuleRow ? h('span',{className:'fab-annule-tag'},'Annulé') : null,
             cycleAnnule ? h('span',{className:'fab-annule-tag',style:{opacity:'.75'}},'Cycle annulé') : null),
-          h('td',null, metrageText ? h('span',{className:'fab-metrage'},metrageText) : null),
+          h('td',null, metrageText
+            ? (!isAdminView && relevesCorrigeables(s).length
+                ? h('button',{type:'button',className:'fab-metrage-btn',
+                    title:'Corriger le métrage relevé',
+                    onClick:()=>ouvrirCorrectionMetrage(s)},
+                    metrageText, svgIcon('edit',11))
+                : h('span',{className:'fab-metrage'},metrageText))
+            : null),
           h('td',null, s.commentaire
             ? h('span',{className:'fab-comment-cell',title:s.commentaire}, s.commentaire)
             : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')
@@ -7685,7 +7712,7 @@ function champOutil(role, ctx){
   const cleQ = role==='avant' ? 'outilQAvant' : 'outilQApres';
 
   const inp = h('input',{
-    type:'search', autocomplete:'off',
+    type:'search', autocomplete:'off', id:'outil-q-'+role,
     placeholder:'Numéro, référence, libellé…',
   });
   inp.value = S[cleQ] || '';
@@ -7735,20 +7762,18 @@ function renderOutilModal(){
   }
 
   const nature = String(ctx.type_label||'Outil');
-  const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
-    style:{textAlign:'right'}});
-  metInp.value = S.outilMetrage||'';
-  metInp.addEventListener('input',e=>{ S.outilMetrage=e.target.value; });
-
   const dernier = ctx.dernier_metrage;
+  const metChamp = champCompteur({id:'outil-metrage', valeur:S.outilMetrage,
+    reference:dernier, onInput:v=>{ S.outilMetrage = v; }});
+
   const metBloc = h('div',{className:'fab-field'},
-    h('label',null,'Compteur machine au changement (m)'),
+    h('label',{for:'outil-metrage'},'Compteur machine au changement'),
     h('div',{className:'fab-field-hint'},
       dernier!=null
         ? 'Dernier relevé sur '+(ctx.machine||'cette machine')+' : '
           +Math.round(dernier).toLocaleString('fr-FR')+' m.'
         : 'Aucun relevé antérieur sur cette machine.'),
-    metInp
+    metChamp
   );
 
   const modal = h('div',{className:'fab-modal-overlay'},
@@ -7836,6 +7861,162 @@ function renderOpCommentModal(){
     )
   );
   setTimeout(()=>ta.focus(),50);
+}
+
+/* Champ de relevé du compteur machine, partagé par le changement d'outil et
+   la correction de métrage. Texte numérique avec un id : le curseur survit
+   aux re-rendus (_fabRestoreUiState), et aucune flèche +/- ne recouvre le
+   chiffre. Sous le champ, la valeur relue et son écart à `reference`. */
+function champCompteur({id, valeur, reference, libelleRef, onInput}){
+  const inp = h('input',{type:'text', id, inputmode:'numeric', autocomplete:'off',
+    placeholder: reference!=null ? String(Math.round(reference)) : 'Ex : 14200'});
+  inp.value = valeur!=null ? String(valeur) : '';
+  const lu = h('div',{className:'fab-metrage-lu'});
+  const maj = ()=>{
+    const v = inp.value ? parseInt(inp.value,10) : NaN;
+    lu.className = 'fab-metrage-lu';
+    lu.textContent = '';
+    if(isNaN(v)) return;
+    lu.appendChild(h('b',null, v.toLocaleString('fr-FR')+' m'));
+    if(reference==null) return;
+    const ecart = v - Math.round(reference);
+    if(libelleRef){
+      if(!ecart) return;
+      lu.appendChild(txt(' · '));
+      lu.appendChild(h('span',null,
+        (ecart>0?'+':'−')+Math.abs(ecart).toLocaleString('fr-FR')+' m '+libelleRef));
+    }else if(ecart < 0){
+      lu.classList.add('ko');
+      lu.appendChild(txt(' — inférieur au dernier relevé'));
+    }else{
+      lu.classList.add('ok');
+      lu.appendChild(txt(' · '));
+      lu.appendChild(h('span',{className:'fab-metrage-ecart'},
+        '+'+ecart.toLocaleString('fr-FR')+' m depuis le dernier relevé'));
+    }
+  };
+  inp.addEventListener('input',e=>{
+    const el = e.target;
+    const brut = el.value;
+    const net = brut.replace(/[^0-9]/g,'');
+    if(net !== brut){
+      // Retire espaces, lettres, signes sans renvoyer le curseur en fin
+      const pos = (el.selectionStart ?? brut.length);
+      const avant = brut.slice(0,pos).replace(/[^0-9]/g,'').length;
+      el.value = net;
+      try{ el.setSelectionRange(avant, avant); }catch(_){}
+    }
+    if(onInput) onInput(net);
+    maj();
+  });
+  maj();
+  return h('div',null,
+    h('div',{className:'fab-metrage-wrap'}, inp, h('span',{className:'fab-metrage-unite'},'m')),
+    lu
+  );
+}
+
+/* Relevés qu'une saisie porte et que son conducteur peut corriger.
+   Même découpage que le serveur (_champs_metrage_permis) : début au 01, fin
+   au 89, les deux au 90, le compteur ailleurs. On corrige, on n'ajoute pas :
+   un relevé vide ne se propose pas. */
+function relevesCorrigeables(s){
+  if(!s || Number(s.est_annule||0)) return [];
+  const code = String(s.operation_code||'').trim();
+  const deb = s.metrage_total_debut ?? s.metrage_prevu;
+  const fin = s.metrage_total_fin   ?? s.metrage_reel;
+  const out = [];
+  if((code==='01'||code==='90') && deb!=null) out.push({champ:'debut', label:'Compteur au début', valeur:parseFloat(deb)});
+  if((code==='89'||code==='90') && fin!=null) out.push({champ:'fin', label:'Compteur à la fin', valeur:parseFloat(fin)});
+  if(!['01','89','90'].includes(code) && s.metrage_compteur!=null)
+    out.push({champ:'compteur', label:'Compteur relevé', valeur:parseFloat(s.metrage_compteur)});
+  return out;
+}
+
+function ouvrirCorrectionMetrage(s){
+  const champs = relevesCorrigeables(s);
+  if(!champs.length) return;
+  const valeurs = {};
+  champs.forEach(c=>{ valeurs[c.champ] = String(Math.round(c.valeur)); });
+  set({metrageCorr:{saisie:s, champs, valeurs, busy:false, focusPose:false}});
+}
+
+function renderMetrageCorrModal(){
+  const mc = S.metrageCorr;
+  const s = mc.saisie;
+  const code = String(s.operation_code||'').trim();
+  const op = OPS[code]||{};
+  const fermer = ()=>set({metrageCorr:null});
+  const blocs = mc.champs.map(c=>h('div',{className:'fab-field'},
+    h('label',{for:'metrage-corr-'+c.champ}, c.label),
+    h('div',{className:'fab-field-hint'},
+      'Saisi : '+Math.round(c.valeur).toLocaleString('fr-FR')+' m.'),
+    champCompteur({id:'metrage-corr-'+c.champ, valeur:mc.valeurs[c.champ],
+      reference:c.valeur, libelleRef:'par rapport à la saisie',
+      onInput:v=>{ mc.valeurs[c.champ] = v; }})
+  ));
+  // Focus posé une seule fois : ensuite c'est _fabRestoreUiState qui le garde.
+  if(!mc.focusPose){
+    mc.focusPose = true;
+    setTimeout(()=>{
+      const el = document.getElementById('metrage-corr-'+mc.champs[0].champ);
+      if(el){ el.focus(); try{ el.select(); }catch(_){} }
+    },50);
+  }
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget && !mc.busy) fermer();}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'}, svgIcon('edit',18),
+        ' Corriger le métrage — '+code+' '+(op.label||s.operation||'')),
+      h('div',{className:'fab-modal-sub'},
+        'Saisie de '+fmtTime(s.date_operation)+(s.no_dossier?' · dossier '+s.no_dossier:'')
+        +'. La valeur doit rester entre le relevé précédent et le suivant sur la machine. '
+        +'La correction est signalée dans MyProd.'),
+      ...blocs,
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted', disabled:!!mc.busy, onClick:fermer},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary', disabled:!!mc.busy, onClick:enregistrerCorrectionMetrage},
+          svgIcon('check',15),' Enregistrer')
+      )
+    )
+  );
+}
+
+async function enregistrerCorrectionMetrage(){
+  const mc = S.metrageCorr;
+  if(!mc || mc.busy) return;
+  const s = mc.saisie;
+  const code = String(s.operation_code||'').trim();
+  const changes = mc.champs.filter(c=>String(mc.valeurs[c.champ]||'') !== String(Math.round(c.valeur)));
+  if(!changes.length){ set({metrageCorr:null}); return; }
+  if(changes.some(c=>!String(mc.valeurs[c.champ]||'').trim())){
+    showToast('Métrage manquant — saisissez le compteur relevé.','danger');
+    return;
+  }
+  fabPauseAutoRefresh(10000);
+  mc.busy = true; render();
+  try{
+    for(const c of changes){
+      const v = parseInt(mc.valeurs[c.champ],10);
+      if(code==='03'){
+        // Fin de calage : sa route réécrit aussi la mention de la ligne de calage.
+        await apiFetch('/api/fabrication/saisie/'+s.id+'/compteur-fin-calage',{
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({metrage_compteur:v}),
+        });
+      }else{
+        await apiFetch('/api/fabrication/saisie/'+s.id+'/metrage',{
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({champ:c.champ, valeur:v}),
+        });
+      }
+    }
+    await loadSession({noRender:true, silent:true});
+    S.metrageCorr = null;
+    showToast('Métrage corrigé.');
+  }catch(e){
+    mc.busy = false;
+    showToast(e.message,'danger');
+  }
 }
 
 function renderCommentModal(){
@@ -9674,6 +9855,7 @@ function render(){
   if(S.confirmCompteur)   root.appendChild(renderConfirmCompteurModal());
   if(S.showCompteurCalage) root.appendChild(renderCompteurCalageModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
+  if(S.metrageCorr)       root.appendChild(renderMetrageCorrModal());
   if(S.showAnnulModal)    root.appendChild(renderAnnulModal());
   if(S.showTracaCommentModal) root.appendChild(renderTracaCommentModal());
   if(S.showRepiquageEditModal) root.appendChild(renderRepiquageEditModal());

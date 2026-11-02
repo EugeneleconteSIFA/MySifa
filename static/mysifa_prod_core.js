@@ -315,7 +315,7 @@
     if(_PAGES_FILTRES.indexOf(S.page)!==-1){
       var fv=S.fv||{};
       var pr=_datePresets().filter(function(x){return x.from===fv.date_from&&x.to===fv.date_to;})[0];
-      if(pr){ if(pr.key!=='yesterday') p.periode=pr.key; }
+      if(pr){ if(pr.key!==_periodeDefaut()) p.periode=pr.key; }
       else if(fv.date_from||fv.date_to){ p.du=fv.date_from||''; p.au=fv.date_to||''; }
       p.machine=(fv.machines||[]).slice();
       p.operateur=(fv.operateurs||[]).slice();
@@ -517,9 +517,9 @@
       var pr=k?_datePresets().filter(function(x){return x.key===k;})[0]:null;
       if(pr){ S.fv.date_from=pr.from; S.fv.date_to=pr.to; }
       else if(u.get('du')){ S.fv.date_from=u.get('du'); S.fv.date_to=u.get('au')||u.get('du'); }
-      else if(complet){
-        var y=_datePresets().filter(function(x){return x.key==='yesterday';})[0];
-        S.fv.date_from=y.from; S.fv.date_to=y.to;
+      else{
+        // Pas de période dans l'adresse : celle par défaut de l'écran.
+        _appliquerPeriodeDefaut();
       }
       if(complet||u.a('machine')) S.fv.machines=u.tous('machine');
       if(complet||u.a('operateur')) S.fv.operateurs=u.tous('operateur');
@@ -11041,6 +11041,9 @@ function _datePresets(){
     {key:'yesterday',
      label: dernierJour === veille ? 'Hier' : 'Dernier jour',
      from: dernierJour, to: dernierJour},
+    {key:'deux_jours',
+     label: dernierJour === veille ? "Hier et aujourd'hui" : "Dernier jour et aujourd'hui",
+     from: dernierJour, to: fmt(today)},
     {key:'last7',     label:'7 derniers jours',  from:fmt(last7Start),    to:fmt(today)},
     {key:'last30',    label:'30 derniers jours', from:fmt(last30Start),   to:fmt(today)},
     {key:'thisMonth', label:'Mois en cours',     from:fmt(monthStart),    to:fmt(today)},
@@ -11048,6 +11051,24 @@ function _datePresets(){
   ];
 }
 
+
+// Période par défaut selon l'écran : la vue d'ensemble regarde la semaine,
+// la liste des saisies la veille travaillée et le jour même (ce qu'un
+// opérateur vient relire), le reste la dernière journée travaillée.
+function _periodeDefaut(){
+  const sous = S.page==='production' ? (S.subPage||'kpis') : null;
+  if(sous==='kpis') return 'last7';
+  if(S.page==='saisies' || sous==='saisies') return 'deux_jours';
+  return 'yesterday';
+}
+function _periodeCourante(){
+  const p = _datePresets().filter(x => x.from === S.fv.date_from && x.to === S.fv.date_to)[0];
+  return p ? p.key : null;
+}
+function _appliquerPeriodeDefaut(){
+  const p = _datePresets().filter(x => x.key === _periodeDefaut())[0];
+  if(p){ S.fv.date_from = p.from; S.fv.date_to = p.to; }
+}
 
 // Widget d'accueil (mysifa_blocs.js) : la période et les machines filtrées ne
 // sont pas dans l'URL. On les déclare à la capture, sous forme de raccourci
@@ -11063,8 +11084,8 @@ window.mysifaBlocsContexte = function(){
 
 // Ouverture depuis un indicateur d'accueil : on remet la période et les
 // machines capturées (paramètres posés par mysifaBlocsContexte ci-dessus).
-// « Hier » n'est pas reposé : c'est déjà le défaut de la page, résolu en
-// dernière journée travaillée par chargerDernierJourSaisi.
+// « Hier » posé sur la veille calendaire : chargerDernierJourSaisi le
+// remplace par la dernière journée travaillée.
 (function(){
   try{
     const sp = new URLSearchParams(location.search || '');
@@ -11075,7 +11096,7 @@ window.mysifaBlocsContexte = function(){
     if(k === 'dates' && sp.get('bloc_du')){
       S.fv.date_from = sp.get('bloc_du');
       S.fv.date_to = sp.get('bloc_au') || sp.get('bloc_du');
-    } else if(k && k !== 'yesterday'){
+    } else if(k){
       const p = _datePresets().filter(x => x.key === k)[0];
       if(p){ S.fv.date_from = p.from; S.fv.date_to = p.to; }
     }
@@ -11103,6 +11124,11 @@ async function chargerDernierJourSaisi(){
     // touche, on la remplace par la derniere journee travaillee : ouvrir la
     // page un lundi sur un dimanche vide n'apprend rien. Un filtre deja
     // modifie n'est jamais ecrase.
+    if(S.fv.date_from === veille && S.fv.date_to === _datePresets().filter(x => x.key === 'deux_jours')[0].to && d.jour !== veille){
+      S.fv.date_from = d.jour;
+      await applyF();
+      return;
+    }
     if(S.fv.date_from === veille && S.fv.date_to === veille && d.jour !== veille){
       S.fv.date_from = d.jour;
       S.fv.date_to = d.jour;
@@ -13214,7 +13240,12 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
+        const auDefaut = _periodeCourante() === _periodeDefaut();
         S.subPage=t.key;
+        if(auDefaut && _periodeCourante() !== _periodeDefaut()){
+          _appliquerPeriodeDefaut();
+          await applyF();
+        }
         _syncProdHash();
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
         else{stopMachineStatusPolling();}

@@ -228,8 +228,16 @@ def _clean_operateur(name: str) -> str:
     return s or "?"
 
 
-def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
-    """Construit les stats MyProd pour un seul no_dossier."""
+def build_dossier_production_stats(rows: List[dict], no_dossier: str,
+                                   contexte: Optional[List[dict]] = None) -> dict:
+    """Construit les stats MyProd pour un seul no_dossier.
+
+    `contexte` : toutes les saisies des mêmes opérateurs les mêmes jours,
+    tous dossiers confondus. La durée d'une opération court jusqu'à la saisie
+    suivante de l'opérateur ; sans les autres dossiers de sa journée, une
+    opération s'étirerait par-dessus le dossier qu'il a fait entre-temps.
+    C'est le calcul de la vue d'ensemble de MyProd.
+    """
     ref = str(no_dossier or "").strip()
     all_list = [dict(r) for r in rows if str(r.get("no_dossier") or "").strip() == ref]
     if not all_list:
@@ -250,7 +258,12 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
             "operateurs": [],
         }
 
-    dossier_times = _enrich_metrage(all_list, compute_dossier_times(all_list))
+    if contexte:
+        temps = [d for d in compute_dossier_times([dict(r) for r in contexte])
+                 if str(d.get("no_dossier") or "").strip() == ref]
+    else:
+        temps = compute_dossier_times(all_list)
+    dossier_times = _enrich_metrage(all_list, temps)
 
     calage = sum(float(d.get("temps_calage_min") or 0) for d in dossier_times)
     prod = sum(float(d.get("temps_prod_min") or 0) for d in dossier_times)

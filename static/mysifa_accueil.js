@@ -946,7 +946,7 @@
      l'adresse capturée de l'indicateur (PATCH url_capture), comme depuis le
      questionnaire de Personnaliser, qui garde tous les filtres (dates
      choisies comprises). Décision du 14/10/2026. */
-  var PERIODE_COURT = { today: "Auj.", yesterday: "Dernier jour", last7: "7 j", last30: "30 j",
+  var PERIODE_COURT = { today: "Auj.", yesterday: "Dernier jour", deux_jours: "Veille + auj.", last7: "7 j", last30: "30 j",
                         thisMonth: "Mois", prevMonth: "Mois dernier" };
 
   function barreFiltres(c) {
