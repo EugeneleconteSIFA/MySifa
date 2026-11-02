@@ -562,6 +562,19 @@ body.light table.fab-table tr.fab-row-last td{
   border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)
 }
 .fab-field textarea{resize:vertical;min-height:70px}
+/* Compteur machine : champ texte numerique, pas d'input number. Les fleches
+   +/- du navigateur mangeaient la place du chiffre, et un input number ne
+   rend pas la position du curseur — chaque re-rendu le renvoyait en fin. */
+.fab-metrage-wrap{position:relative}
+.fab-field .fab-metrage-wrap input{background:var(--card);font-size:20px;font-weight:700;
+  padding:10px 44px 10px 14px;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.fab-metrage-unite{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  font-size:14px;font-weight:700;color:var(--muted);pointer-events:none}
+.fab-metrage-lu{font-size:12px;color:var(--muted);margin-top:6px;min-height:16px;
+  font-variant-numeric:tabular-nums}
+.fab-metrage-lu b{color:var(--text)}
+.fab-metrage-lu.ok .fab-metrage-ecart{color:var(--success)}
+.fab-metrage-lu.ko{color:var(--danger)}
 /* Moteur de saisie d'outil : resultats sous le champ de recherche. La liste
    reste dans le flux (pas en absolu) — sur un ecran d'atelier, un calque qui
    recouvre le champ suivant se ferme par accident au premier effleurement. */
@@ -7655,7 +7668,7 @@ function champOutil(role, ctx){
   const cleQ = role==='avant' ? 'outilQAvant' : 'outilQApres';
 
   const inp = h('input',{
-    type:'search', autocomplete:'off',
+    type:'search', autocomplete:'off', id:'outil-q-'+role,
     placeholder:'Numéro, référence, libellé…',
   });
   inp.value = S[cleQ] || '';
@@ -7705,20 +7718,59 @@ function renderOutilModal(){
   }
 
   const nature = String(ctx.type_label||'Outil');
-  const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
-    style:{textAlign:'right'}});
-  metInp.value = S.outilMetrage||'';
-  metInp.addEventListener('input',e=>{ S.outilMetrage=e.target.value; });
-
   const dernier = ctx.dernier_metrage;
+  // Texte numerique avec un id : le curseur survit aux re-rendus
+  // (_fabRestoreUiState), et aucune fleche +/- ne recouvre le chiffre.
+  const metInp = h('input',{type:'text', id:'outil-metrage', inputmode:'numeric',
+    autocomplete:'off', placeholder:dernier!=null ? String(Math.round(dernier)) : 'Ex : 14200'});
+  metInp.value = S.outilMetrage||'';
+  const metLu = h('div',{className:'fab-metrage-lu'});
+  const majLu = ()=>{
+    const v = S.outilMetrage ? parseInt(S.outilMetrage,10) : NaN;
+    metLu.className = 'fab-metrage-lu';
+    metLu.textContent = '';
+    if(isNaN(v)) return;
+    metLu.appendChild(h('b',null, v.toLocaleString('fr-FR')+' m'));
+    if(dernier==null) return;
+    const ecart = v - Math.round(dernier);
+    if(ecart < 0){
+      metLu.classList.add('ko');
+      metLu.appendChild(txt(' — inférieur au dernier relevé'));
+    }else{
+      metLu.classList.add('ok');
+      metLu.appendChild(txt(' · '));
+      metLu.appendChild(h('span',{className:'fab-metrage-ecart'},
+        '+'+ecart.toLocaleString('fr-FR')+' m depuis le dernier relevé'));
+    }
+  };
+  metInp.addEventListener('input',e=>{
+    const el = e.target;
+    const brut = el.value;
+    const net = brut.replace(/[^0-9]/g,'');
+    if(net !== brut){
+      // Retire espaces, lettres, signes sans renvoyer le curseur en fin
+      const pos = (el.selectionStart ?? brut.length);
+      const avant = brut.slice(0,pos).replace(/[^0-9]/g,'').length;
+      el.value = net;
+      try{ el.setSelectionRange(avant, avant); }catch(_){}
+    }
+    S.outilMetrage = net;
+    majLu();
+  });
+  majLu();
+
   const metBloc = h('div',{className:'fab-field'},
-    h('label',null,'Compteur machine au changement (m)'),
+    h('label',{for:'outil-metrage'},'Compteur machine au changement'),
     h('div',{className:'fab-field-hint'},
       dernier!=null
         ? 'Dernier relevé sur '+(ctx.machine||'cette machine')+' : '
           +Math.round(dernier).toLocaleString('fr-FR')+' m.'
         : 'Aucun relevé antérieur sur cette machine.'),
-    metInp
+    h('div',{className:'fab-metrage-wrap'},
+      metInp,
+      h('span',{className:'fab-metrage-unite'},'m')
+    ),
+    metLu
   );
 
   const modal = h('div',{className:'fab-modal-overlay'},
