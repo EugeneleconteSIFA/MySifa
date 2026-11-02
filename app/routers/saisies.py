@@ -395,8 +395,18 @@ def list_saisies(
         stock_rows = []
 
     rows_out = [dict(r) for r in rows]
+    # Un code de changement d'outil porte son propre compteur ; une autre
+    # ligne de calage n'en porte pas (_ligne_du_compteur) — l'écran de
+    # correction en a besoin pour savoir quel relevé il montre.
+    try:
+        from app.services.outils import codes_par_type
+        with get_db() as conn3:
+            codes_outil = set(codes_par_type(conn3))
+    except Exception:
+        codes_outil = set()
     for r in rows_out:
         r["kind"] = "prod"
+        r["changement_outil"] = str(r.get("operation_code") or "").strip() in codes_outil
     rows_out.extend(stock_rows)
     # v2.3.39 : merge des alertes validées comme des saisies. Mêmes filtres
     # (operateur = user_nom, machine, no_dossier, dates). Non-admin ne voit
@@ -973,6 +983,37 @@ async def modifier_dossier_alerte(ack_id: int, request: Request):
     return {"success": True}
 
 
+def _ligne_du_compteur(conn, ex):
+    """La saisie qui porte le compteur qu'on corrige depuis `ex`.
+
+    Le relevé de fin de calage est écrit sur le « Production » qui ferme le
+    calage, et sa mention (« Fin de calage · compteur X m · calage Y m ») sur
+    la ligne de calage juste avant. Corriger le compteur depuis cette ligne
+    de calage écrivait donc un second compteur à côté du vrai : la mention
+    changeait, le métrage de calage restait calculé sur l'ancien relevé.
+    Une ligne de calage qui n'est pas un changement d'outil renvoie au
+    « Production » qui la suit sur la machine ; sinon, la ligne elle-même."""
+    if (ex["operation_category"] or "") != "calage":
+        return ex
+    try:
+        from app.services.outils import codes_par_type
+        if str(ex["operation_code"] or "").strip() in codes_par_type(conn):
+            return ex
+    except Exception:
+        return ex
+    suiv = conn.execute(
+        """SELECT * FROM production_data
+            WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+              AND COALESCE(operation_category,'') NOT IN ('alert_ack','stock_pf','stock_mp')
+              AND (date_operation > ? OR (date_operation = ? AND id > ?))
+            ORDER BY date_operation ASC, id ASC LIMIT 1""",
+        (ex["id"], ex["machine"] or "", ex["date_operation"], ex["date_operation"], ex["id"]),
+    ).fetchone()
+    if suiv and (suiv["operation_category"] or "") == "production":
+        return suiv
+    return ex
+
+
 def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
     """Écrit le compteur relevé d'une saisie corrigée dans MyProd.
 
@@ -991,6 +1032,13 @@ def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
             raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
         if nouveau < 0:
             raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
+    cible = _ligne_du_compteur(conn, ex)
+    if cible["id"] != ex["id"]:
+        # La mise à jour générale vient d'écrire la valeur sur la ligne de
+        # calage, comme le faisait toute correction avant celle-ci : le
+        # relevé n'a qu'une place, on l'en retire.
+        conn.execute("UPDATE production_data SET metrage_compteur=NULL WHERE id=?", (ex["id"],))
+        row_id, ex = cible["id"], cible
     ancien = ex["metrage_compteur"] if "metrage_compteur" in ex.keys() else None
     if (ancien is None and nouveau is None) or (
             ancien is not None and nouveau is not None and abs(float(ancien) - nouveau) < 0.5):
@@ -1132,6 +1180,12 @@ async def update_saisie(row_id: int, request: Request):
         # calage) : corrigeable ici. Le commentaire qui le cite suit.
         if "metrage_compteur" in body:
             _maj_compteur_releve(conn, row_id, ex, body.get("metrage_compteur"))
+            # Le relevé a pu changer de ligne (fin de calage) : compteur
+            # machine recalé sur l'état final.
+            try:
+                _recaler_compteur_machine(conn, body.get("machine", _ex("machine")))
+            except Exception:
+                pass
         if (str(body.get("no_dossier", _ex("no_dossier")) or "").strip() != str(_ex("no_dossier") or "").strip()
                 or str(body.get("machine", _ex("machine")) or "").strip() != str(_ex("machine") or "").strip()):
             try:
