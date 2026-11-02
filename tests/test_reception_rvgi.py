@@ -423,6 +423,46 @@ check("fournisseur et article relus dans l'ERP",
 check("référence MySifa", h[0]["matiere_ref"], "385 x 385 x 208 mm")
 check("historique : libellé technique", h[0]["libelle_technique"], "Caisse 3BR49 385x385x208")
 check("sans miroir, l'historique reste lisible", rr.historique(base, None)[0]["saisie_erp"], None)
+check("avant la migration : la ligne est à valider", h[0]["valide_at"], None)
+
+# ── 11. Validation : la synchro fait entrer, une personne valide ───────────
+# Toute réception entrée en stock doit être relue par quelqu'un. La synchro
+# n'a pas d'id : ses entrées restent à valider. Une entrée faite à la main
+# vaut validation par son auteur, y compris pour l'historique repris par la
+# migration.
+print("\nValidation des réceptions")
+import importlib                                              # noqa: E402
+migration = importlib.import_module("app.core.migrations.2026_11_02_reception_rvgi_validation")
+base.execute("INSERT INTO erp_reception_integree (lif_id, numero, ligne, quantite, integre_at, integre_par) "
+             "VALUES (28700, 6040, 1, 3, '2026-10-29T12:42:20', 'Synchro RVGI')")
+migration.appliquer(base)
+migration.appliquer(base)
+v = {r["lif_id"]: r for r in base.execute("SELECT lif_id, valide_at, valide_par FROM erp_reception_integree")}
+check("reprise : l'entrée faite à la main est validée par son auteur",
+      (v[28691]["valide_at"], v[28691]["valide_par"]), ("2026-09-18T08:02:11", "Eugene Leconte"))
+check("reprise : l'entrée de la synchro reste à valider", v[28700]["valide_at"], None)
+
+LIGNE_SYNCHRO = dict(LIGNE_CARTON, lif_id=31)
+LIGNE_MAIN = dict(LIGNE_CARTON, lif_id=32)
+rr.integrer(base, LIGNE_SYNCHRO, {"id": None, "nom": "Synchro RVGI"}, faux_mouvement)
+rr.integrer(base, LIGNE_MAIN, {"id": 7, "nom": "Marie Test"}, faux_mouvement)
+v = {r["lif_id"]: r for r in base.execute("SELECT lif_id, valide_at, valide_par FROM erp_reception_integree")}
+check("synchro : l'entrée attend une validation", v[31]["valide_at"], None)
+check("à la main : l'entrée est validée par son auteur", v[32]["valide_par"], "Marie Test")
+
+r = rr.valider(base, 31, {"id": 7, "nom": "Marie Test"})
+check("valider : qui", r["valide_par"], "Marie Test")
+vrai("valider : quand", bool(r["valide_at"]))
+check("historique : la validation remonte",
+      {l["lif_id"]: l["valide_par"] for l in rr.historique(base, None)}[31], "Marie Test")
+rr.valider(base, 31, {"id": 7, "nom": "Marie Test"}, valide=False)
+check("retirer la validation : la ligne redevient à valider",
+      base.execute("SELECT valide_at FROM erp_reception_integree WHERE lif_id=31").fetchone()[0], None)
+try:
+    rr.valider(base, 999, {"id": 7, "nom": "Marie Test"})
+    vrai("ligne absente : validation refusée", False, "elle est passée")
+except ValueError:
+    vrai("ligne absente : validation refusée", True)
 base.close()
 erp.close()
 

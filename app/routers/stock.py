@@ -11867,6 +11867,31 @@ async def reception_rvgi_integrer(request: Request):
     return {"integrees": faits, "refusees": refuses}
 
 
+@router.post("/api/stock/reception-rvgi/{lif_id}/valider")
+async def reception_rvgi_valider(lif_id: int, request: Request):
+    """Valide (ou dévalide) une réception RVGI entrée en stock.
+
+    Body : { valide: true|false }. Le stock ne bouge pas : la validation dit
+    qui a relu la ligne. La synchro fait entrer seule ; personne ne valide à
+    sa place.
+    """
+    user = require_stock_write(request)
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json() or {}
+    valide = bool(body.get("valide", True))
+    with get_db() as conn:
+        try:
+            res = _rr.valider(conn, lif_id, user, valide=valide)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        conn.commit()
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet="reception_rvgi:%s" % lif_id,
+               detail="réception validée" if valide else "validation retirée")
+    return res
+
+
 @router.post("/api/stock/reception-rvgi/{lif_id}/annuler")
 def reception_rvgi_annuler(lif_id: int, request: Request):
     """Défait l'entrée en stock d'une réception RVGI validée par erreur.

@@ -22640,10 +22640,14 @@ function buildRvgiHistorique() {
   }
   const q = (S.rvgiHistoQ || '').trim().toLowerCase();
   const toutes = h.lignes || [];
-  const lignes = q ? toutes.filter(l => [
+  // Toute réception entrée en stock doit être relue par quelqu'un : la
+  // synchro fait entrer seule, elle ne valide pas.
+  const nbAValider = toutes.filter(l => !l.valide_at).length;
+  const seulementAValider = !!S.rvgiHistoAValider && nbAValider > 0;
+  const lignes = toutes.filter(l => (!seulementAValider || !l.valide_at) && (!q || [
       l.fournisseur, l.article, l.libelle, l.libelle_technique, l.matiere_ref, l.matiere_designation,
-      l.integre_par, l.ref_br, l.numero, l.operateur_erp,
-    ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)) : toutes;
+      l.integre_par, l.valide_par, l.ref_br, l.numero, l.operateur_erp,
+    ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)));
 
   const search = el('input', {
     cls: 'field-input', id: 'rvgi-histo-search',
@@ -22662,7 +22666,13 @@ function buildRvgiHistorique() {
     el('span', { style: 'font-size:13px;color:var(--text2)' },
       el('b', null, String(lignes.length)),
       ' réception' + (lignes.length > 1 ? 's' : '') + ' entrée' + (lignes.length > 1 ? 's' : '') + ' en stock'
-      + (q ? ' (sur ' + toutes.length + ')' : ''))));
+      + (q || seulementAValider ? ' (sur ' + toutes.length + ')' : '')),
+    nbAValider ? el('button', {
+      type: 'button', cls: 'mp-pill' + (seulementAValider ? ' active' : ''),
+      attrs: { title: 'Réceptions entrées en stock par la synchro, que personne n\'a encore relues' },
+      on: { click: () => { S.rvgiHistoAValider = !seulementAValider; renderContent(); } },
+    }, nbAValider + ' à valider')
+      : el('span', { style: 'font-size:13px;color:var(--success)' }, '✓ Toutes validées')));
 
   if (!lignes.length) {
     wrap.appendChild(el('div', { cls: 'bes-empty' },
@@ -22710,6 +22720,7 @@ function buildRvgiHistorique() {
           style: 'margin-top:6px',
           on: { click: (ev) => rvgiAnnulerEntree(l, ev.currentTarget) },
         }, iconEl('rotate-ccw', 12), ' Annuler l\'entrée')),
+      rvgiCelluleValidation(l),
     ));
   });
   const table = el('table', { cls: 'bes-table' },
@@ -22721,10 +22732,63 @@ function buildRvgiHistorique() {
       el('th', { cls: 'num' }, 'Quantité'),
       el('th', null, 'Saisie RVGI'),
       el('th', null, 'Pièces'),
-      el('th', null, 'Entrée MySifa'))),
+      el('th', null, 'Entrée MySifa'),
+      el('th', null, 'Validation'))),
     tbody);
   wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
   return wrap;
+}
+
+// Validation d'une réception entrée en stock. Le stock ne bouge pas : la
+// cellule dit qui a relu la ligne (article, quantité, BL), ou qu'il reste à
+// le faire. Une entrée faite à la main est validée par son auteur.
+function rvgiCelluleValidation(l) {
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
+  const td = el('td', { style: 'white-space:nowrap;vertical-align:top' });
+  if (l.valide_at) {
+    td.appendChild(el('div', { style: 'font-weight:700;color:var(--success)' }, '✓ Validée'));
+    td.appendChild(el('div', { style: petit },
+      _rvgiFmtDateHeure(l.valide_at) + (l.valide_par ? ' · ' + l.valide_par : '')));
+    if (!S.stockReadOnly) {
+      td.appendChild(el('button', {
+        type: 'button', cls: 'recep-rvgi-mini', style: 'margin-top:6px',
+        attrs: { title: 'Remettre cette réception parmi celles à valider' },
+        on: { click: (ev) => rvgiValider(l, false, ev.currentTarget) },
+      }, 'Retirer la validation'));
+    }
+    return td;
+  }
+  td.appendChild(el('span', {
+    style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
+      + 'background:var(--bg);border:1px solid var(--warn);color:var(--warn)' }, 'À valider'));
+  if (!S.stockReadOnly) {
+    td.appendChild(el('div', { style: 'margin-top:6px' }, el('button', {
+      type: 'button', cls: 'btn-sm',
+      attrs: { title: 'Article, quantité et BL vérifiés : la réception est correcte' },
+      on: { click: (ev) => rvgiValider(l, true, ev.currentTarget) },
+    }, 'Valider')));
+  }
+  return td;
+}
+
+async function rvgiValider(l, valide, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/stock/reception-rvgi/' + l.lif_id + '/valider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valide }),
+    });
+    // Mise à jour sur place : recharger 500 lignes pour un clic ferait sauter
+    // la page sous la souris de qui en valide une série.
+    l.valide_at = r.valide_at;
+    l.valide_par = r.valide_par;
+    showToast(valide ? 'Réception validée.' : 'Validation retirée.', 'success');
+    renderContent();
+  } catch (e) {
+    showToast((valide ? 'Validation impossible : ' : 'Retrait impossible : ') + ((e && e.message) || e), 'error');
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Défait une entrée validée par erreur : le stock est repris par une sortie
