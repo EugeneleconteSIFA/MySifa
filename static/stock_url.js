@@ -108,6 +108,7 @@ const _STOCK_OUVREURS = [
   ['openMatiereCopyFromCard',  'copier_matiere', a => a[0] && a[0].id],
   ['openCondAjustModal',       'conditionnements', () => 'tous'],
   ['openMatiereCreateModal',   'nouvelle_matiere', () => 'oui'],
+  ['openCreerRefProduitModal', 'nouvelle_ref',   a => a[0] || 'oui'],
   ['openMpDeplacerModal',      'deplacer_variante', a => a[1] && a[1].id],
   ['openMpVarianteModal',      'variante',       a => (a[1] && a[1].id) || 'nouvelle'],
   ['openMpEmplacementModal',   'emplacement_matiere', a => (a[1] && (a[1].id || a[1].emplacement)) || 'nouveau'],
@@ -163,6 +164,7 @@ const _STOCK_REOUVRIR = {
   copier_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openMatiereCopyFromCard(m); },
   conditionnements: () => openCondAjustModal(),
   nouvelle_matiere: () => openMatiereCreateModal(),
+  nouvelle_ref: v => openCreerRefProduitModal(v === 'oui' ? '' : v, prod => loadProduit(prod.id)),
   deplacer_variante: v => {
     const m = S.selMatiere && S.selMatiere.matiere;
     const vs = (S.selMatiere && S.selMatiere.variantes && S.selMatiere.variantes.variantes) || [];

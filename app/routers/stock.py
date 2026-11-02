@@ -1720,8 +1720,16 @@ def deplacer_lot_fifo(
 
 # ── Recherche instantanée ─────────────────────────────────────────
 @router.get("/api/stock/search")
-def search(request: Request, q: str = "", limit: int = 12):
-    """Recherche unifiée : produits + emplacements. 'text contains'."""
+def search(request: Request, q: str = "", limit: int = 12, tout: int = 0):
+    """Recherche unifiée : produits + emplacements. 'text contains'.
+
+    `tout=1` (barre de recherche globale de MyStock) ajoute les matières
+    premières — trouvées par référence, désignation, abréviation, référence
+    fournisseur ou article RVGI d'une variante, ou par l'emplacement où elles
+    sont rangées — et les bobines, par code-barres ou lot fournisseur. Les
+    autres appelants (suggestions de référence produit) n'en ont pas besoin et
+    ne paient pas ces requêtes.
+    """
     require_stock(request)
     q = q.strip()
     if not q:
@@ -1778,10 +1786,91 @@ def search(request: Request, q: str = "", limit: int = 12):
             by_code[code] = d
     merged_empl = sorted(by_code.values(), key=lambda x: x["emplacement"])[:limit]
 
-    return {
+    res = {
         "produits": [dict(r) for r in produits],
         "emplacements": merged_empl,
     }
+    if tout:
+        with get_db() as conn:
+            res["matieres"] = _search_matieres(conn, q, limit)
+            res["bobines"] = _search_bobines(conn, q, limit)
+    return res
+
+
+def _search_matieres(conn: sqlite3.Connection, q: str, limit: int) -> list[dict]:
+    """Matières actives dont un identifiant contient `q`.
+
+    `emplacement` est renseigné quand c'est l'emplacement qui a répondu : la
+    barre de recherche dit alors où la matière est rangée plutôt que de laisser
+    deviner pourquoi elle est sortie.
+    """
+    motif = f"%{q.upper()}%"
+    try:
+        rows = conn.execute(
+            """SELECT mp.id, mp.reference, mp.designation, mp.categorie,
+                      mp.abbreviation,
+                      (SELECT e.emplacement FROM mp_emplacements e
+                        WHERE e.matiere_id = mp.id AND e.quantite > 0
+                          AND UPPER(e.emplacement) LIKE ?
+                        ORDER BY e.emplacement LIMIT 1) AS emplacement
+                 FROM matieres_premieres mp
+                WHERE mp.actif = 1
+                  AND (UPPER(IFNULL(mp.reference,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.designation,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.abbreviation,'')) LIKE ?
+                       OR mp.id IN (SELECT v.matiere_id FROM mp_variantes v
+                                     WHERE v.actif = 1
+                                       AND (UPPER(IFNULL(v.ref_fournisseur,'')) LIKE ?
+                                            OR UPPER(IFNULL(v.libelle_technique,'')) LIKE ?
+                                            OR UPPER(IFNULL(v.rvgi_code1,'') || '/' || IFNULL(v.rvgi_code2,'')) LIKE ?))
+                       OR mp.id IN (SELECT e.matiere_id FROM mp_emplacements e
+                                     WHERE e.quantite > 0 AND UPPER(e.emplacement) LIKE ?))
+                ORDER BY mp.reference
+                LIMIT ?""",
+            (motif, motif, motif, motif, motif, motif, motif, motif, limit),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # Base sans mp_variantes / mp_emplacements : on retombe sur la fiche seule.
+        rows = conn.execute(
+            """SELECT mp.id, mp.reference, mp.designation, mp.categorie,
+                      mp.abbreviation, NULL AS emplacement
+                 FROM matieres_premieres mp
+                WHERE mp.actif = 1
+                  AND (UPPER(IFNULL(mp.reference,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.designation,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.abbreviation,'')) LIKE ?)
+                ORDER BY mp.reference
+                LIMIT ?""",
+            (motif, motif, motif, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _search_bobines(conn: sqlite3.Connection, q: str, limit: int) -> list[dict]:
+    """Bobines (unités de stock matière) par code-barres ou lot fournisseur.
+
+    La matière n'entre pas dans le filtre : chercher « 2028Y » rendrait toutes
+    ses bobines, que la ligne de la matière couvre déjà.
+    """
+    motif = f"%{q.upper()}%"
+    try:
+        rows = conn.execute(
+            """SELECT b.id, b.code_barre, b.lot_fournisseur, b.etat,
+                      b.metrage_restant, b.matiere_id,
+                      mp.reference AS matiere_reference,
+                      mp.designation AS matiere_designation
+                 FROM stock_bobines b
+                 LEFT JOIN matieres_premieres mp ON mp.id = b.matiere_id
+                WHERE b.etat <> ?
+                  AND (UPPER(b.code_barre) LIKE ?
+                       OR UPPER(IFNULL(b.lot_fournisseur,'')) LIKE ?)
+                ORDER BY b.etat = 'stock' DESC, b.created_at DESC
+                LIMIT ?""",
+            (_sb.ETAT_ANNULEE, motif, motif, limit),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(r) for r in rows]
 
 
 # ── Vue tableau de bord (grille) ──────────────────────────────────
