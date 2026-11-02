@@ -364,7 +364,11 @@ class TestMetrageEpaisseurs(unittest.TestCase):
 
     def test_seed_puis_remplacement(self):
         self._patch("direction")
-        seed = self.client.get("/api/stock/metrage-epaisseurs").json()
+        # Le référentiel porte aussi les grammages du widget Poids de colle
+        # (migration epaisseurs_grammages_matiere) : on ne compte que les
+        # lignes qui ont une épaisseur.
+        tout = self.client.get("/api/stock/metrage-epaisseurs").json()
+        seed = [x for x in tout if x["microns"] is not None]
         self.assertEqual(seed[0]["libelle"], "Matière enduite (frontal + colle + glassine)")
         self.assertEqual(seed[0]["microns"], 145)
         self.assertEqual(len(seed), 6)
@@ -372,8 +376,15 @@ class TestMetrageEpaisseurs(unittest.TestCase):
         r = self.client.put("/api/stock/metrage-epaisseurs", json={"items": [
             {"libelle": "PP blanc", "microns": "60,5"}, {"libelle": "Vélin", "microns": 66}]})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual([(x["libelle"], x["microns"]) for x in r.json()],
+        self.assertEqual([(x["libelle"], x["microns"]) for x in r.json() if x["microns"] is not None],
                          [("PP blanc", 60.5), ("Vélin", 66.0)])
+        # Les grammages ne sont pas touchés : Couché perd son épaisseur mais
+        # garde son grammage ; une ligne retirée sans grammage disparaît.
+        apres = {x["libelle"]: x for x in r.json()}
+        self.assertEqual((apres["Couché"]["microns"], apres["Couché"]["grammage_gsm"]), (None, 70.0))
+        self.assertNotIn("Glassine", apres)
+        self.assertEqual(len([x for x in r.json() if x["microns"] is None]),
+                         len([x for x in tout if x["microns"] is None]) + 1)
         # Restaure la liste d'origine pour les autres tests.
         self.client.put("/api/stock/metrage-epaisseurs", json={"items": [
             {"libelle": s["libelle"], "microns": s["microns"]} for s in seed]})
