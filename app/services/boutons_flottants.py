@@ -12,7 +12,7 @@ Deux sortes de boutons :
 
 - **communs** : réglables dans chaque appli ;
 - **propres à une appli** (Métrage bobine dans MyStock, Carte de France dans
-  MyExpé) : ils dépendent du code de leur page, on peut les couper chez elle
+  MyExpé, Poids de colle dans la saisie prod) : ils dépendent du code de leur page, on peut les couper chez elle
   mais pas les étendre ailleurs. Pour en faire un bouton commun, il faut
   d'abord sortir son code dans un fichier partagé.
 
@@ -97,6 +97,8 @@ BOUTONS: tuple[Bouton, ...] = (
     Bouton("carte_france", "Carte de France (délais)", "", "#expe-carte-fab,#expe-carte-panel",
            appli="expe"),
     Bouton("metrage", "Métrage bobine", "", "#mtr-fab,#mtr-panel", appli="stock"),
+    Bouton("poids_colle", "Poids de colle", "Grammage d'adhésif d'après une pesée d'étiquettes",
+           "#pc-fab,#pc-panel", appli="fabrication"),
 )
 
 PAR_CLE = {b.cle: b for b in BOUTONS}

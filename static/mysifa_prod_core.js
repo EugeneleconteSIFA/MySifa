@@ -421,6 +421,11 @@
     produits:{page:null,
       ouvrir:function(){ var M=window.MySifaProduitMemoire; if(M) M.openListe(); },
       fermer:function(){ _pmemFermer(); }},
+    // Historique des pesées par front (mysifa_pesees.js) : ouvert depuis le
+    // Retour de prod, mais un calque sur toute page (page:null).
+    pesees:{page:null, extra:['pesees_dossier','pesees_periode'],
+      ouvrir:function(v,u){ var P=window.MySifaPesees, e=P&&P.lireAdresse(u); if(e) P.ouvrir(e); },
+      fermer:function(){ if(window.MySifaPesees) MySifaPesees.fermer(true); }},
     reglages:{page:'production',
       ouvrir:function(v){ if(v==='ecarts') openReglagesEcarts(); },
       fermer:function(){ fermerReglagesEcarts(true); }},
@@ -456,6 +461,22 @@
       prodSyncUrl();
     });
   }
+  // Le calque des pesées signale ses filtres à chaque changement : il se
+  // déclare dans S.urlModale, comme la mémoire produit.
+  var _peseesBranche=false;
+  function _peseesBrancher(){
+    if(_peseesBranche||!window.MySifaPesees||!MySifaPesees.surAdresse) return;
+    _peseesBranche=true;
+    MySifaPesees.surAdresse(function(e){
+      if(e){
+        var p=MySifaPesees.adresse(e), id=p.pesees; delete p.pesees;
+        S.urlModale={cle:'pesees', id:id, extra:Object.keys(p).length?p:null};
+      }else if(S.urlModale&&S.urlModale.cle==='pesees'){
+        S.urlModale=null;
+      }else return;
+      prodSyncUrl();
+    });
+  }
   function _prodModaleCourante(){
     if(S.ofEditModal&&S.ofEditModal.id) return {cle:'of',id:S.ofEditModal.id};
     if(S.ficheEditModal&&S.ficheEditModal.id) return {cle:'fiche',id:S.ficheEditModal.id};
@@ -480,6 +501,7 @@
 
   function prodSyncUrl(){
     _pmemBrancher();
+    _peseesBrancher();
     if(!window.MySifaUrl||!S.user||S.app==='login') return;
     try{ var r=_prodParams(); MySifaUrl.ecrire(r.params,{navigation:r.nav}); }catch(e){}
   }

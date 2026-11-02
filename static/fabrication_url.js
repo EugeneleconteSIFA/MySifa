@@ -18,7 +18,8 @@
  *   commentaire d'une saisie ou d'une bobine ouvert depuis la liste,
  *   correction d'une bobine scannée, correction d'une saisie de repiquage,
  *   mémoire produit, mouvements de stock de l'onglet Stock (entrée / sortie
- *   MP, entrée / sortie Z1 — formulaires indépendants de la saisie).
+ *   MP, entrée / sortie Z1 — formulaires indépendants de la saisie),
+ *   historique des pesées par front (pesees, pesees_dossier, pesees_periode).
  * Hors adresse, volontairement : les étapes d'une saisie en cours (choix du
  * dossier à démarrer, début, fin, compteur, commentaire imposé par un seuil,
  * changement d'outil, annulation, dossier fictif, tête de sortie), les
@@ -103,6 +104,16 @@ function _fabPmemBrancher() {
   M.surAdresse(e => { if (_fabPmemSilence) return; _fabPmem = e || null; fabSyncUrl(); });
 }
 
+// Historique des pesées par front (mysifa_pesees.js, calque hors de S) :
+// il signale ses filtres, branché comme la mémoire produit.
+let _fabPesees = null;             // { machine, no_dossier, jours }
+function _fabPeseesBrancher() {
+  const P = window.MySifaPesees;
+  if (!P || !P.surAdresse || P.__fabBranche) return;
+  P.__fabBranche = true;
+  P.surAdresse(e => { _fabPesees = e || null; fabSyncUrl(); });
+}
+
 function _fabModale() {
   if (S.ficheEditModal && S.ficheEditModal.id) return { cle: 'fiche', id: S.ficheEditModal.id };
   if (S.ofEditModal && S.ofEditModal.id) return { cle: 'of', id: S.ofEditModal.id };
@@ -116,6 +127,11 @@ function _fabModale() {
   if (f) return { cle: f.cle, id: f.id };
   const t = _fabTracaVivante();
   if (t) return { cle: 'tracabilite', id: t.ref };
+  if (_fabPesees && window.MySifaPesees && MySifaPesees.ouverte()) {
+    const p = MySifaPesees.adresse(_fabPesees);
+    const id = p.pesees; delete p.pesees;
+    return { cle: 'pesees', id, extra: p };
+  }
   if (_fabPmem && document.getElementById('pmem-overlay')) {
     return { cle: _fabPmem.cle, id: _fabPmem.id,
              extra: (_fabPmem.onglet && _fabPmem.onglet !== 'series') ? { produit_onglet: _fabPmem.onglet } : null };
@@ -143,6 +159,7 @@ function fabParams() {
 
 function fabSyncUrl() {
   _fabPmemBrancher();
+  _fabPeseesBrancher();
   if (!_fabUrlPrete || !window.MySifaUrl || !S.user) return;
   try { const r = fabParams(); MySifaUrl.ecrire(r.params, { navigation: r.nav }); } catch (e) {}
 }
@@ -209,6 +226,7 @@ const _FAB_REOUVRIR = {
   produit: (v, u) => { const M = window.MySifaProduitMemoire; if (M) M.openFiche(v, { onglet: u.get('produit_onglet', null) }); },
   historique: (v, u) => { const M = window.MySifaProduitMemoire; if (M) M.openHistorique(v, { onglet: u.get('produit_onglet', null) }); },
   produits: () => { const M = window.MySifaProduitMemoire; if (M) M.openListe(); },
+  pesees: (v, u) => { const P = window.MySifaPesees; const e = P && P.lireAdresse(u); if (e) P.ouvrir(e); },
 };
 
 // Ferme la fenêtre ouverte sans toucher à l'adresse (Retour du navigateur).
@@ -227,6 +245,7 @@ function _fabFermerModale(mo) {
   else if (mo.cle === 'commentaire') set({ showCommentModal: false, commentSaisieId: null });
   else if (mo.cle === 'commentaire_bobine') set({ showTracaCommentModal: false, tracaCommentId: null });
   else if (mo.cle === 'repiquage_modifier') set({ showRepiquageEditModal: false, repiquageEditSaisie: null });
+  else if (mo.cle === 'pesees') { if (window.MySifaPesees) MySifaPesees.fermer(true); _fabPesees = null; }
   else if (window.MySifaProduitMemoire) {
     _fabPmemSilence = true;
     try { window.MySifaProduitMemoire.fermer(); } finally { _fabPmemSilence = false; }

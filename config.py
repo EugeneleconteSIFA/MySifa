@@ -1316,6 +1316,12 @@ CARTONS_EXCLUS = tuple(m.strip().lower() for m in os.getenv("CARTONS_EXCLUS", "c
 # Calculs bobine › Métrage additionne leurs épaisseurs (GET /api/tools/couches).
 COUCHES_MATIERE = (("frontal", "Frontal"), ("adhesif", "Adhésif"), ("glassine", "Glassine"))
 
+# Familles du référentiel « épaisseurs matière » (mp_metrage_epaisseurs) :
+# Métrage bobine lit les épaisseurs, Poids de colle les grammages.
+# `anilox` : dépôt d'encre (g/m²) d'un aplat à 100 %.
+MATIERE_FAMILLES = (("frontal", "Frontal"), ("glassine", "Glassine"),
+                    ("complexe", "Matière enduite"), ("anilox", "Anilox (encre)"))
+
 # ─── MyTools — convertisseur (repris de Prismix) ──────────────────
 # Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et
 # ffmpeg sont gourmands), quota par utilisateur et par heure.
