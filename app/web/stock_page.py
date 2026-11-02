@@ -2249,6 +2249,11 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .empl-sugg-item:last-child{border-bottom:none}
 .empl-sugg-item:hover{background:var(--accent-bg);color:var(--accent)}
+.empl-suggestion-item{padding:11px 14px;cursor:pointer;font-size:13px;line-height:1.35;
+  border-bottom:1px solid var(--border);transition:background .1s}
+.empl-suggestion-item:last-child{border-bottom:none}
+.empl-suggestion-item:hover{background:var(--accent-bg)}
+.empl-suggestions:has(.empl-suggestion-item){max-height:270px}
 .unit-suggest-item{padding:10px 14px;cursor:pointer;font-family:inherit;font-size:13px;
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .unit-suggest-item:last-child{border-bottom:none}
