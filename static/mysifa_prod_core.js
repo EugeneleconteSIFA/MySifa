@@ -8427,7 +8427,13 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
   // Compteur relevé en cours de dossier : changement d'outil (plaque,
   // contre-partie, magnétique…) et « Production » qui ferme un calage.
-  const compteurAvant = (prefill && prefill.metrage_compteur!=null && prefill.metrage_compteur!=='') ? Number(prefill.metrage_compteur) : null;
+  // Sur une ligne de calage (hors changement d'outil), le relevé est celui
+  // du « Production » qui ferme le calage : c'est lui que le serveur corrige
+  // (_ligne_du_compteur) et lui qui fait le métrage de calage.
+  const releveFinCalage = !!(prefill && (prefill.operation_category||'') === 'calage'
+    && !prefill.changement_outil && prefill._fin_calage && prefill._fin_calage.ctr != null);
+  const compteurAvant = releveFinCalage ? Number(prefill._fin_calage.ctr)
+    : (prefill && prefill.metrage_compteur!=null && prefill.metrage_compteur!=='') ? Number(prefill.metrage_compteur) : null;
   const metrageCompteurI  = h('input', { type: 'number', placeholder: '0', min: '0', step: '1', value: compteurAvant!=null ? compteurAvant : '' });
   // Fin de production : le choix de l'opérateur (« Dossier terminé » / « À
   // reprendre plus tard ») se corrige ici ; le serveur rejoue planning et série.
@@ -8511,7 +8517,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
       ),
       h('div', { className: 'form-row', 'data-role':'cpt-releve', style:{display:'none'} },
         h('div', null,
-          h('label', null, 'Compteur relevé (m)'),
+          h('label', null, releveFinCalage ? 'Compteur à la fin du calage (m)' : 'Compteur relevé (m)'),
           metrageCompteurI
         ),
         h('div', { style:{fontSize:'12px',color:'var(--muted)',alignSelf:'end',paddingBottom:'10px'} },
@@ -10416,7 +10422,7 @@ function saisiesMarquerFinsCalage(rows){
       const ctr = r.metrage_compteur != null ? parseFloat(r.metrage_compteur) : null;
       const metres = (ctr != null && st.ctrAvant != null && ctr >= st.ctrAvant) ? ctr - st.ctrAvant : null;
       (st.derniere || r)._fin_calage = {minutes: (isFinite(t0) && isFinite(t1) && t1 >= t0) ? Math.round((t1-t0)/60000) : null,
-                       metres: metres};
+                       metres: metres, ctr: ctr};
       st.debut = null;
     } else {
       st.debut = null;
