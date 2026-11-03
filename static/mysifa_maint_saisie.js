@@ -24,6 +24,12 @@
  *   MySifaMaintSaisie.vue({machine, machines, role})   élément durable à
  *       poser dans la page ; les appels suivants rendent le même élément
  *       (saisie en cours conservée). Machine : celle de l'opérateur.
+ *   MySifaMaintSaisie.modale({machine, machines, role, titre, apres})
+ *       le même formulaire en fenêtre, sans durée ni historique : code
+ *       opération dont `formulaire` vaut « maintenance ». Une fois
+ *       l'opération enregistrée dans MyMaintenance, `apres({libelle,
+ *       commentaire, machine, jour})` est attendu (la saisie de production),
+ *       puis la fenêtre se ferme. Annuler n'enregistre rien.
  * Tout texte passe par textContent.
  */
 (function (global) {
@@ -38,8 +44,6 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
     fleche: '<path d="M7 17 17 7M8 7h9v9"/>',
   };
-  var M = { el: null, codes: null, histo: null, machine: "", machines: [], role: "", refus: false,
-            envoi: false, erreur: "", code: "", form: null };
 
   function el(tag, cls, txt) {
     var e = document.createElement(tag);
@@ -96,6 +100,13 @@
     return jour + "T" + pad(n.getHours()) + ":" + pad(n.getMinutes()) + ":" + pad(n.getSeconds());
   }
 
+  // Une instance par affichage : cfg.modale (fenêtre du code opération) ôte
+  // durée et historique, cfg.apres est appelé après l'enregistrement.
+  function creer(cfg) {
+  cfg = cfg || {};
+  var M = { el: null, codes: null, histo: null, machine: "", machines: [], role: "", refus: false,
+            envoi: false, erreur: "", code: "", form: null };
+
   // ── Données ────────────────────────────────────────────────────────────
   async function chargerCodes() {
     try {
@@ -110,6 +121,7 @@
     rendre();
   }
   async function chargerHisto() {
+    if (cfg.modale) return;
     if (!M.machine) { M.histo = []; rendre(); return; }
     var du = new Date();
     du.setDate(du.getDate() - JOURS_HISTO);
@@ -132,7 +144,7 @@
     var f = M.form;
     var autre = M.code === AUTRE;
     var titre = f.titre.value.trim(), jour = f.date.value, machine = M.machine;
-    var dureeTxt = f.duree.value.trim(), comment = f.comment.value.trim();
+    var dureeTxt = cfg.modale ? "" : f.duree.value.trim(), comment = f.comment.value.trim();
     var duree = dureeTxt === "" ? null : Number(dureeTxt.replace(",", "."));
     if (!M.code) return erreur("Choisissez une intervention.");
     if (autre && !titre) return erreur("Décrivez l'intervention.");
@@ -158,9 +170,19 @@
       if (comment) corps.observations = comment;
       await appel("/api/maintenance/events/" + ev.id + "/ops/" + op.id, { method: "PATCH", body: corps });
       ev = null;
+      var libelle = autre ? titre : ((M.codes || []).filter(function (c) { return c.code === M.code; })[0] || {}).label || M.code;
       M.code = "";
       f.titre.value = ""; f.duree.value = ""; f.comment.value = "";
       f.date.value = isoJour(new Date());
+      if (cfg.apres) {
+        // L'opération est dans MyMaintenance : un échec de la suite ne doit
+        // pas inviter à la ressaisir (elle serait en double).
+        try { await cfg.apres({ libelle: libelle, commentaire: comment, machine: machine, jour: jour }); }
+        catch (x) { toast("Opération enregistrée dans MyMaintenance, mais pas la saisie : " + (x.message || x), "danger"); }
+        M.envoi = false;
+        if (cfg.fermer) cfg.fermer();
+        return;
+      }
       toast("Opération enregistrée.");
       chargerHisto();
     } catch (e) {
@@ -240,8 +262,9 @@
     ligne.appendChild(f.date);
     form.appendChild(ligne);
 
-    form.appendChild(etape(3, "Détails (facultatif)"));
+    form.appendChild(etape(3, cfg.modale ? "Commentaire (facultatif)" : "Détails (facultatif)"));
     var details = el("div", "mm-ligne");
+    if (cfg.modale) details.hidden = true;
     var dureeBloc = el("div", "mm-champ");
     dureeBloc.appendChild(el("span", "mm-lib", "Durée"));
     var dureeLigne = el("div", "mm-duree-ligne");
@@ -254,12 +277,20 @@
     details.appendChild(dureeBloc);
     form.appendChild(details);
     var comBloc = el("label", "mm-champ");
-    comBloc.appendChild(el("span", "mm-lib", "Commentaire"));
+    if (!cfg.modale) comBloc.appendChild(el("span", "mm-lib", "Commentaire"));
+    else f.comment.setAttribute("aria-label", "Commentaire");
     comBloc.appendChild(f.comment);
     form.appendChild(comBloc);
 
     var pied = el("div", "mm-pied");
-    pied.append(f.etat, f.envoyer);
+    pied.appendChild(f.etat);
+    if (cfg.modale) {
+      var annuler = el("button", "mm-btn-sec", "Annuler");
+      annuler.type = "button";
+      annuler.addEventListener("click", function () { if (cfg.fermer) cfg.fermer(); });
+      pied.appendChild(annuler);
+    }
+    pied.appendChild(f.envoyer);
     form.appendChild(pied);
     f.racine = form;
     return f;
@@ -306,7 +337,7 @@
 
     f.envoyer.textContent = "";
     f.envoyer.appendChild(icone("check", 16));
-    f.envoyer.appendChild(document.createTextNode(M.envoi ? "Enregistrement…" : "Enregistrer l'opération"));
+    f.envoyer.appendChild(document.createTextNode(M.envoi ? "Enregistrement…" : (cfg.libelleBouton || "Enregistrer l'opération")));
     f.envoyer.disabled = M.envoi || M.refus;
     f.etat.textContent = M.refus ? "Enregistrement réservé à l'atelier et aux responsables maintenance." : M.erreur;
     f.etat.classList.toggle("mm-erreur", !!(M.erreur || M.refus));
@@ -360,38 +391,88 @@
     if (!M.el) return;
     if (!M.form) {
       M.form = construireForm();
-      M.corps = el("div", "mm-corps");
+      M.corps = el("div", cfg.modale ? "mm-corps mm-corps-seul" : "mm-corps");
       M.histoEl = el("div");
-      M.corps.append(M.form.racine, M.histoEl);
+      M.corps.append(M.form.racine);
+      if (!cfg.modale) M.corps.append(M.histoEl);
       M.el.append(M.corps);
     }
     dessinerForm(M.form);
+    if (cfg.modale) return;
     var h = historique();
     M.corps.replaceChild(h, M.histoEl);
     M.histoEl = h;
   }
 
+  return { M: M, rendre: rendre, chargerCodes: chargerCodes, chargerHisto: chargerHisto };
+  }
+
+  var ONGLET = null;
   function vue(opts) {
     opts = opts || {};
     var machines = (opts.machines || []).filter(Boolean);
+    if (!ONGLET) ONGLET = creer({});
+    var I = ONGLET, M = I.M;
     M.role = opts.role || M.role;
     if (!M.el) {
       M.el = el("section", "mm-section");
       M.machine = opts.machine || machines[0] || "";
       M.machines = machines;
-      rendre();
-      chargerCodes();
-      chargerHisto();
+      I.rendre();
+      I.chargerCodes();
+      I.chargerHisto();
       return M.el;
     }
     // La liste des machines peut arriver après le premier rendu.
     if (machines.join("|") !== M.machines.join("|")) {
       M.machines = machines;
-      if (!M.machine) { M.machine = opts.machine || machines[0] || ""; chargerHisto(); }
-      rendre();
+      if (!M.machine) { M.machine = opts.machine || machines[0] || ""; I.chargerHisto(); }
+      I.rendre();
     }
     return M.el;
   }
 
-  global.MySifaMaintSaisie = { vue: vue, _doneAt: doneAt };
+  // ── Fenêtre (code opération à formulaire « maintenance ») ──────────────
+  // Calque sous <body> : le render() de la page ne le touche pas. C'est une
+  // étape de saisie, elle ne va pas dans l'adresse (url-etat.md).
+  function modale(opts) {
+    opts = opts || {};
+    fermerModale();
+    var calque = el("div", "mm-overlay");
+    calque.id = "mm-overlay";
+    var boite = el("div", "mm-modale");
+    boite.setAttribute("role", "dialog");
+    boite.setAttribute("aria-modal", "true");
+    var tete = el("div", "mm-modale-tete");
+    tete.appendChild(el("div", "mm-modale-titre", opts.titre || "Opération de maintenance"));
+    var x = el("button", "mm-modale-fermer", "×");
+    x.type = "button";
+    x.setAttribute("aria-label", "Fermer");
+    tete.appendChild(x);
+    var corps = el("div", "mm-modale-corps");
+    boite.append(tete, corps);
+    calque.appendChild(boite);
+    var I = creer({ modale: true, apres: opts.apres, fermer: fermerModale,
+                    libelleBouton: "Enregistrer" });
+    x.addEventListener("click", fermerModale);
+    calque.addEventListener("click", function (e) { if (e.target === calque) fermerModale(); });
+    var machines = (opts.machines || []).filter(Boolean);
+    I.M.el = corps;
+    I.M.role = opts.role || "";
+    I.M.machine = opts.machine || machines[0] || "";
+    I.M.machines = machines;
+    document.body.appendChild(calque);
+    I.rendre();
+    I.chargerCodes();
+  }
+  function fermerModale() {
+    var o = document.getElementById("mm-overlay");
+    if (o) o.remove();
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && document.getElementById("mm-overlay")) fermerModale();
+  });
+
+  global.MySifaMaintSaisie = { vue: vue, modale: modale, fermerModale: fermerModale,
+    ouverte: function () { return !!document.getElementById("mm-overlay"); }, _doneAt: doneAt };
 })(window);

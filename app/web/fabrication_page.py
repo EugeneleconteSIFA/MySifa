@@ -1379,7 +1379,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_pesees.css?v=6">
-<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=3">
+<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=4">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -1408,7 +1408,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
 <script src="/static/mysifa_pesees.js?v=5"></script>
-<script src="/static/mysifa_maint_saisie.js?v=3"></script>
+<script src="/static/mysifa_maint_saisie.js?v=4"></script>
 <script src="/static/mysifa_poids_colle.js?v=4"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
@@ -2870,6 +2870,14 @@ function handleOpTrigger(code, label, cat){
   // rien sans une phrase — c'est a ceux-la, et a eux seuls, qu'on demande un
   // commentaire. Exiger un texte partout ferait taper « RAS » partout, et on
   // aurait perdu la seule chose que ce champ apporte.
+  // Opération de maintenance : intervention, machine, date et commentaire
+  // d'abord, enregistrés dans MyMaintenance ; la saisie part ensuite, avec
+  // l'intervention en commentaire. Annuler n'enregistre rien. C'est l'attribut
+  // `formulaire` du code (Paramètres › Opérations) qui décide, pas son numéro.
+  if(opFormulaire(code)==='maintenance' && window.MySifaMaintSaisie){
+    void ouvrirOperationMaintenance(code, label);
+    return;
+  }
   // Changement d'outil : la saisie part tout de suite (l'heure du clic est la
   // bonne), et triggerOp ouvre le formulaire sur la reponse du serveur.
   if(opOutilType(code)){
@@ -7636,6 +7644,22 @@ function renderCompteurCalageModal(){
    si l'heure n'était écrite qu'à la fin, elle serait fausse de toute la durée
    de la recherche. Le formulaire s'ouvre donc derrière une saisie déjà
    enregistrée, et « Annuler » la supprime. */
+
+function opFormulaire(code){
+  const o = OPS && OPS[code];
+  return (o && o.formulaire) ? String(o.formulaire) : '';
+}
+async function ouvrirOperationMaintenance(code, label){
+  if(!(S.machines || []).length) await loadMachines();
+  MySifaMaintSaisie.modale({
+    titre: code+' - '+label,
+    machine: (S.machine && S.machine.nom) || '',
+    machines: (S.machines || []).map(m => m.nom).filter(Boolean),
+    role: (S.user && S.user.role) || '',
+    apres: info => triggerOp(code, label,
+      {commentaire: info.libelle + (info.commentaire ? ' — ' + info.commentaire : '')}),
+  });
+}
 
 function opOutilType(code){
   const o = OPS && OPS[code];
