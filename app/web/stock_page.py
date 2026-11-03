@@ -22317,8 +22317,10 @@ function buildReception() {
         loadReceptionRvgi();
       }}
     }, iconEl('download', 13), ' Depuis l\'ERP',
-       (S.rvgiFile && S.rvgiFile.total
-        ? el('span', { cls: 'recep-hist-lot' }, String(S.rvgiFile.total)) : null)),
+       // Même compte que la pastille de la sidebar : lignes à intégrer ET
+       // entrées à valider.
+       (rvgiNbEnAttente()
+        ? el('span', { cls: 'recep-hist-lot' }, String(rvgiNbEnAttente())) : null)),
     el('button', {
       cls: 'recep-subtab' + (sub === 'rvgi-historique' ? ' active' : ''),
       on: { click: () => {
