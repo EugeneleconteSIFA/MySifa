@@ -75,6 +75,23 @@ INSERT INTO mouvements_stock VALUES
   (10,7,'B200','entree',1500000,'','2026-10-23T08:00:00','D',NULL);
 INSERT INTO lots_stock VALUES (1,1,'A111',1000000,'9932689'),(2,1,'Z1',1000000,'9932689');
 INSERT INTO stock_emplacements VALUES (4,'A131',10000);
+-- 1021/0002 : entré en Z1 sous dossier, puis rangé à la main (sortie FIFO de Z1
+-- + entrées sans dossier en rack), plus une vraie entrée de 372 000 le même jour.
+ALTER TABLE mouvements_stock ADD COLUMN lot_id INT;
+INSERT INTO produits VALUES (9,'1021/0002','Etiq 9','étiquette');
+INSERT INTO planning_entries VALUES
+  (16,'9932705 - L2','9932705','1021/0002 - X','1021/0002','CLIENT F','termine','2026-10-20',1,NULL,'2026-10-16T16:00:00',NULL,NULL);
+INSERT INTO production_data VALUES (8,'9932705 - L2','2026-10-16T16:00:00','89','Machine A',1400000,1,0,NULL);
+INSERT INTO mouvements_stock(id,produit_id,emplacement,type_mouvement,quantite,note,created_at,created_by_name,no_dossier,lot_id) VALUES
+  (20,9,'Z1','entree',468000,'Production dossier 9932705 - L2','2026-10-16T13:01:00','B','9932705 - L2',11),
+  (21,9,'Z1','entree',468000,'Production dossier 9932705 - L2','2026-10-16T16:07:00','J','9932705 - L2',12),
+  (22,9,'A162','entree',372000,'Production | 2026-10-17','2026-10-18T08:58:20','N',NULL,13),
+  (23,9,'Z1','sortie',468000,'Sortie lot FIFO','2026-10-18T08:58:24','N',NULL,NULL),
+  (24,9,'Z1','sortie',468000,'Sortie lot FIFO','2026-10-18T08:58:28','N',NULL,NULL),
+  (25,9,'A113','entree',468000,'Production | 2026-10-18','2026-10-18T13:55:23','N',NULL,14),
+  (26,9,'A132','entree',468000,'Production | 2026-10-18','2026-10-18T13:55:48','N',NULL,15);
+INSERT INTO lots_stock VALUES (11,9,'Z1',0,'9932705 - L2'),(12,9,'Z1',0,'9932705 - L2'),
+  (13,9,'A162',372000,NULL),(14,9,'A113',468000,NULL),(15,9,'A132',468000,NULL);
 INSERT INTO expe_departs VALUES (1,'2026-10-19','valide','CLIENT C','9939121','T',NULL,NULL,12),
                                 (2,'2026-10-17','en_attente','CLIENT D',NULL,'T',NULL,NULL,13);
 """)
@@ -112,6 +129,14 @@ ok(not hd and r.get("ajustements_ignores") == 1,
 ok(not (L.get("d:9932543") or {}).get("qte_entree"),
    "entrée annulée le jour même par une sortie de même quantité : pas comptée en production")
 
+rg = L.get("d:9932705 - L2") or {}
+ok(rg.get("qte_entree") == 1308000,
+   "rangement Z1 saisi en sortie + entrée : les entrées en rack ne sont pas recomptées en production")
+ok(rg.get("nb_deplacements") == 2 and sorted(x["vers"] for x in rg["detail"]["deplacements"]) == ["A113", "A132"],
+   "rangement Z1 → A113 et A132 affiché en déplacement, apparié à quantité égale")
+ok(rg.get("stock_restant") == 1308000 and rg.get("emplacements_restants") == ["A113", "A132", "A162"],
+   "stock restant du dossier : les lots rangés sans n° de dossier comptent")
+
 print("— expédition")
 erp = sqlite3.connect(":memory:")
 erp.row_factory = sqlite3.Row
@@ -138,6 +163,7 @@ ok(x.get("statut") == "ok" and x.get("qte_bl") == 304000 and x.get("qte_sortie")
    "24/0012 : BL 304 000, sortie 300 000 → OK à 2 % (annulation exclue)")
 ok([dd["no_dossier"] for dd in x.get("dossiers", [])] == ["9932585"], "dossier retrouvé par la commande du BL")
 ok([dp["id"] for dp in x.get("departs", [])] == [1], "départ retrouvé par son numéro de BL")
+ok("1021/0002" not in E, "sortie de Z1 rangée en rack le jour même : pas une expédition")
 ok("FR/FRAIS_DE_PORT" not in E and "FR" not in E, "les frais de port ne sont pas un article")
 ok("1004/0219" not in E and e.get("sous_traitance_ignorees") == 1,
    "sous-traitance (achetée en article, cdf_ligne.type = 1) écartée, comptée à part")
