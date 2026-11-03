@@ -820,10 +820,11 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
   padding:20px 24px;gap:18px;
 }
 .fab-prod-head{margin-bottom:2px}
-/* Onglet Qualité : seule la liste des dossiers défile (static/mysifa_pesees.css). */
-.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;padding:20px 24px 0;gap:14px}
-.fab-qualite .pf-vue{flex:1;min-height:0}
-.fab-qualite .pf-corps{flex:1;min-height:0;overflow:auto}
+/* Onglet Qualité : pesées (static/mysifa_pesees.css) puis opérations de
+   maintenance (static/mysifa_maint_saisie.css) ; tout l'onglet défile. */
+.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 28px;gap:14px}
+.fab-qualite .pf-corps{padding-bottom:4px}
+.fab-qualite .mm-section{margin-top:6px}
 .fab-prod-head-title{
   font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
 }
@@ -1364,6 +1365,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_pesees.css?v=4">
+<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -1392,6 +1394,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
 <script src="/static/mysifa_pesees.js?v=3"></script>
+<script src="/static/mysifa_maint_saisie.js?v=1"></script>
 <script src="/static/mysifa_poids_colle.js?v=3"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
@@ -2891,6 +2894,8 @@ async function switchFabTab(tab){
   if(tab==='stats'){
     await loadStockProduction();
   }
+  // Machines proposées pour une opération de maintenance (onglet Qualité).
+  if(tab==='qualite' && !(S.machines || []).length) await loadMachines();
 }
 
 var FAB_VALID_TABS=['saisie','print','traca','qualite','of','stats'];
@@ -5377,19 +5382,28 @@ function renderStatsPanel(){
    son défilement et le texte en cours de frappe survivent au
    rafraîchissement automatique.
    Machine par défaut : celle de l'opérateur. */
+// Défilement de l'onglet : le panneau est recréé à chaque render().
+let _fabQualiteHaut = 0;
 function renderQualitePanel(){
-  const P = window.MySifaPesees;
-  const wrap = h('div',{className:'fab-main fab-qualite'},
+  const P = window.MySifaPesees, MM = window.MySifaMaintSaisie;
+  const machine = (S.machine && S.machine.nom) || '';
+  const wrap = h('div',{className:'fab-main fab-qualite',
+      onScroll:e=>{ _fabQualiteHaut = e.currentTarget.scrollTop; }},
     h('div',{className:'fab-prod-head'},
       h('h2',{className:'fab-prod-head-title'}, 'Pesées par front'),
       h('div',{className:'fab-prod-head-sub'},
         'Pesées d’étiquettes saisies dans les alertes d’inspection, dossier par dossier.')));
-  if(!P){ wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.')); return wrap; }
-  const vue = P.vue({machine:(S.machine && S.machine.nom) || ''});
-  // Sortie puis remise dans la page, la vue perd focus et défilement :
-  // le module les a suivis et les rend une fois la page reconstruite.
-  wrap.appendChild(vue);
-  queueMicrotask(()=>P.retablir());
+  if(P) wrap.appendChild(P.vue({machine}));
+  // Opérations de maintenance : enregistrées dans MyMaintenance.
+  if(MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',
+    machines:(S.machines || []).map(m => m.nom).filter(Boolean)}));
+  if(!P && !MM) wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.'));
+  // Sortie puis remise dans la page, les vues perdent focus et défilement :
+  // les modules les ont suivis et les rendent une fois la page reconstruite.
+  queueMicrotask(()=>{
+    if(wrap.isConnected) wrap.scrollTop = _fabQualiteHaut;
+    if(P) P.retablir();
+  });
   return wrap;
 }
 

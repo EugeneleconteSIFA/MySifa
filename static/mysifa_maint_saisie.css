@@ -1,0 +1,34 @@
+/* MySifa — Saisie prod, onglet Qualité : opérations de maintenance (static/mysifa_maint_saisie.js). */
+.mm-section{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:12px;color:var(--text);font-family:'Segoe UI',system-ui,sans-serif}
+.mm-tete{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.mm-titre{margin:0;font-size:16px;font-weight:800;color:var(--text)}
+.mm-sous{font-size:12.5px;color:var(--text2);margin-top:2px}
+.mm-lien{font-size:12.5px;font-weight:700;color:var(--accent);text-decoration:none;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:6px 11px;white-space:nowrap}
+.mm-lien:hover{border-color:var(--accent)}
+.mm-form{display:flex;flex-direction:column;gap:10px}
+.mm-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.mm-champ{display:flex;flex-direction:column;gap:4px;min-width:0}
+.mm-champ.mm-large{grid-column:1/-1}
+.mm-champ[hidden]{display:none}
+.mm-lib{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
+.mm-input{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font:inherit;font-size:13.5px;min-width:0;box-sizing:border-box;width:100%}
+.mm-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+textarea.mm-input{resize:vertical;min-height:52px}
+.mm-pied{display:flex;align-items:center;justify-content:flex-end;gap:12px}
+.mm-etat{flex:1;font-size:12.5px;color:var(--text2)}
+.mm-etat.mm-erreur{color:var(--danger);font-weight:600}
+.mm-btn{background:var(--accent);color:white;border:none;border-radius:10px;padding:9px 18px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;transition:filter .15s}
+.mm-btn:hover{filter:brightness(1.05)}
+.mm-btn:disabled{opacity:.55;cursor:default;filter:none}
+.mm-histo{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:12px}
+.mm-sous-titre{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
+.mm-vide{font-size:13px;color:var(--muted);padding:6px 0}
+.mm-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px}
+.mm-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.mm-table th{background:var(--bg);color:var(--text2);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:left;padding:7px 9px;white-space:nowrap;border-bottom:1px solid var(--border)}
+.mm-table td{padding:6px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+.mm-table tbody tr:last-child td{border-bottom:none}
+.mm-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.mm-date{color:var(--text2);font-variant-numeric:tabular-nums}
+.mm-com{max-width:320px;overflow:hidden;text-overflow:ellipsis;color:var(--text2)}
+.mm-tag{margin-left:6px;font-size:10.5px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:999px;padding:1px 7px}
