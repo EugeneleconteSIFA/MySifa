@@ -24975,6 +24975,27 @@ function buildValorisationCategoriePills() {
 // ces valeurs et les affiche — les endpoints correspondants restent en place
 // côté serveur pour les reprises et les scripts.
 
+// Largeurs des colonnes du tableau des matières : [min, max] en px. Le min
+// tient sur th (min-width), le max sur le contenu des cellules de texte (un
+// max-width sur une cellule de tableau est ignoré par les navigateurs).
+const VAL_COLS = {
+  categorie: [96, 140], commercial: [200, 320], technique: [220, 400],
+  quantite: [110, 190], achat: [130, 200], vente: [120, 190], valo: [110, 170],
+};
+
+// Bouton d'action carré, icône seule : le libellé passe dans l'infobulle.
+function valBoutonIcone(icone, titre, couleur, bordure, fond, onClick) {
+  const b = el('button', {
+    type: 'button', title: titre, 'aria-label': titre,
+    style: 'width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;'
+      + 'border-radius:8px;cursor:pointer;flex:0 0 auto;transition:all .15s;'
+      + 'border:1px solid ' + bordure + ';background:' + fond + ';color:' + couleur,
+    on: { click: onClick },
+  });
+  b.appendChild(iconEl(icone, 14));
+  return b;
+}
+
 function buildValorisationTableRow(item) {
   const rowKey = item.row_key || ('m' + item.id);
   const tr = el('tr', { 'data-row-key': rowKey, style: 'border-bottom:1px solid var(--border)' });
@@ -25003,9 +25024,11 @@ function buildValorisationTableRow(item) {
       'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(251,146,60,0.15);color:#fb923c;font-size:11px;font-weight:700;font-family:inherit' },
       'Aucune laize'));
   }
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)' }, ...refChildren);
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)' },
+    el('div', { style: 'max-width:' + VAL_COLS.commercial[1] + 'px' }, ...refChildren));
   const desText = item.libelle_technique || '—';
-  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') }, desText);
+  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') },
+    el('div', { style: 'max-width:' + VAL_COLS.technique[1] + 'px' }, desText));
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     el('div', { style: 'white-space:nowrap' },
       valFormatQte(item.quantite),
@@ -25038,20 +25061,17 @@ function buildValorisationTableRow(item) {
       : prixSeul ? !((item.prix_unitaire || 0) > 0)
       : !((item.unites_par_palette || 0) > 0);
     const libelle = item.laizee ? 'Métrage' : prixSeul ? 'Prix' : 'Conditionnement';
-    cfgBtn = el('button', {
-      type: 'button',
-      title: item.laizee ? 'Éditer le métrage par bobine'
-        : prixSeul ? 'Saisir le prix unitaire'
-        : 'Éditer le prix et le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
-      style: 'background:var(--card);border:1px solid ' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--border)')
-        + ';border-radius:6px;padding:4px 8px;cursor:pointer;color:' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--text2)')
-        + ';font-size:11px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap',
-      on: { click: () => item.laizee
+    const titre = (item.laizee ? 'Métrage par bobine'
+        : prixSeul ? 'Prix unitaire'
+        : 'Prix et conditionnement (' + (item.unite_achat || 'unité') + ' par palette)')
+      + (aConfigurer ? ' — ' + libelle.toLowerCase() + ' à renseigner' : '');
+    cfgBtn = valBoutonIcone('edit', titre,
+      aConfigurer ? 'var(--warn)' : 'var(--text2)',
+      aConfigurer ? 'var(--warn)' : 'var(--border)',
+      'var(--card)',
+      () => item.laizee
         ? openValorisationParamsModal(item.matiere_id)
-        : openValorisationConditionnementModal(item.matiere_id || item.id) },
-    });
-    cfgBtn.appendChild(iconEl('edit', 11));
-    cfgBtn.appendChild(el('span', null, aConfigurer ? libelle + ' ?' : libelle));
+        : openValorisationConditionnementModal(item.matiere_id || item.id));
   }
 
   // "Valorisée" = prix > 0 ET (si conditionnement requis) unites_par_palette > 0
@@ -25177,27 +25197,27 @@ function buildValorisationTableRow(item) {
   });
   histBtn.appendChild(iconEl('clock', 14));
 
-  const lienCm = valLienCoutsMatieres(item, 'Coûts matières');
-  lienCm.style.marginTop = '0';
-  lienCm.style.whiteSpace = 'nowrap';
+  // Lien Coûts matières en icône seule, même gabarit que les autres actions.
+  const lienCm = valLienCoutsMatieres(item, '');
+  lienCm.textContent = '';
+  lienCm.appendChild(iconEl('external-link', 14));
+  lienCm.title = 'Ouvrir dans Coûts matières' + (item.reference ? ' — ' + item.reference : '');
+  lienCm.setAttribute('aria-label', 'Ouvrir dans Coûts matières');
+  Object.assign(lienCm.style, { marginTop: '0', width: '28px', height: '28px', padding: '0',
+    justifyContent: 'center', borderRadius: '8px', flex: '0 0 auto' });
   // Stock à jeter : la ligne compte pour (-1) × sa valorisation.
-  const devalBtn = el('button', {
-    type: 'button',
-    title: item.devalorise
-      ? 'Stock à jeter, soustrait de la valorisation. Cliquer pour le revaloriser.'
-      : 'Marquer comme stock à jeter : la ligne sera soustraite de la valorisation.',
-    style: 'border:1px solid var(--danger);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;'
-      + 'display:inline-flex;align-items:center;gap:4px;white-space:nowrap;'
-      + (item.devalorise ? 'background:var(--danger);color:white;font-weight:700'
-                         : 'background:var(--card);color:var(--danger)'),
-    on: { click: () => valBasculerDevalorisation(item) },
-  });
-  devalBtn.appendChild(iconEl('trash-2', 11));
-  devalBtn.appendChild(el('span', null, item.devalorise ? 'Dévalorisé' : 'Dévalorisation'));
+  const devalBtn = valBoutonIcone('trash-2',
+    item.devalorise
+      ? 'Dévalorisé : stock à jeter, soustrait de la valorisation. Cliquer pour le revaloriser.'
+      : 'Dévalorisation : marquer comme stock à jeter, la ligne sera soustraite de la valorisation.',
+    item.devalorise ? 'white' : 'var(--danger)',
+    'var(--danger)',
+    item.devalorise ? 'var(--danger)' : 'var(--card)',
+    () => valBasculerDevalorisation(item));
   if (item.devalorise) tr.style.background = 'color-mix(in srgb, var(--danger) 7%, transparent)';
   const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), devalBtn, histBtn];
   const tdHist = el('td', {
-    style: 'padding:10px 12px;text-align:center;white-space:nowrap'
+    style: 'padding:10px 12px;text-align:right;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrixReel, tdVente, tdVal, tdHist);
@@ -25614,7 +25634,7 @@ function buildValorisationTable() {
     'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
   const tableWrap = el('div', { style: 'overflow-x:auto' });
-  const table = el('table', { style: 'width:100%;border-collapse:collapse;min-width:880px' });
+  const table = el('table', { style: 'width:100%;border-collapse:collapse' });
 
   const arrow = (col) => {
     if (v.sortColumn !== col) return '';
@@ -25625,27 +25645,26 @@ function buildValorisationTable() {
   const thStyleC = thStyle + ';text-align:center;cursor:default';
 
   const thChildren = [
-    el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
-    // Les libellés prennent la largeur libre : la colonne Actions se serre sur
-    // ses boutons (width:1%) au lieu de garder la place restante. Pas de
-    // largeur minimale : elle faisait déborder le tableau sur un écran moyen.
-    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
-    el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
+    // Bornes de largeur : VAL_COLS. La colonne Actions se serre sur ses
+    // boutons (width:1%), les libellés prennent la place libre jusqu'à leur max.
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.categorie[0] + 'px', on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.commercial[0] + 'px', on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.technique[0] + 'px', on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.quantite[0] + 'px', on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
   ];
   thChildren.push(
-    el('th', { style: thStyleR + ';color:var(--success, #16a34a)',
+    el('th', { style: thStyleR + ';color:var(--success, #16a34a);min-width:' + VAL_COLS.achat[0] + 'px',
       on: { click: () => valToggleSort('prix_unitaire_reel') },
       title: "Sous-total d'achat (prix + transport + taxes) converti en euros, calculé par Coûts matières."
     }, 'Sous-total achat €' + arrow('prix_unitaire_reel')),
-    el('th', { style: thStyleR,
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.vente[0] + 'px',
       on: { click: () => valToggleSort('prix_vente') },
       title: "Sous-total d'achat en euros + marge de la catégorie (Coûts matières)."
     }, 'Prix de vente' + arrow('prix_vente')),
   );
   thChildren.push(
-    el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
-    el('th', { style: thStyleC + ';width:1%' }, 'Actions'),
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.valo[0] + 'px', on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+    el('th', { style: thStyleC + ';width:1%;text-align:right' }, 'Actions'),
   );
   const thead = el('thead', null, el('tr', null, ...thChildren));
 
@@ -27019,7 +27038,8 @@ async function openValorisationClotureModal() {
 
 function buildValorisation() {
   const v = valEnsureState();
-  const root = el('div', { style: 'padding:18px 20px;max-width:1400px;margin:0 auto' });
+  // Pleine largeur : le tableau des matières a besoin de place pour ses libellés.
+  const root = el('div', { style: 'padding:18px 20px' });
 
   const head = el('div', { style: 'margin-bottom:18px' },
     el('h2', { style: 'font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px' }, 'Valorisation du stock'),
