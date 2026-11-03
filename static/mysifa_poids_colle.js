@@ -22,8 +22,8 @@
 (function (global) {
   "use strict";
 
-  // Deux étiquettes posées sur une balance : le widget part d'une pesée.
-  var ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="7.5" height="6" rx="1.2"/><path d="M5.8 8h3"/><rect x="13" y="5" width="7.5" height="6" rx="1.2"/><path d="M15.3 8h3"/><path d="M2 13.5h20"/><path d="M4.5 13.5 3.5 20.5h17l-1-7"/><path d="M10 17.5h4"/></svg>';
+  // Pèse-étiquettes : balance à afficheur, flèche de pesée.
+  var ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5.5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H10"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M17.5 15.3v4.2"/><path d="m15.7 17.8 1.8 1.8 1.8-1.8"/></svg>';
   var LS = "mysifa_poids_colle_v1";
   var W = { open: false, data: null, charge: false, edit: false, erreur: "", saisie: null };
 
