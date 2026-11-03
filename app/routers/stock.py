@@ -9148,6 +9148,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
         """
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
                mp.unites_par_palette, mp.sous_section,
+               COALESCE(mp.stock_a_l_unite, 0) AS stock_a_l_unite, mp.unite_comptage,
                MAX(COALESCE(s.quantite, 0), 0) AS quantite,
                COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
@@ -9235,6 +9236,15 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             transport_state = int(r["cout_transport_inclus"] or 0)
         except (TypeError, ValueError):
             transport_state = 0
+        # Matière tenue à l'unité (bagues, cartons au lot) : la quantité se
+        # compte en bagues ou en cartons, pas en palettes.
+        a_l_unite = avec_cond and bool(int(r["stock_a_l_unite"] or 0))
+        unite = _mp_unite_gestion(cat)
+        if a_l_unite:
+            choix_cpt = unites_comptage(cat)
+            unite = (r["unite_comptage"] or "").strip()
+            if unite not in choix_cpt:
+                unite = choix_cpt[0] if choix_cpt else _mp_unite_achat(cat)
         out.append({
             "id": r["id"],
             "row_key": f"m{r['id']}",
@@ -9248,7 +9258,8 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             "designation": r["designation"],
             "libelle_commercial": r["designation"],
             "quantite": qte,
-            "unite": _mp_unite_gestion(cat),
+            "unite": unite,
+            "stock_a_l_unite": a_l_unite,
             "prix_unitaire": prix,
             "valorisation": valorisation,
             "laizee": False,
@@ -9394,7 +9405,7 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
     # matières, lui, est celui du jour.
     items = _valorisation_query(conn, couts_matieres=not snapshot_date)
     if not snapshot_date:
-        return items
+        return _appliquer_devalorisation(conn, items)
     stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
     # Clôture d'inventaire : corrections saisies après la date mais rattachées
     # à elle, et prix lus jusqu'à la date limite. Copies : le snapshot est en cache.
@@ -9463,6 +9474,40 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
                 it["prix_palette"] = round(prix, 4)
                 it["valorisation"] = round(new_qte * prix, 2)
                 it["incomplete"] = False
+    return _appliquer_devalorisation(conn, items)
+
+
+def _devalorisations(conn) -> set[tuple[int, int]]:
+    """Lignes marquées « à jeter » : {(matiere_id, laize_id ou 0)}."""
+    try:
+        rows = conn.execute(
+            "SELECT matiere_id, laize_id FROM mp_devalorisation WHERE actif = 1"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return set()
+    return {(int(r[0]), int(r[1] or 0)) for r in rows}
+
+
+def _appliquer_devalorisation(conn, items: list[dict]) -> list[dict]:
+    """Stock à jeter : la ligne compte pour (-1) × sa valorisation.
+
+    Posé en dernier, sur les valorisations déjà calculées : les totaux,
+    l'export, le PDF et la tendance additionnent alors le négatif sans
+    rien savoir du marquage. La valorisation réelle des lignes hors Coûts
+    matières est recalculée ensuite depuis `valorisation`, qui est déjà
+    négative."""
+    marques = _devalorisations(conn)
+    for it in items:
+        try:
+            cle = (int(it.get("matiere_id")), int(it.get("laize_id") or 0))
+        except (TypeError, ValueError):
+            cle = None
+        it["devalorise"] = cle in marques
+        if not it["devalorise"]:
+            continue
+        for champ in ("valorisation", "valorisation_reelle", "valorisation_vente"):
+            if it.get(champ) is not None:
+                it[champ] = -abs(float(it[champ]))
     return items
 
 
@@ -9851,6 +9896,7 @@ def get_valorisation_trend(request: Request, days: int = 30):
             _table_max_id(conn, "mouvements_stock"),
             _table_max_id(conn, "mp_valorisation_historique"),
             _table_max_id(conn, "pf_valorisation_historique"),
+            tuple(sorted(_devalorisations(conn))),
             round(_get_taux_eur_usd(conn), 6),
             round(_get_import_tax_pct(conn), 4),
             round(_get_charge_production_pct(conn), 4),
@@ -10014,6 +10060,48 @@ async def update_valorisation_conteneur(declinaison_id: int, request: Request):
         # sans effet : prix_pour_valorisation ne la lit qu'en conteneur / forfait.
         _mystock_prix.set_surcharge_conteneur(conn, declinaison_id, cout, user_name=user_name)
     return {"ok": True, "transport_cout": cout}
+
+
+@router.put("/api/stock/valorisation/devalorisation/{matiere_id}")
+async def update_valorisation_devalorisation(matiere_id: int, request: Request):
+    """Marque une ligne de valorisation comme stock à jeter (ou retire la marque).
+
+    Body : {"laize_id": 12 | null, "devalorise": true | false}. La ligne
+    compte alors pour (-1) × sa valorisation (cf. _appliquer_devalorisation).
+    """
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    try:
+        laize_id = int(body.get("laize_id") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Laize invalide.") from None
+    actif = 1 if body.get("devalorise") else 0
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT reference, designation FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        conn.execute(
+            """INSERT INTO mp_devalorisation (matiere_id, laize_id, actif, updated_at, updated_by_name)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                 actif = excluded.actif, updated_at = excluded.updated_at,
+                 updated_by_name = excluded.updated_by_name""",
+            (matiere_id, laize_id, actif, now, user_name),
+        )
+        conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Dévalorisation {mat['reference'] or mat['designation'] or matiere_id}",
+        detail={"matiere_id": matiere_id, "laize_id": laize_id or None, "devalorise": bool(actif)},
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, "devalorise": bool(actif)}
 
 
 @router.put("/api/stock/valorisation/{matiere_id}")
