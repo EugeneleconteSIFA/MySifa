@@ -1322,6 +1322,13 @@ COUCHES_MATIERE = (("frontal", "Frontal"), ("adhesif", "Adhésif"), ("glassine",
 MATIERE_FAMILLES = (("frontal", "Frontal"), ("glassine", "Glassine"),
                     ("complexe", "Matière enduite"), ("anilox", "Anilox (encre)"))
 
+# Pesées par front (alertes_pesees.py) : une mesure est signalée « à vérifier »
+# quand elle s'écarte de la médiane de son dossier (au moins 4 mesures) ou,
+# pour une pesée par front, de la médiane des autres fronts de la même
+# validation (au moins 3 fronts). Écarts relatifs : 0.3 = 30 %.
+PESEES_ECART_DOSSIER = float(os.getenv("PESEES_ECART_DOSSIER", "0.3"))
+PESEES_ECART_FRONTS = float(os.getenv("PESEES_ECART_FRONTS", "0.15"))
+
 # ─── MyTools — convertisseur (repris de Prismix) ──────────────────
 # Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et
 # ffmpeg sont gourmands), quota par utilisateur et par heure.

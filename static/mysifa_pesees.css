@@ -1,4 +1,4 @@
-/* MySifa — Historique des pesées par front (static/mysifa_pesees.js). */
+/* MySifa — Pesées par front (static/mysifa_pesees.js) : fenêtre (.pf-modal) ou onglet (.pf-vue). */
 .pf-overlay{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
 .pf-modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:min(1100px,100%);max-height:min(90vh,100%);display:flex;flex-direction:column;color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;box-shadow:0 12px 48px rgba(0,0,0,.45)}
 .pf-tete{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
@@ -14,28 +14,47 @@
 .pf-vide,.pf-erreur{font-size:13px;color:var(--muted);padding:18px 0;text-align:center}
 .pf-erreur{color:var(--danger)}
 .pf-alerte{font-size:13px;font-weight:700;color:var(--accent);margin-top:6px}
-.pf-sous-titre{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.pf-synthese{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
-.pf-front{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
-.pf-front-nom{font-size:11px;color:var(--muted);font-weight:600}
-.pf-front-val{font-size:17px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
-.pf-front-sous{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
-.pf-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;max-height:52vh}
+.pf-legende{font-size:11.5px;color:var(--muted)}
+.pf-section{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.pf-section-tete{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
+.pf-section-titre{font:inherit;font-size:14px;font-weight:700;color:var(--text);background:none;border:none;padding:0}
+button.pf-section-titre{cursor:pointer}
+button.pf-section-titre:hover{color:var(--accent);text-decoration:underline}
+.pf-section-sous{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pf-badge-alerte{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--danger);background:var(--bg);border:1px solid var(--danger);border-radius:999px;padding:2px 9px}
+.pf-courbe{position:relative}
+.pf-courbe svg{display:block;width:100%;height:auto}
+.pf-grille{stroke:var(--border);stroke-width:1}
+.pf-axe{fill:var(--muted);font-size:11px;font-family:inherit;font-variant-numeric:tabular-nums}
+.pf-plage{stroke:var(--accent);stroke-opacity:.3;stroke-width:6;stroke-linecap:round}
+.pf-moyenne{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round}
+.pf-point{fill:var(--accent);stroke:var(--card);stroke-width:2}
+.pf-alerte-point{fill:var(--danger);stroke:var(--card);stroke-width:2}
+.pf-cible{fill:transparent;cursor:default}
+.pf-bulle{position:absolute;top:4px;transform:translateX(10px);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;box-shadow:0 6px 18px rgba(0,0,0,.18);pointer-events:none;white-space:nowrap;z-index:2}
+.pf-bulle.pf-bulle-gauche{transform:translateX(calc(-100% - 10px))}
+.pf-bulle-titre{font-weight:700;margin-bottom:2px}
+.pf-bulle-ligne{font-variant-numeric:tabular-nums;color:var(--text2)}
+.pf-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px}
 .pf-table{width:100%;border-collapse:collapse;font-size:12.5px}
-.pf-table th{position:sticky;top:0;background:var(--bg);color:var(--muted);font-weight:600;text-align:left;padding:7px 9px;white-space:nowrap;border-bottom:1px solid var(--border)}
-.pf-table td{padding:6px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+.pf-table th{position:sticky;top:0;background:var(--bg);color:var(--muted);font-weight:600;text-align:left;padding:6px 9px;white-space:nowrap;border-bottom:1px solid var(--border)}
+.pf-table td{padding:5px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+.pf-table tbody tr:last-child td{border-bottom:none}
 .pf-table .num{text-align:right;font-variant-numeric:tabular-nums}
 .pf-table tbody tr:hover td{background:var(--accent-bg)}
-.pf-table .pf-col-front{color:var(--accent)}
 .pf-date{color:var(--text2);font-variant-numeric:tabular-nums}
-.pf-dos{cursor:pointer;color:var(--accent)}
-.pf-dos:hover{text-decoration:underline}
-.pf-ecart{color:var(--text2)}
 .pf-hors{color:var(--danger);font-weight:700}
+td.pf-hors{background:var(--bg)}
 .pf-nc td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
+.pf-plus{display:block;width:100%;border:none;border-top:1px solid var(--border);background:var(--bg);color:var(--accent);font:inherit;font-size:12px;font-weight:600;padding:6px;cursor:pointer}
+.pf-plus:hover{background:var(--accent-bg)}
+/* Onglet Qualité de la saisie prod : pas de cadre de fenêtre, la page défile. */
+.pf-vue{display:flex;flex-direction:column;min-height:0;flex:1}
+.pf-vue .pf-filtres{padding:0 0 12px}
+.pf-vue .pf-corps{padding:12px 0 24px;overflow:visible}
+.pf-vue .pf-section{background:var(--card)}
 @media (max-width:640px){
   .pf-overlay{padding:0;align-items:stretch}
   .pf-modal{border-radius:0;max-height:100%;height:100%}
   .pf-tete,.pf-filtres,.pf-corps{padding-left:14px;padding-right:14px}
-  .pf-table-wrap{max-height:none}
 }

@@ -19,7 +19,8 @@
  *   correction d'une bobine scannée, correction d'une saisie de repiquage,
  *   mémoire produit, mouvements de stock de l'onglet Stock (entrée / sortie
  *   MP, entrée / sortie Z1 — formulaires indépendants de la saisie),
- *   historique des pesées par front (pesees, pesees_dossier, pesees_periode).
+ *   onglet Qualité : filtres des pesées par front (pesees, pesees_dossier,
+ *   pesees_periode).
  * Hors adresse, volontairement : les étapes d'une saisie en cours (choix du
  * dossier à démarrer, début, fin, compteur, commentaire imposé par un seuil,
  * changement d'outil, annulation, dossier fictif, tête de sortie), les
@@ -28,7 +29,7 @@
  * rafraîchissement d'une tablette ferait saisir sur un état périmé.
  */
 let _fabUrlPrete = false;          // posé à la fin d'init()
-const _FAB_ONGLETS = ['saisie', 'print', 'traca', 'of', 'stats'];
+const _FAB_ONGLETS = ['saisie', 'print', 'traca', 'qualite', 'of', 'stats'];
 const _FAB_ID = /^[0-9]+$/;
 
 // Fenêtre de traçabilité (DOM, hors de S) : retenue avec son élément, fermée
@@ -104,14 +105,13 @@ function _fabPmemBrancher() {
   M.surAdresse(e => { if (_fabPmemSilence) return; _fabPmem = e || null; fabSyncUrl(); });
 }
 
-// Historique des pesées par front (mysifa_pesees.js, calque hors de S) :
-// il signale ses filtres, branché comme la mémoire produit.
-let _fabPesees = null;             // { machine, no_dossier, jours }
+// Onglet Qualité (mysifa_pesees.js, vue hors de S) : ses filtres changent
+// sans render(), il les signale.
 function _fabPeseesBrancher() {
   const P = window.MySifaPesees;
   if (!P || !P.surAdresse || P.__fabBranche) return;
   P.__fabBranche = true;
-  P.surAdresse(e => { _fabPesees = e || null; fabSyncUrl(); });
+  P.surAdresse(() => fabSyncUrl());
 }
 
 function _fabModale() {
@@ -127,11 +127,6 @@ function _fabModale() {
   if (f) return { cle: f.cle, id: f.id };
   const t = _fabTracaVivante();
   if (t) return { cle: 'tracabilite', id: t.ref };
-  if (_fabPesees && window.MySifaPesees && MySifaPesees.ouverte()) {
-    const p = MySifaPesees.adresse(_fabPesees);
-    const id = p.pesees; delete p.pesees;
-    return { cle: 'pesees', id, extra: p };
-  }
   if (_fabPmem && document.getElementById('pmem-overlay')) {
     return { cle: _fabPmem.cle, id: _fabPmem.id,
              extra: (_fabPmem.onglet && _fabPmem.onglet !== 'series') ? { produit_onglet: _fabPmem.onglet } : null };
@@ -147,6 +142,13 @@ function fabParams() {
   if (onglet === 'of' && S.ofSubTab && S.ofSubTab !== 'of') { p.sous = S.ofSubTab; nav += '/' + S.ofSubTab; }
   if (S.saisieViewMode === 'admin') { p.vue = 'admin'; nav += '/admin'; }
   if (S.adminMachineId) p.machine = String(S.adminMachineId);
+  if (onglet === 'qualite' && window.MySifaPesees && MySifaPesees.etat()) {
+    // Machine de l'opérateur et 3 jours : la page sans paramètre.
+    const e = MySifaPesees.etat();
+    const a = MySifaPesees.adresse(e);
+    if (a.pesees === ((S.machine && S.machine.nom) || 'toutes')) delete a.pesees;
+    Object.assign(p, a);
+  }
   if (onglet === 'saisie' && S.repiquageView === 'dossier' && S.repiquageDossierActif) {
     p.repiquage = String(S.repiquageDossierActif);
     nav += '/rep:' + S.repiquageDossierActif;
@@ -179,7 +181,8 @@ function fabUrlObserver() {
 // forme « #traca » relue une fois, puis réécrite.
 function fabLireNavigation(u) {
   const h = MySifaUrl.hashHerite();
-  const onglet = u.get('onglet', null, _FAB_ONGLETS) || (_FAB_ONGLETS.indexOf(h) !== -1 ? h : 'saisie');
+  // ?pesees= sans onglet : lien de l'ancienne fenêtre, désormais l'onglet Qualité.
+  const onglet = u.get('onglet', null, _FAB_ONGLETS) || (_FAB_ONGLETS.indexOf(h) !== -1 ? h : (u.get('pesees', null) ? 'qualite' : 'saisie'));
   const sous = u.get('sous', 'of', ['of', 'fiche']);
   const admin = u.get('vue', null) === 'admin';
   const m = u.get('machine', null);
@@ -226,7 +229,6 @@ const _FAB_REOUVRIR = {
   produit: (v, u) => { const M = window.MySifaProduitMemoire; if (M) M.openFiche(v, { onglet: u.get('produit_onglet', null) }); },
   historique: (v, u) => { const M = window.MySifaProduitMemoire; if (M) M.openHistorique(v, { onglet: u.get('produit_onglet', null) }); },
   produits: () => { const M = window.MySifaProduitMemoire; if (M) M.openListe(); },
-  pesees: (v, u) => { const P = window.MySifaPesees; const e = P && P.lireAdresse(u); if (e) P.ouvrir(e); },
 };
 
 // Ferme la fenêtre ouverte sans toucher à l'adresse (Retour du navigateur).
@@ -245,7 +247,6 @@ function _fabFermerModale(mo) {
   else if (mo.cle === 'commentaire') set({ showCommentModal: false, commentSaisieId: null });
   else if (mo.cle === 'commentaire_bobine') set({ showTracaCommentModal: false, tracaCommentId: null });
   else if (mo.cle === 'repiquage_modifier') set({ showRepiquageEditModal: false, repiquageEditSaisie: null });
-  else if (mo.cle === 'pesees') { if (window.MySifaPesees) MySifaPesees.fermer(true); _fabPesees = null; }
   else if (window.MySifaProduitMemoire) {
     _fabPmemSilence = true;
     try { window.MySifaProduitMemoire.fermer(); } finally { _fabPmemSilence = false; }
@@ -278,6 +279,15 @@ async function fabAllerUrl(complet) {
       set({ adminMachineId: n.machine });
       await loadSession();
     }
+  }
+  if (n.onglet === 'qualite' && window.MySifaPesees) {
+    // Avant le changement d'onglet : la vue se charge une fois, sur les bons
+    // filtres. Sans « pesees= », la machine de l'opérateur.
+    const P = window.MySifaPesees;
+    const m = (S.machine && S.machine.nom) || 'toutes';
+    const e = P.lireAdresse(u.get('pesees', null) ? u
+      : { get: (k, ...r) => (k === 'pesees' ? m : u.get(k, ...r)) });
+    if (e) P.allerVue(e);
   }
   if (n.onglet !== (S.fabTab || 'saisie')) await switchFabTab(n.onglet);
   if (n.onglet === 'of' && n.sous !== (S.ofSubTab || 'of')) {

@@ -820,6 +820,10 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
   padding:20px 24px;gap:18px;
 }
 .fab-prod-head{margin-bottom:2px}
+/* Onglet Qualité : seule la liste des dossiers défile (static/mysifa_pesees.css). */
+.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;padding:20px 24px 0;gap:14px}
+.fab-qualite .pf-vue{flex:1;min-height:0}
+.fab-qualite .pf-corps{flex:1;min-height:0;overflow:auto}
 .fab-prod-head-title{
   font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
 }
@@ -1359,12 +1363,12 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_pesees.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
-<script src="/static/mysifa_dock.js?v=fab1"></script>
+<script src="/static/mysifa_dock.js?v=fab2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
@@ -1383,12 +1387,12 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>if(window.MySifaProduitMemoire)window.MySifaProduitMemoire.regler({ongletParDefaut:'documents',ofUnParUn:true});</script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/fabrication_url.js?v=3"></script>
+<script src="/static/fabrication_url.js?v=4"></script>
 <!-- Plaque confirmée au démarrage du dossier. -->
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
-<script src="/static/mysifa_pesees.js?v=1"></script>
-<script src="/static/mysifa_poids_colle.js?v=1"></script>
+<script src="/static/mysifa_pesees.js?v=2"></script>
+<script src="/static/mysifa_poids_colle.js?v=2"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
   window.mysifaPoidsColleContexte = function () {
@@ -1567,7 +1571,7 @@ let S = {
   searchQuery: '',
 
   // Footer tabs
-  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'stats' (Stock) | 'of'
+  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'qualite' | 'stats' (Stock) | 'of'
   stockProdZ1: {refs:[],total_unites:0,nb_refs:0}, // Z1 en attente sortie de prod
   stockProdLoading: false,
 
@@ -2887,7 +2891,7 @@ async function switchFabTab(tab){
   }
 }
 
-var FAB_VALID_TABS=['saisie','print','traca','of','stats'];
+var FAB_VALID_TABS=['saisie','print','traca','qualite','of','stats'];
 function _readFabTab(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(FAB_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
@@ -5365,6 +5369,28 @@ function renderStatsPanel(){
   );
 }
 
+/* ── Onglet Qualité : pesées par front ───────────────────────────
+   La vue vient de static/mysifa_pesees.js : un élément durable, rendu une
+   fois et reposé à chaque render() — ses filtres, ses sections dépliées,
+   son défilement et le texte en cours de frappe survivent au
+   rafraîchissement automatique.
+   Machine par défaut : celle de l'opérateur. */
+function renderQualitePanel(){
+  const P = window.MySifaPesees;
+  const wrap = h('div',{className:'fab-main fab-qualite'},
+    h('div',{className:'fab-prod-head'},
+      h('h2',{className:'fab-prod-head-title'}, 'Pesées par front'),
+      h('div',{className:'fab-prod-head-sub'},
+        'Pesées d’étiquettes saisies dans les alertes d’inspection, dossier par dossier.')));
+  if(!P){ wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.')); return wrap; }
+  const vue = P.vue({machine:(S.machine && S.machine.nom) || ''});
+  // Sortie puis remise dans la page, la vue perd focus et défilement :
+  // le module les a suivis et les rend une fois la page reconstruite.
+  wrap.appendChild(vue);
+  queueMicrotask(()=>P.retablir());
+  return wrap;
+}
+
 function renderMain(){
   if(S.fabTab==='of'){
     return h('div',{className:'fab-of-panel',style:{display:'flex',flexDirection:'column',flex:'1',minHeight:0}},
@@ -5387,6 +5413,7 @@ function renderMain(){
   }
   if(S.fabTab==='print') return renderPrintPanel();
   if(S.fabTab==='traca') return renderTracaPanel();
+  if(S.fabTab==='qualite') return renderQualitePanel();
   if(S.fabTab==='stats') return renderStatsPanel();
 
   // Vue Repiquage : machine effective = Repiquage → vue simplifiée (saisies code 92)
@@ -5534,12 +5561,6 @@ function renderMain(){
         isAdminView ? h('span',{style:{fontSize:'11px',fontWeight:'800',color:'var(--muted)',letterSpacing:'.4px',textTransform:'uppercase'}},'Lecture seule') : null
       ) : null,
       alert ? null : null,
-      // Pesées par front (alerte d'inspection) : historique de la machine,
-      // static/mysifa_pesees.js — ouvert par l'attribut, rien à brancher.
-      h('button',{type:'button',className:'fab-btn fab-btn-ghost fab-btn-sm',
-        'data-pesees':'1','data-pesees-machine':(S.machine && S.machine.nom) || '',
-        title:'Historique des pesées d’étiquettes, front par front'},
-        svgIcon('scale',14),' Pesées'),
       h('span',{className:'fab-etat-badge '+etatClass(S.etat)}, etatLabel(S.etat)),
       h('span',{className:'fab-main-sub'},
         (isAdminView
@@ -5818,6 +5839,7 @@ function _fabTabDefs(){
     {key:'saisie', icon:'edit',    label:'Saisie'},
     {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
     {key:'traca',  icon:'scan',    label:'Traça'},
+    {key:'qualite',icon:'scale',   label:'Qualité'},
     {key:'stats',  icon:'box',     label:'Stock'},
     // « Fiches et OF » : meme intitule que la section de la barre laterale
     // de MyProd. Ici l'onglet couvre bien les deux (sous-onglets OF et

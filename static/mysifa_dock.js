@@ -65,7 +65,10 @@
 
   function isVisible(el) {
     if (!el) return false;
-    if (el.id === 'ai-chat-root') return el.style.display !== 'none';
+    // L'assistant se masque en ligne (style.display), mais aussi par la règle
+    // des boutons flottants coupés pour l'appli (display:none!important) : sans
+    // le second test, son bouton gardait sa place et laissait un trou.
+    if (el.id === 'ai-chat-root') return el.style.display !== 'none' && getComputedStyle(el).display !== 'none';
     return getComputedStyle(el).display !== 'none';
   }
 

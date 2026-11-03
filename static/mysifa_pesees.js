@@ -1,32 +1,42 @@
 /*
- * MySifa — Historique des pesées par front (saisie prod, MyProd).
+ * MySifa — Pesées par front (saisie prod : onglet Qualité ; MyProd : fenêtre).
  *
  * Les pesées d'étiquettes se saisissent dans une alerte de maintenance, une
- * mesure par front. Ici elles se relisent en tableau : quand, qui, quel
- * dossier, la valeur de chaque front, et les autres mesures de la même
- * validation (grammage de colle…). Données : GET /api/maintenance/alertes/pesees
- * (app/services/alertes_pesees.py) — aucune question n'est nommée ici.
+ * mesure par front. Ici elles se relisent dossier par dossier, le plus
+ * récemment pesé en haut : une courbe (moyenne des fronts, écart entre le
+ * plus léger et le plus lourd) puis les dernières pesées. Une mesure loin des
+ * autres du dossier est marquée « à vérifier » — le calcul est fait côté
+ * serveur (app/services/alertes_pesees.py, GET /api/maintenance/alertes/pesees).
  *
- *   MySifaPesees.ouvrir({machine, no_dossier, jours})   ouvre la fenêtre
+ *   MySifaPesees.ouvrir({machine, no_dossier, jours})   fenêtre (MyProd)
  *   MySifaPesees.fermer(sansAdresse)
+ *   MySifaPesees.vue({machine, no_dossier, jours})       élément durable à
+ *       poser dans la page (onglet Qualité) : le premier appel charge, les
+ *       suivants rendent le même élément, état et défilement compris.
+ *   MySifaPesees.allerVue(e)   applique un état lu dans l'adresse à la vue
  *   MySifaPesees.surAdresse(fn)   fn({machine, no_dossier, jours}) à chaque
- *       ouverture ou changement de filtre, fn(null) à la fermeture : la page
- *       porte la fenêtre dans son adresse (url-etat.md). Une fermeture
- *       technique (Retour du navigateur) passe sansAdresse et ne prévient pas.
+ *       changement de filtre, fn(null) à la fermeture de la fenêtre : la page
+ *       porte l'état dans son adresse (url-etat.md). Une fermeture technique
+ *       (Retour du navigateur) passe sansAdresse et ne prévient pas.
  *   MySifaPesees.adresse(e) / lireAdresse(u)   e ↔ paramètres d'URL
  *       (pesees=<machine|toutes>, pesees_dossier, pesees_periode).
  *   <button data-pesees data-pesees-machine="…" data-pesees-dossier="…">
- *       ouvre aussi, sans rien brancher (écoute déléguée sur le document)
+ *       ouvre la fenêtre, sans rien brancher (écoute déléguée sur le document)
  *
- * La fenêtre vit dans son propre calque sous <body> : le re-rendu de la page
- * hôte (render() toutes les quelques secondes en saisie prod) ne la touche
- * pas. Tout texte passe par textContent.
+ * Fenêtre et vue vivent hors du rendu de la page hôte : le render() de la
+ * saisie prod, toutes les quelques secondes, ne les reconstruit pas. Tout
+ * texte passe par textContent.
  */
 (function (global) {
   "use strict";
 
-  var PERIODES = [["7", "7 derniers jours"], ["30", "30 derniers jours"], ["90", "90 derniers jours"], ["", "Tout l'historique"]];
-  var P = { filtres: null, data: null, charge: false, erreur: "", jeton: 0, abonnes: [] };
+  var PERIODES = [["3", "3 derniers jours"], ["7", "7 derniers jours"], ["30", "30 derniers jours"],
+                  ["90", "90 derniers jours"], ["", "Tout l'historique"]];
+  var DEFAUT = "3";
+  var LIGNES_VISIBLES = 5;
+  var SVG = "http://www.w3.org/2000/svg";
+  var P = { filtres: null, data: null, charge: false, erreur: "", jeton: 0, abonnes: [],
+            mode: "modale", vueEl: null, deplies: {}, defil: 0, focus: null };
 
   function signaler(e) {
     P.abonnes.forEach(function (fn) { try { fn(e); } catch (x) {} });
@@ -36,6 +46,11 @@
     var e = document.createElement(tag);
     if (cls) e.className = cls;
     if (txt != null) e.textContent = txt;
+    return e;
+  }
+  function sv(tag, attrs) {
+    var e = document.createElementNS(SVG, tag);
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
     return e;
   }
   function fmt(v, d) {
@@ -58,7 +73,13 @@
   function hors(q, v) {
     return (q.min != null && v < q.min) || (q.max != null && v > q.max);
   }
+  function aVerifier(l, q, i) {
+    var a = (l.aberrants || {})[String(q.index)];
+    return !!(a && a.indexOf(i) >= 0) || hors(q, ((l.valeurs || {})[String(q.index)] || [])[i]);
+  }
+  function unite(q) { return q.unit ? " " + q.unit : ""; }
 
+  // ── Fenêtre / vue ──────────────────────────────────────────────────────
   function calque() {
     var o = document.getElementById("pf-overlay");
     if (o) return o;
@@ -107,15 +128,38 @@
     rendre();
   }
 
-  function ouvrir(opts) {
+  function normaliser(opts) {
     opts = opts || {};
-    P.filtres = { machine: opts.machine || "", no_dossier: opts.no_dossier || "",
-                  jours: opts.jours != null ? String(opts.jours) : (opts.no_dossier ? "" : "30") };
+    return { machine: opts.machine || "", no_dossier: opts.no_dossier || "",
+             jours: opts.jours != null ? String(opts.jours) : (opts.no_dossier ? "" : DEFAUT) };
+  }
+  function ouvrir(opts) {
+    P.mode = "modale";
+    P.defil = 0;
+    P.filtres = normaliser(opts);
     P.data = null;
     calque();
     charger();
   }
+  function vue(opts) {
+    P.mode = "vue";
+    if (!P.vueEl) {
+      P.vueEl = el("div", "pf-vue");
+      P.filtres = normaliser(opts);
+      P.data = null;
+      charger();
+    }
+    return P.vueEl;
+  }
+  function allerVue(e) {
+    var f = normaliser(e), g = P.filtres;
+    vue(e);
+    if (g && f.machine === g.machine && f.no_dossier === g.no_dossier && f.jours === g.jours) return;
+    P.filtres = f;
+    charger();
+  }
 
+  // ── Filtres ────────────────────────────────────────────────────────────
   function filtres() {
     var f = P.filtres, barre = el("div", "pf-filtres");
     var machines = ((P.data && P.data.machines) || []).slice();
@@ -133,6 +177,7 @@
 
     var inpD = el("input", "pf-champ pf-dossier");
     inpD.type = "search";
+    inpD.id = "pf-dossier";
     inpD.placeholder = "Référence dossier";
     inpD.value = f.no_dossier;
     var minuteur = 0;
@@ -140,122 +185,285 @@
       clearTimeout(minuteur);
       minuteur = setTimeout(function () { f.no_dossier = inpD.value.trim(); charger(); }, 400);
     });
+    // Suivi du focus et du curseur : la page hôte peut sortir la vue du
+    // document à tout moment (render() de la saisie prod), retablir() les rend.
+    function noter() { P.focus = [inpD.selectionStart, inpD.selectionEnd]; }
+    ["focus", "input", "keyup", "select", "click"].forEach(function (t) { inpD.addEventListener(t, noter); });
+    inpD.addEventListener("blur", function () {
+      setTimeout(function () { if (inpD.isConnected) P.focus = null; }, 0);
+    });
+    inpD.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && inpD.value) {
+        e.stopPropagation();
+        inpD.value = "";
+        f.no_dossier = "";
+        if (!f.jours) f.jours = DEFAUT;
+        charger();
+      }
+    });
     barre.append(selM, selP, inpD);
     return barre;
   }
 
-  function synthese(q) {
-    var fr = (q.par_front || []).filter(function (x) { return x.n; });
-    if (!fr.length) return null;
-    var b = el("div", "pf-synthese");
-    fr.forEach(function (x) {
-      var c = el("div", "pf-front");
-      c.appendChild(el("div", "pf-front-nom", q.libelle_point + " " + x.position));
-      c.appendChild(el("div", "pf-front-val", fmt(x.moyenne, 3) + (q.unit ? " " + q.unit : "")));
-      c.appendChild(el("div", "pf-front-sous", fmt(x.min, 3) + " – " + fmt(x.max, 3) + " · " + x.n + " pesée" + (x.n > 1 ? "s" : "")));
-      b.appendChild(c);
+  // ── Courbe d'un dossier ────────────────────────────────────────────────
+  // Abscisse : les pesées dans l'ordre, la plus ancienne à gauche. Ordonnée :
+  // bornée par les mesures normales ; une mesure à vérifier hors de cette
+  // échelle est posée au bord, flèche vers l'extérieur, pour ne pas écraser
+  // la courbe (4,266 g au milieu de pesées à 1,4 g).
+  // Une seule pesée : pas de courbe, le tableau suffit.
+  function courbe(g, q, largeur) {
+    var k = String(q.index);
+    var lignes = g.lignes.slice().reverse().filter(function (l) { return (l.valeurs[k] || []).length; });
+    if (lignes.length < 2) return null;
+    var normales = [], toutes = [];
+    lignes.forEach(function (l) {
+      (l.valeurs[k] || []).forEach(function (v, i) {
+        toutes.push(v);
+        if (!aVerifier(l, q, i)) normales.push(v);
+      });
     });
-    return b;
+    var base = normales.length ? normales : toutes;
+    var lo = Math.min.apply(null, base), hi = Math.max.apply(null, base);
+    var marge = (hi - lo) * 0.15 || Math.abs(hi) * 0.05 || 1;
+    lo -= marge; hi += marge;
+
+    // Largeur réelle de la page : le texte du graphique garde sa taille.
+    var W = Math.max(300, Math.round(largeur || 640)), H = 150, G = 52, D = 14, T = 12, B = 26;
+    var larg = W - G - D, haut = H - T - B, n = lignes.length;
+    function x(i) { return n === 1 ? G + larg / 2 : G + i * larg / (n - 1); }
+    function y(v) { return T + (hi - v) / (hi - lo) * haut; }
+
+    var wrap = el("div", "pf-courbe");
+    var s = sv("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img",
+                        "aria-label": q.label + " — " + n + " pesée" + (n > 1 ? "s" : "") });
+    [lo + marge, (lo + hi) / 2, hi - marge].forEach(function (v) {
+      s.appendChild(sv("line", { x1: G, x2: W - D, y1: y(v), y2: y(v), class: "pf-grille" }));
+      var t = sv("text", { x: G - 6, y: y(v) + 4, "text-anchor": "end", class: "pf-axe" });
+      t.textContent = fmt(v, 3);
+      s.appendChild(t);
+    });
+    [[0, "start"], [n - 1, "end"]].forEach(function (p, j) {
+      if (j && n === 1) return;
+      var t = sv("text", { x: n === 1 ? x(0) : x(p[0]), y: H - 6,
+                           "text-anchor": n === 1 ? "middle" : p[1], class: "pf-axe" });
+      t.textContent = dateCourte(lignes[p[0]].ack_at);
+      s.appendChild(t);
+    });
+
+    var moyennes = [];
+    lignes.forEach(function (l, i) {
+      var v = l.valeurs[k] || [], ok = v.filter(function (_, j) { return !aVerifier(l, q, j); });
+      if (ok.length > 1) {
+        s.appendChild(sv("line", { x1: x(i), x2: x(i), y1: y(Math.max.apply(null, ok)), y2: y(Math.min.apply(null, ok)),
+                                   class: "pf-plage" }));
+      }
+      moyennes.push(ok.length ? ok.reduce(function (a, b) { return a + b; }, 0) / ok.length : null);
+    });
+    var d = "";
+    moyennes.forEach(function (m, i) {
+      if (m == null) return;
+      d += (d ? " L" : "M") + x(i).toFixed(1) + " " + y(m).toFixed(1);
+    });
+    if (d) s.appendChild(sv("path", { d: d, class: "pf-moyenne" }));
+    moyennes.forEach(function (m, i) {
+      if (m != null) s.appendChild(sv("circle", { cx: x(i), cy: y(m), r: 4, class: "pf-point" }));
+    });
+    lignes.forEach(function (l, i) {
+      (l.valeurs[k] || []).forEach(function (v, j) {
+        if (!aVerifier(l, q, j)) return;
+        var yy = y(v), dehors = yy < T ? -1 : (yy > T + haut ? 1 : 0);
+        yy = Math.max(T, Math.min(T + haut, yy));
+        if (dehors) {
+          var p = dehors < 0 ? [x(i) - 5, yy + 1, x(i) + 5, yy + 1, x(i), yy - 7] : [x(i) - 5, yy - 1, x(i) + 5, yy - 1, x(i), yy + 7];
+          s.appendChild(sv("polygon", { points: p.join(" "), class: "pf-alerte-point" }));
+        } else {
+          s.appendChild(sv("circle", { cx: x(i), cy: yy, r: 5, class: "pf-alerte-point" }));
+        }
+      });
+    });
+
+    // Survol : une colonne par pesée, plus large que la marque.
+    var bulle = el("div", "pf-bulle");
+    bulle.hidden = true;
+    var pas = n === 1 ? larg : larg / (n - 1);
+    lignes.forEach(function (l, i) {
+      var cible = sv("rect", { x: x(i) - pas / 2, y: 0, width: pas, height: H, class: "pf-cible" });
+      cible.addEventListener("mouseenter", function () {
+        bulle.textContent = "";
+        bulle.appendChild(el("div", "pf-bulle-titre", dateCourte(l.ack_at) + " · " + (l.operateur || "—")));
+        (l.valeurs[k] || []).forEach(function (v, j) {
+          var r = el("div", aVerifier(l, q, j) ? "pf-bulle-ligne pf-hors" : "pf-bulle-ligne",
+                     q.libelle_point + " " + (j + 1) + " : " + fmt(v, 3) + unite(q) + (aVerifier(l, q, j) ? " · à vérifier" : ""));
+          bulle.appendChild(r);
+        });
+        bulle.hidden = false;
+        bulle.style.left = (x(i) / W * 100) + "%";
+        bulle.classList.toggle("pf-bulle-gauche", x(i) > W * 0.6);
+      });
+      cible.addEventListener("mouseleave", function () { bulle.hidden = true; });
+      s.appendChild(cible);
+    });
+    wrap.append(s, bulle);
+    return wrap;
   }
 
-  function tableau(a) {
-    var qs = a.questions, nbF = a.nb_fronts || 0;
+  // ── Tableau d'un dossier ───────────────────────────────────────────────
+  function tableau(g, qs, nbF, cle) {
     var t = el("table", "pf-table"), thead = el("thead"), tr = el("tr");
-    ["Date", "Machine", "Opérateur", "Dossier"].forEach(function (h) { tr.appendChild(el("th", null, h)); });
+    ["Date", "Opérateur"].forEach(function (h) { tr.appendChild(el("th", null, h)); });
     qs.forEach(function (q) {
-      var u = q.unit ? " (" + q.unit + ")" : "";
-      if (!q.multiple) { tr.appendChild(el("th", "num", q.label + u)); return; }
-      for (var i = 0; i < nbF; i++) {
-        var th = el("th", "num pf-col-front", q.libelle_point + " " + (i + 1));
-        th.title = q.label + u;
-        tr.appendChild(th);
-      }
-      var te = el("th", "num", "Écart");
-      te.title = "Plus lourd moins plus léger, sur la même validation";
-      tr.appendChild(te);
+      if (!q.multiple) { tr.appendChild(el("th", "num", q.label + (q.unit ? " (" + q.unit + ")" : ""))); return; }
+      for (var i = 0; i < nbF; i++) tr.appendChild(el("th", "num", q.libelle_point + " " + (i + 1)));
     });
     thead.appendChild(tr);
     t.appendChild(thead);
-    var tb = el("tbody");
-    a.lignes.forEach(function (l) {
+    var tb = el("tbody"), toutes = !!P.deplies[cle];
+    var lignes = toutes ? g.lignes : g.lignes.slice(0, LIGNES_VISIBLES);
+    lignes.forEach(function (l) {
       var r = el("tr");
       if (l.nc) r.className = "pf-nc";
       r.appendChild(el("td", "pf-date", dateCourte(l.ack_at)));
-      r.appendChild(el("td", null, l.machine || "—"));
       r.appendChild(el("td", null, l.operateur || "—"));
-      var td = el("td", "pf-dos", l.no_dossier || "—");
-      if (l.no_dossier) {
-        td.title = "Filtrer sur ce dossier";
-        td.addEventListener("click", function () { P.filtres.no_dossier = l.no_dossier; P.filtres.jours = ""; charger(); });
-      }
-      r.appendChild(td);
       qs.forEach(function (q) {
-        var v = l.valeurs[String(q.index)] || [];
-        if (!q.multiple) {
-          var c = el("td", "num", v.length ? v.map(fmtLibre).join(" / ") : "—");
-          if (v.some(function (x) { return hors(q, x); })) c.classList.add("pf-hors");
+        var v = l.valeurs[String(q.index)] || [], med = (g.medianes || {})[String(q.index)];
+        var cols = q.multiple ? nbF : 1;
+        for (var i = 0; i < cols; i++) {
+          var txt = q.multiple ? (v[i] != null ? fmt(v[i], 3) : "") : (v.length ? v.map(fmtLibre).join(" / ") : "—");
+          var c = el("td", "num", txt);
+          var douteux = q.multiple ? (v[i] != null && aVerifier(l, q, i))
+                                   : v.some(function (_, j) { return aVerifier(l, q, j); });
+          if (douteux) {
+            c.classList.add("pf-hors");
+            c.title = "À vérifier" + (med != null ? " — médiane du dossier : " + fmt(med, q.multiple ? 3 : 1) + unite(q) : "");
+          }
           r.appendChild(c);
-          return;
         }
-        for (var i = 0; i < nbF; i++) {
-          var cf = el("td", "num", v[i] != null ? fmt(v[i], 3) : "");
-          if (v[i] != null && hors(q, v[i])) cf.classList.add("pf-hors");
-          r.appendChild(cf);
-        }
-        r.appendChild(el("td", "num pf-ecart", v.length > 1 ? fmt(Math.max.apply(null, v) - Math.min.apply(null, v), 3) : ""));
       });
       tb.appendChild(r);
     });
     t.appendChild(tb);
     var w = el("div", "pf-table-wrap");
     w.appendChild(t);
+    if (g.lignes.length > LIGNES_VISIBLES) {
+      var plus = el("button", "pf-plus", toutes ? "Afficher les " + LIGNES_VISIBLES + " dernières"
+                                                : "Afficher les " + g.lignes.length + " pesées");
+      plus.type = "button";
+      plus.addEventListener("click", function () { P.deplies[cle] = !toutes; rendre(); });
+      w.appendChild(plus);
+    }
     return w;
   }
 
+  function section(a, g, largeur) {
+    var qs = a.questions, qm = qs.filter(function (q) { return q.multiple; });
+    var cle = a.id + "|" + g.no_dossier;
+    var nbF = 0;
+    g.lignes.forEach(function (l) {
+      qm.forEach(function (q) { nbF = Math.max(nbF, (l.valeurs[String(q.index)] || []).length); });
+    });
+    var s = el("section", "pf-section");
+    var tete = el("div", "pf-section-tete");
+    var titre = el(g.no_dossier ? "button" : "span", "pf-section-titre", g.no_dossier || "Sans dossier");
+    if (g.no_dossier) {
+      titre.type = "button";
+      titre.title = "Tout l'historique de ce dossier";
+      titre.addEventListener("click", function () { P.filtres.no_dossier = g.no_dossier; P.filtres.jours = ""; P.defil = 0; charger(); });
+    }
+    tete.appendChild(titre);
+    var n = g.lignes.length, der = g.lignes[0], prem = g.lignes[n - 1];
+    tete.appendChild(el("span", "pf-section-sous",
+      (g.machines || []).join(", ") + (g.machines && g.machines.length ? " · " : "") +
+      n + " pesée" + (n > 1 ? "s" : "") + " · " +
+      (n > 1 ? dateCourte(prem.ack_at) + " → " + dateCourte(der.ack_at) : dateCourte(der.ack_at))));
+    if (g.nb_aberrants) {
+      tete.appendChild(el("span", "pf-badge-alerte",
+        g.nb_aberrants + " valeur" + (g.nb_aberrants > 1 ? "s" : "") + " à vérifier"));
+    }
+    s.appendChild(tete);
+    qm.forEach(function (q) {
+      var c = courbe(g, q, largeur);
+      if (c) s.appendChild(c);
+    });
+    s.appendChild(tableau(g, qs, nbF, cle));
+    return s;
+  }
+
+  function contenu(corps, largeur) {
+    var alertes = (P.data && P.data.alertes) || [];
+    if (!alertes.length) {
+      corps.appendChild(el("div", "pf-vide", "Aucune alerte ne demande de pesée par front. Une question « valeur » à mesures multiples, dans Maintenance › Alertes, les fait apparaître ici."));
+      return;
+    }
+    var periode = (PERIODES.filter(function (p) { return p[0] === P.filtres.jours; })[0] || [0, ""])[1].toLowerCase();
+    alertes.forEach(function (a) {
+      if (alertes.length > 1) corps.appendChild(el("div", "pf-alerte", a.nom));
+      var gs = a.dossiers || [];
+      if (!gs.length) {
+        corps.appendChild(el("div", "pf-vide", P.filtres.no_dossier
+          ? "Aucune pesée pour « " + P.filtres.no_dossier + " »" + (P.filtres.jours ? " sur les " + periode + "." : ".")
+          : "Aucune pesée sur les " + periode + "."));
+        return;
+      }
+      var qm = a.questions.filter(function (q) { return q.multiple; })[0];
+      if (qm) {
+        corps.appendChild(el("div", "pf-legende",
+          qm.label + " · trait : moyenne des " + qm.libelle_point.toLowerCase() + "s · barre : du plus léger au plus lourd · rouge : à vérifier"));
+      }
+      gs.forEach(function (g) { corps.appendChild(section(a, g, largeur)); });
+    });
+  }
+
   function rendre() {
-    var o = document.getElementById("pf-overlay");
-    if (!o) return;
-    o.textContent = "";
-    var m = el("div", "pf-modal");
-    m.setAttribute("role", "dialog");
-    m.setAttribute("aria-label", "Pesées par front");
-    var tete = el("div", "pf-tete");
-    tete.appendChild(el("div", "pf-titre", "Pesées par front"));
-    var x = el("button", "pf-fermer", "×");
-    x.type = "button";
-    x.setAttribute("aria-label", "Fermer");
-    x.addEventListener("click", function () { fermer(); });
-    tete.appendChild(x);
-    m.appendChild(tete);
+    var racine = P.mode === "vue" ? P.vueEl : document.getElementById("pf-overlay");
+    if (!racine) return;
+    // Largeur utile d'une section (bords et marges ôtés), mesurée avant de vider.
+    var mesure = racine.querySelector(".pf-corps");
+    if (mesure && mesure.clientWidth) {
+      var cs = getComputedStyle(mesure);
+      P.largeur = mesure.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    }
+    else if (P.mode === "vue" && racine.clientWidth) P.largeur = racine.clientWidth;
+    else if (P.mode !== "vue") P.largeur = Math.min(1100, window.innerWidth - 32) - 36;
+    racine.textContent = "";
+    var m = racine;
+    if (P.mode !== "vue") {
+      m = el("div", "pf-modal");
+      m.setAttribute("role", "dialog");
+      m.setAttribute("aria-label", "Pesées par front");
+      var tete = el("div", "pf-tete");
+      tete.appendChild(el("div", "pf-titre", "Pesées par front"));
+      var x = el("button", "pf-fermer", "×");
+      x.type = "button";
+      x.setAttribute("aria-label", "Fermer");
+      x.addEventListener("click", function () { fermer(); });
+      tete.appendChild(x);
+      m.appendChild(tete);
+    }
     m.appendChild(filtres());
     var corps = el("div", "pf-corps");
     if (P.erreur) corps.appendChild(el("div", "pf-erreur", P.erreur));
     else if (P.charge && !P.data) corps.appendChild(el("div", "pf-vide", "Chargement…"));
-    else {
-      var alertes = (P.data && P.data.alertes) || [];
-      if (!alertes.length) {
-        corps.appendChild(el("div", "pf-vide", "Aucune alerte ne demande de pesée par front. Une question « valeur » à mesures multiples, dans Maintenance › Alertes, les fait apparaître ici."));
-      }
-      alertes.forEach(function (a) {
-        if (alertes.length > 1) corps.appendChild(el("div", "pf-alerte", a.nom));
-        if (!a.lignes.length) {
-          corps.appendChild(el("div", "pf-vide", "Aucune pesée sur cette sélection."));
-          return;
-        }
-        a.questions.filter(function (q) { return q.multiple; }).forEach(function (q) {
-          var s = synthese(q);
-          if (s) {
-            corps.appendChild(el("div", "pf-sous-titre", "Moyenne par " + q.libelle_point.toLowerCase() + " — " + q.label));
-            corps.appendChild(s);
-          }
-        });
-        corps.appendChild(el("div", "pf-sous-titre", a.lignes.length + " validation" + (a.lignes.length > 1 ? "s" : "") + ", la plus récente en haut"));
-        corps.appendChild(tableau(a));
-      });
-    }
+    else contenu(corps, (P.largeur || 640) - 30);
     if (P.charge && P.data) corps.classList.add("pf-maj");
     m.appendChild(corps);
-    o.appendChild(m);
+    if (m !== racine) racine.appendChild(m);
+    corps.addEventListener("scroll", function () { P.defil = corps.scrollTop; });
+    retablir();
+  }
+
+  // Défilement de la liste et focus du champ dossier, après une reconstruction
+  // ou une remise de la vue dans la page.
+  function retablir() {
+    var racine = P.mode === "vue" ? P.vueEl : document.getElementById("pf-overlay");
+    if (!racine || !racine.isConnected) return;
+    var corps = racine.querySelector(".pf-corps");
+    if (corps) corps.scrollTop = P.defil;
+    var i = P.focus && racine.querySelector("#pf-dossier");
+    if (i && document.activeElement !== i) {
+      var f = P.focus;
+      i.focus();
+      try { i.setSelectionRange(f[0], f[1]); } catch (e) {}
+    }
   }
 
   document.addEventListener("click", function (e) {
@@ -268,11 +476,11 @@
   });
 
   // Paramètres d'adresse d'un état, et l'inverse. Défaut non écrit :
-  // 30 derniers jours (tout l'historique quand un dossier est choisi).
+  // 3 derniers jours (tout l'historique quand un dossier est choisi).
   function adresse(e) {
     var p = { pesees: e.machine || "toutes" };
     if (e.no_dossier) p.pesees_dossier = e.no_dossier;
-    var defaut = e.no_dossier ? "" : "30";
+    var defaut = e.no_dossier ? "" : DEFAUT;
     if (e.jours !== defaut) p.pesees_periode = e.jours || "tout";
     return p;
   }
@@ -280,13 +488,15 @@
     var v = u.get("pesees", null);
     if (!v || v.length > 80) return null;
     var dos = (u.get("pesees_dossier", "") || "").slice(0, 80);
-    var per = u.get("pesees_periode", null, ["7", "30", "90", "tout"]);
+    var per = u.get("pesees_periode", null, ["3", "7", "30", "90", "tout"]);
     return { machine: v === "toutes" ? "" : v, no_dossier: dos,
-             jours: per === "tout" ? "" : (per || (dos ? "" : "30")) };
+             jours: per === "tout" ? "" : (per || (dos ? "" : DEFAUT)) };
   }
 
   global.MySifaPesees = {
-    ouvrir: ouvrir, fermer: fermer, adresse: adresse, lireAdresse: lireAdresse,
+    ouvrir: ouvrir, fermer: fermer, vue: vue, allerVue: allerVue, retablir: retablir,
+    adresse: adresse, lireAdresse: lireAdresse,
+    etat: function () { return P.filtres ? { machine: P.filtres.machine, no_dossier: P.filtres.no_dossier, jours: P.filtres.jours } : null; },
     ouverte: function () { return !!document.getElementById("pf-overlay"); },
     surAdresse: function (fn) { if (typeof fn === "function") P.abonnes.push(fn); },
     CLES: ["pesees", "pesees_dossier", "pesees_periode"],

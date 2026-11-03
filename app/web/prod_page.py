@@ -102,7 +102,7 @@ __ARRIVEE_PLANNING__
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_prod_mobile.css?v=__V_LABEL__-mpm2">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu14">
-<link rel="stylesheet" href="/static/mysifa_pesees.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu19">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
@@ -121,7 +121,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <!-- Historique des pesées par front : avant le Retour de prod, qui en pose les boutons. -->
-<script src="/static/mysifa_pesees.js?v=1"></script>
+<script src="/static/mysifa_pesees.js?v=2"></script>
 <script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu19"></script>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
@@ -143,10 +143,10 @@ __ARRIVEE_PLANNING__
 <!-- Export PDF des saisies par operateur et par session (appele par le core) -->
 <script src="/static/mysifa_saisies_pdf.js?v=1"></script>
 <!-- Panneau « Données de prod » d'un dossier (partage avec le destockage) -->
-<script src="/static/mysifa_donnees_prod.js?v=16"></script>
+<script src="/static/mysifa_donnees_prod.js?v=17"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent23-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes1"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent23-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes3"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
