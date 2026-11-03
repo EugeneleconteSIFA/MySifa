@@ -1819,6 +1819,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-bg-warn{background:var(--warn)}
 .mon-page .mon-bg-neutre{background:var(--muted)}
 .mon-page .mon-depart{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.mon-page .mon-parti{display:inline-block;margin-top:5px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);white-space:nowrap;cursor:help}
 .mon-page .mon-point{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .mon-page .mon-etat{padding:28px 16px;text-align:center;color:var(--muted)}
 .mon-page .mon-alerte{margin-bottom:12px;padding:10px 14px;border-radius:9px;background:var(--card);border:1px solid var(--warn);font-size:12.5px;color:var(--text)}
@@ -20190,7 +20191,8 @@ function monDesignation(l) {
 function monColonnes(page) {
   const statut = {
     cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1],
-    txt: l => monStatutDef(page, l.statut)[1], td: l => el('td', { cls: 'mon-cell' }, monBadge(page, l.statut)),
+    txt: l => monStatutDef(page, l.statut)[1] + ((l.departs_apres || []).length ? ' parti' : ''),
+    td: l => el('td', { cls: 'mon-cell' }, monBadge(page, l.statut), monPartiPastille(l)),
   };
   if (page === 'expedition') return [
     statut,
@@ -20470,6 +20472,17 @@ function monLienProduit(ref) {
     'Fiche produit ' + ref + ' ↗');
 }
 
+// Production → stock : la référence est partie (départ MyExpé ou BL RVGI)
+// dans les jours qui ont suivi la production.
+function monPartiPastille(l) {
+  const deps = l.departs_apres || [];
+  if (!deps.length) return null;
+  const p = deps[0];
+  const titre = deps.map(d => fD(d.jour) + (d.no_bl ? ' · BL ' + d.no_bl : '') + (d.client ? ' · ' + d.client : '')).join('\n');
+  return el('div', { cls: 'mon-parti', title: titre },
+    '→ parti le ' + monCourt(p.jour) + (deps.length > 1 ? ' +' + (deps.length - 1) : ''));
+}
+
 function monDetailProduction(l) {
   const d = l.detail || {};
   const u = l.unite;
@@ -20503,6 +20516,16 @@ function monDetailProduction(l) {
         ['Emplacement', x => x.emplacement],
         ['Quantité', x => monQteExacte(x.quantite, u), true],
       ], 'Plus rien en stock pour ce dossier.', monTotal(d.restants, u)),
+      monSection('Départs après la production', l.departs_apres, [
+        ['Date', x => fD(x.jour)],
+        ['Origine', x => x.source === 'depart'
+          ? el('span', { cls: 'mon-depart' }, el('span', { cls: 'mon-point mon-bg-' + (x.statut === 'valide' ? 'ok' : 'neutre') }), 'MyExpé · ' + (MON_STATUT_DEPART[x.statut] || x.statut || '—'))
+          : 'BL RVGI'],
+        ['Client', x => x.client, 'libre'],
+        ['BL', x => x.no_bl],
+        ['Quantité', x => x.quantite ? monQteExacte(x.quantite, u) : '', true],
+        ['', x => x.depart_id ? el('a', { cls: 'mon-det-lien', href: '/expe?onglet=suivi_departs' + (x.jour ? '&jour=' + encodeURIComponent(x.jour) : '') + '&depart=' + encodeURIComponent(x.depart_id) }, 'Ouvrir ↗') : null],
+      ], 'Aucun départ de cette référence dans les ' + ((monEnsureState().data || {}).fenetre_expe_jours || 7) + ' jours qui ont suivi la production.'),
     ));
 }
 

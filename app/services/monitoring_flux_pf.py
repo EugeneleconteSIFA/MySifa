@@ -18,6 +18,11 @@ la période, pas ligne à ligne. Une entrée de production porte son dossier
 Les déplacements s'écrivent en couple « sortie Déplacement vers X » + « entrée
 Déplacement depuis Y » (`deplacer_lot_fifo`) : ils ne sont comptés ni comme
 entrée de production, ni comme sortie d'expédition.
+
+Un rangement peut aussi se saisir à la main : sortie FIFO de la zone de sortie
+de production (`STOCK_EMPLACEMENT_SORTIE_PROD`) puis entrée sans dossier dans
+un rack, même référence, même jour (`_rangements`). Le couple est traité comme
+un déplacement : ni production, ni expédition.
 """
 from __future__ import annotations
 
@@ -25,7 +30,8 @@ import re
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional
 
-from config import MONITORING_EXPE_FENETRE_JOURS, MONITORING_RAPPROCHEMENT_JOURS, MONITORING_TOLERANCE_PCT
+from config import (MONITORING_EXPE_FENETRE_JOURS, MONITORING_RAPPROCHEMENT_JOURS, MONITORING_TOLERANCE_PCT,
+                    STOCK_EMPLACEMENT_SORTIE_PROD)
 from datetime import date, datetime, timedelta
 
 _RE_OF = re.compile(r"\b(99\d{5})\b")
@@ -128,6 +134,67 @@ def _apparier_corrections(entrees: List[dict], sorties: List[dict]) -> tuple:
     return e_out, s_out
 
 
+def _sorties_zone_prod(conn, refs: List[str], jours: List[str]) -> List[dict]:
+    """Sorties de la zone de sortie de production, hors déplacement et annulation."""
+    out: List[dict] = []
+    if not refs or not jours:
+        return out
+    for lot in _lots(refs, 400):
+        out += [dict(r) for r in conn.execute(
+            f"""SELECT m.id, m.created_at, m.emplacement, m.quantite, p.reference
+                  FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
+                 WHERE m.type_mouvement = 'sortie' AND m.emplacement = ?
+                   AND COALESCE(m.note, '') NOT LIKE ?
+                   AND COALESCE(m.note, '') NOT LIKE ?
+                   AND TRIM(p.reference) IN ({_place(len(lot))})
+                   AND substr(m.created_at, 1, 10) IN ({_place(len(jours))})""",
+            [STOCK_EMPLACEMENT_SORTIE_PROD, _NOTE_DEPLACEMENT_SORTIE, _NOTE_ANNULATION, *lot, *jours]).fetchall()]
+    return out
+
+
+def _rangements(sorties: List[dict], entrees: List[dict]) -> tuple:
+    """Rangements saisis à la main : une sortie de la zone de sortie de
+    production suivie (ou précédée) d'une entrée SANS dossier ailleurs, même
+    référence, même jour. Les quantités égales (à 1 % près) s'apparient
+    d'abord, le reliquat ensuite dans l'ordre chronologique — une palette de
+    Z1 peut être rangée en deux emplacements.
+
+    Rend ({id entrée: quantité rangée}, {id sortie: quantité rangée})."""
+    z = STOCK_EMPLACEMENT_SORTIE_PROD
+    groupes: Dict[tuple, dict] = defaultdict(lambda: {"s": [], "e": []})
+    for s in sorties:
+        if s.get("emplacement") == z:
+            groupes[((s.get("reference") or "").strip(), (s.get("created_at") or "")[:10])]["s"].append(s)
+    for e in entrees:
+        if e.get("emplacement") != z and not (e.get("no_dossier_propre") or "").strip():
+            groupes[((e.get("reference") or "").strip(), (e.get("created_at") or "")[:10])]["e"].append(e)
+    e_q: Dict[Any, float] = {}
+    s_q: Dict[Any, float] = {}
+    for g in groupes.values():
+        if not g["s"] or not g["e"]:
+            continue
+        ss = sorted(g["s"], key=lambda x: x.get("created_at") or "")
+        es = sorted(g["e"], key=lambda x: x.get("created_at") or "")
+        reste_s = {s["id"]: _f(s.get("quantite")) for s in ss}
+        reste_e = {e["id"]: _f(e.get("quantite")) for e in es}
+        for s in ss:
+            for e in es:
+                qs, qe = reste_s[s["id"]], reste_e[e["id"]]
+                if qs > 0 and qe > 0 and qe == _f(e.get("quantite")) and abs(qs - qe) <= qs * 0.01:
+                    e_q[e["id"]] = qe; s_q[s["id"]] = qs
+                    reste_s[s["id"]] = reste_e[e["id"]] = 0
+                    break
+        for s in ss:
+            for e in es:
+                q = min(reste_s[s["id"]], reste_e[e["id"]])
+                if q <= 0:
+                    continue
+                e_q[e["id"]] = e_q.get(e["id"], 0) + q
+                s_q[s["id"]] = s_q.get(s["id"], 0) + q
+                reste_s[s["id"]] -= q; reste_e[e["id"]] -= q
+    return e_q, s_q
+
+
 _SQL_BORNES = """
     SELECT TRIM(pe.reference) AS ref,
            COALESCE((SELECT MIN(pd.date_operation) FROM production_data pd
@@ -170,8 +237,97 @@ def _bornes(conn, dossier: str) -> tuple:
     return (r["debut"], r["fin"]) if r else (None, None)
 
 
-def flux_production(conn, du: str, au: str) -> dict:
-    """Dossiers produits ou entrés en stock entre `du` et `au` (inclus, AAAA-MM-JJ)."""
+def _departs_apres_production(conn, erp, lignes: List[dict]) -> None:
+    """Pose sur chaque ligne `departs_apres` : ce qui est parti pour sa
+    référence entre le début de la production et `MONITORING_EXPE_FENETRE_JOURS`
+    après sa fin — départs MyExpé et BL RVGI. Une marchandise expédiée sans
+    passer par MyStock se voit ainsi à côté du « Non entré en stock ».
+
+    Un départ se rattache par son dossier, par le dossier du planning ou par
+    les BL qu'il porte (lus dans le miroir RVGI, `erp` peut être `None`)."""
+    from app.services.coherence import numeros_bl
+
+    fen = timedelta(days=MONITORING_EXPE_FENETRE_JOURS)
+    fenetres: Dict[int, tuple] = {}
+    for i, l in enumerate(lignes):
+        debut = (l.get("debut_prod") or l.get("derniere_entree") or "")[:10]
+        fin = (l.get("derniere_saisie") or l.get("derniere_entree") or "")[:10]
+        if not l.get("reference") or not debut or not fin:
+            continue
+        try:
+            fenetres[i] = (debut, (date.fromisoformat(fin) + fen).isoformat())
+        except ValueError:
+            continue
+        l["departs_apres"] = []
+    if not fenetres:
+        return
+    g_du = min(f[0] for f in fenetres.values())
+    g_au = max(f[1] for f in fenetres.values())
+
+    bls = _bl_rvgi(erp, g_du, g_au) if erp is not None else []
+    bl_par_ref: Dict[str, List[dict]] = defaultdict(list)
+    refs_du_bl: Dict[str, set] = defaultdict(set)
+    for b in bls:
+        bl_par_ref[b["reference"]].append(b)
+        refs_du_bl[b["bl"]].add(b["reference"])
+
+    departs = [dict(r) for r in conn.execute(
+        """SELECT d.id, substr(d.date_enlevement, 1, 10) AS jour, d.statut, d.client,
+                  d.no_bl, d.transporteur,
+                  COALESCE(NULLIF(TRIM(COALESCE(d.no_dossier, '')), ''),
+                           TRIM(COALESCE(pe.reference, ''))) AS no_dossier,
+                  TRIM(COALESCE(pe.ref_produit_norm, '')) AS ref_plan
+             FROM expe_departs d
+             LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
+            WHERE substr(COALESCE(d.date_enlevement, ''), 1, 10) BETWEEN ? AND ?""",
+        (g_du, g_au),
+    ).fetchall()]
+    ref_du_dossier = {l["no_dossier"]: l["reference"] for l in lignes if l.get("no_dossier")}
+    dep_par_ref: Dict[str, List[dict]] = defaultdict(list)
+    for d in departs:
+        d["bls"] = numeros_bl(d["no_bl"])
+        refs = set()
+        for n in d["bls"]:
+            refs |= refs_du_bl.get(n, set())
+        if d["no_dossier"] in ref_du_dossier:
+            refs.add(ref_du_dossier[d["no_dossier"]])
+        if d["ref_plan"]:
+            refs.add(d["ref_plan"])
+        for ref in refs:
+            dep_par_ref[ref].append(d)
+
+    for i, (du, au) in fenetres.items():
+        l = lignes[i]
+        ref = l["reference"]
+        bls_ref = [b for b in bl_par_ref.get(ref, []) if du <= (b["jour"] or "") <= au]
+        couverts = set()
+        out = []
+        for d in dep_par_ref.get(ref, []):
+            if not (du <= (d["jour"] or "") <= au):
+                continue
+            q = sum(b["qte"] for b in bls_ref if b["bl"] in d["bls"])
+            couverts |= set(d["bls"])
+            out.append({"jour": d["jour"], "source": "depart", "depart_id": d["id"],
+                        "statut": d["statut"], "client": d["client"], "no_bl": d["no_bl"],
+                        "transporteur": d["transporteur"], "no_dossier": d["no_dossier"] or None,
+                        "quantite": q or None})
+        par_bl: Dict[str, dict] = {}
+        for b in bls_ref:
+            if b["bl"] in couverts:
+                continue
+            x = par_bl.setdefault(b["bl"], {"jour": b["jour"], "source": "bl", "depart_id": None,
+                                            "statut": None, "client": b["client"], "no_bl": b["bl"],
+                                            "transporteur": None, "no_dossier": None, "quantite": 0})
+            x["quantite"] += b["qte"]
+        out += par_bl.values()
+        l["departs_apres"] = sorted(out, key=lambda x: (x["jour"] or "", str(x["no_bl"] or "")))
+
+
+def flux_production(conn, du: str, au: str, erp=None) -> dict:
+    """Dossiers produits ou entrés en stock entre `du` et `au` (inclus, AAAA-MM-JJ).
+
+    `erp` (miroir RVGI, facultatif) sert à retrouver les départs de la
+    référence par leurs BL (`_departs_apres_production`)."""
     # 1. Dossiers saisis sur la période.
     dossiers: set = set()
     for r in conn.execute(
@@ -187,6 +343,7 @@ def flux_production(conn, du: str, au: str) -> dict:
     entrees_periode = [dict(r) for r in conn.execute(
         """SELECT m.id, m.created_at, m.emplacement, m.quantite, m.note,
                   TRIM(COALESCE(m.no_dossier, '')) AS no_dossier,
+                  TRIM(COALESCE(m.no_dossier, '')) AS no_dossier_propre, m.lot_id,
                   m.created_by_name, p.reference, p.designation, p.unite
              FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
             WHERE m.type_mouvement = 'entree'
@@ -252,7 +409,8 @@ def flux_production(conn, du: str, au: str) -> dict:
             continue
         for r in conn.execute(
             """SELECT m.id, m.created_at, m.emplacement, m.quantite, m.note,
-                      '' AS no_dossier, m.created_by_name, p.reference, p.designation, p.unite
+                      '' AS no_dossier, '' AS no_dossier_propre, m.lot_id,
+                      m.created_by_name, p.reference, p.designation, p.unite
                  FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
                 WHERE m.type_mouvement = 'entree'
                   AND COALESCE(m.note, '') NOT LIKE ?
@@ -305,8 +463,8 @@ def flux_production(conn, du: str, au: str) -> dict:
         # Entrées du dossier, toutes dates : un dossier saisi le 14 peut entrer en stock le 21.
         for r in conn.execute(
             f"""SELECT m.id, m.created_at, m.emplacement, m.quantite, m.note,
-                       TRIM(m.no_dossier) AS no_dossier, m.created_by_name,
-                       p.reference, p.designation, p.unite
+                       TRIM(m.no_dossier) AS no_dossier, TRIM(m.no_dossier) AS no_dossier_propre,
+                       m.lot_id, m.created_by_name, p.reference, p.designation, p.unite
                   FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
                  WHERE m.type_mouvement = 'entree'
                    AND COALESCE(m.note, '') NOT LIKE ?
@@ -316,7 +474,7 @@ def flux_production(conn, du: str, au: str) -> dict:
             entrees[r["no_dossier"]].append(dict(r))
         for r in conn.execute(
             f"""SELECT m.created_at, m.emplacement, m.quantite, m.note,
-                       TRIM(m.no_dossier) AS no_dossier
+                       TRIM(m.no_dossier) AS no_dossier, m.lot_id
                   FROM mouvements_stock m
                  WHERE m.type_mouvement = 'entree'
                    AND COALESCE(m.note, '') LIKE ?
@@ -341,6 +499,58 @@ def flux_production(conn, du: str, au: str) -> dict:
     for d, lst in rattachees.items():
         entrees[d].extend(lst)
 
+    # Rangement de Z1 saisi en « sortie + entrée sans dossier » : l'entrée est
+    # un déplacement du dossier, pas de la production (_rangements).
+    candidates = [e for lst in entrees.values() for e in lst] + hors_dossier
+    refs_r = sorted({(e["reference"] or "").strip() for e in candidates if e.get("reference")})
+    jours_r = sorted({(e["created_at"] or "")[:10] for e in candidates if e.get("created_at")})
+    e_rang, s_rang = _rangements(_sorties_zone_prod(conn, refs_r, jours_r), candidates)
+    if e_rang:
+        for d in list(entrees):
+            garde = []
+            for e in entrees[d]:
+                q = e_rang.get(e["id"])
+                if not q:
+                    garde.append(e)
+                    continue
+                deplacements[d].append({"created_at": e["created_at"], "emplacement": e["emplacement"],
+                                        "quantite": q, "no_dossier": d, "lot_id": e.get("lot_id"),
+                                        "note": "Déplacement depuis " + STOCK_EMPLACEMENT_SORTIE_PROD})
+                if _f(e["quantite"]) - q > 0:
+                    garde.append(dict(e, quantite=_f(e["quantite"]) - q))
+            entrees[d] = garde
+        for d in deplacements:
+            deplacements[d].sort(key=lambda x: x["created_at"] or "")
+        hors_dossier = [e for e in hors_dossier if e["id"] not in e_rang]
+
+    # Stock restant : les lots du dossier, plus ceux de ses entrées et de ses
+    # rangements qui ne portent pas son n° (rattachés par OF ou par référence).
+    lots_d: Dict[str, set] = defaultdict(set)
+    for d in liste:
+        for x in (entrees.get(d) or []) + (deplacements.get(d) or []):
+            if x.get("lot_id"):
+                lots_d[d].add(x["lot_id"])
+    tous_lots = sorted({i for s in lots_d.values() for i in s})
+    lot_info: Dict[Any, dict] = {}
+    for lot in _lots(tous_lots):
+        for r in conn.execute(
+            f"""SELECT id, emplacement, quantite_restante, TRIM(COALESCE(no_dossier, '')) AS d
+                  FROM lots_stock WHERE quantite_restante > 0 AND id IN ({_place(len(lot))})""",
+            lot,
+        ).fetchall():
+            lot_info[r["id"]] = dict(r)
+    for d, ids in lots_d.items():
+        par_empl: Dict[str, float] = defaultdict(float)
+        for i in ids:
+            li = lot_info.get(i)
+            if li and li["d"] != d:
+                par_empl[li["emplacement"]] += _f(li["quantite_restante"])
+        if par_empl:
+            cumul = {x["emplacement"]: x["quantite"] for x in restants.get(d) or []}
+            for em, q in par_empl.items():
+                cumul[em] = cumul.get(em, 0) + q
+            restants[d] = [{"emplacement": em, "quantite": q} for em, q in sorted(cumul.items())]
+
     # Entrée corrigée le jour même par une sortie de même quantité : saisie
     # erronée, pas de la production.
     toutes = [e for lst in entrees.values() for e in lst]
@@ -358,6 +568,7 @@ def flux_production(conn, du: str, au: str) -> dict:
                        AND TRIM(p.reference) IN ({_place(len(lot))})
                        AND substr(m.created_at, 1, 10) IN ({_place(len(jours_c))})""",
                 [_NOTE_DEPLACEMENT_SORTIE, *lot, *jours_c]).fetchall()]
+        sorties_c = [s for s in sorties_c if s["id"] not in s_rang]
         corrigees, _ = _apparier_corrections(toutes, sorties_c)
         for d in list(entrees):
             entrees[d] = [e for e in entrees[d] if e["id"] not in corrigees]
@@ -450,7 +661,9 @@ def flux_production(conn, du: str, au: str) -> dict:
     # Les entrées rattachées à aucun dossier (ni par leur n°, ni par l'OF de
     # leur note, ni par la référence) sont des ajustements de stock, pas de la
     # production : elles ne sont pas comparées. Seul leur nombre est rendu.
+    _departs_apres_production(conn, erp, lignes)
     return {"du": du, "au": au, "tolerance_pct": MONITORING_TOLERANCE_PCT, "lignes": lignes,
+            "fenetre_expe_jours": MONITORING_EXPE_FENETRE_JOURS, "miroir": erp is not None,
             "ajustements_ignores": len(hors_dossier)}
 
 
@@ -553,7 +766,8 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
     # Une sortie qui annule une entrée du jour (correction de saisie) n'est pas
     # une expédition.
     entrees_c = [dict(r) for r in conn.execute(
-        """SELECT m.id, m.created_at, m.emplacement, m.quantite, p.reference
+        """SELECT m.id, m.created_at, m.emplacement, m.quantite, p.reference,
+                  TRIM(COALESCE(m.no_dossier, '')) AS no_dossier_propre
              FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
             WHERE m.type_mouvement = 'entree'
               AND COALESCE(m.note, '') NOT LIKE ?
@@ -562,6 +776,16 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
     ).fetchall()]
     _, s_corr = _apparier_corrections(entrees_c, sorties_large)
     sorties_large = [s for s in sorties_large if s["id"] not in s_corr]
+
+    # Une sortie de Z1 rangée aussitôt dans un rack n'est pas une expédition
+    # (_rangements) ; seul son reliquat éventuel l'est.
+    _, s_rang = _rangements(sorties_large, entrees_c)
+    garde = []
+    for s in sorties_large:
+        reste = _f(s["quantite"]) - s_rang.get(s["id"], 0)
+        if reste > 0:
+            garde.append(dict(s, quantite=reste) if s["id"] in s_rang else s)
+    sorties_large = garde
 
     # Chaque sortie va au BL de même référence le plus proche (± fen jours).
     # Elle compte si ce BL est dans la période ; sans BL proche, elle compte
