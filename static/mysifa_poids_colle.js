@@ -22,8 +22,8 @@
 (function (global) {
   "use strict";
 
-  // Un poids de balance : le widget part d'une pesée.
-  var ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="3"/><path d="M6.5 8a2 2 0 0 0-1.9 1.46L2.1 18.5A2 2 0 0 0 4 21h16a2 2 0 0 0 1.92-2.54L19.4 9.5A2 2 0 0 0 17.5 8z"/></svg>';
+  // Balance à afficheur et pastille euro : ce que pèse, et coûte, la colle.
+  var ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H9.5"/><circle cx="17.5" cy="17.5" r="5"/><path d="M19.6 15.4a2.7 2.7 0 1 0 0 4.2" stroke-width="1.6"/><path d="M14.6 16.8h3.2M14.6 18.3h3.2" stroke-width="1.4"/></svg>';
   var LS = "mysifa_poids_colle_v1";
   var W = { open: false, data: null, charge: false, edit: false, erreur: "", saisie: null };
 
