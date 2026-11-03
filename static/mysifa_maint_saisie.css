@@ -20,6 +20,7 @@
 .mm-pastille-machine{font-weight:700}
 .mm-pastille-petite{padding:7px 11px;font-size:12.5px}
 .mm-titre-libre[hidden]{display:none}
+.mm-select-code{max-width:560px;font-weight:600;cursor:pointer}
 
 /* Champs : style du design system (fond carte, bordure, rayon 10). */
 .mm-ligne{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 18px}
