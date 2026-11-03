@@ -325,6 +325,27 @@ class TestChangementOutil(unittest.TestCase):
             400, "compteur en baisse",
         )
 
+    def test_5b_cliche_remonte_sur_la_meme_reference(self):
+        # Un cliché porte plusieurs tapis d'encrage (amalgame) : changer de
+        # tapis se saisit sur la même référence. Attribut de la nature
+        # (`outil_types.meme_reference`), pas une exception codée en dur.
+        self._reset(None)
+        c = self._outil("T-560", type_cle="cliche")
+        sid = self._clic(operation="75 - Changement Cliché").json()["id"]
+        r = self._completer(sid, metrage_compteur=2000,
+                            outil_avant_id=c["id"], outil_apres_id=c["id"])
+        self.assertEqual(r.status_code, 200, r.text)
+        row, _ = self._derniere()
+        self.assertEqual((row["outil_avant_id"], row["outil_apres_id"]), (c["id"], c["id"]))
+        self.assertEqual(row["commentaire"], "Cliché T-560 remonté · compteur 2 000 m")
+
+        # Le poste reçoit l'information pour proposer « Même cliché ».
+        from database import get_db
+        from app.routers.fabrication import _contexte_changement_outil
+        with get_db() as conn:
+            self.assertTrue(_contexte_changement_outil(conn, "cliche", {"nom": "X"})["meme_reference"])
+            self.assertFalse(_contexte_changement_outil(conn, "plaque", {"nom": "X"})["meme_reference"])
+
     # ── 6. Annulation ────────────────────────────────────────────────────
     def test_6_annuler_supprime_la_saisie_du_clic(self):
         from database import get_db
