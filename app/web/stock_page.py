@@ -11039,7 +11039,9 @@ async function mpReactiverMatiere(x) {
 (function mpInstallerBulles() {
   if (window.__mpBulles) return;
   window.__mpBulles = true;
-  const PORTEE = '.mp-detail, .hist-page, .mp-modal';
+  // .val-mp-table : tableau des matières de la valorisation (actions en icônes,
+  // l'infobulle native y arrivait tard et sans le style MySifa).
+  const PORTEE = '.mp-detail, .hist-page, .mp-modal, .val-mp-table';
   let bulle = null;
   let cible = null;
   const cacher = () => { if (bulle) bulle.classList.remove('on'); cible = null; };
@@ -25664,7 +25666,7 @@ function buildValorisationTable() {
   const v = valEnsureState();
   const rows = valFilteredItems();
 
-  const wrap = el('div', { style:
+  const wrap = el('div', { cls: 'val-mp-table', style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
   const tableWrap = el('div', { style: 'overflow-x:auto' });
