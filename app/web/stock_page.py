@@ -25016,11 +25016,11 @@ function buildValorisationTableRow(item) {
   // Quantité convertie par le conditionnement (400 cartons par palette) :
   // le calcul s'affiche, sinon la valorisation ne se refait pas de tête.
   const uppQte = Number(item.unites_par_palette || 0);
-  if (item.avec_conditionnement && !item.stock_a_l_unite && uppQte > 0) {
+  if (item.avec_conditionnement && !item.stock_a_l_unite && uppQte > 1) {
     const uAchat = item.unite_achat || 'unité';
     const totalUnites = Number(item.quantite || 0) * uppQte;
     tdQte.appendChild(el('div', {
-      style: 'font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap',
+      style: 'font-size:10px;color:var(--muted);margin-top:2px',
       title: 'Conditionnement : ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + ' par palette',
     }, '× ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + '/pal. = '
       + valFormatQte(totalUnites) + ' ' + valUniteLibelle(uAchat, totalUnites)));
@@ -25627,9 +25627,10 @@ function buildValorisationTable() {
   const thChildren = [
     el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
     // Les libellés prennent la largeur libre : la colonne Actions se serre sur
-    // ses boutons (width:1%) au lieu de garder la place restante.
-    el('th', { style: thStyle + ';min-width:240px', on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
-    el('th', { style: thStyle + ';min-width:300px', on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
+    // ses boutons (width:1%) au lieu de garder la place restante. Pas de
+    // largeur minimale : elle faisait déborder le tableau sur un écran moyen.
+    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
+    el('th', { style: thStyle, on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
     el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
   ];
   thChildren.push(
