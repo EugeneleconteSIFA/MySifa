@@ -3489,6 +3489,15 @@ function stockMpRefLink(matiereId, label, options) {
   if (!mid) return el('span', null, txt);
   const href = stockDeepLinkUrl({ tab: 'matieres', matiere: mid });
   const baseStyle = opts.style || 'text-decoration:none';
+  // nouvelOnglet : la fiche s'ouvre à côté, la page courante (valorisation
+  // filtrée, défilée) reste où elle est.
+  if (opts.nouvelOnglet) {
+    return el('a', {
+      cls: 'mvt-ref-link', href: href, target: '_blank', rel: 'noopener',
+      style: baseStyle, title: opts.title || null,
+      on: { click: (e) => e.stopPropagation() },
+    }, txt);
+  }
   return el('a', {
     cls: 'mvt-ref-link',
     href: href,
@@ -24261,8 +24270,11 @@ async function loadValorisationTrend() {
     v.trend.points = [];
   } finally {
     v.trend.loading = false;
-    // Re-render juste la card total (via full render pour rester simple)
-    renderValorisationView(true);
+    // Seules les cartes du haut portent la courbe : on ne reconstruit qu'elles.
+    // Un rendu complet refaisait tout le tableau des matières pour un graphe.
+    const kpis = document.querySelector('#scroll-area .val-kpis');
+    if (kpis && S.tab === 'valorisation') kpis.replaceWith(buildValorisationKpis());
+    else renderValorisationView(true);
   }
 }
 
@@ -24985,12 +24997,31 @@ const VAL_COLS = {
 
 // Bouton d'action carré, icône seule : le libellé passe dans l'infobulle.
 function valBoutonIcone(icone, titre, couleur, bordure, fond, onClick) {
+  // Survol : fond qui s'assombrit et bordure accentuée ; un bouton plein
+  // (dévalorisé) s'éclaircit à peine. mouseleave rend exactement le repos.
+  const plein = fond !== 'var(--card)';
   const b = el('button', {
     type: 'button', title: titre, 'aria-label': titre,
     style: 'width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;'
       + 'border-radius:8px;cursor:pointer;flex:0 0 auto;transition:all .15s;'
       + 'border:1px solid ' + bordure + ';background:' + fond + ';color:' + couleur,
-    on: { click: onClick },
+    on: {
+      click: onClick,
+      mouseenter: (e) => {
+        const t = e.currentTarget;
+        if (plein) { t.style.filter = 'brightness(1.1)'; return; }
+        t.style.background = 'var(--bg)';
+        t.style.borderColor = bordure === 'var(--border)' ? 'var(--accent)' : bordure;
+        if (couleur === 'var(--text2)') t.style.color = 'var(--accent)';
+      },
+      mouseleave: (e) => {
+        const t = e.currentTarget;
+        t.style.filter = '';
+        t.style.background = fond;
+        t.style.borderColor = bordure;
+        t.style.color = couleur;
+      },
+    },
   });
   b.appendChild(iconEl(icone, 14));
   return b;
@@ -25011,8 +25042,9 @@ function buildValorisationTableRow(item) {
   const refLabel = item.libelle_commercial || item.designation || item.reference || '';
   const matiereId = item.matiere_id || item.id;
   const refLink = stockMpRefLink(matiereId, refLabel, {
-    title: 'Ouvrir la matière' + (item.reference ? ' · ' + item.reference : ''),
+    title: 'Ouvrir la matière dans un nouvel onglet' + (item.reference ? ' · ' + item.reference : ''),
     style: 'text-decoration:none;color:var(--text);font-weight:700;font-size:13px',
+    nouvelOnglet: true,
   });
   const refChildren = [refLink];
   if (item.laizee && item.laize_label) {
@@ -25191,8 +25223,8 @@ function buildValorisationTableRow(item) {
     style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
     on: {
       click: () => openValorisationHistorique(item.matiere_id || item.id),
-      mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-      mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
+      mouseenter: (e) => { const t = e.currentTarget; t.style.background = 'var(--bg)'; t.style.color = 'var(--accent)'; t.style.borderColor = 'var(--accent)'; },
+      mouseleave: (e) => { const t = e.currentTarget; t.style.background = 'var(--card)'; t.style.color = 'var(--text2)'; t.style.borderColor = 'var(--border)'; },
     },
   });
   histBtn.appendChild(iconEl('clock', 14));
@@ -25204,7 +25236,9 @@ function buildValorisationTableRow(item) {
   lienCm.title = 'Ouvrir dans Coûts matières' + (item.reference ? ' — ' + item.reference : '');
   lienCm.setAttribute('aria-label', 'Ouvrir dans Coûts matières');
   Object.assign(lienCm.style, { marginTop: '0', width: '28px', height: '28px', padding: '0',
-    justifyContent: 'center', borderRadius: '8px', flex: '0 0 auto' });
+    justifyContent: 'center', borderRadius: '8px', flex: '0 0 auto', transition: 'all .15s' });
+  lienCm.addEventListener('mouseenter', () => { lienCm.style.background = 'var(--bg)'; });
+  lienCm.addEventListener('mouseleave', () => { lienCm.style.background = 'var(--card)'; });
   // Stock à jeter : la ligne compte pour (-1) × sa valorisation.
   const devalBtn = valBoutonIcone('trash-2',
     item.devalorise
@@ -25828,7 +25862,8 @@ async function loadValorisationPF() {
   const pf = valPFEnsureState();
   const v = valEnsureState();
   pf.loading = true;
-  renderValorisationView(true);
+  // Pas de rendu complet ici : il reconstruisait le tableau des matières
+  // juste pour marquer la section PF « en chargement ». Le rendu de fin suffit.
   try {
     const qs = v.snapshotDate ? ('?date=' + encodeURIComponent(v.snapshotDate)) : '';
     const data = await api('/api/stock/valorisation/pf' + qs);
