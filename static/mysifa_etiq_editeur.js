@@ -354,6 +354,57 @@
     if (e.type === 'ligne') return e.orientation === 'v' ? { x: e.x - 0.5, y: e.y, w: e.epaisseur + 1, h: e.longueur } : { x: e.x, y: e.y - 0.5, w: e.longueur, h: e.epaisseur + 1 };
     return { x: e.x, y: e.y, w: 20, h: e.hauteur || 15 };
   }
+  // Cadre de sélection et carré de redimensionnement (visible sur l'objet choisi).
+  function poignees(g, e) {
+    const b = bboxElement(e);
+    if (e.type === 'code_barre' && g.dataset.w) { b.w = +g.dataset.w; b.h = +g.dataset.h + (e.lisible && !DEUX_D.includes(e.symbologie) ? 3 : 0); }
+    g.appendChild(s('rect', { x: b.x, y: b.y, width: Math.max(1, b.w), height: Math.max(1, b.h), class: 'es-poignee' }));
+    if (!fige(e)) g.appendChild(s('rect', { x: b.x + Math.max(1, b.w) - 0.9, y: b.y + Math.max(1, b.h) - 0.9, width: 1.8, height: 1.8, class: 'es-redim' }));
+  }
+  // Nouvelle taille d'un objet tiré par son coin : (w, h) en mm depuis son origine.
+  function redimensionner(e, init, w, h) {
+    const r = (v, pas) => +(Math.round(v / pas) * pas).toFixed(2);
+    w = Math.max(1, w); h = Math.max(1, h);
+    if (e.type === 'cadre' || e.type === 'ellipse' || e.type === 'image') { e.largeur = r(w, 0.5); e.hauteur = r(h, 0.5); }
+    else if (e.type === 'picto') {
+      // Un picto garde ses proportions : on suit le plus grand des deux rapports.
+      const k = Math.max(w / init.largeur, h / init.hauteur);
+      e.largeur = r(init.largeur * k, 0.5); e.hauteur = r(init.hauteur * k, 0.5);
+    }
+    else if (e.type === 'ligne') e.longueur = r(e.orientation === 'v' ? h : w, 0.5);
+    else if (e.type === 'texte') {
+      e.taille = Math.max(0.8, r(h / ((init.largeur ? (init.lignes || 1) : 1) * 1.05), 0.1));
+      if (init.largeur) e.largeur = r(w, 0.5);
+    }
+    else if (e.type === 'code_barre') {
+      e.hauteur = r(Math.max(2, h - (init.lisible && !DEUX_D.includes(init.symbologie) ? 3 : 0)), 0.5);
+      if (init.w) e.module = Math.max(0.1, Math.round(init.module * w / init.w * 100) / 100);
+    }
+  }
+  function editerSurPlace(g, e) {
+    const zone = $id('es-canevas');
+    if (!zone) return;
+    const rz = zone.getBoundingClientRect(), rg = g.getBoundingClientRect();
+    const ta = X().h('textarea', { cls: 'es-sur-place', rows: 1, 'aria-label': 'Texte de l\'objet' });
+    ta.value = e.valeur || '';
+    Object.assign(ta.style, { left: (rg.left - rz.left) + 'px', top: (rg.top - rz.top) + 'px',
+      width: Math.max(120, rg.width + 24) + 'px', height: Math.max(28, rg.height + 8) + 'px',
+      fontSize: Math.max(12, Math.min(40, rg.height * 0.7)) + 'px' });
+    let fait = false;
+    const finir = (garder) => {
+      if (fait) return; fait = true;
+      if (garder && ta.value !== (e.valeur || '')) { memoriser(); e.valeur = ta.value; salir(); }
+      ta.remove(); majListe(); majPanneauElement(); dessiner();
+    };
+    ta.addEventListener('keydown', (k) => {
+      if (k.key === 'Escape') { k.preventDefault(); finir(false); }
+      else if (k.key === 'Enter' && !k.shiftKey) { k.preventDefault(); finir(true); }
+      k.stopPropagation();
+    });
+    ta.addEventListener('blur', () => finir(true));
+    zone.appendChild(ta);
+    ta.focus(); ta.select();
+  }
   function cheminForme(m, lay) {
     const L = m.largeur_mm, H = m.hauteur_mm, f = lay.forme || {};
     if (f.type === 'ronde' || f.type === 'ovale') return s('ellipse', { cx: L / 2, cy: H / 2, rx: L / 2, ry: H / 2 });
@@ -381,11 +432,7 @@
       const g = s('g', { 'data-id': e.id, class: 'es-el' + (interactif && (e.id === ED.sel || ED.multi.has(e.id)) ? ' sel' : '')
         + (interactif && MO().verrouille(e, lay) ? ' es-fige' : '') + (vis ? '' : ' es-masque') });
       dessinerElement(g, e, vals);
-      if (interactif) {
-        const b = bboxElement(e);
-        if (e.type === 'code_barre' && g.dataset.w) { b.w = +g.dataset.w; b.h = +g.dataset.h + (e.lisible && !DEUX_D.includes(e.symbologie) ? 3 : 0); }
-        g.appendChild(s('rect', { x: b.x, y: b.y, width: Math.max(1, b.w), height: Math.max(1, b.h), class: 'es-poignee' }));
-      }
+      if (interactif) poignees(g, e);
       corps.appendChild(g);
     }
     if (interactif && mp && mp.dessinerDessus) mp.dessinerDessus(svg, m, lay);
@@ -399,7 +446,7 @@
       try {
         const e = layout().elements.find(x => x.id === g.dataset.id);
         if (!e) return;
-        const kids = [...g.children].filter(c => !c.classList.contains('es-poignee') && c.tagName !== 'defs');
+        const kids = [...g.children].filter(c => !c.classList.contains('es-poignee') && !c.classList.contains('es-redim') && c.tagName !== 'defs');
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
         // Boîte de chaque enfant ramenée au repère de l'étiquette (un picto est
         // dessiné dans un groupe mis à l'échelle).
@@ -445,8 +492,32 @@
   function brancherSouris(svg) {
     let glisse = null;
     const enMm = (ev) => { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); };
+    // Objet visé : parmi ceux sous la souris, le plus petit. Un cadre posé autour d'un
+    // texte couvre ce texte ; sans cette règle, le texte ne se clique plus.
+    const cible = (ev) => {
+      let mieux = null, aire = Infinity;
+      for (const n of document.elementsFromPoint(ev.clientX, ev.clientY)) {
+        const g = n.closest && n.closest('.es-el');
+        if (!g || !svg.contains(g)) continue;
+        const r = g.getBoundingClientRect(), a = r.width * r.height;
+        if (a < aire) { mieux = g; aire = a; }
+      }
+      return mieux;
+    };
     svg.addEventListener('pointerdown', (ev) => {
-      const g = ev.target.closest('.es-el');
+      // La poignée peut être recouverte par un objet dessiné après (cadre) : on la cherche sous la souris.
+      const redim = document.elementsFromPoint(ev.clientX, ev.clientY).find(n => n.classList.contains('es-redim') && n.closest('.es-el.sel'));
+      if (redim) {
+        const g = redim.closest('.es-el');
+        const e = layout().elements.find(x => x.id === g.dataset.id);
+        if (!e || fige(e)) return;
+        ev.stopPropagation();
+        glisse = { e, redim: true, bouge: false, groupe: [{ x: e, ox: 0, oy: 0 }],
+          init: { largeur: e.largeur, hauteur: e.hauteur, lignes: e.lignes, module: e.module, lisible: e.lisible, symbologie: e.symbologie, w: +g.dataset.w || 0 } };
+        svg.setPointerCapture(ev.pointerId);
+        return;
+      }
+      const g = cible(ev);
       if (!g) { if (ED.sel || ED.multi.size) { ED.sel = null; ED.multi.clear(); majPanneauElement(); dessiner(); } return; }
       const e = layout().elements.find(x => x.id === g.dataset.id);
       if (!e) return;
@@ -468,6 +539,16 @@
     svg.addEventListener('pointermove', (ev) => {
       if (!glisse) return;
       const p = enMm(ev);
+      if (glisse.redim) {
+        const e = glisse.e, avant = JSON.stringify(e);
+        if (!glisse.bouge) memoriser();
+        redimensionner(e, glisse.init, Math.min(p.x, ED.m.largeur_mm) - e.x, Math.min(p.y, ED.m.hauteur_mm) - e.y);
+        if (JSON.stringify(e) === avant) return;
+        glisse.bouge = true; salir();
+        const g = svg.querySelector(`.es-el[data-id="${CSS.escape(e.id)}"]`);
+        if (g) { g.replaceChildren(); dessinerElement(g, e, valeursApercu(layout())); poignees(g, e); }
+        return;
+      }
       let nx = Math.max(0, Math.round((p.x - glisse.dx) * 2) / 2);
       let ny = Math.max(0, Math.round((p.y - glisse.dy) * 2) / 2);
       const mpa = ext('miseEnPage');
@@ -484,14 +565,27 @@
         if (!g) continue;
         g.replaceChildren();
         dessinerElement(g, o.x, vals);
-        const b = bboxElement(o.x);
-        if (o.x.type === 'code_barre' && g.dataset.w) { b.w = +g.dataset.w; b.h = +g.dataset.h; }
-        g.appendChild(s('rect', { x: b.x, y: b.y, width: Math.max(1, b.w), height: Math.max(1, b.h), class: 'es-poignee' }));
+        poignees(g, o.x);
       }
       const mp = ext('miseEnPage');
       if (mp && mp.reperes) mp.reperes(svg, glisse.e, bboxElement(glisse.e));
     });
-    const fin = () => { if (glisse && glisse.bouge) { majChampsPosition(); dessiner(); } glisse = null; };
+    const fin = () => {
+      if (glisse && glisse.bouge) { if (glisse.redim) majPanneauElement(); else majChampsPosition(); dessiner(); }
+      glisse = null;
+    };
+    // Double-clic : un texte se modifie sur place, les autres objets ouvrent leur premier champ.
+    svg.addEventListener('dblclick', (ev) => {
+      // Le pointeur est capturé par le SVG au premier clic : la cible peut être le SVG, d'où le repli sur la sélection.
+      const id = cible(ev)?.dataset.id || ED.sel;
+      const g = id && svg.querySelector(`.es-el[data-id="${CSS.escape(id)}"]`);
+      const e = g && layout().elements.find(x => x.id === id);
+      if (!e || fige(e)) return;
+      ev.preventDefault();
+      if (e.type === 'texte') { editerSurPlace(g, e); return; }
+      const champ = $id('es-panneau-el')?.querySelector('input:not([disabled]):not([type=number]), textarea:not([disabled]), input[type=number]:not([disabled])');
+      if (champ) { champ.scrollIntoView({ block: 'nearest' }); champ.focus(); champ.select?.(); }
+    });
     svg.addEventListener('pointerup', fin);
     svg.addEventListener('pointercancel', fin);
     svg.addEventListener('keydown', (ev) => {
