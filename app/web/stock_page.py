@@ -24227,6 +24227,16 @@ function valAbbrUnite(u) {
   return s || '';
 }
 
+function valUniteLibelle(u, n) {
+  // Unité accordée à la quantité : « 0,45 palette », « 9,63 palettes ».
+  // Pluriel au-delà de 1 ; le kilo et le mètre ne s'accordent pas.
+  let s = (u || '').toLowerCase();
+  if (s === 'unite') s = 'unité';
+  if (!s || !(Math.abs(Number(n || 0)) > 1)) return s;
+  if (s === 'kg' || s === 'm' || /[sx]$/.test(s)) return s;
+  return s + 's';
+}
+
 function valFormatPrixDetail(n) {
   // Comme valFormatEuroDetail mais sans unité (pour composer le sous-titre).
   const num = Number(n || 0);
@@ -24918,9 +24928,24 @@ function buildValorisationTableRow(item) {
   const desText = item.libelle_technique || '—';
   const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') }, desText);
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
-    valFormatQte(item.quantite),
-    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || '')
+    el('div', { style: 'white-space:nowrap' },
+      valFormatQte(item.quantite),
+      el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' },
+        valUniteLibelle(item.unite, item.quantite))
+    )
   );
+  // Quantité convertie par le conditionnement (400 cartons par palette) :
+  // le calcul s'affiche, sinon la valorisation ne se refait pas de tête.
+  const uppQte = Number(item.unites_par_palette || 0);
+  if (item.avec_conditionnement && !item.stock_a_l_unite && uppQte > 0) {
+    const uAchat = item.unite_achat || 'unité';
+    const totalUnites = Number(item.quantite || 0) * uppQte;
+    tdQte.appendChild(el('div', {
+      style: 'font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap',
+      title: 'Conditionnement : ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + ' par palette',
+    }, '× ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + '/pal. = '
+      + valFormatQte(totalUnites) + ' ' + valUniteLibelle(uAchat, totalUnites)));
+  }
 
   // Plus de colonne « Prix unitaire » : elle montrait le miroir de Coûts
   // matières dans la devise d'achat, pas un prix en euros. Les prix viennent
@@ -24950,7 +24975,7 @@ function buildValorisationTableRow(item) {
   // "Valorisée" = prix > 0 ET (si conditionnement requis) unites_par_palette > 0
   const valored = (item.prix_unitaire || 0) > 0
     && (!item.avec_conditionnement || (item.unites_par_palette || 0) > 0);
-  const valColor = valored ? 'var(--text)' : 'var(--muted)';
+  const valColor = item.devalorise ? 'var(--danger)' : (valored ? 'var(--text)' : 'var(--muted)');
   // Une ligne est « réelle » dès qu'au moins un flag (USD, taxe ou transport) est actif
   // ET produit un ajustement (multiplicateur ≠ 1 OU forfait transport > 0).
   const hasReel = valored
@@ -25073,13 +25098,43 @@ function buildValorisationTableRow(item) {
   const lienCm = valLienCoutsMatieres(item, 'Coûts matières');
   lienCm.style.marginTop = '0';
   lienCm.style.whiteSpace = 'nowrap';
-  const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), histBtn];
+  // Stock à jeter : la ligne compte pour (-1) × sa valorisation.
+  const devalBtn = el('button', {
+    type: 'button',
+    title: item.devalorise
+      ? 'Stock à jeter, soustrait de la valorisation. Cliquer pour le revaloriser.'
+      : 'Marquer comme stock à jeter : la ligne sera soustraite de la valorisation.',
+    style: 'border:1px solid var(--danger);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;'
+      + 'display:inline-flex;align-items:center;gap:4px;white-space:nowrap;'
+      + (item.devalorise ? 'background:var(--danger);color:white;font-weight:700'
+                         : 'background:var(--card);color:var(--danger)'),
+    on: { click: () => valBasculerDevalorisation(item) },
+  });
+  devalBtn.appendChild(iconEl('trash-2', 11));
+  devalBtn.appendChild(el('span', null, item.devalorise ? 'Dévalorisé' : 'Dévalorisation'));
+  if (item.devalorise) tr.style.background = 'color-mix(in srgb, var(--danger) 7%, transparent)';
+  const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), devalBtn, histBtn];
   const tdHist = el('td', {
     style: 'padding:10px 12px;text-align:center;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrixReel, tdVente, tdVal, tdHist);
   return tr;
+}
+
+async function valBasculerDevalorisation(item) {
+  const voulu = !item.devalorise;
+  try {
+    await api('/api/stock/valorisation/devalorisation/' + (item.matiere_id || item.id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ laize_id: item.laize_id || null, devalorise: voulu }),
+    });
+    showToast(voulu ? 'Stock dévalorisé.' : 'Dévalorisation retirée.', 'success');
+    await loadValorisation();
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+  }
 }
 
 // Cellule de prix issue de Coûts matières, à l'échelle de la ligne (bobine,
