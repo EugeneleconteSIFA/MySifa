@@ -22403,7 +22403,9 @@ async function loadReceptionRvgi() {
 
 function rvgiNbEnAttente() {
   const f = S.rvgiFile;
-  return f ? Number(f.total != null ? f.total : (f.lignes || []).length) || 0 : 0;
+  if (!f) return 0;
+  return (Number(f.total != null ? f.total : (f.lignes || []).length) || 0)
+    + (f.a_valider || []).length;
 }
 
 // Met à jour la pastille de la sidebar sans reconstruire la page.
@@ -22589,7 +22591,8 @@ function buildReceptionRvgi() {
   }
 
   const lignes = f.lignes || [];
-  if (!lignes.length) {
+  const aValider = f.a_valider || [];
+  if (!lignes.length && !aValider.length) {
     // État vide au format des autres écrans de MyStock (bes-empty) : la
     // classe `muted` n'existe pas ici, la phrase sortait en gros texte noir.
     wrap.appendChild(el('div', { cls: 'bes-empty' },
@@ -22599,7 +22602,30 @@ function buildReceptionRvgi() {
         + (f.depuis ? ' depuis le ' + _fmtDate(f.depuis) : '') + '.')));
     return wrap;
   }
+  if (lignes.length) wrap.appendChild(rvgiBlocAIntegrer(f, lignes));
+  if (aValider.length) wrap.appendChild(rvgiBlocAValider(aValider));
+  return wrap;
+}
 
+// Les entrées faites par la synchro restent dans la file tant que personne ne
+// les a relues : le stock est déjà à jour, la réception n'est pas encore
+// vérifiée. Une fois validée, la ligne passe dans l'historique.
+function rvgiBlocAValider(aValider) {
+  const bloc = el('div', { style: 'margin-top:18px' });
+  bloc.appendChild(el('div', { style: 'display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 12px' },
+    el('span', { style: 'font-size:15px;font-weight:700;color:var(--text)' }, 'Entrées en stock à valider'),
+    el('span', { style: 'font-size:13px;color:var(--text2)' },
+      el('b', null, String(aValider.length)),
+      ' réception' + (aValider.length > 1 ? 's' : '') + ' entrée' + (aValider.length > 1 ? 's' : '')
+      + ' par la synchro — article, quantité et BL à vérifier')));
+  const tbody = el('tbody');
+  aValider.forEach(l => tbody.appendChild(rvgiLigneEntree(l, loadReceptionRvgi)));
+  bloc.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, el('table', { cls: 'bes-table' }, rvgiTheadEntrees(), tbody)));
+  return bloc;
+}
+
+function rvgiBlocAIntegrer(f, lignes) {
+  const wrap = el('div');
   const pretes = lignes.filter(l => l.integrable);
   wrap.appendChild(el('div', {
     style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 12px' },
@@ -22665,15 +22691,13 @@ function buildRvgiHistorique() {
     return wrap;
   }
   const q = (S.rvgiHistoQ || '').trim().toLowerCase();
+  // Seulement les réceptions validées : celles qui attendent une validation
+  // sont dans « Depuis l'ERP ».
   const toutes = h.lignes || [];
-  // Toute réception entrée en stock doit être relue par quelqu'un : la
-  // synchro fait entrer seule, elle ne valide pas.
-  const nbAValider = toutes.filter(l => !l.valide_at).length;
-  const seulementAValider = !!S.rvgiHistoAValider && nbAValider > 0;
-  const lignes = toutes.filter(l => (!seulementAValider || !l.valide_at) && (!q || [
+  const lignes = q ? toutes.filter(l => [
       l.fournisseur, l.article, l.libelle, l.libelle_technique, l.matiere_ref, l.matiere_designation,
       l.integre_par, l.valide_par, l.ref_br, l.numero, l.operateur_erp,
-    ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)));
+    ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)) : toutes;
 
   const search = el('input', {
     cls: 'field-input', id: 'rvgi-histo-search',
@@ -22691,24 +22715,40 @@ function buildRvgiHistorique() {
     search,
     el('span', { style: 'font-size:13px;color:var(--text2)' },
       el('b', null, String(lignes.length)),
-      ' réception' + (lignes.length > 1 ? 's' : '') + ' entrée' + (lignes.length > 1 ? 's' : '') + ' en stock'
-      + (q || seulementAValider ? ' (sur ' + toutes.length + ')' : '')),
-    nbAValider ? el('button', {
-      type: 'button', cls: 'mp-pill' + (seulementAValider ? ' active' : ''),
-      attrs: { title: 'Réceptions entrées en stock par la synchro, que personne n\'a encore relues' },
-      on: { click: () => { S.rvgiHistoAValider = !seulementAValider; renderContent(); } },
-    }, nbAValider + ' à valider')
-      : el('span', { style: 'font-size:13px;color:var(--success)' }, '✓ Toutes validées')));
+      ' réception' + (lignes.length > 1 ? 's' : '') + ' validée' + (lignes.length > 1 ? 's' : '')
+      + (q ? ' (sur ' + toutes.length + ')' : ''))));
 
   if (!lignes.length) {
     wrap.appendChild(el('div', { cls: 'bes-empty' },
-      q ? 'Aucune réception pour « ' + S.rvgiHistoQ.trim() + ' ».' : 'Aucune réception RVGI entrée en stock pour le moment.'));
+      q ? 'Aucune réception pour « ' + S.rvgiHistoQ.trim() + ' ».' : 'Aucune réception RVGI validée pour le moment.'));
     return wrap;
   }
-  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
   const tbody = el('tbody');
-  lignes.forEach(l => {
-    tbody.appendChild(el('tr', l.matiere_fsc ? { cls: 'recep-ligne-fsc' } : null,
+  lignes.forEach(l => tbody.appendChild(rvgiLigneEntree(l, loadRvgiHistorique)));
+  const table = el('table', { cls: 'bes-table' }, rvgiTheadEntrees(), tbody);
+  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
+  return wrap;
+}
+
+// Une réception entrée en stock, dans l'historique comme dans la file des
+// entrées à valider : mêmes colonnes, pour qu'une ligne validée se retrouve à
+// l'identique d'un écran à l'autre.
+function rvgiTheadEntrees() {
+  return el('thead', null, el('tr', null,
+    el('th', null, 'Livraison'),
+    el('th', null, 'Commande RVGI'),
+    el('th', null, 'Article RVGI'),
+    el('th', null, 'Référence MySifa'),
+    el('th', { cls: 'num' }, 'Quantité'),
+    el('th', null, 'Saisie RVGI'),
+    el('th', null, 'Pièces'),
+    el('th', null, 'Entrée MySifa'),
+    el('th', null, 'Validation')));
+}
+
+function rvgiLigneEntree(l, apres) {
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
+  return el('tr', l.matiere_fsc ? { cls: 'recep-ligne-fsc' } : null,
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
         l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null),
@@ -22736,7 +22776,7 @@ function buildRvgiHistorique() {
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.saisie_erp)),
         el('div', { style: petit }, l.operateur_erp != null ? 'opérateur RVGI n° ' + l.operateur_erp : '—')),
-      recepCelluleDocuments(l, loadRvgiHistorique),
+      recepCelluleDocuments(l, apres),
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.integre_at)),
         el('div', { style: petit }, l.integre_par ? 'par ' + l.integre_par : '—'),
@@ -22747,22 +22787,7 @@ function buildRvgiHistorique() {
           on: { click: (ev) => rvgiAnnulerEntree(l, ev.currentTarget) },
         }, iconEl('rotate-ccw', 12), ' Annuler l\'entrée')),
       rvgiCelluleValidation(l),
-    ));
-  });
-  const table = el('table', { cls: 'bes-table' },
-    el('thead', null, el('tr', null,
-      el('th', null, 'Livraison'),
-      el('th', null, 'Commande RVGI'),
-      el('th', null, 'Article RVGI'),
-      el('th', null, 'Référence MySifa'),
-      el('th', { cls: 'num' }, 'Quantité'),
-      el('th', null, 'Saisie RVGI'),
-      el('th', null, 'Pièces'),
-      el('th', null, 'Entrée MySifa'),
-      el('th', null, 'Validation'))),
-    tbody);
-  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
-  return wrap;
+    );
 }
 
 // Validation d'une réception entrée en stock. Le stock ne bouge pas : la
@@ -22805,11 +22830,25 @@ async function rvgiValider(l, valide, btn) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ valide }),
     });
-    // Mise à jour sur place : recharger 500 lignes pour un clic ferait sauter
-    // la page sous la souris de qui en valide une série.
+    // Validée, la ligne quitte la file pour l'historique ; dévalidée, elle y
+    // revient. On la retire sur place plutôt que de recharger : la page ne
+    // doit pas sauter sous la souris de qui en valide une série.
     l.valide_at = r.valide_at;
     l.valide_par = r.valide_par;
-    showToast(valide ? 'Réception validée.' : 'Validation retirée.', 'success');
+    if (valide) {
+      if (S.rvgiFile && S.rvgiFile.a_valider) {
+        S.rvgiFile.a_valider = S.rvgiFile.a_valider.filter(x => x.lif_id !== l.lif_id);
+      }
+      S.rvgiHisto = null;
+    } else {
+      if (S.rvgiHisto && S.rvgiHisto.lignes) {
+        S.rvgiHisto.lignes = S.rvgiHisto.lignes.filter(x => x.lif_id !== l.lif_id);
+      }
+      S.rvgiFile = null;
+      loadRvgiCountBackground();
+    }
+    rvgiMajBadgeNav();
+    showToast(valide ? 'Réception validée.' : 'Validation retirée — la ligne est de retour dans « Depuis l\'ERP ».', 'success');
     renderContent();
   } catch (e) {
     showToast((valide ? 'Validation impossible : ' : 'Retrait impossible : ') + ((e && e.message) || e), 'error');

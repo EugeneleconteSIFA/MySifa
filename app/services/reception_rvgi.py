@@ -685,8 +685,13 @@ _SQL_HISTO_ERP = """
 """
 
 
-def historique(conn, conn_erp=None, limite=300):
-    """Les receptions RVGI deja entrees en stock, la plus recente en tete."""
+def historique(conn, conn_erp=None, limite=300, validees=None):
+    """Les receptions RVGI deja entrees en stock, la plus recente en tete.
+
+    `validees` : True ne rend que les lignes relues, False que celles qui
+    attendent une validation (elles s'affichent dans la file « Depuis l'ERP »),
+    None les deux.
+    """
     # `matiere_fsc` arrive par migration : une base qui ne l'a pas encore
     # (tests, instance en retard) doit garder son historique.
     cols_mp = {r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)")}
@@ -694,6 +699,13 @@ def historique(conn, conn_erp=None, limite=300):
     cols_i = {r[1] for r in conn.execute("PRAGMA table_info(erp_reception_integree)")}
     expr_valide = ("i.valide_at, i.valide_par, " if "valide_at" in cols_i
                    else "NULL AS valide_at, NULL AS valide_par, ")
+    # Base sans la migration : rien n'est encore a valider, l'historique reste
+    # ce qu'il etait.
+    filtre = ""
+    if validees is not None and "valide_at" in cols_i:
+        filtre = "WHERE i.valide_at IS %s NULL " % ("NOT" if validees else "")
+    elif validees is False:
+        return []
     try:
         rows = conn.execute(
             "SELECT i.lif_id, i.numero, i.ligne, i.amjl, i.qte_rvgi, i.matiere_id, "
@@ -705,6 +717,7 @@ def historique(conn, conn_erp=None, limite=300):
             "FROM erp_reception_integree i "
             "LEFT JOIN matieres_premieres mp ON mp.id = i.matiere_id "
             "LEFT JOIN mp_laizes lz ON lz.id = i.laize_id "
+            + filtre +
             "ORDER BY i.integre_at DESC, i.lif_id DESC LIMIT ?",
             (int(limite),),
         ).fetchall()
