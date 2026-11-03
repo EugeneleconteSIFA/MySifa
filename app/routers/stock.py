@@ -11726,6 +11726,11 @@ def reception_rvgi_file(request: Request, limite: int = 300):
             par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes if l.get("lif_id")])
             for l in lignes:
                 l["documents"] = par_lif.get(l.get("lif_id"), [])
+            # Entrées en stock que personne n'a encore relues : elles restent
+            # dans la file tant qu'elles ne sont pas validées.
+            a_valider = _rr.historique(conn, erp, limite=1000, validees=False)
+            _joindre_documents(conn, a_valider)
+            res["a_valider"] = a_valider
     except FileNotFoundError as e:
         raise HTTPException(503, str(e)) from None
     res["familles"] = {str(t): v[0] for t, v in _rr.PERIMETRE.items()}
@@ -11734,7 +11739,8 @@ def reception_rvgi_file(request: Request, limite: int = 300):
 
 @router.get("/api/stock/reception-rvgi/historique")
 def reception_rvgi_historique(request: Request, limite: int = 300):
-    """Les réceptions RVGI déjà entrées en stock : saisie ERP et entrée MySifa."""
+    """Les réceptions RVGI entrées en stock ET validées : saisie ERP, entrée
+    MySifa, validation. Celles qui attendent une validation sont dans la file."""
     require_stock(request)
     from app.services import erp_mirror as _miroir
     from app.services import reception_rvgi as _rr
@@ -11744,19 +11750,23 @@ def reception_rvgi_historique(request: Request, limite: int = 300):
         if _miroir.miroir_present():
             try:
                 with _miroir.get_erp_db() as erp:
-                    lignes = _rr.historique(conn, erp, limite=limite)
+                    lignes = _rr.historique(conn, erp, limite=limite, validees=True)
             except FileNotFoundError:
-                lignes = _rr.historique(conn, None, limite=limite)
+                lignes = _rr.historique(conn, None, limite=limite, validees=True)
         else:
-            lignes = _rr.historique(conn, None, limite=limite)
-        # Pièces fournisseur : celles de la ligne ERP, et celles déposées sur
-        # la réception scannée qui en est issue.
-        par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes])
-        par_rec = _documents_par(conn, "reception_id",
-                                 [l["reception_id"] for l in lignes if l.get("reception_id")])
-        for l in lignes:
-            l["documents"] = par_lif.get(l["lif_id"], []) + par_rec.get(l.get("reception_id"), [])
+            lignes = _rr.historique(conn, None, limite=limite, validees=True)
+        _joindre_documents(conn, lignes)
     return {"lignes": lignes, "total": len(lignes)}
+
+
+def _joindre_documents(conn, lignes):
+    """Pièces fournisseur d'une réception entrée : celles de la ligne ERP, et
+    celles déposées sur la réception scannée qui en est issue."""
+    par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes])
+    par_rec = _documents_par(conn, "reception_id",
+                             [l["reception_id"] for l in lignes if l.get("reception_id")])
+    for l in lignes:
+        l["documents"] = par_lif.get(l["lif_id"], []) + par_rec.get(l.get("reception_id"), [])
 
 
 @router.put("/api/stock/reception-rvgi/mise-en-service")

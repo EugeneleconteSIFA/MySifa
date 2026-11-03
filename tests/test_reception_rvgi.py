@@ -455,6 +455,11 @@ check("valider : qui", r["valide_par"], "Marie Test")
 vrai("valider : quand", bool(r["valide_at"]))
 check("historique : la validation remonte",
       {l["lif_id"]: l["valide_par"] for l in rr.historique(base, None)}[31], "Marie Test")
+valides = {l["lif_id"] for l in rr.historique(base, None, validees=True)}
+attente = {l["lif_id"] for l in rr.historique(base, None, validees=False)}
+vrai("historique validé : la ligne validée y est, celle de la synchro non",
+     31 in valides and 28700 not in valides, str(valides))
+check("file à valider : seules les entrées non relues", attente, {28700})
 rr.valider(base, 31, {"id": 7, "nom": "Marie Test"}, valide=False)
 check("retirer la validation : la ligne redevient à valider",
       base.execute("SELECT valide_at FROM erp_reception_integree WHERE lif_id=31").fetchone()[0], None)
