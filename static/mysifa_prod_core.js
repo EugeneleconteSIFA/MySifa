@@ -423,7 +423,7 @@
       fermer:function(){ _pmemFermer(); }},
     // Historique des pesées par front (mysifa_pesees.js) : ouvert depuis le
     // Retour de prod, mais un calque sur toute page (page:null).
-    pesees:{page:null, extra:['pesees_dossier','pesees_periode'],
+    pesees:{page:null, extra:['pesees_dossier','pesees_periode','pesees_champs'],
       ouvrir:function(v,u){ var P=window.MySifaPesees, e=P&&P.lireAdresse(u); if(e) P.ouvrir(e); },
       fermer:function(){ if(window.MySifaPesees) MySifaPesees.fermer(true); }},
     reglages:{page:'production',
