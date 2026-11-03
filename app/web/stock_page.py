@@ -2661,6 +2661,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/mysifa_haut_de_page.js?v=1" defer></script>
 <script src="/static/stock_url.js?v=8"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -25625,8 +25626,10 @@ function buildValorisationTable() {
 
   const thChildren = [
     el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
+    // Les libellés prennent la largeur libre : la colonne Actions se serre sur
+    // ses boutons (width:1%) au lieu de garder la place restante.
+    el('th', { style: thStyle + ';min-width:240px', on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
+    el('th', { style: thStyle + ';min-width:300px', on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
     el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
   ];
   thChildren.push(
@@ -25641,7 +25644,7 @@ function buildValorisationTable() {
   );
   thChildren.push(
     el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
-    el('th', { style: thStyleC }, 'Actions'),
+    el('th', { style: thStyleC + ';width:1%' }, 'Actions'),
   );
   const thead = el('thead', null, el('tr', null, ...thChildren));
 
