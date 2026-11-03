@@ -183,6 +183,24 @@ sans = flux_expedition(conn, None, "2026-10-14", "2026-10-20")
 ok(sans["miroir"] is False and {l["reference"]: l for l in sans["lignes"]}["24/0012"]["statut"] == "sortie",
    "miroir absent : le côté MySifa reste affiché")
 
+print("— production → départ qui a suivi")
+# 9932700 (470/0020) : clôturé le 15, jamais entré, parti le 17 chez le client
+# avec un départ MyExpé relié seulement par son BL ; un BL du 25 tombe hors fenêtre.
+erp.executescript("""
+INSERT INTO liv_entete VALUES (9939193,'2026-10-17 09:00:00','CARREFOUR',0),(9939300,'2026-10-25 09:00:00','CARREFOUR',0);
+INSERT INTO liv_ligne VALUES (9939193,9932700,1,400000,0),(9939300,9932700,1,1000,0);
+INSERT INTO cde_ligne VALUES (9932700,1,'470','0020',0);
+""")
+conn.execute("INSERT INTO expe_departs VALUES (3,'2026-10-17','valide','CARREFOUR','9939193','T',NULL,NULL,NULL)")
+P = {l["cle"]: l for l in flux_production(conn, "2026-10-14", "2026-10-20", erp)["lignes"]}
+dp = (P.get("d:9932700") or {}).get("departs_apres") or []
+ok(len(dp) == 1 and dp[0]["source"] == "depart" and dp[0]["depart_id"] == 3 and dp[0]["quantite"] == 400000,
+   "non entré mais parti le 17 : départ MyExpé retrouvé par son BL, hors fenêtre écarté")
+ok(P["d:9932700"]["statut"] == "non_entre", "le statut reste « Non entré en stock »")
+ok((P.get("d:9932689") or {}).get("departs_apres") == [], "dossier sans départ : liste vide")
+sans_erp = {l["cle"]: l for l in flux_production(conn, "2026-10-14", "2026-10-20")["lignes"]}
+ok(sans_erp["d:9932700"].get("departs_apres") == [], "miroir absent : départ relié par BL seul non retrouvé, sans erreur")
+
 print()
 print("ECHEC" if erreurs else "Tout est vert.")
 sys.exit(1 if erreurs else 0)

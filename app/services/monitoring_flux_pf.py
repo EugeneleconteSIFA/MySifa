@@ -237,8 +237,97 @@ def _bornes(conn, dossier: str) -> tuple:
     return (r["debut"], r["fin"]) if r else (None, None)
 
 
-def flux_production(conn, du: str, au: str) -> dict:
-    """Dossiers produits ou entrés en stock entre `du` et `au` (inclus, AAAA-MM-JJ)."""
+def _departs_apres_production(conn, erp, lignes: List[dict]) -> None:
+    """Pose sur chaque ligne `departs_apres` : ce qui est parti pour sa
+    référence entre le début de la production et `MONITORING_EXPE_FENETRE_JOURS`
+    après sa fin — départs MyExpé et BL RVGI. Une marchandise expédiée sans
+    passer par MyStock se voit ainsi à côté du « Non entré en stock ».
+
+    Un départ se rattache par son dossier, par le dossier du planning ou par
+    les BL qu'il porte (lus dans le miroir RVGI, `erp` peut être `None`)."""
+    from app.services.coherence import numeros_bl
+
+    fen = timedelta(days=MONITORING_EXPE_FENETRE_JOURS)
+    fenetres: Dict[int, tuple] = {}
+    for i, l in enumerate(lignes):
+        debut = (l.get("debut_prod") or l.get("derniere_entree") or "")[:10]
+        fin = (l.get("derniere_saisie") or l.get("derniere_entree") or "")[:10]
+        if not l.get("reference") or not debut or not fin:
+            continue
+        try:
+            fenetres[i] = (debut, (date.fromisoformat(fin) + fen).isoformat())
+        except ValueError:
+            continue
+        l["departs_apres"] = []
+    if not fenetres:
+        return
+    g_du = min(f[0] for f in fenetres.values())
+    g_au = max(f[1] for f in fenetres.values())
+
+    bls = _bl_rvgi(erp, g_du, g_au) if erp is not None else []
+    bl_par_ref: Dict[str, List[dict]] = defaultdict(list)
+    refs_du_bl: Dict[str, set] = defaultdict(set)
+    for b in bls:
+        bl_par_ref[b["reference"]].append(b)
+        refs_du_bl[b["bl"]].add(b["reference"])
+
+    departs = [dict(r) for r in conn.execute(
+        """SELECT d.id, substr(d.date_enlevement, 1, 10) AS jour, d.statut, d.client,
+                  d.no_bl, d.transporteur,
+                  COALESCE(NULLIF(TRIM(COALESCE(d.no_dossier, '')), ''),
+                           TRIM(COALESCE(pe.reference, ''))) AS no_dossier,
+                  TRIM(COALESCE(pe.ref_produit_norm, '')) AS ref_plan
+             FROM expe_departs d
+             LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
+            WHERE substr(COALESCE(d.date_enlevement, ''), 1, 10) BETWEEN ? AND ?""",
+        (g_du, g_au),
+    ).fetchall()]
+    ref_du_dossier = {l["no_dossier"]: l["reference"] for l in lignes if l.get("no_dossier")}
+    dep_par_ref: Dict[str, List[dict]] = defaultdict(list)
+    for d in departs:
+        d["bls"] = numeros_bl(d["no_bl"])
+        refs = set()
+        for n in d["bls"]:
+            refs |= refs_du_bl.get(n, set())
+        if d["no_dossier"] in ref_du_dossier:
+            refs.add(ref_du_dossier[d["no_dossier"]])
+        if d["ref_plan"]:
+            refs.add(d["ref_plan"])
+        for ref in refs:
+            dep_par_ref[ref].append(d)
+
+    for i, (du, au) in fenetres.items():
+        l = lignes[i]
+        ref = l["reference"]
+        bls_ref = [b for b in bl_par_ref.get(ref, []) if du <= (b["jour"] or "") <= au]
+        couverts = set()
+        out = []
+        for d in dep_par_ref.get(ref, []):
+            if not (du <= (d["jour"] or "") <= au):
+                continue
+            q = sum(b["qte"] for b in bls_ref if b["bl"] in d["bls"])
+            couverts |= set(d["bls"])
+            out.append({"jour": d["jour"], "source": "depart", "depart_id": d["id"],
+                        "statut": d["statut"], "client": d["client"], "no_bl": d["no_bl"],
+                        "transporteur": d["transporteur"], "no_dossier": d["no_dossier"] or None,
+                        "quantite": q or None})
+        par_bl: Dict[str, dict] = {}
+        for b in bls_ref:
+            if b["bl"] in couverts:
+                continue
+            x = par_bl.setdefault(b["bl"], {"jour": b["jour"], "source": "bl", "depart_id": None,
+                                            "statut": None, "client": b["client"], "no_bl": b["bl"],
+                                            "transporteur": None, "no_dossier": None, "quantite": 0})
+            x["quantite"] += b["qte"]
+        out += par_bl.values()
+        l["departs_apres"] = sorted(out, key=lambda x: (x["jour"] or "", str(x["no_bl"] or "")))
+
+
+def flux_production(conn, du: str, au: str, erp=None) -> dict:
+    """Dossiers produits ou entrés en stock entre `du` et `au` (inclus, AAAA-MM-JJ).
+
+    `erp` (miroir RVGI, facultatif) sert à retrouver les départs de la
+    référence par leurs BL (`_departs_apres_production`)."""
     # 1. Dossiers saisis sur la période.
     dossiers: set = set()
     for r in conn.execute(
@@ -572,7 +661,9 @@ def flux_production(conn, du: str, au: str) -> dict:
     # Les entrées rattachées à aucun dossier (ni par leur n°, ni par l'OF de
     # leur note, ni par la référence) sont des ajustements de stock, pas de la
     # production : elles ne sont pas comparées. Seul leur nombre est rendu.
+    _departs_apres_production(conn, erp, lignes)
     return {"du": du, "au": au, "tolerance_pct": MONITORING_TOLERANCE_PCT, "lignes": lignes,
+            "fenetre_expe_jours": MONITORING_EXPE_FENETRE_JOURS, "miroir": erp is not None,
             "ajustements_ignores": len(hors_dossier)}
 
 
