@@ -510,7 +510,7 @@
 
   // `opts.fiche` : fiche dossier de MyProd — cartes resserrées, devis dans
   // les cartes, section Qualité, déroulé des saisies. `opts.no` : référence
-  // du dossier (bouton « Pesées par front »).
+  // du dossier (vue des inspections des produits finis).
   function prodHtml(d, opts) {
     const fiche = !!(opts && opts.fiche);
     const st = d.stats || {};

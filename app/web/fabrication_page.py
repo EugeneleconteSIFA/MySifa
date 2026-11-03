@@ -823,7 +823,9 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 /* Onglet Qualité : deux sous-onglets, pesées (static/mysifa_pesees.css) et
    opérations de maintenance (static/mysifa_maint_saisie.css) ; tout
    l'onglet défile. */
-.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 28px;gap:14px}
+/* Marge basse : le dock (outils en bas à droite) ne recouvre pas le bouton
+   d'enregistrement en fin de défilement. */
+.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 96px;gap:14px}
 /* Les blocs gardent leur hauteur : la vue des pesées est réglée pour
    remplir une fenêtre (flex:1, min-height:0), ici elle rétrécissait et
    débordait sous la section maintenance. */
@@ -1377,7 +1379,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_pesees.css?v=6">
-<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -1405,9 +1407,9 @@ body.has-topbar .fab-main{padding-top:74px}
 <!-- Plaque confirmée au démarrage du dossier. -->
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
-<script src="/static/mysifa_pesees.js?v=4"></script>
-<script src="/static/mysifa_maint_saisie.js?v=2"></script>
-<script src="/static/mysifa_poids_colle.js?v=3"></script>
+<script src="/static/mysifa_pesees.js?v=5"></script>
+<script src="/static/mysifa_maint_saisie.js?v=3"></script>
+<script src="/static/mysifa_poids_colle.js?v=4"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
   window.mysifaPoidsColleContexte = function () {
@@ -1983,6 +1985,9 @@ function icon(name,size=16){
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     scale:'<path d="M12 3v18"/><path d="M5 21h14"/><path d="M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0z"/><path d="M17 7l-3 7a3 3 0 0 0 6 0z"/>',
+    // Inspections des produits finis (onglet Qualité) et widget Poids de
+    // colle (static/mysifa_poids_colle.js) : balance à afficheur, pastille « 5 ».
+    balance:'<path d="M11.5 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H9.5"/><circle cx="17.5" cy="17.5" r="5"/><path d="M19.2 14.6h-3l-.4 2.7c.4-.3.9-.4 1.4-.4a1.65 1.65 0 0 1 0 3.3c-.6 0-1.1-.2-1.5-.6" stroke-width="1.6"/>',
     // Onglet Qualité : un check au-dessus d'une main ouverte.
     qualite:'<circle cx="12" cy="6" r="4.5"/><path d="m10 6 1.4 1.4 2.8-2.8"/><g transform="translate(0 2.5)"><path d="M11 14h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16"/><path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 15 6 6"/></g>',
   };
@@ -5397,6 +5402,8 @@ function renderStatsPanel(){
    Machine par défaut : celle de l'opérateur. */
 // Défilement de l'onglet : le panneau est recréé à chaque render().
 let _fabQualiteHaut = 0;
+// Lien « Inspections des produits finis » du widget Poids de colle.
+window.mysifaAllerInspections = () => { set({qualiteSous:'pesees'}); void switchFabTab('qualite'); };
 function _fabQualiteSous(sous){
   if(sous === S.qualiteSous) return;
   _fabQualiteHaut = 0;
@@ -5416,7 +5423,7 @@ function renderQualitePanel(){
   const wrap = h('div',{className:'fab-main fab-qualite',
       onScroll:e=>{ _fabQualiteHaut = e.currentTarget.scrollTop; }},
     h('div',{className:'fab-qualite-nav',role:'group','aria-label':'Qualité'},
-      carte('pesees', 'scale', 'Pesées par front', 'Historique des inspections'),
+      carte('pesees', 'balance', 'Inspections des produits finis', 'Pesées et mesures, dossier par dossier'),
       carte('maintenance', 'tool', 'Opérations de maintenance', 'Enregistrer une intervention')));
   // Opérations de maintenance : enregistrées dans MyMaintenance.
   if(sous === 'maintenance' && MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',

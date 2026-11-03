@@ -34,7 +34,6 @@
   var DUREES = [15, 30, 60, 120];
   var SVG = "http://www.w3.org/2000/svg";
   var ICONES = {
-    outil: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
     fleche: '<path d="M7 17 17 7M8 7h9v9"/>',
@@ -237,10 +236,8 @@
     form.appendChild(etape(2, "Machine et date"));
     var ligne = el("div", "mm-ligne");
     ligne.appendChild(f.machines);
-    var dateBloc = el("label", "mm-champ");
-    dateBloc.appendChild(el("span", "mm-lib", "Date"));
-    dateBloc.appendChild(f.date);
-    ligne.appendChild(dateBloc);
+    f.date.setAttribute("aria-label", "Date de l'intervention");
+    ligne.appendChild(f.date);
     form.appendChild(ligne);
 
     form.appendChild(etape(3, "Détails (facultatif)"));
@@ -318,8 +315,15 @@
   function historique() {
     var b = el("div", "mm-carte mm-histo");
     var t = el("div", "mm-histo-tete");
-    t.appendChild(el("div", "mm-histo-titre", "Dernières opérations"));
-    t.appendChild(el("div", "mm-histo-sous", (M.machine || "—") + " · " + JOURS_HISTO + " derniers jours"));
+    var tt = el("div", null);
+    tt.appendChild(el("div", "mm-histo-titre", "Dernières opérations"));
+    tt.appendChild(el("div", "mm-histo-sous", (M.machine || "—") + " · " + JOURS_HISTO + " derniers jours"));
+    var a = el("a", "mm-lien");
+    a.href = lienMaintenance();
+    a.title = "Ouvrir MyMaintenance";
+    a.appendChild(document.createTextNode("MyMaintenance"));
+    a.appendChild(icone("fleche", 14));
+    t.append(tt, a);
     b.appendChild(t);
     if (M.histo == null) { b.appendChild(el("div", "mm-vide", "Chargement…")); return b; }
     if (!M.histo.length) { b.appendChild(el("div", "mm-vide", "Aucune opération enregistrée sur cette machine depuis " + JOURS_HISTO + " jours.")); return b; }
@@ -350,28 +354,18 @@
 
   // Squelette construit une fois (le formulaire n'est jamais sorti de la
   // page : un champ en cours de frappe garde son focus) ; à chaque rendu,
-  // pastilles, lien et historique seulement.
+  // pastilles et historique seulement. Pas de titre : la carte « Opérations
+  // de maintenance » de l'onglet Qualité le porte déjà.
   function rendre() {
     if (!M.el) return;
     if (!M.form) {
       M.form = construireForm();
-      var tete = el("div", "mm-tete");
-      var ico = el("div", "mm-tete-ico");
-      ico.appendChild(icone("outil", 22));
-      var tt = el("div", "mm-tete-txt");
-      tt.appendChild(el("h3", "mm-titre", "Enregistrer une opération de maintenance"));
-      tt.appendChild(el("div", "mm-sous", "Intervention déjà réalisée. Elle rejoint l'historique de MyMaintenance."));
-      M.lien = el("a", "mm-lien");
-      M.lien.appendChild(document.createTextNode("Ouvrir MyMaintenance"));
-      M.lien.appendChild(icone("fleche", 14));
-      tete.append(ico, tt, M.lien);
       M.corps = el("div", "mm-corps");
       M.histoEl = el("div");
       M.corps.append(M.form.racine, M.histoEl);
-      M.el.append(tete, M.corps);
+      M.el.append(M.corps);
     }
     dessinerForm(M.form);
-    M.lien.href = lienMaintenance();
     var h = historique();
     M.corps.replaceChild(h, M.histoEl);
     M.histoEl = h;
