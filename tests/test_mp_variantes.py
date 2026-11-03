@@ -174,6 +174,25 @@ with get_db() as c:
     refus("laize fournisseur : article sans fournisseur", lambda: mv.poser_laize_fournisseur(c, vsans, {"valeur_mm": 400}))
     c.rollback()
 
+# Article « Fournisseur non identifié » (reprise d'inventaire) : son prix doit
+# arriver dans Coûts matières comme celui d'un article avec fournisseur. Il
+# restait sur l'article seul, et la grille affichait « à compléter ».
+with get_db() as c:
+    c.execute("INSERT INTO matieres_premieres (categorie, reference, designation, actif) "
+              "VALUES ('frontal','T-SANS-FOU','Sans fournisseur',1)")
+    msf = c.execute("SELECT id FROM matieres_premieres WHERE reference='T-SANS-FOU'").fetchone()[0]
+    dsf = c.execute("INSERT INTO mp_matiere_declinaison (matiere_id, laize_id, grammage_id) VALUES (?,NULL,NULL)",
+                    (msf,)).lastrowid
+    c.execute("INSERT INTO mp_matiere_prix (matiere_id, declinaison_id, fournisseur_id, prix, principal) "
+              "VALUES (?,?,NULL,0,1)", (msf, dsf))
+    vsf = c.execute("INSERT INTO mp_variantes (matiere_id, fournisseur_id, libelle_technique, principal, actif) "
+                    "VALUES (?,NULL,'Polyester sans fournisseur',1,1)", (msf,)).lastrowid
+    res = mv.definir_prix_article(c, vsf, 0.4, user_name="t")
+    check("sans fournisseur : le prix de l'article est poussé", res.get("pousse"), True)
+    check("sans fournisseur : prix en vigueur dans Coûts matières", c.execute(
+        "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=?", (dsf,)).fetchone()[0], 0.4)
+    c.rollback()
+
 print()
 if FAIL:
     print("ÉCHEC : %d contrôle(s) en erreur" % len(FAIL))

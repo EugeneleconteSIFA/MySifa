@@ -24844,7 +24844,30 @@ function buildValorisationKpis() {
     ...kpiPFChildren
   );
 
-  wrap.append(kpiTotal, kpiMP, kpiPF);
+  // ── Dévalorisation : le stock marqué « à jeter », déjà soustrait des totaux ──
+  // On l'affiche à part pour qu'il se lise : sans cette carte, une baisse du
+  // total ne disait pas si elle venait d'un stock jeté ou d'un prix.
+  const devalItems = (v.items || []).filter(it => it.devalorise);
+  const devalMontant = devalItems.reduce((acc, it) => acc + Math.abs(valItemAchat(it)), 0);
+  const nbDeval = devalItems.length;
+  const kpiDeval = el('div', { style:
+    'background:var(--card);border:1px solid ' + (nbDeval ? 'var(--danger)' : 'var(--border)')
+    + ';border-radius:12px;padding:16px 18px;' + (nbDeval ? 'cursor:pointer' : ''),
+    title: nbDeval ? 'Afficher les lignes dévalorisées' : null,
+    on: nbDeval ? { click: () => {
+      v.query = ''; v.filterCategorie = null; v.filterSousSection = null;
+      v.sortColumn = 'valorisation'; v.sortDirection = 'asc';
+      renderValorisationView(true);
+    } } : null },
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Dévalorisation'),
+    el('div', { style: 'font-size:24px;font-weight:800;color:' + (nbDeval ? 'var(--danger)' : 'var(--muted)') },
+      nbDeval ? '− ' + valFormatEuro(devalMontant) : '0 €'),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
+      nbDeval ? nbDeval + ' ligne' + (nbDeval > 1 ? 's' : '') + ' de stock à jeter, soustraite' + (nbDeval > 1 ? 's' : '') + ' du total'
+              : 'Aucun stock à jeter')
+  );
+
+  wrap.append(kpiTotal, kpiMP, kpiPF, kpiDeval);
   // Widget d'accueil (app/services/blocs_registre.py) : les montants mis en
   // avant par les cartes — le réel quand il est affiché en gros, la base
   // sinon. Une date figée se capture aussi : elle devient le filtre
