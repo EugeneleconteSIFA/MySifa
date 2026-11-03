@@ -823,6 +823,11 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 /* Onglet Qualité : pesées (static/mysifa_pesees.css) puis opérations de
    maintenance (static/mysifa_maint_saisie.css) ; tout l'onglet défile. */
 .fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 28px;gap:14px}
+/* Les blocs gardent leur hauteur : la vue des pesées est réglée pour
+   remplir une fenêtre (flex:1, min-height:0), ici elle rétrécissait et
+   débordait sous la section maintenance. */
+.fab-qualite>*{flex-shrink:0}
+.fab-qualite .pf-vue{flex:none;min-height:auto}
 .fab-qualite .pf-corps{padding-bottom:4px}
 .fab-qualite .mm-section{margin-top:6px}
 .fab-prod-head-title{
