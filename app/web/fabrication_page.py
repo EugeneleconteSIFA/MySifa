@@ -1967,8 +1967,8 @@ function icon(name,size=16){
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     scale:'<path d="M12 3v18"/><path d="M5 21h14"/><path d="M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0z"/><path d="M17 7l-3 7a3 3 0 0 0 6 0z"/>',
-    // Onglet Qualité : une fiche de contrôle cochée.
-    'clipboard-check':'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+    // Onglet Qualité : une rosette cochée tendue dans une main ouverte.
+    qualite:'<path d="M12.00 1.00 L13.00 1.81 L14.29 1.74 L14.63 2.99 L15.71 3.69 L15.25 4.90 L15.71 6.11 L14.63 6.81 L14.29 8.06 L13.00 7.99 L12.00 8.80 L11.00 7.99 L9.71 8.06 L9.37 6.81 L8.29 6.11 L8.75 4.90 L8.29 3.69 L9.37 2.99 L9.71 1.74 L11.00 1.81Z"/><path d="m10.5 5 1 1 2-2"/><path d="M10.2 8.4 9.5 11l1.2-.4.7 1 .5-2.3"/><path d="M13.8 8.4l.7 2.6-1.2-.4-.7 1-.5-2.3"/><g transform="translate(0 2.5)"><path d="M11 14h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16"/><path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 15 6 6"/></g>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -5841,7 +5841,7 @@ function _fabTabDefs(){
     {key:'saisie', icon:'edit',    label:'Saisie'},
     {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
     {key:'traca',  icon:'scan',    label:'Traça'},
-    {key:'qualite',icon:'clipboard-check', label:'Qualité'},
+    {key:'qualite',icon:'qualite', label:'Qualité'},
     {key:'stats',  icon:'box',     label:'Stock'},
     // « Fiches et OF » : meme intitule que la section de la barre laterale
     // de MyProd. Ici l'onglet couvre bien les deux (sous-onglets OF et
