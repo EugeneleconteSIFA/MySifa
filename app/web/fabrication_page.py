@@ -1363,7 +1363,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_pesees.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -1392,7 +1392,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
 <script src="/static/mysifa_pesees.js?v=2"></script>
-<script src="/static/mysifa_poids_colle.js?v=2"></script>
+<script src="/static/mysifa_poids_colle.js?v=3"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
   window.mysifaPoidsColleContexte = function () {
@@ -1967,6 +1967,8 @@ function icon(name,size=16){
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     scale:'<path d="M12 3v18"/><path d="M5 21h14"/><path d="M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0z"/><path d="M17 7l-3 7a3 3 0 0 0 6 0z"/>',
+    // Onglet Qualité : une fiche de contrôle cochée.
+    'clipboard-check':'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -5839,7 +5841,7 @@ function _fabTabDefs(){
     {key:'saisie', icon:'edit',    label:'Saisie'},
     {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
     {key:'traca',  icon:'scan',    label:'Traça'},
-    {key:'qualite',icon:'scale',   label:'Qualité'},
+    {key:'qualite',icon:'clipboard-check', label:'Qualité'},
     {key:'stats',  icon:'box',     label:'Stock'},
     // « Fiches et OF » : meme intitule que la section de la barre laterale
     // de MyProd. Ici l'onglet couvre bien les deux (sous-onglets OF et

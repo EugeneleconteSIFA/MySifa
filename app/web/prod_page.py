@@ -102,7 +102,7 @@ __ARRIVEE_PLANNING__
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_prod_mobile.css?v=__V_LABEL__-mpm2">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu14">
-<link rel="stylesheet" href="/static/mysifa_pesees.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu19">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
