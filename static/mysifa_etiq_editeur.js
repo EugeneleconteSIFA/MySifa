@@ -580,7 +580,10 @@
       onclick: (ev) => {
         if (ev.shiftKey) { if (ED.sel && !ED.multi.size) ED.multi.add(ED.sel); ED.multi.has(e.id) ? ED.multi.delete(e.id) : ED.multi.add(e.id); }
         else ED.multi.clear();
-        ED.sel = e.id; majListe(); majPanneauElement(); dessinerSel();
+        ED.sel = e.id;
+        // Un objet d'un calque masqué n'est pas dessiné : le choisir réaffiche son calque.
+        if (ED.calquesMasques.delete(e.calque)) { X().rendre(); return; }
+        majListe(); majPanneauElement(); dessinerSel();
       } },
       ic(ICONE_TYPE[e.type], 14),
       h('span', { cls: 'es-el-nom', text: e.nom || resume(e) }),
@@ -603,8 +606,9 @@
       ...lay.calques.map(c => h('div', { cls: 'es-calque' },
         h('button', { cls: 'es-btn es-btn-icone' + (ED.calquesMasques.has(c.id) ? '' : ' es-btn-actif'), type: 'button',
           'data-bulle': ED.calquesMasques.has(c.id) ? 'Afficher' : 'Masquer', 'aria-label': 'Afficher ou masquer le calque ' + c.nom,
-          onclick: () => { ED.calquesMasques.has(c.id) ? ED.calquesMasques.delete(c.id) : ED.calquesMasques.add(c.id); majListe(); dessiner(); } }, ic('eye', 13)),
-        h('span', { cls: 'es-el-nom', text: c.nom }),
+          onclick: () => { ED.calquesMasques.has(c.id) ? ED.calquesMasques.delete(c.id) : ED.calquesMasques.add(c.id); X().rendre(); } },
+          ic(ED.calquesMasques.has(c.id) ? 'eye-off' : 'eye', 13)),
+        h('span', { cls: 'es-el-nom' + (ED.calquesMasques.has(c.id) ? ' es-el-masque' : ''), text: c.nom + (ED.calquesMasques.has(c.id) ? ' · masqué' : '') }),
         h('button', { cls: 'es-btn es-btn-icone' + (c.verrou ? ' es-btn-actif' : ''), type: 'button', disabled: concepteur() ? null : true,
           'data-bulle': c.verrou ? 'Déverrouiller' : 'Verrouiller', 'aria-label': (c.verrou ? 'Déverrouiller' : 'Verrouiller') + ' le calque ' + c.nom,
           onclick: () => { memoriser(); c.verrou = !c.verrou; salir(); X().rendre(); } }, ic('lock', 13)))));
@@ -857,7 +861,7 @@
             for (const g of garde) { const i = nouveau.elements.findIndex(e => e.id === g.id); if (i >= 0) nouveau.elements[i] = g; else nouveau.elements.unshift(g); }
             nouveau.calques = layout().calques;
             ED.m.layout = nouveau; ED.m.largeur_mm = p.largeur_mm; ED.m.hauteur_mm = p.hauteur_mm;
-            ED.propo = null; ED.sel = null; salir(); X().rendre();
+            ED.propo = null; ED.sel = null; ED.calquesMasques.clear(); salir(); X().rendre();
             X().toast('Proposition appliquée — enregistrer pour la garder.');
           }, 'accent', 'check'))));
     }
