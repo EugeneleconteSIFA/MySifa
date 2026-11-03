@@ -820,8 +820,9 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
   padding:20px 24px;gap:18px;
 }
 .fab-prod-head{margin-bottom:2px}
-/* Onglet Qualité : pesées (static/mysifa_pesees.css) puis opérations de
-   maintenance (static/mysifa_maint_saisie.css) ; tout l'onglet défile. */
+/* Onglet Qualité : deux sous-onglets, pesées (static/mysifa_pesees.css) et
+   opérations de maintenance (static/mysifa_maint_saisie.css) ; tout
+   l'onglet défile. */
 .fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 28px;gap:14px}
 /* Les blocs gardent leur hauteur : la vue des pesées est réglée pour
    remplir une fenêtre (flex:1, min-height:0), ici elle rétrécissait et
@@ -829,7 +830,13 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .fab-qualite>*{flex-shrink:0}
 .fab-qualite .pf-vue{flex:none;min-height:auto}
 .fab-qualite .pf-corps{padding-bottom:4px}
-.fab-qualite .mm-section{margin-top:6px}
+/* Sous-onglets de Qualité : les cartes de l'onglet Stock, la carte ouverte
+   marquée. Elles disent d'emblée que l'onglet a deux parties. */
+.fab-qualite-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.fab-qualite-nav .fab-prod-card[aria-pressed="true"]{border:2px solid var(--accent);background:var(--accent-bg);padding:15px 17px}
+.fab-qualite-nav .fab-prod-card[aria-pressed="true"] .fab-prod-card-title{color:var(--accent)}
+.fab-prod-card-pesees .fab-prod-card-ico{background:var(--accent)}
+.fab-prod-card-maintenance .fab-prod-card-ico{background:var(--c4)}
 .fab-prod-head-title{
   font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
 }
@@ -1369,8 +1376,8 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_pesees.css?v=4">
-<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=6">
+<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -1394,12 +1401,12 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>if(window.MySifaProduitMemoire)window.MySifaProduitMemoire.regler({ongletParDefaut:'documents',ofUnParUn:true});</script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/fabrication_url.js?v=4"></script>
+<script src="/static/fabrication_url.js?v=5"></script>
 <!-- Plaque confirmée au démarrage du dossier. -->
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
-<script src="/static/mysifa_pesees.js?v=3"></script>
-<script src="/static/mysifa_maint_saisie.js?v=1"></script>
+<script src="/static/mysifa_pesees.js?v=4"></script>
+<script src="/static/mysifa_maint_saisie.js?v=2"></script>
 <script src="/static/mysifa_poids_colle.js?v=3"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
@@ -1593,6 +1600,7 @@ let S = {
   ofEditModal: null,
   ofSelected: new Set(),   // Set d'ids d'OFs sélectionnés
   ofSubTab: 'of',        // 'of' | 'fiche'
+  qualiteSous: 'pesees', // onglet Qualité : 'pesees' | 'maintenance'
   ficheSearch: '',
   fichePage: 0,
   ficheTotal: 0,
@@ -5389,25 +5397,37 @@ function renderStatsPanel(){
    Machine par défaut : celle de l'opérateur. */
 // Défilement de l'onglet : le panneau est recréé à chaque render().
 let _fabQualiteHaut = 0;
+function _fabQualiteSous(sous){
+  if(sous === S.qualiteSous) return;
+  _fabQualiteHaut = 0;
+  set({qualiteSous: sous});
+}
 function renderQualitePanel(){
   const P = window.MySifaPesees, MM = window.MySifaMaintSaisie;
   const machine = (S.machine && S.machine.nom) || '';
+  const sous = S.qualiteSous === 'maintenance' ? 'maintenance' : 'pesees';
+  const carte = (cle, icone, titre, texte) => h('button',{
+      type:'button', className:'fab-prod-card fab-prod-card-'+cle,
+      'aria-pressed': sous===cle ? 'true' : 'false', onClick:()=>_fabQualiteSous(cle)},
+    h('div',{className:'fab-prod-card-ico'}, svgIcon(icone,22)),
+    h('div',{className:'fab-prod-card-txt'},
+      h('div',{className:'fab-prod-card-title'}, titre),
+      h('div',{className:'fab-prod-card-sub'}, texte)));
   const wrap = h('div',{className:'fab-main fab-qualite',
       onScroll:e=>{ _fabQualiteHaut = e.currentTarget.scrollTop; }},
-    h('div',{className:'fab-prod-head'},
-      h('h2',{className:'fab-prod-head-title'}, 'Pesées par front'),
-      h('div',{className:'fab-prod-head-sub'},
-        'Pesées d’étiquettes saisies dans les alertes d’inspection, dossier par dossier.')));
-  if(P) wrap.appendChild(P.vue({machine}));
+    h('div',{className:'fab-qualite-nav',role:'group','aria-label':'Qualité'},
+      carte('pesees', 'scale', 'Pesées par front', 'Historique des inspections'),
+      carte('maintenance', 'tool', 'Opérations de maintenance', 'Enregistrer une intervention')));
   // Opérations de maintenance : enregistrées dans MyMaintenance.
-  if(MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',
+  if(sous === 'maintenance' && MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',
     machines:(S.machines || []).map(m => m.nom).filter(Boolean)}));
-  if(!P && !MM) wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.'));
+  else if(sous === 'pesees' && P) wrap.appendChild(P.vue({machine}));
+  else wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.'));
   // Sortie puis remise dans la page, les vues perdent focus et défilement :
   // les modules les ont suivis et les rendent une fois la page reconstruite.
   queueMicrotask(()=>{
     if(wrap.isConnected) wrap.scrollTop = _fabQualiteHaut;
-    if(P) P.retablir();
+    if(P && sous === 'pesees') P.retablir();
   });
   return wrap;
 }

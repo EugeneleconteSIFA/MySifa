@@ -19,8 +19,8 @@
  *   correction d'une bobine scannée, correction d'une saisie de repiquage,
  *   mémoire produit, mouvements de stock de l'onglet Stock (entrée / sortie
  *   MP, entrée / sortie Z1 — formulaires indépendants de la saisie),
- *   onglet Qualité : filtres des pesées par front (pesees, pesees_dossier,
- *   pesees_periode, pesees_champs).
+ *   onglet Qualité : sous=maintenance (pesées par défaut), filtres des pesées
+ *   par front (pesees, pesees_dossier, pesees_periode, pesees_champs).
  * Hors adresse, volontairement : les étapes d'une saisie en cours (choix du
  * dossier à démarrer, début, fin, compteur, commentaire imposé par un seuil,
  * changement d'outil, annulation, dossier fictif, tête de sortie), les
@@ -142,7 +142,8 @@ function fabParams() {
   if (onglet === 'of' && S.ofSubTab && S.ofSubTab !== 'of') { p.sous = S.ofSubTab; nav += '/' + S.ofSubTab; }
   if (S.saisieViewMode === 'admin') { p.vue = 'admin'; nav += '/admin'; }
   if (S.adminMachineId) p.machine = String(S.adminMachineId);
-  if (onglet === 'qualite' && window.MySifaPesees && MySifaPesees.etat()) {
+  if (onglet === 'qualite' && S.qualiteSous === 'maintenance') { p.sous = 'maintenance'; nav += '/maintenance'; }
+  else if (onglet === 'qualite' && window.MySifaPesees && MySifaPesees.etat()) {
     // Machine de l'opérateur et 3 jours : la page sans paramètre.
     const e = MySifaPesees.etat();
     const a = MySifaPesees.adresse(e);
@@ -184,9 +185,10 @@ function fabLireNavigation(u) {
   // ?pesees= sans onglet : lien de l'ancienne fenêtre, désormais l'onglet Qualité.
   const onglet = u.get('onglet', null, _FAB_ONGLETS) || (_FAB_ONGLETS.indexOf(h) !== -1 ? h : (u.get('pesees', null) ? 'qualite' : 'saisie'));
   const sous = u.get('sous', 'of', ['of', 'fiche']);
+  const qsous = u.get('sous', 'pesees', ['pesees', 'maintenance']);
   const admin = u.get('vue', null) === 'admin';
   const m = u.get('machine', null);
-  return { onglet, sous, admin, machine: (m && _FAB_ID.test(m)) ? Number(m) : null,
+  return { onglet, sous, qsous, admin, machine: (m && _FAB_ID.test(m)) ? Number(m) : null,
            repiquage: u.get('repiquage', null),
            repOnglet: u.get('repiquage_onglet', 'saisie', ['saisie', 'historique', 'discussion']) };
 }
@@ -280,7 +282,8 @@ async function fabAllerUrl(complet) {
       await loadSession();
     }
   }
-  if (n.onglet === 'qualite' && window.MySifaPesees) {
+  if (n.onglet === 'qualite' && n.qsous !== (S.qualiteSous || 'pesees')) set({ qualiteSous: n.qsous });
+  if (n.onglet === 'qualite' && n.qsous === 'pesees' && window.MySifaPesees) {
     // Avant le changement d'onglet : la vue se charge une fois, sur les bons
     // filtres. Sans « pesees= », la machine de l'opérateur.
     const P = window.MySifaPesees;

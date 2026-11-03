@@ -150,18 +150,12 @@
     + '.dp-al-c b{color:inherit}'
     + '.dp-al-c.nc{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent);'
     + 'background:color-mix(in srgb,var(--danger) 12%,var(--card))}'
-    // Section Qualité de la fiche dossier : un contrôle par carte.
-    + '.dp-q{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;margin-bottom:14px}'
-    + '.dp-q-c{border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--card);display:flex;flex-direction:column;gap:5px;min-width:0}'
+    // Section Qualité de la fiche dossier : une ligne par contrôle.
+    + '.dp-q{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}'
+    + '.dp-q-l{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card)}'
     + '.dp-q-nom{font-size:13px;font-weight:700;color:var(--text)}'
-    + '.dp-q-sous{font-size:11px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}'
-    + '.dp-q-l{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--text2)}'
-    + '.dp-q-l>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
-    + '.dp-q-l b{font-variant-numeric:tabular-nums;color:var(--text);white-space:nowrap}'
-    + '.dp-q-l b.ok{color:var(--success)}.dp-q-l b.nc{color:var(--danger)}'
-    + '.dp-q-btn{align-self:flex-start;margin-top:2px;background:var(--bg);border:1px solid var(--border);border-radius:8px;'
-    + 'padding:4px 9px;font:inherit;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer}'
-    + '.dp-q-btn:hover{border-color:var(--accent)}'
+    + '.dp-q-sous{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}'
+    + '.dp-q-choix{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}'
     // Format / laize remontés dans l'en-tête de la fiche (MyProd) : en ligne.
     + '.dp-ident.dp-ident-tete{display:inline-flex;margin:0;gap:6px;vertical-align:middle}'
     + '.dp-ident.dp-ident-tete span{padding:2px 8px;font-size:12px}';
@@ -270,9 +264,11 @@
   }
 
   // ── Section Qualité de la fiche dossier ─────────────────────────────────
-  // Les contrôles validés pendant le dossier, une carte par alerte : ce qui a
-  // été testé, combien de fois, et le résultat en une ligne par question.
-  // Les courbes restent dans la fenêtre « Alertes validées ».
+  // Une ligne par contrôle validé : son nom, le nombre de validations, et le
+  // résultat des questions à choix en pastilles (« ✓ 7 conformes »,
+  // « 1 NC sur 7 »). Les mesures (pesée par front, grammage, release…) vont
+  // dans `.dp-q-pesees`, que la page remplit avec la vue des pesées du
+  // dossier (MySifaPesees.dossier) : boutons de champs, courbe, tableau.
   function qualiteHtml(alertes, no) {
     if (!Array.isArray(alertes)) return '';
     let h = '<div class="dp-titre">Qualité <span class="dp-n">' + alertes.length + '</span></div>';
@@ -283,58 +279,37 @@
       if (!parAlerte[k]) { parAlerte[k] = []; ordre.push(k); }
       parAlerte[k].push(a);
     });
+    let mesures = false;
     h += '<div class="dp-q">';
     ordre.forEach(k => {
       const acks = parAlerte[k], items = acks[acks.length - 1].items || [];
-      let lignes = '', pesees = false;
+      let choix = '';
       items.forEach((it, idx) => {
-        const cle = String(idx), lib = esc(it.label || (it.type === 'value' ? 'Valeur' : 'Contrôle'));
-        const u = it.unit ? ' ' + esc(it.unit) : '';
-        if (it.type === 'value') {
-          const min = nombreFr(it.min), max = nombreFr(it.max);
-          const dehors = (v) => (min !== null && v < min) || (max !== null && v > max);
-          const vals = [];
-          let der = null;
-          acks.forEach(a => {
-            const r = (a.reponses || {})[cle];
-            const ns = (Array.isArray(r) ? r : [r]).map(nombreFr).filter(v => v !== null);
-            if (ns.length) { der = ns; vals.push(...ns); }
-          });
-          if (!der) return;
-          if (it.points_libres) pesees = true;
-          // Plusieurs mesures (fronts) : la moyenne de la dernière validation.
-          const moy = der.reduce((s, v) => s + v, 0) / der.length;
-          const val = der.length > 1 ? 'moy. ' + nombre(Math.round(moy * 1000) / 1000) + u : nombre(der[0]) + u;
-          const plage = vals.length > 1 ? ' · ' + nombre(Math.min(...vals)) + '–' + nombre(Math.max(...vals)) : '';
-          lignes += '<div class="dp-q-l"><span title="' + lib + '">' + lib + '</span><b'
-            + (vals.some(dehors) ? ' class="nc" title="Valeur hors tolérance"' : '') + '>' + val
-            + '<span class="dp-q-sous">' + plage + '</span></b></div>';
-        } else {
-          const nc = new Set(it.nc_responses || []);
-          let rep = 0, ko = 0;
-          acks.forEach(a => {
-            const r = (a.reponses || {})[cle];
-            const vs = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
-            if (!vs.length) return;
-            rep++;
-            if (vs.some(v => nc.has(v))) ko++;
-          });
-          if (!rep) return;
-          lignes += '<div class="dp-q-l"><span title="' + lib + '">' + lib + '</span>'
-            + (ko ? '<b class="nc">' + ko + ' NC sur ' + rep + '</b>'
-                  : '<b class="ok">✓ ' + (rep > 1 ? rep + ' conformes' : 'conforme') + '</b>') + '</div>';
-        }
+        if (it.type === 'value') { mesures = true; return; }
+        const cle = String(idx);
+        const nc = new Set(it.nc_responses || []);
+        let rep = 0, ko = 0;
+        acks.forEach(a => {
+          const r = (a.reponses || {})[cle];
+          const vs = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
+          if (!vs.length) return;
+          rep++;
+          if (vs.some(v => nc.has(v))) ko++;
+        });
+        if (!rep) return;
+        choix += '<span class="dp-al-c' + (ko ? ' nc' : '') + '">' + esc(it.label || 'Contrôle') + ' · '
+          + (ko ? ko + ' NC sur ' + rep : '✓ ' + (rep > 1 ? rep + ' conformes' : 'conforme')) + '</span>';
       });
       const coms = acks.filter(a => (a.commentaire || '').trim()).length;
-      h += '<div class="dp-q-c"><div><div class="dp-q-nom">' + esc(acks[0].nom) + '</div>'
-        + '<div class="dp-q-sous">' + acks.length + ' validation' + (acks.length > 1 ? 's' : '') + ' · '
+      h += '<div class="dp-q-l"><span class="dp-q-nom">' + esc(acks[0].nom) + '</span>'
+        + '<span class="dp-q-sous">' + acks.length + ' validation' + (acks.length > 1 ? 's' : '') + ' · '
         + esc(dateCourte(acks[0].ack_at)) + (acks.length > 1 ? ' → ' + esc(dateCourte(acks[acks.length - 1].ack_at)) : '')
-        + (coms ? ' · ' + coms + ' commentaire' + (coms > 1 ? 's' : '') : '') + '</div></div>'
-        + lignes
-        + (pesees && no ? '<button type="button" class="dp-q-btn" data-pesees data-pesees-dossier="' + esc(no) + '">Pesées par front</button>' : '')
-        + '</div>';
+        + (coms ? ' · ' + coms + ' commentaire' + (coms > 1 ? 's' : '') : '') + '</span>'
+        + (choix ? '<span class="dp-q-choix">' + choix + '</span>' : '') + '</div>';
     });
-    return h + '</div>';
+    h += '</div>';
+    if (mesures && no) h += '<div class="dp-q-pesees" data-q-dossier="' + esc(no) + '"></div>';
+    return h;
   }
 
   // ── Théorique (devis) contre réel ───────────────────────────────────────
