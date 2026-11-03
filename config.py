@@ -122,14 +122,22 @@ APP_STATUS_TEXT = os.getenv("APP_STATUS_TEXT", "Service opérationnel")
 APP_TITLE = os.getenv("APP_TITLE", APP_NAME)
 
 # Onglet navigateur & SEO.
+# Titre et description de la page d'accueil publique (« / ») : ce que Google affiche.
+# Le titre commence par le nom de l'appli, 70 caractères au plus ; la description fait
+# 140 à 160 caractères. Seul « / » est indexable (voir SEO_INDEXABLE).
 APP_PAGE_TITLE = os.getenv(
     "APP_PAGE_TITLE",
-    f"{APP_NAME} — Portail interne {APP_ORG_NAME}",
+    f"{APP_NAME} · Gestion de production de {APP_ORG_NAME}, fabricant d'étiquettes",
 )
 APP_META_DESCRIPTION = os.getenv(
     "APP_META_DESCRIPTION",
-    f"Portail interne {APP_ORG_NAME} : production, stocks, planning et outils métier.",
+    f"{APP_NAME}, le portail de gestion de production de {APP_ORG_NAME}, fabricant d'étiquettes : "
+    "saisies opérateurs, planning machine, stocks, qualité et expéditions dans un seul outil.",
 )
+# Image d'aperçu des partages (Open Graph, 1200×630) et auteur cité dans les données structurées.
+APP_OG_IMAGE = os.getenv("APP_OG_IMAGE", "/static/og-mysifa.png")
+APP_AUTHOR_NAME = os.getenv("APP_AUTHOR_NAME", "Eugène Leconte")
+APP_AUTHOR_URL = os.getenv("APP_AUTHOR_URL", "https://www.kernse.fr/")
 
 # Thème visuel : dark cyan MySifa (défaut) ou clair navy/orange Kernse.
 # Active via KERNSE_THEME=1 dans le .env de l'instance client.
@@ -166,6 +174,10 @@ ENV_NAME = os.getenv("ENV_NAME", "v2").strip().lower()
 # ne tente meme pas l'import de sentry_sdk. Voir app/core/monitoring.py.
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 IS_STAGING = (ENV_NAME == "v1")
+# Référencement : seule la page d'accueil de l'instance de prod, sur son domaine public
+# (public_base_url()), est ouverte aux moteurs. Staging, ERP et toutes les autres pages
+# (modules, portail Espace, API) répondent « noindex » (middleware de main.py).
+SEO_INDEXABLE = os.getenv("SEO_INDEXABLE", "0" if IS_STAGING else "1").strip().lower() in {"1", "true", "yes"}
 
 # MIGRATIONS_DISABLED : désactive les migrations de schéma au boot.
 #

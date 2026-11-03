@@ -20,6 +20,7 @@ from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_ST
 from app.core.audit_middleware import AuditMiddleware
 from app.core.requete_courante import RequeteCouranteMiddleware
 from app.web.html import render_frontend_html
+from app.routers.pwa import seo_indexable
 
 from routers.auth       import router as auth_router
 from routers.imports    import router as router_imports
@@ -453,6 +454,24 @@ async def no_cache_planning(request: Request, call_next):
     return response
 
 
+_SEO_PUBLIC = ("/", "/robots.txt", "/sitemap.xml")
+
+
+@app.middleware("http")
+async def noindex_hors_accueil(request: Request, call_next):
+    """Seule la page d'accueil de la prod est indexable ; tout le reste répond « noindex ».
+
+    Couvre v1 (sinon copie de la prod dans Google), l'ERP, les pages de modules, les liens
+    du portail Espace envoyés aux destinataires externes et l'API. Déclaré avant
+    `router_hote_erp`, donc exécuté après lui : sur l'ERP, le chemin est déjà réécrit.
+    """
+    response = await call_next(request)
+    p = request.url.path
+    if not (seo_indexable(request) and (p in _SEO_PUBLIC or p.startswith("/static/"))):
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
 @app.middleware("http")
 async def router_hote_erp(request: Request, call_next):
     """Sert le nouvel ERP sur son sous-domaine (erp.mysifa.com).
@@ -467,7 +486,7 @@ async def router_hote_erp(request: Request, call_next):
     p = request.scope.get("path") or "/"
     dans_prefixe = p == ERP2_PREFIXE or p.startswith(ERP2_PREFIXE + "/")
     if hote in ERP2_HOSTS:
-        if not dans_prefixe and not p.startswith(("/api/", "/static/", "/uploads/")):
+        if not dans_prefixe and not p.startswith(("/api/", "/static/", "/uploads/")) and p not in _SEO_PUBLIC[1:]:
             nouveau = ERP2_PREFIXE + p
             request.scope["path"] = nouveau
             request.scope["raw_path"] = nouveau.encode("utf-8")
