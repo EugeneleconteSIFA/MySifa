@@ -340,6 +340,18 @@ def unites_comptage(categorie):
     """Unités de comptage proposées pour une catégorie, ou ()."""
     return STOCK_UNITES_COMPTAGE.get((categorie or "").strip().lower(), ())
 
+
+# Consommables dont le prix unitaire se saisit directement dans MyStock (fiche
+# matière et valorisation), par l'administration. Les matières de production
+# (frontal, glassine, complexe, adhésif, encre) gardent leur prix dans Coûts
+# matières, où vivent devise, transport et taxes.
+STOCK_CATEGORIES_PRIX_DIRECT = ("carton", "mandrin", "palette", "autre")
+
+
+def categorie_prix_direct(categorie):
+    """Le prix unitaire de cette catégorie se saisit-il dans MyStock ?"""
+    return (categorie or "").strip().lower() in STOCK_CATEGORIES_PRIX_DIRECT
+
 # Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
 # métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
 # minute) : le déstockage refuse de s'en servir, les écrans affichent « erreur

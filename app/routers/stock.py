@@ -42,6 +42,7 @@ from config import (
     STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
     ROLES_SETTINGS_LOGISTIQUE,
     ROLES_TRACA_VIEWER,
+    categorie_prix_direct,
     unites_comptage,
 )
 from database import get_db, parse_file
@@ -542,6 +543,7 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "abbreviation": (r["abbreviation"] or "").strip() or None
             if "abbreviation" in keys and r["abbreviation"] else None,
         "avec_conditionnement": _mp_a_conditionnement(cat),
+        "prix_direct": categorie_prix_direct(cat),
         "unites_par_palette": unites_par_palette,
         "longueur_tube_mm": longueur_tube_mm,
         "est_mandrin": _mp_est_mandrin(cat),
@@ -7136,10 +7138,13 @@ async def create_matiere_premiere(request: Request):
 
 @router.put("/api/stock/matieres/{matiere_id}")
 async def update_matiere_premiere(matiere_id: int, request: Request):
-    require_stock_matieres_admin(request)
+    user = require_stock_matieres_admin(request)
     body = await request.json()
     sets = []
     params: list[Any] = []
+    # Prix unitaire d'un consommable (bague, carton, palette…), saisi par
+    # l'administration sur la fiche ou depuis la valorisation.
+    prix_unitaire = _lire_prix_unitaire(body.get("prix_unitaire")) if "prix_unitaire" in body else None
 
     if "reference" in body:
         reference = (body.get("reference") or "").strip()
@@ -7331,8 +7336,11 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             sets.append("epaisseur_um=?")
             params.append(v_f)
 
-        if not sets and bascule is None:
+        if not sets and bascule is None and prix_unitaire is None:
             raise HTTPException(400, "Aucun champ à mettre à jour.")
+        if prix_unitaire is not None and not categorie_prix_direct(row["categorie"]):
+            raise HTTPException(
+                400, "Prix de cette catégorie : à saisir dans Coûts matières.")
 
         sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
         params.append(matiere_id)
@@ -7368,6 +7376,13 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                 passer_a_l_unite(conn, matiere_id)
             elif bascule == 0:
                 repasser_a_la_palette(conn, matiere_id, upp_body)
+            prix_change = False
+            if prix_unitaire is not None:
+                prix_change = _ecrire_prix_unitaire(
+                    conn, matiere_id, prix_unitaire, "Saisi sur la fiche matière",
+                    _now_paris().strftime("%Y-%m-%dT%H:%M:%S"), user.get("id"),
+                    (user.get("nom") or user.get("email") or "").strip() or None,
+                )
             conn.commit()
         except sqlite3.IntegrityError:
             conn.rollback()
@@ -7375,6 +7390,14 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                 400,
                 "Cette référence existe déjà dans cette catégorie.",
             ) from None
+        if prix_change:
+            # Même sens retour que la valorisation : Coûts matières suit.
+            _mystock_prix.resync_depuis_mystock(
+                conn, matiere_id, user_id=user.get("id"),
+                user_name=(user.get("nom") or user.get("email") or "").strip() or None,
+                origine="MyStock — fiche matière",
+            )
+            conn.commit()
     return {"ok": True}
 
 
@@ -9260,6 +9283,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             "quantite": qte,
             "unite": unite,
             "stock_a_l_unite": a_l_unite,
+            "prix_direct": categorie_prix_direct(cat),
             "prix_unitaire": prix,
             "valorisation": valorisation,
             "laizee": False,
@@ -10062,6 +10086,56 @@ async def update_valorisation_conteneur(declinaison_id: int, request: Request):
     return {"ok": True, "transport_cout": cout}
 
 
+def _lire_prix_unitaire(brut) -> float:
+    """Prix unitaire saisi (virgule acceptée), borné. Vide = 0, « non renseigné »."""
+    try:
+        prix = float(str(brut).replace(",", ".")) if brut not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Prix unitaire invalide.") from None
+    if prix < 0:
+        raise HTTPException(400, "Prix unitaire négatif interdit.")
+    if prix > 1_000_000:
+        raise HTTPException(400, "Prix unitaire hors limites (max 1 000 000).")
+    return prix
+
+
+def _ecrire_prix_unitaire(conn, matiere_id: int, prix: float, note, now: str,
+                          user_id, user_name) -> bool:
+    """Prix unitaire d'une matière non laizée, avec sa ligne d'historique.
+
+    Seul point d'écriture de `mp_valorisation.prix_unitaire` : la valorisation
+    et la fiche matière passent toutes deux par ici. Ne commite pas ; à
+    l'appelant de faire suivre Coûts matières (`resync_depuis_mystock`).
+    Renvoie True si le prix a changé.
+    """
+    prev = conn.execute(
+        "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (matiere_id,)
+    ).fetchone()
+    prix_avant = float(prev["prix_unitaire"]) if prev and prev["prix_unitaire"] is not None else None
+    if prev:
+        conn.execute(
+            """UPDATE mp_valorisation
+               SET prix_unitaire=?, updated_at=?, updated_by_name=?
+               WHERE matiere_id=?""",
+            (prix, now, user_name, matiere_id),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
+               VALUES (?,?,?,?)""",
+            (matiere_id, prix, now, user_name),
+        )
+    if prix_avant == prix:
+        return False
+    conn.execute(
+        """INSERT INTO mp_valorisation_historique
+           (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
+           VALUES (?,?,?,?,?,?,?)""",
+        (matiere_id, prix_avant, prix, note, now, user_id, user_name),
+    )
+    return True
+
+
 @router.put("/api/stock/valorisation/devalorisation/{matiere_id}")
 async def update_valorisation_devalorisation(matiere_id: int, request: Request):
     """Marque une ligne de valorisation comme stock à jeter (ou retire la marque).
@@ -10177,39 +10251,9 @@ async def update_valorisation(matiere_id: int, request: Request):
             conn.commit()
         else:
             # Matière non laizée → comportement classique avec prix_unitaire
-            try:
-                prix = float(body.get("prix_unitaire") or 0)
-            except (TypeError, ValueError):
-                raise HTTPException(400, "Prix unitaire invalide.") from None
-            if prix < 0:
-                raise HTTPException(400, "Prix unitaire négatif interdit.")
-            if prix > 1_000_000:
-                raise HTTPException(400, "Prix unitaire hors limites (max 1 000 000).")
+            prix = _lire_prix_unitaire(body.get("prix_unitaire"))
             note = (body.get("note") or "").strip() or None
-            prev = conn.execute(
-                "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (matiere_id,)
-            ).fetchone()
-            prix_avant = float(prev["prix_unitaire"]) if prev else None
-            if prev:
-                conn.execute(
-                    """UPDATE mp_valorisation
-                       SET prix_unitaire=?, updated_at=?, updated_by_name=?
-                       WHERE matiere_id=?""",
-                    (prix, now, user_name, matiere_id),
-                )
-            else:
-                conn.execute(
-                    """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
-                       VALUES (?,?,?,?)""",
-                    (matiere_id, prix, now, user_name),
-                )
-            if prix_avant != prix:
-                conn.execute(
-                    """INSERT INTO mp_valorisation_historique
-                       (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
-                       VALUES (?,?,?,?,?,?,?)""",
-                    (matiere_id, prix_avant, prix, note, now, user_id, user_name),
-                )
+            _ecrire_prix_unitaire(conn, matiere_id, prix, note, now, user_id, user_name)
             conn.commit()
         # Coûts matières lit le prix dans la ligne principale de mp_matiere_prix :
         # un prix corrigé ici doit y redescendre, sinon le devis continue de
