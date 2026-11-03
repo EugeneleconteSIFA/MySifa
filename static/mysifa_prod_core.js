@@ -11672,6 +11672,10 @@ function _psDetailCharger(no, cible, hote){
 function _psBoutonSignaler(no, cible, hote){
   const panneau = cible.querySelector('.dp');
   if(!panneau || !hote) return;
+  // Mesures des contrôles (pesée par front, grammage…) : la vue des pesées du
+  // dossier, boutons de champs et courbe (static/mysifa_pesees.js).
+  const pesees = panneau.querySelector('.dp-q-pesees');
+  if(pesees && window.MySifaPesees && MySifaPesees.dossier) MySifaPesees.dossier(pesees, no);
   // Format et laize à côté de la machine : une ligne de moins dans la fiche.
   const ident = panneau.querySelector('.dp-ident-tete');
   const tete = hote.closest('.ps-fiche-tete');

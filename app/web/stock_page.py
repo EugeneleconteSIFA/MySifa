@@ -2649,7 +2649,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=unite3"></script>
 <script src="/static/mysifa_scanner.js?v=1"></script>
-<script src="/static/mysifa_donnees_prod.js?v=17"></script>
+<script src="/static/mysifa_donnees_prod.js?v=18"></script>
 <script src="/static/mysifa_destockage.js?v=11"></script>
 <script src="/static/mysifa_dock.js?v=3"></script>
 <script src="/static/mysifa_postit.js"></script>

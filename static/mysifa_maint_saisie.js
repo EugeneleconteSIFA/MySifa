@@ -1,6 +1,6 @@
 /*
- * MySifa — Saisie prod, onglet Qualité : enregistrer une opération de
- * maintenance déjà réalisée, sans quitter la saisie.
+ * MySifa — Saisie prod, onglet Qualité › Opérations de maintenance :
+ * enregistrer une intervention déjà réalisée, sans quitter la saisie.
  *
  * Même circuit que « Enregistrer une opération » de MyMaintenance
  * (opSubmitNew / adminSubmitRegisterOp de app/web/maintenance_page.py) :
@@ -17,21 +17,30 @@
  * (catégorie « remplacements ») ; contrôles et nettoyages restent dans
  * MyMaintenance.
  *
- * Les opérations récentes de la machine sont relues dans
+ * Interventions et machines se choisissent en pastilles (écran tactile de
+ * l'atelier). Les opérations récentes de la machine sont relues dans
  * GET /api/maintenance/history, la source de l'écran Historique.
  *
- *   MySifaMaintSaisie.vue({machine, machines, role})   élément durable à poser
- *       dans la page ; les appels suivants rendent le même élément (saisie en
- *       cours conservée). Machine : celle de l'opérateur, modifiable.
+ *   MySifaMaintSaisie.vue({machine, machines, role})   élément durable à
+ *       poser dans la page ; les appels suivants rendent le même élément
+ *       (saisie en cours conservée). Machine : celle de l'opérateur.
  * Tout texte passe par textContent.
  */
 (function (global) {
   "use strict";
 
   var AUTRE = "__autre__";
-  var JOURS_HISTO = 30, LIGNES_HISTO = 6;
+  var JOURS_HISTO = 30, LIGNES_HISTO = 8;
+  var DUREES = [15, 30, 60, 120];
+  var SVG = "http://www.w3.org/2000/svg";
+  var ICONES = {
+    outil: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    fleche: '<path d="M7 17 17 7M8 7h9v9"/>',
+  };
   var M = { el: null, codes: null, histo: null, machine: "", machines: [], role: "", refus: false,
-            envoi: false, erreur: "", form: null };
+            envoi: false, erreur: "", code: "", form: null };
 
   function el(tag, cls, txt) {
     var e = document.createElement(tag);
@@ -39,11 +48,30 @@
     if (txt != null) e.textContent = txt;
     return e;
   }
+  function icone(nom, taille) {
+    var s = document.createElementNS(SVG, "svg");
+    s.setAttribute("viewBox", "0 0 24 24");
+    s.setAttribute("width", taille || 16);
+    s.setAttribute("height", taille || 16);
+    s.setAttribute("fill", "none");
+    s.setAttribute("stroke", "currentColor");
+    s.setAttribute("stroke-width", "2");
+    s.setAttribute("stroke-linecap", "round");
+    s.setAttribute("stroke-linejoin", "round");
+    s.setAttribute("aria-hidden", "true");
+    s.innerHTML = ICONES[nom];  // tracé constant, aucune donnée
+    return s;
+  }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function isoJour(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
-  function dateCourte(iso) {
+  function jourLisible(iso) {
     var s = String(iso || "");
-    return s.length >= 10 ? s.slice(8, 10) + "/" + s.slice(5, 7) + (s.length >= 16 ? " " + s.slice(11, 16) : "") : s;
+    if (s.length < 10) return s;
+    var auj = isoJour(new Date()), hier = new Date();
+    hier.setDate(hier.getDate() - 1);
+    var j = s.slice(0, 10);
+    var lib = j === auj ? "Aujourd'hui" : j === isoJour(hier) ? "Hier" : s.slice(8, 10) + "/" + s.slice(5, 7);
+    return lib + (s.length >= 16 ? " · " + s.slice(11, 16) : "");
   }
   function toast(msg, type) {
     if (typeof global.showToast === "function") global.showToast(msg, type || "success");
@@ -103,13 +131,13 @@
   // ── Enregistrement ─────────────────────────────────────────────────────
   async function enregistrer() {
     var f = M.form;
-    var autre = f.code.value === AUTRE;
-    var titre = f.titre.value.trim(), jour = f.date.value, machine = f.machine.value;
+    var autre = M.code === AUTRE;
+    var titre = f.titre.value.trim(), jour = f.date.value, machine = M.machine;
     var dureeTxt = f.duree.value.trim(), comment = f.comment.value.trim();
     var duree = dureeTxt === "" ? null : Number(dureeTxt.replace(",", "."));
-    if (!f.code.value) return erreur("Choisissez une intervention.");
+    if (!M.code) return erreur("Choisissez une intervention.");
     if (autre && !titre) return erreur("Décrivez l'intervention.");
-    if (!machine) return erreur("Machine obligatoire.");
+    if (!machine) return erreur("Choisissez une machine.");
     if (!jour) return erreur("Date obligatoire.");
     if (jour > isoJour(new Date())) return erreur("Une opération réalisée ne peut pas être datée dans le futur.");
     if (duree != null && (!isFinite(duree) || duree < 0 || Math.round(duree) !== duree)) {
@@ -119,7 +147,7 @@
     rendre();
     var ev = null;
     try {
-      var code = f.code.value;
+      var code = M.code;
       if (autre) code = (await appel("/api/maintenance/codes/libres", { method: "POST", body: { label: titre } })).code;
       var d = await appel("/api/maintenance/events", { method: "POST", body: {
         machine: machine, date_prevue: jour, source: "non_planifie", ops: [code], operators: [] } });
@@ -131,10 +159,10 @@
       if (comment) corps.observations = comment;
       await appel("/api/maintenance/events/" + ev.id + "/ops/" + op.id, { method: "PATCH", body: corps });
       ev = null;
-      f.code.value = ""; f.titre.value = ""; f.duree.value = ""; f.comment.value = "";
+      M.code = "";
+      f.titre.value = ""; f.duree.value = ""; f.comment.value = "";
       f.date.value = isoJour(new Date());
       toast("Opération enregistrée.");
-      M.machine = machine;
       chargerHisto();
     } catch (e) {
       // Créneau créé mais pas soldé : on le retire, comme MyMaintenance.
@@ -152,150 +180,201 @@
   }
 
   // ── Rendu ──────────────────────────────────────────────────────────────
-  // Le formulaire est construit une fois : la saisie en cours survit aux
-  // rendus. Seuls la liste des interventions, l'état et l'historique bougent.
+  function pastille(texte, actif, onClick, cls) {
+    var b = el("button", "mm-pastille" + (cls ? " " + cls : "") + (actif ? " actif" : ""));
+    b.type = "button";
+    b.setAttribute("aria-pressed", actif ? "true" : "false");
+    if (actif) b.appendChild(icone("check", 14));
+    b.appendChild(document.createTextNode(texte));
+    b.addEventListener("click", onClick);
+    return b;
+  }
+  function etape(num, titre) {
+    var t = el("div", "mm-etape");
+    t.appendChild(el("span", "mm-etape-num", String(num)));
+    t.appendChild(el("span", null, titre));
+    return t;
+  }
+
+  // Champs texte construits une fois : la saisie en cours survit aux rendus.
+  // Pastilles et liste sont redessinées à chaque rendu.
   function construireForm() {
     var f = {};
-    function champ(lib, input, cls) {
-      var c = el("label", "mm-champ" + (cls ? " " + cls : ""));
-      c.appendChild(el("span", "mm-lib", lib));
-      c.appendChild(input);
-      return c;
-    }
-    f.code = el("select", "mm-input");
     f.titre = el("input", "mm-input");
     f.titre.type = "text";
     f.titre.maxLength = 200;
-    f.titre.placeholder = "Ex. : remplacement joint pompe hydraulique";
-    f.machine = el("select", "mm-input");
+    f.titre.placeholder = "Décrivez l'intervention — ex. : remplacement joint pompe hydraulique";
     f.date = el("input", "mm-input");
     f.date.type = "date";
     f.date.value = isoJour(new Date());
     f.date.max = isoJour(new Date());
-    f.duree = el("input", "mm-input");
+    f.duree = el("input", "mm-input mm-duree");
     f.duree.type = "number";
     f.duree.min = "0";
     f.duree.step = "1";
-    f.duree.placeholder = "Facultatif";
+    f.duree.placeholder = "—";
+    f.duree.inputMode = "numeric";
+    f.duree.addEventListener("input", rendre);
     f.comment = el("textarea", "mm-input");
     f.comment.rows = 2;
     f.comment.placeholder = "Pièces changées, observations…";
-    f.envoyer = el("button", "mm-btn", "Enregistrer");
+    f.envoyer = el("button", "mm-btn");
     f.envoyer.type = "button";
     f.envoyer.addEventListener("click", enregistrer);
-    f.machine.addEventListener("change", function () { M.machine = f.machine.value; M.histo = null; rendre(); chargerHisto(); });
-    f.code.addEventListener("change", function () {
-      f.titreChamp.hidden = f.code.value !== AUTRE;
-      if (!f.titreChamp.hidden) f.titre.focus();
-    });
-
-    var grille = el("div", "mm-grille");
-    grille.appendChild(champ("Intervention", f.code, "mm-large"));
-    f.titreChamp = champ("Autre maintenance — description", f.titre, "mm-large");
-    f.titreChamp.hidden = true;
-    grille.appendChild(f.titreChamp);
-    grille.appendChild(champ("Machine", f.machine));
-    grille.appendChild(champ("Date", f.date));
-    grille.appendChild(champ("Durée (min)", f.duree));
-    grille.appendChild(champ("Commentaire", f.comment, "mm-large"));
-    f.racine = el("div", "mm-form");
-    f.racine.appendChild(grille);
+    // Zones redessinées
+    f.codes = el("div", "mm-pastilles");
+    f.machines = el("div", "mm-pastilles");
+    f.durees = el("div", "mm-pastilles mm-pastilles-duree");
     f.etat = el("div", "mm-etat");
+
+    var form = el("div", "mm-carte mm-form");
+    form.appendChild(etape(1, "Intervention réalisée"));
+    form.appendChild(f.codes);
+    f.titreBloc = el("div", "mm-titre-libre");
+    f.titreBloc.appendChild(f.titre);
+    form.appendChild(f.titreBloc);
+
+    form.appendChild(etape(2, "Machine et date"));
+    var ligne = el("div", "mm-ligne");
+    ligne.appendChild(f.machines);
+    var dateBloc = el("label", "mm-champ");
+    dateBloc.appendChild(el("span", "mm-lib", "Date"));
+    dateBloc.appendChild(f.date);
+    ligne.appendChild(dateBloc);
+    form.appendChild(ligne);
+
+    form.appendChild(etape(3, "Détails (facultatif)"));
+    var details = el("div", "mm-ligne");
+    var dureeBloc = el("div", "mm-champ");
+    dureeBloc.appendChild(el("span", "mm-lib", "Durée"));
+    var dureeLigne = el("div", "mm-duree-ligne");
+    dureeLigne.appendChild(f.durees);
+    var unite = el("label", "mm-unite");
+    unite.appendChild(f.duree);
+    unite.appendChild(el("span", null, "min"));
+    dureeLigne.appendChild(unite);
+    dureeBloc.appendChild(dureeLigne);
+    details.appendChild(dureeBloc);
+    form.appendChild(details);
+    var comBloc = el("label", "mm-champ");
+    comBloc.appendChild(el("span", "mm-lib", "Commentaire"));
+    comBloc.appendChild(f.comment);
+    form.appendChild(comBloc);
+
     var pied = el("div", "mm-pied");
     pied.append(f.etat, f.envoyer);
-    f.racine.appendChild(pied);
+    form.appendChild(pied);
+    f.racine = form;
     return f;
   }
 
-  function remplirCodes(f) {
-    var avant = f.code.value;
-    f.code.textContent = "";
-    f.code.appendChild(new Option(M.codes ? "Choisir une intervention…" : "Chargement…", ""));
+  function dessinerForm(f) {
+    f.codes.textContent = "";
+    if (!M.codes) f.codes.appendChild(el("div", "mm-vide", "Chargement du catalogue…"));
     (M.codes || []).forEach(function (c) {
-      var o = new Option(c.label, c.code);
-      o.title = c.code;
-      f.code.appendChild(o);
+      var b = pastille(c.label, M.code === c.code, function () { M.code = M.code === c.code ? "" : c.code; rendre(); });
+      b.title = c.code;
+      f.codes.appendChild(b);
     });
-    f.code.appendChild(new Option("Autre maintenance…", AUTRE));
-    f.code.value = avant;
-    if (f.code.value !== avant) f.code.value = "";
-    f.titreChamp.hidden = f.code.value !== AUTRE;
-  }
-  function remplirMachines(f) {
+    var autre = pastille("Autre maintenance", M.code === AUTRE, function () {
+      M.code = M.code === AUTRE ? "" : AUTRE;
+      rendre();
+      if (M.code === AUTRE) f.titre.focus();
+    }, "mm-pastille-autre");
+    if (M.code !== AUTRE) autre.insertBefore(icone("plus", 14), autre.firstChild);
+    f.codes.appendChild(autre);
+    f.titreBloc.hidden = M.code !== AUTRE;
+
     var liste = M.machines.slice();
     if (M.machine && liste.indexOf(M.machine) < 0) liste.unshift(M.machine);
-    var cle = liste.join("|");
-    if (f.machinesCle === cle) { f.machine.value = M.machine; return; }
-    f.machinesCle = cle;
-    f.machine.textContent = "";
-    if (!liste.length) f.machine.appendChild(new Option("Aucune machine", ""));
-    liste.forEach(function (m) { f.machine.appendChild(new Option(m, m)); });
-    f.machine.value = M.machine;
+    f.machines.textContent = "";
+    if (!liste.length) f.machines.appendChild(el("div", "mm-vide", "Aucune machine."));
+    liste.forEach(function (m) {
+      f.machines.appendChild(pastille(m, m === M.machine, function () {
+        if (m === M.machine) return;
+        M.machine = m; M.histo = null;
+        rendre();
+        chargerHisto();
+      }, "mm-pastille-machine"));
+    });
+
+    var dv = f.duree.value.trim();
+    f.durees.textContent = "";
+    DUREES.forEach(function (n) {
+      f.durees.appendChild(pastille(n < 60 ? n + " min" : (n / 60) + " h", dv === String(n), function () {
+        f.duree.value = dv === String(n) ? "" : String(n);
+        rendre();
+      }, "mm-pastille-petite"));
+    });
+
+    f.envoyer.textContent = "";
+    f.envoyer.appendChild(icone("check", 16));
+    f.envoyer.appendChild(document.createTextNode(M.envoi ? "Enregistrement…" : "Enregistrer l'opération"));
+    f.envoyer.disabled = M.envoi || M.refus;
+    f.etat.textContent = M.refus ? "Enregistrement réservé à l'atelier et aux responsables maintenance." : M.erreur;
+    f.etat.classList.toggle("mm-erreur", !!(M.erreur || M.refus));
   }
 
   function historique() {
-    var b = el("div", "mm-histo");
-    var t = el("div", "mm-sous-titre", "Dernières opérations" + (M.machine ? " · " + M.machine : "") + " · " + JOURS_HISTO + " jours");
+    var b = el("div", "mm-carte mm-histo");
+    var t = el("div", "mm-histo-tete");
+    t.appendChild(el("div", "mm-histo-titre", "Dernières opérations"));
+    t.appendChild(el("div", "mm-histo-sous", (M.machine || "—") + " · " + JOURS_HISTO + " derniers jours"));
     b.appendChild(t);
     if (M.histo == null) { b.appendChild(el("div", "mm-vide", "Chargement…")); return b; }
-    if (!M.histo.length) { b.appendChild(el("div", "mm-vide", "Aucune opération enregistrée sur cette période.")); return b; }
-    var tab = el("table", "mm-table"), th = el("tr");
-    ["Date", "Opération", "Opérateur", "Durée", "Commentaire"].forEach(function (h, i) {
-      th.appendChild(el("th", i === 3 ? "num" : null, h));
-    });
-    var thead = el("thead");
-    thead.appendChild(th);
-    tab.appendChild(thead);
-    var tb = el("tbody");
+    if (!M.histo.length) { b.appendChild(el("div", "mm-vide", "Aucune opération enregistrée sur cette machine depuis " + JOURS_HISTO + " jours.")); return b; }
+    var ul = el("ul", "mm-liste");
     M.histo.slice(0, LIGNES_HISTO).forEach(function (h) {
-      var r = el("tr");
-      r.appendChild(el("td", "mm-date", dateCourte(h.date_saisie)));
-      var type = el("td", null, h.type || h.code || "—");
-      if (h.libre) type.appendChild(el("span", "mm-tag", "Autre"));
-      r.appendChild(type);
-      r.appendChild(el("td", null, h.operateur || "—"));
-      r.appendChild(el("td", "num", h.duree_reelle_min != null ? h.duree_reelle_min + " min" : "—"));
-      var c = el("td", "mm-com", h.commentaire || "");
-      c.title = h.commentaire || "";
-      r.appendChild(c);
-      tb.appendChild(r);
+      var li = el("li", "mm-op" + (h.libre ? " mm-op-autre" : ""));
+      var haut = el("div", "mm-op-haut");
+      haut.appendChild(el("span", "mm-op-nom", h.type || h.code || "—"));
+      if (h.libre) haut.appendChild(el("span", "mm-tag", "Autre"));
+      haut.appendChild(el("span", "mm-op-date", jourLisible(h.date_saisie)));
+      li.appendChild(haut);
+      var meta = [h.operateur || "", h.duree_reelle_min != null ? h.duree_reelle_min + " min" : ""].filter(Boolean).join(" · ");
+      if (meta) li.appendChild(el("div", "mm-op-meta", meta));
+      if (h.commentaire) li.appendChild(el("div", "mm-op-com", h.commentaire));
+      ul.appendChild(li);
     });
-    tab.appendChild(tb);
-    var w = el("div", "mm-table-wrap");
-    w.appendChild(tab);
-    b.appendChild(w);
+    b.appendChild(ul);
+    if (M.histo.length > LIGNES_HISTO) b.appendChild(el("div", "mm-histo-sous", "+ " + (M.histo.length - LIGNES_HISTO) + " dans MyMaintenance"));
     return b;
   }
 
   function lienMaintenance() {
     // Responsables : historique des opérations filtré sur la machine ;
     // atelier : ses tâches de maintenance (MyMaintenance choisit la vue).
-    var href = M.role === "fabrication" ? "/maintenance?vue=op-tasks"
+    return M.role === "fabrication" ? "/maintenance?vue=op-tasks"
       : "/maintenance?vue=operations" + (M.machine ? "&machine=" + encodeURIComponent(M.machine) : "");
-    var a = el("a", "mm-lien", "Ouvrir MyMaintenance →");
-    a.href = href;
-    return a;
   }
 
+  // Squelette construit une fois (le formulaire n'est jamais sorti de la
+  // page : un champ en cours de frappe garde son focus) ; à chaque rendu,
+  // pastilles, lien et historique seulement.
   function rendre() {
     if (!M.el) return;
-    if (!M.form) M.form = construireForm();
-    var f = M.form;
-    remplirCodes(f);
-    remplirMachines(f);
-    f.envoyer.disabled = M.envoi || M.refus;
-    f.envoyer.textContent = M.envoi ? "Enregistrement…" : "Enregistrer";
-    f.etat.textContent = M.refus ? "Enregistrement réservé à l'atelier et aux responsables maintenance." : M.erreur;
-    f.etat.classList.toggle("mm-erreur", !!(M.erreur || M.refus));
-
-    var tete = el("div", "mm-tete");
-    var tt = el("div", null);
-    tt.appendChild(el("h3", "mm-titre", "Opérations de maintenance"));
-    tt.appendChild(el("div", "mm-sous",
-      "Interventions déjà réalisées. Elles sont enregistrées dans MyMaintenance, comme si elles y avaient été saisies."));
-    tete.append(tt, lienMaintenance());
-    M.el.textContent = "";
-    M.el.append(tete, f.racine, historique());
+    if (!M.form) {
+      M.form = construireForm();
+      var tete = el("div", "mm-tete");
+      var ico = el("div", "mm-tete-ico");
+      ico.appendChild(icone("outil", 22));
+      var tt = el("div", "mm-tete-txt");
+      tt.appendChild(el("h3", "mm-titre", "Enregistrer une opération de maintenance"));
+      tt.appendChild(el("div", "mm-sous", "Intervention déjà réalisée. Elle rejoint l'historique de MyMaintenance."));
+      M.lien = el("a", "mm-lien");
+      M.lien.appendChild(document.createTextNode("Ouvrir MyMaintenance"));
+      M.lien.appendChild(icone("fleche", 14));
+      tete.append(ico, tt, M.lien);
+      M.corps = el("div", "mm-corps");
+      M.histoEl = el("div");
+      M.corps.append(M.form.racine, M.histoEl);
+      M.el.append(tete, M.corps);
+    }
+    dessinerForm(M.form);
+    M.lien.href = lienMaintenance();
+    var h = historique();
+    M.corps.replaceChild(h, M.histoEl);
+    M.histoEl = h;
   }
 
   function vue(opts) {
