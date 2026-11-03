@@ -349,7 +349,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>

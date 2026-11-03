@@ -253,7 +253,8 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
 .portal-vol-pied:hover{background:var(--accent);color:var(--bg)}
 .portal-vol-vide{padding:12px 10px;font-size:11.5px;color:var(--muted)}
 /* Le volet est une commodité souris et clavier : sur un écran tactile étroit,
-   un appui long n'existe pas et la tuile doit rester un simple bouton. */
+   les mêmes raccourcis s'ouvrent par un appui maintenu sur la tuile
+   (portalTuileFeuille). */
 @media (max-width:900px){.portal-vol-pop{display:none!important}}
 
 /* ── Tuiles : volet, épinglage, sections ──────────────────────────────── */
@@ -341,7 +342,7 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
     grid-template-columns:repeat(3, minmax(0, 1fr));
     gap:8px;
     width:100%;
-    max-width:min(100%, 320px);
+    max-width:100%;
     margin:0 auto;
     justify-items:stretch;
   }
@@ -377,7 +378,7 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
 @media (min-width:520px) and (max-width:900px){
   .portal-apps{
     grid-template-columns:repeat(4, minmax(0, 1fr));
-    max-width:min(100%, 400px);
+    max-width:min(100%, 560px);
     gap:10px;
   }
   .portal-app{max-height:88px}
@@ -832,12 +833,13 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 
   /* A traiter : les compteurs deja servis un par un, rendus tapables. */
   .portal-atraiter{width:100%}
-  .portal-atraiter-empty{
-    display:flex;align-items:center;gap:9px;padding:13px 14px;
-    border:1px solid var(--border);border-radius:12px;background:var(--card);
-    font-size:12.5px;color:var(--muted);
-  }
-  .portal-atraiter-empty svg{color:var(--success);flex:0 0 auto}
+  /* Feuille d'une tuile (appui maintenu) : titre, epingle, raccourcis du module. */
+  .portal-feuille-titre{padding:2px 22px 10px;font-size:15px;font-weight:800;color:var(--text);
+    border-bottom:1px solid var(--border);margin-bottom:6px}
+  .portal-feuille-corps{padding:4px 2px 0;border-top:1px solid var(--border);margin-top:6px}
+  .portal-feuille-corps .portal-vol-item{min-height:48px}
+  /* Rien à traiter : le bloc s'efface, les tuiles remontent. */
+  .portal-atraiter--vide{display:none}
 
   /* Atelier maintenant : etat instantane des machines. */
   .portal-atelier{display:block;order:6;width:100%}
@@ -871,13 +873,19 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   /* Un bloc sans donnee ne laisse pas un titre orphelin. */
   .portal-atelier--vide{display:none!important}
 
-  /* Pas de survol au doigt : le chevron des volets doit etre visible en
-     permanence, sinon les sous-menus du module — exactement ce qu'on vient
-     chercher au telephone — sont inatteignables. */
-  .portal-app .portal-app-chev{display:flex;width:26px;height:26px;top:4px;right:4px}
-  /* L'etoile reste au bureau : epingler est un geste de configuration, et a
-     22 px sur une tuile de 96 on la touche en voulant ouvrir l'application. */
-  .portal-app .portal-app-star{display:none!important}
+  /* Chevron et etoile restent au bureau : a 22 px sur une tuile de 96, on les
+     touche en voulant ouvrir l'application. Au doigt, les raccourcis du module
+     et l'epinglage passent par l'appui maintenu (portalTuileFeuille). */
+  .portal-app .portal-app-chev,.portal-app .portal-app-star{display:none!important}
+  /* Au doigt, :hover s'allume des qu'on pose le doigt, y compris pour faire
+     defiler, et reste allume ensuite. La couleur ne vient plus que de la classe
+     posee par attachPortalReorder quand l'appui est franc. */
+  .portal-app{-webkit-tap-highlight-color:transparent}
+  .portal-app:hover{border-color:var(--border)}
+  .portal-app:hover .portal-app-icon{background:var(--accent-bg);color:var(--accent)}
+  .portal-app.portal-app--appui{border-color:var(--accent)}
+  .portal-app.portal-app--appui .portal-app-icon{background:var(--accent);color:#fff}
+  .portal-app--disabled.portal-app--appui{border-color:var(--border)}
   .portal-apps-sec-btn{min-height:34px}
 
   /* Ligne machine : c'est un bouton, on annule le style natif. */
@@ -886,17 +894,17 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
     color:inherit;font:inherit;text-align:left;cursor:pointer;
   }
   .portal-mach:last-child{border-bottom:0}
-  .portal-mach:hover{background:var(--bg)}
+  .portal-mach:active{background:var(--bg)}
 
   /* Les blocs mobiles s'alignent sur la largeur de la grille de tuiles,
      sinon le portail donne l'impression de deux mises en page superposees. */
   .portal-mcol,.portal-atelier{
-    max-width:min(100%,320px);margin-left:auto;margin-right:auto;
+    max-width:100%;margin-left:auto;margin-right:auto;
   }
 }
 
 @media (min-width:520px) and (max-width:900px){
-  .portal-mcol,.portal-atelier{max-width:min(100%,400px)}
+  .portal-mcol,.portal-atelier{max-width:min(100%,560px)}
 }
 
 /* Portrait : l'ordre de lecture est bonjour → chercher → ce qui m'attend →
@@ -912,7 +920,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 @media (max-width:900px) and (orientation:landscape){
   .portal-page{
     display:grid;
-    grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-columns:auto minmax(0,1fr);
     grid-template-rows:auto minmax(0,1fr);
     gap:8px 14px;
     align-content:stretch;
@@ -939,15 +947,9 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   }
   .portal-msearch{height:38px;font-size:12.5px;border-radius:10px;padding:0 8px 0 11px}
   .portal-msearch-google{height:26px;font-size:10.5px;padding:0 8px}
-  .portal-corner-stack{
-    grid-column:3;grid-row:1;
-    position:static;flex-direction:row;flex-wrap:nowrap;justify-content:flex-end;
-    align-items:center;gap:6px;width:auto;margin:0;padding:0;
-    background:none;border:0;border-radius:0;box-shadow:none;
-  }
-  .portal-corner-stack .portal-settings-corner{width:34px;height:34px;border-radius:10px;
-    background:var(--card);border:1px solid var(--border)}
-  .portal-corner-stack .portal-settings-corner:hover{background:var(--bg);border-color:var(--accent)}
+  /* Les memes acces sont dans la feuille de l'avatar, comme en portrait : a huit
+     icones, cette barre debordait sur les tuiles. */
+  .portal-corner-stack{display:none!important}
   /* Le bloc paysage historique laissait ce conteneur en display:flex centre.
      Les deux en-tetes de section et les deux grilles de tuiles devenaient des
      items d'une meme ligne : ecrases, superposes, illisibles. Ici il empile. */
@@ -1347,6 +1349,52 @@ async function savePortalAppsOrder(ids){
     if(!same)toast('Ordre du portail enregistré');
   }catch(e){toast(e.message||'Enregistrement impossible','danger');}
 }
+// Appui maintenu puis lâché sur une tuile, au doigt : ce que la souris trouve au
+// survol (étoile, raccourcis du module). Même feuille que le menu de l'avatar.
+function portalTuileFeuille(tile){
+  const sheet=document.getElementById('msf-sheet-root');
+  const bd=document.getElementById('msf-sheet-backdrop');
+  const id=tile.getAttribute('data-portal-id');
+  if(!sheet||!bd||!id)return;
+  const nomEl=tile.querySelector('.portal-app-name');
+  const fav=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
+  const estFav=fav.indexOf(id)!==-1;
+  const icoEtoile=document.createElement('span');
+  icoEtoile.style.display='inline-flex';
+  icoEtoile.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="'+(estFav?'currentColor':'none')+
+    '" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">'+
+    '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/></svg>';
+  const btnFav=h('button',{
+    type:'button',
+    className:'msf-sheet-item',
+    onClick:()=>{
+      closeProfileSheet();
+      savePortalAppsFavoris(estFav?fav.filter(x=>x!==id):fav.concat([id]));
+    }
+  },
+    h('span',{className:'msf-sheet-item-ico'},icoEtoile),
+    h('span',{className:'msf-sheet-item-label'},estFav?'Retirer des favoris':'Ajouter aux favoris')
+  );
+  sheet.innerHTML='';
+  sheet.appendChild(h('div',{className:'msf-sheet-handle'}));
+  sheet.appendChild(h('div',{className:'portal-feuille-titre'},nomEl?nomEl.textContent:''));
+  sheet.appendChild(h('div',{className:'msf-sheet-list'},btnFav));
+  portalChargerVolets().then(volets=>{
+    const volet=(volets.tuiles||{})[id];
+    if(!volet||!(volet.groupes||[]).length||!sheet.classList.contains('open'))return;
+    const corps=h('div',{className:'portal-feuille-corps'});
+    portalVoletRemplirCorps(corps,volet);
+    sheet.appendChild(corps);
+  });
+  bd.classList.add('open');
+  bd.setAttribute('aria-hidden','false');
+  sheet.classList.add('open');
+  // Le navigateur peut émettre un clic tardif au lâcher, sur le voile qui vient
+  // d'apparaître : seul un appui commencé sur le voile referme.
+  let appuiVoile=false;
+  bd.onpointerdown=()=>{appuiVoile=true;};
+  bd.onclick=()=>{if(appuiVoile)closeProfileSheet();};
+}
 function attachPortalReorder(appsWrap){
   if(appsWrap._portalDndBound)return;
   appsWrap._portalDndBound=true;
@@ -1356,6 +1404,9 @@ function attachPortalReorder(appsWrap){
   // téléphone. Le navigateur garde la main sur le défilement jusque-là.
   const TOUCH_HOLD_MS=500;
   const TOUCH_SLOP=10;
+  // Délai avant de colorer la tuile : un doigt qui part faire défiler a déjà
+  // bougé, seul un appui franc l'atteint. Un appui bref colore au lâcher.
+  const TOUCH_APPUI_MS=130;
   let dragState=null;
 
   function ensurePlaceholder(){
@@ -1376,6 +1427,7 @@ function attachPortalReorder(appsWrap){
 
   function armTouchHold(tile){
     const top0=tile.getBoundingClientRect().top;
+    dragState.appuiTimer=setTimeout(()=>{tile.classList.add('portal-app--appui');},TOUCH_APPUI_MS);
     dragState.holdTimer=setTimeout(()=>{
       if(!dragState||dragState.tile!==tile||dragState.active)return;
       // Portail reconstruit pendant l'appui, ou page qui a défilé sous le doigt
@@ -1386,8 +1438,14 @@ function attachPortalReorder(appsWrap){
     },TOUCH_HOLD_MS);
   }
 
+  function clearTouchPress(st){
+    clearTimeout(st.holdTimer);
+    clearTimeout(st.appuiTimer);
+    st.tile.classList.remove('portal-app--appui');
+  }
+
   function abandonDrag(){
-    if(dragState)clearTimeout(dragState.holdTimer);
+    if(dragState)clearTouchPress(dragState);
     dragState=null;
     clearDocumentListeners();
   }
@@ -1434,13 +1492,20 @@ function attachPortalReorder(appsWrap){
     else appsWrap.insertBefore(ph,after);
   }
 
-  function finishDrag(){
+  function finishDrag(ev){
     if(!dragState)return;
-    const {tile,active,ghost,placeholder:ph,touch,holdTimer}=dragState;
-    clearTimeout(holdTimer);
+    const {tile,active,ghost,placeholder:ph,touch,moved}=dragState;
+    clearTouchPress(dragState);
     dragState=null;
     clearDocumentListeners();
-    if(!active)return;
+    if(!active){
+      // Appui bref : la tuile s'allume le temps que l'application s'ouvre.
+      if(touch&&ev&&ev.type==='pointerup'){
+        tile.classList.add('portal-app--appui');
+        setTimeout(()=>{tile.classList.remove('portal-app--appui');},600);
+      }
+      return;
+    }
 
     tile.style.display='';
     if(ph&&ph.parentNode){
@@ -1452,6 +1517,11 @@ function attachPortalReorder(appsWrap){
     if(touch){
       _portalDragSuppressClick=true;
       setTimeout(()=>{_portalDragSuppressClick=false;},450);
+      if(!moved){
+        // Après le clic tardif, sinon il tomberait sur la feuille, sous le doigt.
+        if(ev&&ev.type==='pointerup')setTimeout(()=>{portalTuileFeuille(tile);},80);
+        return;
+      }
     }
 
     // L'ordre enregistré est celui des DEUX rangées (favoris puis le reste) :
@@ -1479,6 +1549,10 @@ function attachPortalReorder(appsWrap){
       activateDrag(dragState.tile,e);
     }
     e.preventDefault();
+    if(dragState.touch&&!dragState.moved){
+      if(Math.abs(dx)<=TOUCH_SLOP&&Math.abs(dy)<=TOUCH_SLOP)return;
+      dragState.moved=true;
+    }
     const {ghost,offX,offY}=dragState;
     ghost.style.left=(e.clientX-offX)+'px';
     ghost.style.top=(e.clientY-offY)+'px';
@@ -1487,7 +1561,7 @@ function attachPortalReorder(appsWrap){
 
   function onPointerUp(e){
     if(!dragState||e.pointerId!==dragState.pointerId)return;
-    finishDrag();
+    finishDrag(e);
   }
 
   appsWrap.addEventListener('dragstart',e=>e.preventDefault());
@@ -1916,7 +1990,9 @@ function renderPortal(){
     (favTiles.length&&restTiles.length)?secTitre('Toutes les applications',btnRepli):null,
     appsWrap,
     apps.length?h('div',{className:'portal-apps-hint'},
-      favTiles.length
+      window.matchMedia('(max-width:900px)').matches
+        ?'Maintenir une tuile : glisser pour la déplacer, lâcher pour l\'épingler ou ouvrir ses raccourcis.'
+        :favTiles.length
         ?'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile épingle une application en favori (ordre et favoris enregistrés pour votre compte).'
         :'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile, au survol, épingle une application en favori.'):null
   );
@@ -2095,8 +2171,14 @@ function renderPortal(){
     _mobGoogleBtn
   );
 
+  // Le nombre de lignes de la dernière fois réserve la place : les tuiles ne
+  // sautent pas sous le doigt quand la réponse arrive, ni quand le portail se
+  // reconstruit. Sans ligne la dernière fois, le bloc part masqué.
+  const _atCle='mysifa_portail_atraiter_n';
+  const _atAvant=(()=>{try{return parseInt(localStorage.getItem(_atCle),10)||0;}catch(e){return 0;}})();
   const _atraiterBody=h('div',{className:'portal-atraiter-body'});
-  const _atraiterBlock=h('div',{className:'portal-atraiter'},
+  if(_atAvant>0)_atraiterBody.style.minHeight=(_atAvant*58)+'px';
+  const _atraiterBlock=h('div',{className:'portal-atraiter'+(_atAvant>0?'':' portal-atraiter--vide')},
     h('div',{className:'msf-sect'},h('b',null,'À traiter')),
     _atraiterBody
   );
@@ -2179,16 +2261,11 @@ function renderPortal(){
         }
 
         while(_atraiterBody.firstChild)_atraiterBody.removeChild(_atraiterBody.firstChild);
-        if(rows.length){
-          _atraiterBody.className='portal-atraiter-body msf-rows';
-          rows.forEach(r=>_atraiterBody.appendChild(r));
-        }else{
-          _atraiterBody.className='portal-atraiter-body';
-          _atraiterBody.appendChild(h('div',{className:'portal-atraiter-empty'},
-            iconEl('check-circle',18),
-            document.createTextNode('Rien à traiter — tout est à jour.')
-          ));
-        }
+        _atraiterBody.style.minHeight='';
+        _atraiterBody.className='portal-atraiter-body'+(rows.length?' msf-rows':'');
+        rows.forEach(r=>_atraiterBody.appendChild(r));
+        _atraiterBlock.classList.toggle('portal-atraiter--vide',!rows.length);
+        try{localStorage.setItem(_atCle,String(rows.length));}catch(e){}
       })
       .catch(()=>{});
   },0);

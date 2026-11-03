@@ -191,7 +191,8 @@
   // /api/auth/me, donc on attend qu'il existe — quelques secondes au plus, et
   // on renonce si la page visitée n'est pas le portail.
   function guetter() {
-    if (vu()) return;
+    // Écrite pour la souris (survol, étoile, barre d'icônes) : rien à montrer au doigt.
+    if (vu() || window.matchMedia('(max-width: 900px)').matches) return;
     var reste = 40;
     var t = setInterval(function () {
       reste -= 1;

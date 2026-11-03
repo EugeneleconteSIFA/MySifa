@@ -11096,7 +11096,7 @@ async function deleteUpdate(id) {
 
 </script>
 <script>window.__MYSIFA_APP__='maintenance';</script>
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script>
 if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
