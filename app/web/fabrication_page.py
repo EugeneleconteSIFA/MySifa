@@ -600,6 +600,7 @@ body.light table.fab-table tr.fab-row-last td{
   letter-spacing:.4px;color:var(--muted);border:1px solid var(--border);
   border-radius:20px;padding:2px 7px;white-space:nowrap}
 .fab-outil-vide{font-size:12px;color:var(--muted);padding:6px 2px}
+.fab-outil-meme{margin-bottom:8px}
 .fab-outil-choisi{display:flex;align-items:center;gap:5px;margin-top:6px;
   font-size:12px;font-weight:700;color:var(--success)}
 /* Plaque confirmée au démarrage : la proposition de la fiche en gros, deux
@@ -7736,7 +7737,9 @@ async function enregistrerChangementOutil(){
     showToast('Indiquez la '+nature+' démontée et la '+nature+' montée.','danger');
     return;
   }
-  if(S.outilAvant.id === S.outilApres.id){
+  // Même référence : admise pour une nature qui le permet (un cliché porte
+  // plusieurs tapis d'encrage), refusée sinon. Le serveur contrôle pareil.
+  if(S.outilAvant.id === S.outilApres.id && !ctx.meme_reference){
     showToast('La '+nature+' montée est la même que la '+nature+' démontée.','danger');
     return;
   }
@@ -7864,11 +7867,21 @@ function champOutil(role, ctx){
           +' posée sur cette machine. Corrigez si ce n\'est pas celle-là.'
         : 'Aucun changement de '+nature.toLowerCase()
           +' n\'a encore été saisi sur cette machine — cherchez le numéro.')
-    : 'La recherche interroge le référentiel, RVGI et les fiches techniques.';
+    : (ctx.meme_reference
+        ? 'Même référence, autre tapis : « Même '+nature.toLowerCase()+' ». Sinon, cherchez le numéro.'
+        : 'La recherche interroge le référentiel, RVGI et les fiches techniques.');
+  // Côté montée, pour une nature qui l'admet : remonter la référence démontée.
+  const memeBtn = (role==='apres' && ctx.meme_reference && S.outilAvant
+      && !(S.outilApres && S.outilApres.id === S.outilAvant.id))
+    ? h('button',{type:'button', className:'fab-btn fab-btn-ghost fab-btn-sm fab-outil-meme',
+        onClick:()=>{ S.outilApres = S.outilAvant; S.outilQApres = S.outilAvant.numero; S.outilResApres = null; render(); }},
+        svgIcon('refresh-ccw',13),' Même '+nature.toLowerCase()+' ('+S.outilAvant.numero+')')
+    : null;
 
   return h('div',{className:'fab-field'},
     h('label',null, nature+(role==='avant'?' démontée':' montée')),
     h('div',{className:'fab-field-hint'}, hint),
+    memeBtn,
     inp,
     choisi ? h('div',{className:'fab-outil-choisi'},
       svgIcon('check',13),' ', choisi.numero,
