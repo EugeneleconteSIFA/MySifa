@@ -4,12 +4,12 @@ Permet l'installation « Ajouter à l'écran d'accueil » (mobile) / « Installe
 """
 
 import json
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, Response
 
-from config import APP_VERSION, IS_STAGING, SEO_INDEXABLE, public_base_url
+from app.core.noindex import hote_indexable
+from config import APP_VERSION, IS_STAGING, public_base_url
 
 # Suffix des icônes MySifa (dark par défaut, -light en staging v1).
 _MYS_SFX = "-light" if IS_STAGING else ""
@@ -30,15 +30,9 @@ def _manifest_response(body: dict) -> Response:
     )
 
 
-def seo_indexable(request: Request) -> bool:
-    """Vrai sur l'instance de prod, appelée par son domaine public. Faux sur v1, sur l'ERP, sur une IP."""
-    hote = (request.headers.get("host") or "").split(":")[0].strip().lower()
-    return SEO_INDEXABLE and hote == (urlparse(public_base_url()).hostname or "").lower()
-
-
 @router.get("/robots.txt", include_in_schema=False)
 def robots(request: Request):
-    if not seo_indexable(request):
+    if not hote_indexable(request.headers.get("host")):
         return PlainTextResponse("User-agent: *\nDisallow: /\n")
     base = public_base_url()
     # Seule la page d'accueil est publique : le reste est derrière la connexion et répond « noindex ».
@@ -48,7 +42,7 @@ def robots(request: Request):
 
 @router.get("/sitemap.xml", include_in_schema=False)
 def sitemap(request: Request):
-    if not seo_indexable(request):
+    if not hote_indexable(request.headers.get("host")):
         return Response(status_code=404)
     base = public_base_url()
     return Response(

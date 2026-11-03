@@ -176,7 +176,7 @@ SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 IS_STAGING = (ENV_NAME == "v1")
 # Référencement : seule la page d'accueil de l'instance de prod, sur son domaine public
 # (public_base_url()), est ouverte aux moteurs. Staging, ERP et toutes les autres pages
-# (modules, portail Espace, API) répondent « noindex » (middleware de main.py).
+# (modules, portail Espace, API) répondent « noindex » (app/core/noindex.py).
 SEO_INDEXABLE = os.getenv("SEO_INDEXABLE", "0" if IS_STAGING else "1").strip().lower() in {"1", "true", "yes"}
 
 # MIGRATIONS_DISABLED : désactive les migrations de schéma au boot.
