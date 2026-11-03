@@ -1357,7 +1357,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script>window.__STOCK_UNITE_VENTE_DEFAUT__="__STOCK_UNITE_VENTE_DEFAUT__";</script>
-<script src="/static/mysifa_stock_modals.js?v=unite2"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite3"></script>
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>

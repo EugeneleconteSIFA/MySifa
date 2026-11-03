@@ -2647,7 +2647,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=unite2"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite3"></script>
 <script src="/static/mysifa_scanner.js?v=1"></script>
 <script src="/static/mysifa_donnees_prod.js?v=17"></script>
 <script src="/static/mysifa_destockage.js?v=11"></script>
@@ -9328,6 +9328,14 @@ function matiereRefEditPayload(item, fields) {
       payload.unites_par_palette = upp;
     }
   }
+  if (fields.prixInp) {
+    const raw = (fields.prixInp.value || '').replace(',', '.').trim();
+    const prix = raw === '' ? 0 : parseFloat(raw);
+    if (isNaN(prix) || prix < 0) {
+      return { error: 'Prix unitaire invalide — valeur positive attendue.' };
+    }
+    if (Math.abs(prix - Number(item.prix_unitaire || 0)) > 1e-9) payload.prix_unitaire = prix;
+  }
   if (fields.isMandrin && fields.ltInp) {
     // Toujours envoyée, même vide, pour autoriser l'effacement de la longueur.
     const raw = (fields.ltInp.value || '').replace(',', '.').trim();
@@ -9856,7 +9864,9 @@ function appendMatiereRefEditFields(parent, item) {
   function refreshLongueurTube() {
     const lt = parseFloat((ltInp.value || '').replace(',', '.'));
     const upp = parseFloat((uppInp.value || '').replace(',', '.'));
-    if (lt > 0 && upp > 0) {
+    if (lt > 0 && unChk.checked) {
+      ltHint.textContent = 'Longueur du tube acheté.';
+    } else if (lt > 0 && upp > 0) {
       ltHint.textContent = 'Une palette représente ' + fN(upp) + ' tubes, soit '
         + fN(Math.round(lt * upp / 1000)) + ' m de mandrin à découper.';
     } else if (lt > 0) {
@@ -9869,8 +9879,34 @@ function appendMatiereRefEditFields(parent, item) {
   }
   ltInp.addEventListener('input', refreshLongueurTube);
   uppInp.addEventListener('input', refreshLongueurTube);
+  unChk.addEventListener('change', refreshLongueurTube);
   refreshLongueurTube();
   ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp, ltHint);
+
+  // ── Prix unitaire des consommables (bagues, cartons, palettes…) ───────────
+  // Saisi ici par l'administration ; les matières de production gardent leur
+  // prix dans Coûts matières (config.STOCK_CATEGORIES_PRIX_DIRECT).
+  const prixDirect = !!item.prix_direct && isMatieresAdmin();
+  const prixInp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,35' } });
+  prixInp.value = Number(item.prix_unitaire) > 0 ? String(item.prix_unitaire) : '';
+  const prixLbl = el('label', null, '');
+  const prixHint = el('div', { cls: 'mp-hint' }, '');
+  function refreshPrixLabel() {
+    const c = (item.categorie || '').toLowerCase();
+    const u = (hasCond && unChk.checked) ? (unSel.value || uniteAchat)
+      : hasCond ? uniteAchat
+      : c === 'palette' ? 'palette' : 'unité';
+    prixLbl.textContent = 'Prix unitaire (€ / ' + u + ')';
+    const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+    const prix = parseFloat((prixInp.value || '').replace(',', '.'));
+    prixHint.textContent = (hasCond && !unChk.checked && upp > 0 && prix > 0)
+      ? 'Soit ' + (prix * upp).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' € la palette de ' + fN(upp) + ' ' + uniteAchat + 's.'
+      : 'Repris dans la valorisation et dans Coûts matières.';
+  }
+  [prixInp, uppInp].forEach(i => i.addEventListener('input', refreshPrixLabel));
+  [unChk, unSel].forEach(i => i.addEventListener('change', refreshPrixLabel));
+  refreshPrixLabel();
+  const prixWrap = prixDirect ? el('div', { cls: 'mp-field' }, prixLbl, prixInp, prixHint) : null;
 
   // ── Conditionnement à l'achat des adhésifs ────────────────────────────────
   // Le stock est au kilo ; ces deux champs décrivent comment l'adhésif ARRIVE
@@ -9965,6 +10001,7 @@ function appendMatiereRefEditFields(parent, item) {
       fscWrap,
     ),
     sectionConditionnement,
+    prixWrap ? mpFormSection('Prix', prixWrap) : null,
     mpFormSection('Stock & inventaire',
       el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
       el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
@@ -9980,7 +10017,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, unSel, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, unSel, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc, prixInp: prixWrap ? prixInp : null };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -24993,15 +25030,18 @@ function buildValorisationTableRow(item) {
   // des colonnes Sous-total achat € et Prix de vente. Le conditionnement
   // (métrage par bobine, unités par palette) se règle depuis les actions.
   let cfgBtn = null;
-  if (item.laizee || item.avec_conditionnement) {
+  const prixSeul = !item.laizee && !item.avec_conditionnement && !!item.prix_direct && isMatieresAdmin();
+  if (item.laizee || item.avec_conditionnement || prixSeul) {
     const aConfigurer = item.laizee
       ? !((item.metres_lineaires_par_bobine || 0) > 0)
+      : prixSeul ? !((item.prix_unitaire || 0) > 0)
       : !((item.unites_par_palette || 0) > 0);
-    const libelle = item.laizee ? 'Métrage' : 'Conditionnement';
+    const libelle = item.laizee ? 'Métrage' : prixSeul ? 'Prix' : 'Conditionnement';
     cfgBtn = el('button', {
       type: 'button',
       title: item.laizee ? 'Éditer le métrage par bobine'
-        : 'Éditer le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
+        : prixSeul ? 'Saisir le prix unitaire'
+        : 'Éditer le prix et le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
       style: 'background:var(--card);border:1px solid ' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--border)')
         + ';border-radius:6px;padding:4px 8px;cursor:pointer;color:' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--text2)')
         + ';font-size:11px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap',
@@ -25359,27 +25399,50 @@ async function openValorisationConditionnementModal(matiereId) {
   box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px' },
     (item.reference || '') + ' — ' + (item.designation || '')));
 
-  const uniteAchat = item.unite_achat || 'unité';
+  // Une bague tenue à l'unité se paie à la bague, pas au tube.
+  const sansPalette = !!item.stock_a_l_unite || !item.avec_conditionnement;
+  const uniteAchat = sansPalette ? (item.unite_achat && !item.stock_a_l_unite ? item.unite_achat
+    : (item.unite === 'unite' ? 'unité' : (item.unite || 'unité'))) : (item.unite_achat || 'unité');
   const prixUnit = Number(item.prix_unitaire || 0);
-  const uppInp = el('input', { type: 'number', step: '1', min: '0',
-    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  const champStyle = 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums';
+  const labelStyle = 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px';
+  const uppInp = el('input', { type: 'number', step: '1', min: '0', style: champStyle });
   uppInp.value = String(Number(item.unites_par_palette || 0) || '');
+  // Consommable : le prix unitaire se saisit ici (administration). Sinon il
+  // reste en lecture seule, il appartient à Coûts matières.
+  const prixEditable = !!item.prix_direct && isMatieresAdmin();
+  const prixInp = prixEditable
+    ? el('input', { type: 'number', step: '0.0001', min: '0', placeholder: 'Ex. 0,35', style: champStyle })
+    : null;
+  if (prixInp) prixInp.value = prixUnit > 0 ? String(prixUnit) : '';
+  const prixSaisi = () => prixInp ? (parseFloat((prixInp.value || '').replace(',', '.')) || 0) : prixUnit;
 
-  box.appendChild(valBlocPrixLectureSeule(item,
-    prixUnit > 0
-      ? prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/' + uniteAchat
-      : 'non valorisé'));
-  box.appendChild(el('div', { style: 'height:14px' }));
-  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, uniteAchat + ' par palette'));
-  box.appendChild(uppInp);
+  if (prixInp) {
+    box.appendChild(el('label', { style: labelStyle }, 'Prix unitaire (€ / ' + uniteAchat + ')'));
+    box.appendChild(prixInp);
+  } else {
+    box.appendChild(valBlocPrixLectureSeule(item,
+      prixUnit > 0
+        ? prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/' + uniteAchat
+        : 'non valorisé'));
+  }
+  // Tenue à l'unité, palette, autre : pas de conditionnement à saisir.
+  if (!sansPalette) {
+    box.appendChild(el('div', { style: 'height:14px' }));
+    box.appendChild(el('label', { style: labelStyle }, uniteAchat + ' par palette'));
+    box.appendChild(uppInp);
+  }
 
   // Aperçu prix palette : le prix vient de Coûts matières, seul le
   // conditionnement bouge ici.
   const preview = el('div', { style: 'margin-top:12px;font-size:12px;color:var(--text2);background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:10px 12px' });
   const updatePreview = () => {
-    const u = parseFloat((uppInp.value || '').replace(',', '.')) || 0;
-    if (prixUnit > 0 && u > 0) {
-      const total = prixUnit * u;
+    const u = sansPalette ? 1 : (parseFloat((uppInp.value || '').replace(',', '.')) || 0);
+    const prix = prixSaisi();
+    if (sansPalette) {
+      preview.textContent = 'Valorisation = quantité × prix unitaire.';
+    } else if (prix > 0 && u > 0) {
+      const total = prix * u;
       preview.innerHTML = '';
       preview.append(
         el('span', { style: 'color:var(--muted)' }, 'Prix palette calculé : '),
@@ -25391,6 +25454,7 @@ async function openValorisationConditionnementModal(matiereId) {
     }
   };
   uppInp.addEventListener('input', updatePreview);
+  if (prixInp) prixInp.addEventListener('input', updatePreview);
   updatePreview();
   box.appendChild(preview);
 
@@ -25404,15 +25468,26 @@ async function openValorisationConditionnementModal(matiereId) {
     type: 'button',
     style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
     on: { click: async () => {
-      const upp = parseFloat((uppInp.value || '').replace(',', '.'));
-      if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
+      const corps = {};
+      if (!sansPalette) {
+        const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+        if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
+        corps.unites_par_palette = upp;
+      }
+      if (prixInp) {
+        const raw = (prixInp.value || '').replace(',', '.').trim();
+        const prix = raw === '' ? 0 : parseFloat(raw);
+        if (isNaN(prix) || prix < 0) { showToast('Prix unitaire invalide — valeur positive attendue.', 'danger'); return; }
+        if (Math.abs(prix - prixUnit) > 1e-9) corps.prix_unitaire = prix;
+      }
+      if (!Object.keys(corps).length) { root.innerHTML = ''; return; }
       try {
         await api('/api/stock/matieres/' + matiereId, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ unites_par_palette: upp }),
+          body: JSON.stringify(corps),
         });
-        showToast('Conditionnement enregistré.', 'success');
+        showToast('prix_unitaire' in corps ? 'Prix et conditionnement enregistrés.' : 'Conditionnement enregistré.', 'success');
         root.innerHTML = '';
         await loadValorisation();
       } catch (e) {
@@ -25425,7 +25500,7 @@ async function openValorisationConditionnementModal(matiereId) {
 
   overlay.appendChild(box);
   root.appendChild(overlay);
-  setTimeout(() => uppInp.focus(), 50);
+  setTimeout(() => (prixInp || uppInp).focus(), 50);
 }
 
 /**
