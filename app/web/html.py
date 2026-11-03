@@ -1,14 +1,11 @@
 import functools as _functools
 import json as _json
+import html as _html
 from config import (
     APP_VERSION,
     APP_META_DESCRIPTION,
     APP_PAGE_TITLE,
-    APP_OG_IMAGE,
-    APP_AUTHOR_NAME,
-    APP_AUTHOR_URL,
     SEO_INDEXABLE,
-    public_base_url,
     THEME_COLOR_META,
     ENV_NAME,
     IS_STAGING,
@@ -11132,37 +11129,11 @@ _DEFAULT_CONFIG = {
 }
 
 
-def _html_attr(v: str) -> str:
-    return (v.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;"))
-
-
-def _seo_head() -> str:
-    """Balises de la page d'accueil publique : canonical, Open Graph, données structurées."""
-    base = public_base_url()
-    img = APP_OG_IMAGE if APP_OG_IMAGE.startswith("http") else base + APP_OG_IMAGE
-    title, desc = _html_attr(APP_PAGE_TITLE), _html_attr(APP_META_DESCRIPTION)
-    ld = {"@context": "https://schema.org", "@type": "WebApplication", "name": APP_NAME, "url": base + "/",
-          "description": APP_META_DESCRIPTION, "applicationCategory": "BusinessApplication", "operatingSystem": "Web",
-          "inLanguage": "fr", "publisher": {"@type": "Organization", "name": APP_ORG_NAME},
-          "author": {"@type": "Person", "name": APP_AUTHOR_NAME, "url": APP_AUTHOR_URL}}
-    return "\n".join([
-        f'<link rel="canonical" href="{base}/">',
-        f'<meta property="og:type" content="website">',
-        f'<meta property="og:site_name" content="{_html_attr(APP_NAME)}">',
-        f'<meta property="og:locale" content="fr_FR">',
-        f'<meta property="og:title" content="{title}">',
-        f'<meta property="og:description" content="{desc}">',
-        f'<meta property="og:url" content="{base}/">',
-        f'<meta property="og:image" content="{_html_attr(img)}">',
-        '<meta property="og:image:width" content="1200">',
-        '<meta property="og:image:height" content="630">',
-        '<meta name="twitter:card" content="summary_large_image">',
-        '<script type="application/ld+json">' + _json.dumps(ld, ensure_ascii=False).replace("</", "<\\/") + "</script>",
-    ])
-
-
 # Rendu 100% déterminé par initial_app (le reste = constantes de config lues
 # au boot) : cache pour éviter 84 .replace() sur ~500 Ko à chaque hit.
+from app.web.components.seo_accueil import NOINDEX, seo_head as seo_head_accueil  # noqa: E402
+
+
 @_functools.lru_cache(maxsize=32)
 def render_frontend_html(initial_app: str = "portal") -> str:
     cfg = _MODULE_CONFIG.get(initial_app, _DEFAULT_CONFIG)
@@ -11196,10 +11167,10 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         page_title = brand
     else:
         page_title = f"{cfg['app_title']} — {brand}"
-    seo_head = '<meta name="robots" content="noindex, nofollow">'
+    seo_head = NOINDEX
     if initial_app == "portal" and SEO_INDEXABLE:
         page_title = APP_PAGE_TITLE
-        seo_head = _seo_head()
+        seo_head = seo_head_accueil()
     return (
         _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
@@ -11214,7 +11185,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__FAV_SFX2__", fav_sfx)
         .replace("__FAV_ICO__", "/static/favicon-light-32.png" if IS_STAGING else "/static/favicon.ico")
         .replace("__TOUCH_ICON__", touch_icon)
-        .replace("__PAGE_TITLE__", _html_attr(page_title))
+        .replace("__PAGE_TITLE__", _html.escape(page_title, quote=False))
         .replace("__SEO_HEAD__", seo_head)
         .replace("__BRAND__", brand)
         .replace("__APP_TITLE__", cfg["app_title"])
