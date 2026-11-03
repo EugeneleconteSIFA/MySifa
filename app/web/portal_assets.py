@@ -97,7 +97,8 @@ body.light .rvgi-mark .rvgi-clair{display:block}
   opacity:0;pointer-events:none;
 }
 .portal-apps{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:stretch}
-.portal-apps--reorderable .portal-app:not(.portal-app--busy){cursor:grab;touch-action:none}
+.portal-apps--reorderable .portal-app:not(.portal-app--busy){cursor:grab;touch-action:manipulation;
+  -webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .portal-apps--reorderable .portal-app--dragging{cursor:grabbing;opacity:.92;z-index:5;
   box-shadow:0 12px 36px rgba(0,0,0,.35);transform:scale(1.02)}
 .portal-apps--reorderable .portal-app--placeholder{
@@ -1350,6 +1351,11 @@ function attachPortalReorder(appsWrap){
   if(appsWrap._portalDndBound)return;
   appsWrap._portalDndBound=true;
   const DRAG_THRESHOLD=6;
+  // Au doigt, un appui qui glisse est un défilement : le déplacement ne s'arme
+  // qu'après un appui maintenu sans bouger, comme sur l'écran d'accueil d'un
+  // téléphone. Le navigateur garde la main sur le défilement jusque-là.
+  const TOUCH_HOLD_MS=500;
+  const TOUCH_SLOP=10;
   let dragState=null;
 
   function ensurePlaceholder(){
@@ -1366,6 +1372,24 @@ function attachPortalReorder(appsWrap){
     document.removeEventListener('pointermove',onPointerMove,true);
     document.removeEventListener('pointerup',onPointerUp,true);
     document.removeEventListener('pointercancel',onPointerUp,true);
+  }
+
+  function armTouchHold(tile){
+    const top0=tile.getBoundingClientRect().top;
+    dragState.holdTimer=setTimeout(()=>{
+      if(!dragState||dragState.tile!==tile||dragState.active)return;
+      // Portail reconstruit pendant l'appui, ou page qui a défilé sous le doigt
+      // sans que le navigateur l'ait signalé : ce n'est plus cette tuile qu'on tient.
+      if(!tile.isConnected||Math.abs(tile.getBoundingClientRect().top-top0)>TOUCH_SLOP){abandonDrag();return;}
+      activateDrag(tile,{clientX:dragState.startX,clientY:dragState.startY});
+      if(navigator.vibrate){try{navigator.vibrate(12);}catch(err){}}
+    },TOUCH_HOLD_MS);
+  }
+
+  function abandonDrag(){
+    if(dragState)clearTimeout(dragState.holdTimer);
+    dragState=null;
+    clearDocumentListeners();
   }
 
   function activateDrag(tile,e){
@@ -1412,7 +1436,8 @@ function attachPortalReorder(appsWrap){
 
   function finishDrag(){
     if(!dragState)return;
-    const {tile,active,ghost,placeholder:ph}=dragState;
+    const {tile,active,ghost,placeholder:ph,touch,holdTimer}=dragState;
+    clearTimeout(holdTimer);
     dragState=null;
     clearDocumentListeners();
     if(!active)return;
@@ -1423,6 +1448,11 @@ function attachPortalReorder(appsWrap){
       ph.parentNode.removeChild(ph);
     }
     if(ghost&&ghost.parentNode)ghost.parentNode.removeChild(ghost);
+    // Doigt levé sans avoir bougé : le navigateur peut émettre un clic tardif.
+    if(touch){
+      _portalDragSuppressClick=true;
+      setTimeout(()=>{_portalDragSuppressClick=false;},450);
+    }
 
     // L'ordre enregistré est celui des DEUX rangées (favoris puis le reste) :
     // ne remonter que le conteneur qu'on vient de manipuler effacerait l'autre.
@@ -1441,6 +1471,10 @@ function attachPortalReorder(appsWrap){
     const dx=e.clientX-dragState.startX;
     const dy=e.clientY-dragState.startY;
     if(!dragState.active){
+      if(dragState.touch){
+        if(Math.abs(dx)>TOUCH_SLOP||Math.abs(dy)>TOUCH_SLOP)abandonDrag();
+        return;
+      }
       if(Math.abs(dx)<DRAG_THRESHOLD&&Math.abs(dy)<DRAG_THRESHOLD)return;
       activateDrag(dragState.tile,e);
     }
@@ -1457,6 +1491,14 @@ function attachPortalReorder(appsWrap){
   }
 
   appsWrap.addEventListener('dragstart',e=>e.preventDefault());
+  // Une fois la tuile attrapée, le doigt la déplace : la page ne défile plus.
+  // À poser avant le début du geste, Safari ignore un écouteur ajouté en cours.
+  appsWrap.addEventListener('touchmove',e=>{
+    if(dragState&&dragState.active&&e.cancelable)e.preventDefault();
+  },{passive:false});
+  appsWrap.addEventListener('contextmenu',e=>{
+    if(dragState&&dragState.touch)e.preventDefault();
+  });
 
   appsWrap.addEventListener('pointerdown',e=>{
     if(e.button!==0)return;
@@ -1471,10 +1513,12 @@ function attachPortalReorder(appsWrap){
       startY:e.clientY,
       active:false,
       pointerId:e.pointerId,
+      touch:e.pointerType!=='mouse',
     };
     document.addEventListener('pointermove',onPointerMove,true);
     document.addEventListener('pointerup',onPointerUp,true);
     document.addEventListener('pointercancel',onPointerUp,true);
+    if(dragState.touch)armTouchHold(tile);
   });
 }
 
