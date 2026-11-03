@@ -149,7 +149,22 @@
     + 'border:1px solid color-mix(in srgb,var(--success) 45%,transparent);background:color-mix(in srgb,var(--success) 12%,var(--card))}'
     + '.dp-al-c b{color:inherit}'
     + '.dp-al-c.nc{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent);'
-    + 'background:color-mix(in srgb,var(--danger) 12%,var(--card))}';
+    + 'background:color-mix(in srgb,var(--danger) 12%,var(--card))}'
+    // Section Qualité de la fiche dossier : un contrôle par carte.
+    + '.dp-q{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;margin-bottom:14px}'
+    + '.dp-q-c{border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--card);display:flex;flex-direction:column;gap:5px;min-width:0}'
+    + '.dp-q-nom{font-size:13px;font-weight:700;color:var(--text)}'
+    + '.dp-q-sous{font-size:11px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}'
+    + '.dp-q-l{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--text2)}'
+    + '.dp-q-l>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+    + '.dp-q-l b{font-variant-numeric:tabular-nums;color:var(--text);white-space:nowrap}'
+    + '.dp-q-l b.ok{color:var(--success)}.dp-q-l b.nc{color:var(--danger)}'
+    + '.dp-q-btn{align-self:flex-start;margin-top:2px;background:var(--bg);border:1px solid var(--border);border-radius:8px;'
+    + 'padding:4px 9px;font:inherit;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer}'
+    + '.dp-q-btn:hover{border-color:var(--accent)}'
+    // Format / laize remontés dans l'en-tête de la fiche (MyProd) : en ligne.
+    + '.dp-ident.dp-ident-tete{display:inline-flex;margin:0;gap:6px;vertical-align:middle}'
+    + '.dp-ident.dp-ident-tete span{padding:2px 8px;font-size:12px}';
 
   // ── Alertes validées pendant le dossier ─────────────────────────────────
   // Une valeur relevée = une courbe dans le temps (une seule série : le titre
@@ -254,6 +269,74 @@
     return h + '</div>';
   }
 
+  // ── Section Qualité de la fiche dossier ─────────────────────────────────
+  // Les contrôles validés pendant le dossier, une carte par alerte : ce qui a
+  // été testé, combien de fois, et le résultat en une ligne par question.
+  // Les courbes restent dans la fenêtre « Alertes validées ».
+  function qualiteHtml(alertes, no) {
+    if (!Array.isArray(alertes)) return '';
+    let h = '<div class="dp-titre">Qualité <span class="dp-n">' + alertes.length + '</span></div>';
+    if (!alertes.length) return h + '<div class="dp-vide" style="font-size:13px;margin-bottom:14px">Aucun contrôle validé sur ce dossier.</div>';
+    const parAlerte = {}, ordre = [];
+    alertes.forEach(a => {
+      const k = a.alert_id || a.nom;
+      if (!parAlerte[k]) { parAlerte[k] = []; ordre.push(k); }
+      parAlerte[k].push(a);
+    });
+    h += '<div class="dp-q">';
+    ordre.forEach(k => {
+      const acks = parAlerte[k], items = acks[acks.length - 1].items || [];
+      let lignes = '', pesees = false;
+      items.forEach((it, idx) => {
+        const cle = String(idx), lib = esc(it.label || (it.type === 'value' ? 'Valeur' : 'Contrôle'));
+        const u = it.unit ? ' ' + esc(it.unit) : '';
+        if (it.type === 'value') {
+          const min = nombreFr(it.min), max = nombreFr(it.max);
+          const dehors = (v) => (min !== null && v < min) || (max !== null && v > max);
+          const vals = [];
+          let der = null;
+          acks.forEach(a => {
+            const r = (a.reponses || {})[cle];
+            const ns = (Array.isArray(r) ? r : [r]).map(nombreFr).filter(v => v !== null);
+            if (ns.length) { der = ns; vals.push(...ns); }
+          });
+          if (!der) return;
+          if (it.points_libres) pesees = true;
+          // Plusieurs mesures (fronts) : la moyenne de la dernière validation.
+          const moy = der.reduce((s, v) => s + v, 0) / der.length;
+          const val = der.length > 1 ? 'moy. ' + nombre(Math.round(moy * 1000) / 1000) + u : nombre(der[0]) + u;
+          const plage = vals.length > 1 ? ' · ' + nombre(Math.min(...vals)) + '–' + nombre(Math.max(...vals)) : '';
+          lignes += '<div class="dp-q-l"><span title="' + lib + '">' + lib + '</span><b'
+            + (vals.some(dehors) ? ' class="nc" title="Valeur hors tolérance"' : '') + '>' + val
+            + '<span class="dp-q-sous">' + plage + '</span></b></div>';
+        } else {
+          const nc = new Set(it.nc_responses || []);
+          let rep = 0, ko = 0;
+          acks.forEach(a => {
+            const r = (a.reponses || {})[cle];
+            const vs = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
+            if (!vs.length) return;
+            rep++;
+            if (vs.some(v => nc.has(v))) ko++;
+          });
+          if (!rep) return;
+          lignes += '<div class="dp-q-l"><span title="' + lib + '">' + lib + '</span>'
+            + (ko ? '<b class="nc">' + ko + ' NC sur ' + rep + '</b>'
+                  : '<b class="ok">✓ ' + (rep > 1 ? rep + ' conformes' : 'conforme') + '</b>') + '</div>';
+        }
+      });
+      const coms = acks.filter(a => (a.commentaire || '').trim()).length;
+      h += '<div class="dp-q-c"><div><div class="dp-q-nom">' + esc(acks[0].nom) + '</div>'
+        + '<div class="dp-q-sous">' + acks.length + ' validation' + (acks.length > 1 ? 's' : '') + ' · '
+        + esc(dateCourte(acks[0].ack_at)) + (acks.length > 1 ? ' → ' + esc(dateCourte(acks[acks.length - 1].ack_at)) : '')
+        + (coms ? ' · ' + coms + ' commentaire' + (coms > 1 ? 's' : '') : '') + '</div></div>'
+        + lignes
+        + (pesees && no ? '<button type="button" class="dp-q-btn" data-pesees data-pesees-dossier="' + esc(no) + '">Pesées par front</button>' : '')
+        + '</div>';
+    });
+    return h + '</div>';
+  }
+
   // ── Théorique (devis) contre réel ───────────────────────────────────────
   // Même calcul que la Rentabilité (`comparaison_pour_dossier`), lu tel quel :
   // l'écart vient du serveur, l'écran ne fait que dire s'il est bon ou non.
@@ -270,11 +353,6 @@
     const dv = c.devis || {};
     return 'Devis' + (dv.client ? ' ' + esc(dv.client) : '') + (dv.date_devis ? ' du ' + esc(String(dv.date_devis).slice(0, 10).split('-').reverse().join('/')) : '')
       + (c.palier && Number(c.palier.qte_retenue) > 0 ? ' · recalé sur ' + nombre(c.palier.qte_retenue) + ' étiquettes' : '');
-  }
-  function devisConclusion(c) {
-    const concl = c.conclusion || {};
-    const coul = {success: 'var(--success)', warn: 'var(--warn)', danger: 'var(--danger)'}[concl.color] || 'var(--muted)';
-    return concl.label ? '<span class="dp-cmp-concl" style="--c:' + coul + '">' + esc(concl.label) + '</span>' : '';
   }
 
   function comparaisonHtml(c) {
@@ -429,7 +507,8 @@
     const vit = (v) => nombre(Math.round(Number(v) * 10) / 10) + ' m/min';
     const devis = (v, fmt, cle, plusEstMieux) => (c && Number(v || 0))
       ? 'Devis ' + fmt(v) + ' · ' + ecartHtml(ec, cle, plusEstMieux) : '';
-    return (c ? '<div class="dp-devis">' + devisSource(c) + devisConclusion(c) + '</div>' : '')
+    // Pas de conclusion en badge (« Mitigé ») : les écarts des cartes la disent.
+    return (c ? '<div class="dp-devis">' + devisSource(c) + '</div>' : '')
       + '<div class="dp-cartes dp-3">'
       + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
       + carte('Métrage', q.metrage_m ? nombre(Math.round(q.metrage_m)) + ' m' : '—', d.alerte ? 'var(--danger)' : 'var(--accent)',
@@ -445,16 +524,18 @@
   }
 
   // Format, laize et matière du dossier : ce qui décrit le produit fabriqué.
-  function identiteHtml(id) {
+  // `tete` : MyProd la déplace à côté de la machine, dans l'en-tête de la fiche.
+  function identiteHtml(id, tete) {
     if (!id) return '';
     const puce = (lib, v) => v ? '<span><em>' + lib + '</em>' + esc(v) + '</span>' : '';
     const h = puce('Format', String(id.format || '').replace(/(\d+)\.0\b/g, '$1')) + puce('Laize', id.laize_mm ? nombre(id.laize_mm) + ' mm' : '')
       + puce('Matière', id.matiere);
-    return h ? '<div class="dp-ident">' + h + '</div>' : '';
+    return h ? '<div class="dp-ident' + (tete ? ' dp-ident-tete' : '') + '">' + h + '</div>' : '';
   }
 
   // `opts.fiche` : fiche dossier de MyProd — cartes resserrées, devis dans
-  // les cartes, déroulé des saisies.
+  // les cartes, section Qualité, déroulé des saisies. `opts.no` : référence
+  // du dossier (bouton « Pesées par front »).
   function prodHtml(d, opts) {
     const fiche = !!(opts && opts.fiche);
     const st = d.stats || {};
@@ -466,7 +547,7 @@
     const dur = (m) => Number(m || 0) ? duree(m) : vide;
     let h = '<style>' + DP_CSS + '</style><div class="dp">';
     if (d.alerte) h += '<div class="dp-alerte">' + esc(d.alerte.charAt(0).toUpperCase() + d.alerte.slice(1)) + '.</div>';
-    if (fiche) h += identiteHtml(d.identite) + cartesFicheHtml(d) + friseHtml(d.saisies, d.alertes);
+    if (fiche) h += identiteHtml(d.identite, true) + cartesFicheHtml(d) + qualiteHtml(d.alertes, opts.no) + friseHtml(d.saisies, d.alertes);
     else h += '<div class="dp-cartes">'
       + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
       + carte('Calage', duree(tt.calage_min), DP_CATS.calage[1])

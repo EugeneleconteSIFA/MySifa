@@ -169,6 +169,26 @@ check("filtre machine",
       [l["no_dossier"] for l in alertes_pesees.historique(c2, machine="Cohésio 1")["alertes"][0]["lignes"]], ["C"])
 check("filtre dossier", len(alertes_pesees.historique(c2, no_dossier="A")["alertes"][0]["lignes"]), 1)
 check("machines proposées", h["machines"], ["Cohésio 1", "Cohésio 2"])
+check("dossiers : le plus récemment pesé d'abord", [d["no_dossier"] for d in a["dossiers"]], ["B", "A", "C"])
+
+# Valeurs à vérifier (cas du 30/10 : 4,266 g au milieu de pesées à 1,4 g).
+qs3 = [{"index": 2, "multiple": True}, {"index": 1, "multiple": False}]
+
+
+def L(dos, fronts, colle=None):
+    return {"no_dossier": dos, "machine": "M", "valeurs": {"2": fronts, "1": [colle] if colle else []}}
+
+
+lignes = [L("768", [1.415, 1.421, 1.419], 21.5), L("768", [4.266, 4.264], 22.6),
+          L("768", [1.454, 1.458], 22.5), L("768", [1.432, 1.430, 1.441], 22.5),
+          L("729", [0.736, 0.741, 0.98]), L("771", [24.9, 26.2, 25.7], 25.6)]
+gs = {g["no_dossier"]: g for g in alertes_pesees.par_dossier(lignes, qs3)}
+check("loin de la médiane du dossier", lignes[1]["aberrants"], {"2": [0, 1]})
+check("pesée cohérente : rien", lignes[0]["aberrants"], {})
+check("un front loin des autres fronts", lignes[4]["aberrants"], {"2": [2]})
+check("dossier d'une seule pesée cohérente : rien", lignes[5]["aberrants"], {})
+check("compte par dossier", (gs["768"]["nb_aberrants"], gs["771"]["nb_aberrants"]), (2, 0))
+check("grammage de colle comparé aussi", "1" in lignes[1]["aberrants"], False)
 
 print("\n" + ("TOUT EST VERT" if not FAIL else f"{len(FAIL)} ÉCHEC(S)"))
 sys.exit(1 if FAIL else 0)

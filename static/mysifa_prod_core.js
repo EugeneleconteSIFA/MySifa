@@ -11605,6 +11605,13 @@ function _prodVueCss(){
     +'.ps-l:hover{background:var(--bg)}'
     +'.ps-l.actif{background:var(--accent-bg);box-shadow:inset 3px 0 0 var(--accent)}'
     +'.ps-l-nom{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    // Dossier en cours sur une machine : puce verte qui clignote.
+    +'.ps-l-live{display:none;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:1px;'
+    +'animation:ps-clignote 1.4s ease-in-out infinite}'
+    +'.ps-l.en-cours .ps-l-live{display:inline-block}'
+    +'@keyframes ps-clignote{0%,100%{opacity:1}50%{opacity:.25}}'
+    +'@media (prefers-reduced-motion:reduce){.ps-l-live{animation:none}}'
+    +'.perf-eco .ps-l-live,.reduce-anim .ps-l-live{animation:none}'
     +'.ps-l.actif .ps-l-nom{color:var(--accent)}'
     +'.ps-l-sous{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}'
     +'.ps-barre{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--bg)}'
@@ -11620,6 +11627,7 @@ function _prodVueCss(){
     +'.ps-fiche-no{font-size:20px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}'
     +'.ps-fiche-client{font-size:14px;font-weight:600;color:var(--text);margin-top:2px}'
     +'.ps-fiche-meta{font-size:12px;color:var(--muted);margin-top:2px}'
+    +'.ps-fiche-meta-ident{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-top:4px}'
     +'.ps-fiche-defaut{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
     +'vertical-align:3px;color:var(--accent);background:var(--accent-bg)}'
     +'.ps-fiche-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}'
@@ -11649,7 +11657,7 @@ function _psDetailCharger(no, cible, hote){
   if(cache && cache.html){ cible.innerHTML = cache.html; _psBoutonSignaler(no, cible, hote); return; }
   cible.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Chargement des saisies…</div>';
   api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no)).then(d=>{
-    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d, {fiche:true})
+    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d, {fiche:true, no})
       : '<div style="color:var(--danger)">Affichage indisponible — rechargez la page.</div>';
     S.psDetailCache[no] = {html};
     if(cible.isConnected){ cible.innerHTML = html; _psBoutonSignaler(no, cible, hote); }
@@ -11664,6 +11672,19 @@ function _psDetailCharger(no, cible, hote){
 function _psBoutonSignaler(no, cible, hote){
   const panneau = cible.querySelector('.dp');
   if(!panneau || !hote) return;
+  // Format et laize à côté de la machine : une ligne de moins dans la fiche.
+  const ident = panneau.querySelector('.dp-ident-tete');
+  const tete = hote.closest('.ps-fiche-tete');
+  if(ident && tete){
+    const bloc = tete.firstElementChild;
+    let meta = bloc && bloc.querySelector('.ps-fiche-meta');
+    if(!meta && bloc){ meta = h('div',{className:'ps-fiche-meta'}); bloc.appendChild(meta); }
+    if(meta){
+      const ancienne = meta.querySelector('.dp-ident-tete'); if(ancienne) ancienne.remove();
+      meta.classList.add('ps-fiche-meta-ident');
+      meta.appendChild(ident);
+    }
+  }
   const ancien = hote.querySelector('.ps-outils'); if(ancien) ancien.remove();
   const styleBtn = {display:'inline-flex',alignItems:'center',gap:'6px',background:'var(--bg)',
     border:'1px solid var(--border)',padding:'5px 9px',borderRadius:'8px',fontSize:'12px',fontWeight:'600',color:'var(--text2)'};
@@ -11705,7 +11726,7 @@ async function openAlertesDossier(no){
     try{
       const d = await api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no));
       if(!d || !window.MySifaDonneesProd) return;
-      S.psDetailCache[no] = {html: window.MySifaDonneesProd.html(d, {fiche:true})};
+      S.psDetailCache[no] = {html: window.MySifaDonneesProd.html(d, {fiche:true, no})};
     }catch(e){ toast((e && e.message) || 'Alertes indisponibles.','error'); return; }
   }
   // HTML produit par mysifa_donnees_prod.js (donnees echappees a la source).
@@ -12351,7 +12372,18 @@ async function loadMachineStatus(){
     }
   }catch(e){}
 }
+// Dossiers en cours : ceux qu'une machine allumée affiche dans « Statut
+// machines ». Les lignes « Par dossier » portent leur référence et prennent
+// la classe `en-cours` (puce verte) — rejoué à chaque relevé, sans render().
+function _psEnCoursMaj(racine){
+  const enCours = new Set(Object.values(S.machineStatus || {})
+    .filter(m => m && m.dossier && m.statut_key && m.statut_key !== 'eteinte')
+    .map(m => String(m.dossier.no_dossier || '').trim()).filter(Boolean));
+  (racine || document).querySelectorAll('[data-ps-dossier]').forEach(b =>
+    b.classList.toggle('en-cours', enCours.has(b.getAttribute('data-ps-dossier'))));
+}
 function updateMachineStatusDOM(){
+  _psEnCoursMaj();
   const ms=S.machineStatus;
   // Portrait telephone : les tuiles ne sont pas des .mst-card, et sans cette
   // branche le rafraichissement toutes les 15 s mettrait S.machineStatus a
@@ -13837,9 +13869,10 @@ function renderProdKpis(){
     const tot = cal + prd + arr;
     const pc = v => tot > 0 ? (v / tot * 100).toFixed(1) + '%' : '0%';
     return h('button',Object.assign({type:'button',className:'ps-l'+(o.actif?' actif':''),
-        title:o.title||'', onClick:o.onClick}, o.actif?{'aria-current':'true'}:{}),
+        title:o.title||'', onClick:o.onClick}, o.actif?{'aria-current':'true'}:{},
+        o.dossier?{'data-ps-dossier':o.dossier}:{}),
       h('span',{style:{minWidth:0}},
-        h('span',{className:'ps-l-nom'}, o.nom),
+        h('span',{className:'ps-l-nom'}, o.dossier ? h('i',{className:'ps-l-live',title:'En cours sur une machine'}) : null, o.nom),
         o.sous ? h('span',{className:'ps-l-sous'}, o.sous) : null),
       h('span',{style:{minWidth:0}},
         h('span',{className:'ps-barre'},
@@ -13851,11 +13884,15 @@ function renderProdKpis(){
         h('span',{className:'ps-l-vit'}, vitEl(o.vit)),
         h('span',{className:'ps-l-met'}, fN(o.met||0) + ' m')));
   };
-  const _psCarte = (titre, compte, bloc, lignes) => h('div',{className:'card',
-      'data-bloc':bloc, 'data-bloc-valeur-lignes':String(lignes.length)},
-    h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,titre),
-      h('span',{style:{fontSize:'11px',color:'var(--muted)'}},compte)),
-    h('div',null,...lignes));
+  const _psCarte = (titre, compte, bloc, lignes) => {
+    const c = h('div',{className:'card',
+        'data-bloc':bloc, 'data-bloc-valeur-lignes':String(lignes.length)},
+      h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,titre),
+        h('span',{style:{fontSize:'11px',color:'var(--muted)'}},compte)),
+      h('div',null,...lignes));
+    _psEnCoursMaj(c);
+    return c;
+  };
 
   // Fiche du dossier choisi. Par défaut : le dernier dossier terminé (il a
   // son 89) — celui en cours n'a pas encore ses chiffres définitifs.
@@ -13951,7 +13988,7 @@ function renderProdKpis(){
       colonne.push(_psCarte('Par dossier', rowsAgg.length+' · par heure de fin', 'prod.ensemble.par-dossier',
         rowsAgg.map(r=>{
           const no = String(r.no_dossier||'');
-          return _psLigne({nom:no, sous:prodSynthCleanClient(r.client) || '—',
+          return _psLigne({nom:no, dossier:no, sous:prodSynthCleanClient(r.client) || '—',
             cal:r.temps_calage_min, prd:r.temps_prod_min, arr:r.temps_arret_min, met:r.metrage_m,
             vit:vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0)),
             actif:no===actif, title:'Afficher la fiche du dossier',
