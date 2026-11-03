@@ -430,6 +430,8 @@
     zone.replaceChildren(svg);
     if (interactif) brancherSouris(svg);
     ED.boites = mesurer(svg);
+    const mpb = ext('miseEnPage');
+    if (mpb && mpb.majBarre) mpb.majBarre();
     const av = $id('es-avert');
     if (av) av.replaceChildren(...avertissements(lay, vals).map(t => X().h('div', { cls: 'es-avert-ligne', text: t })));
     const dim = $id('es-dim');
