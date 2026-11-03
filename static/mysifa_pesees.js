@@ -1,5 +1,7 @@
 /*
- * MySifa — Pesées par front (saisie prod : onglet Qualité ; MyProd : fenêtre).
+ * MySifa — Inspections des produits finis : pesées par front et autres
+ * mesures des alertes d'inspection (saisie prod : onglet Qualité ; MyProd :
+ * fenêtre et fiche dossier).
  *
  * Des boutons choisissent les champs affichés (pesée par front par défaut,
  * grammage de colle, release… en plus) : une courbe et des colonnes par
@@ -498,9 +500,9 @@
     if (P.mode !== "vue") {
       m = el("div", "pf-modal");
       m.setAttribute("role", "dialog");
-      m.setAttribute("aria-label", "Pesées par front");
+      m.setAttribute("aria-label", "Inspections des produits finis");
       var tete = el("div", "pf-tete");
-      tete.appendChild(el("div", "pf-titre", "Pesées par front"));
+      tete.appendChild(el("div", "pf-titre", "Inspections des produits finis"));
       var x = el("button", "pf-fermer", "×");
       x.type = "button";
       x.setAttribute("aria-label", "Fermer");

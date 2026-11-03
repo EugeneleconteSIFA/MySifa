@@ -1353,6 +1353,12 @@ MATIERE_FAMILLES = (("frontal", "Frontal"), ("glassine", "Glassine"),
 PESEES_ECART_DOSSIER = float(os.getenv("PESEES_ECART_DOSSIER", "0.3"))
 PESEES_ECART_FRONTS = float(os.getenv("PESEES_ECART_FRONTS", "0.15"))
 
+# Formulaire qu'un code opération ouvre au poste avant que la saisie ne parte
+# (operation_codes.formulaire, Paramètres › Opérations). « maintenance » :
+# intervention, machine, date, commentaire, enregistrés dans MyMaintenance
+# (static/mysifa_maint_saisie.js).
+OPERATION_FORMULAIRES = (("maintenance", "Opération de maintenance (MyMaintenance)"),)
+
 # ─── MyTools — convertisseur (repris de Prismix) ──────────────────
 # Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et
 # ffmpeg sont gourmands), quota par utilisateur et par heure.

@@ -121,8 +121,8 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <!-- Historique des pesées par front : avant le Retour de prod, qui en pose les boutons. -->
-<script src="/static/mysifa_pesees.js?v=4"></script>
-<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu19"></script>
+<script src="/static/mysifa_pesees.js?v=5"></script>
+<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu20"></script>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
 <script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu19"></script>

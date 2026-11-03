@@ -76,6 +76,25 @@ def _outil_type(row) -> Optional[str]:
     return val or None
 
 
+def _formulaire(row) -> Optional[str]:
+    """`formulaire` n'existe qu'a partir de la migration
+    `operation_codes_formulaire`."""
+    try:
+        val = row["formulaire"]
+    except (IndexError, KeyError):
+        return None
+    val = str(val or "").strip()
+    return val or None
+
+
+def _cols_select(conn) -> str:
+    cols = _colonnes(conn)
+    return ", ".join([
+        "outil_type" if "outil_type" in cols else "NULL AS outil_type",
+        "formulaire" if "formulaire" in cols else "NULL AS formulaire",
+    ])
+
+
 def _row_to_entry(row) -> Dict[str, Any]:
     return {
         "severity": row["severity"],
@@ -86,6 +105,8 @@ def _row_to_entry(row) -> Dict[str, Any]:
         # None = code ordinaire. C'est ce champ, et lui seul, qui fait
         # apparaitre la saisie « metrage + outil avant/apres » au poste.
         "outil_type": _outil_type(row),
+        # Formulaire ouvert au poste avant la saisie (OPERATION_FORMULAIRES).
+        "formulaire": _formulaire(row),
     }
 
 
@@ -103,9 +124,8 @@ def load_operations_dict(conn=None) -> Dict[str, Dict[str, Any]]:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (TABLE,)
         ).fetchone()
         if exists:
-            col_outil = "outil_type" if "outil_type" in _colonnes(conn) else "NULL AS outil_type"
             rows = conn.execute(
-                f"""SELECT code, severity, label, category, required, {col_outil}
+                f"""SELECT code, severity, label, category, required, {_cols_select(conn)}
                     FROM {TABLE} ORDER BY CAST(code AS INTEGER), code"""
             ).fetchall()
             if rows:
@@ -207,6 +227,10 @@ def validate_operation_payload(body: dict, *, for_create: bool = True) -> dict:
     outil_type = str(body.get("outil_type") or "").strip()
     if outil_type and not re.match(r"^[a-z0-9_]{2,40}$", outil_type):
         raise ValueError("Nature d'outil invalide.")
+    from config import OPERATION_FORMULAIRES
+    formulaire = str(body.get("formulaire") or "").strip()
+    if formulaire and formulaire not in {k for k, _ in OPERATION_FORMULAIRES}:
+        raise ValueError("Formulaire inconnu.")
     return {
         "code": code,
         "label": label,
@@ -215,13 +239,13 @@ def validate_operation_payload(body: dict, *, for_create: bool = True) -> dict:
         "required": required,
         # Chaine vide = ce code ne declenche aucune saisie d'outil.
         "outil_type": outil_type or None,
+        "formulaire": formulaire or None,
     }
 
 
 def list_operation_codes(conn) -> list:
-    col_outil = "outil_type" if "outil_type" in _colonnes(conn) else "NULL AS outil_type"
     rows = conn.execute(
-        f"""SELECT code, severity, label, category, required, updated_at, {col_outil}
+        f"""SELECT code, severity, label, category, required, updated_at, {_cols_select(conn)}
             FROM {TABLE} ORDER BY CAST(code AS INTEGER), code"""
     ).fetchall()
     return [
@@ -232,6 +256,7 @@ def list_operation_codes(conn) -> list:
             "category": r["category"],
             "required": bool(r["required"]),
             "outil_type": _outil_type(r),
+            "formulaire": _formulaire(r),
             "updated_at": r["updated_at"],
         }
         for r in rows

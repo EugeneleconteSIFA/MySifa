@@ -2904,6 +2904,17 @@ def _valider_outil_type(conn, outil_type):
     return outil_type
 
 
+def _ecrire_formulaire(conn, table, code, formulaire):
+    """Formulaire ouvert au poste (operation_codes.formulaire) : colonne
+    posée par la migration `operation_codes_formulaire`, ignorée avant."""
+    try:
+        cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+    except Exception:
+        return
+    if "formulaire" in cols:
+        conn.execute(f"UPDATE {table} SET formulaire=? WHERE code=?", (formulaire, code))
+
+
 def _colonne_outil_type(conn, table) -> bool:
     try:
         return "outil_type" in {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
@@ -2918,9 +2929,12 @@ def list_operation_codes(request: Request):
     from database import get_db
     from app.services.operations_config import categories_for_ui, list_operation_codes as _list
 
+    from config import OPERATION_FORMULAIRES
+
     with get_db() as conn:
         items = _list(conn)
-    return {"items": items, "categories": categories_for_ui()}
+    return {"items": items, "categories": categories_for_ui(),
+            "formulaires": [{"code": c, "label": l} for c, l in OPERATION_FORMULAIRES]}
 
 
 @router.post("/api/settings/operation-codes")
@@ -2971,6 +2985,7 @@ async def create_operation_code(request: Request):
                     now,
                 ),
             )
+        _ecrire_formulaire(conn, TABLE, payload["code"], payload.get("formulaire"))
         conn.commit()
     refresh_operations_cache()
     return {"success": True, "code": payload["code"]}
@@ -3033,6 +3048,7 @@ async def update_operation_code(code: str, request: Request):
                     code_key,
                 ),
             )
+        _ecrire_formulaire(conn, TABLE, code_key, payload.get("formulaire"))
 
         # Le referentiel fait foi, y compris sur l'historique.
         #

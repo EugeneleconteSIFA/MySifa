@@ -418,7 +418,7 @@
          + ' data-pesees-dossier="' + escAttr(dossier || "") + '"'
          + ' title="Pesées d’étiquettes front par front' + (dossier ? ' sur ce dossier' : '') + '"'
          + (flottant ? ' style="float:right;margin-left:6px"' : ' style="align-self:flex-start"')
-         + '>Pesées par front</button>';
+         + '>Inspections des produits finis</button>';
   }
 
   function renderFeuille(d, frise) {

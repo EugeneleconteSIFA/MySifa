@@ -2076,6 +2076,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <select id="op-severity"><option value="info">info</option><option value="attention">attention</option><option value="critique">critique</option></select>
             <select id="op-category"></select>
             <select id="op-outil-type" title="Ce code fait-il changer un outil ?"><option value="">Aucun outil</option></select>
+            <select id="op-formulaire" title="Formulaire ouvert au poste avant la saisie"><option value="">Aucun formulaire</option></select>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="op-required"> Obligatoire</label>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -7169,6 +7170,7 @@ async function submitEditUpdate() {
 
 let _opItems = [];
 let _opCategories = [];
+let _opFormulaires = [];  // [{code, label}] : formulaire ouvert au poste (config.OPERATION_FORMULAIRES)
 let _opEditCode = null;
 
 /* ─── Seuils d'arrêt ────────────────────────────────────────────────────────
@@ -7314,6 +7316,12 @@ async function loadOperationCodes() {
     const d = await api('/api/settings/operation-codes');
     _opItems = (d && d.items) ? d.items : [];
     _opCategories = (d && d.categories) ? d.categories : [];
+    _opFormulaires = (d && d.formulaires) ? d.formulaires : [];
+    const selF = document.getElementById('op-formulaire');
+    if (selF) {
+      selF.innerHTML = '<option value="">Aucun formulaire</option>'
+        + _opFormulaires.map(f => '<option value="' + esc(f.code) + '">' + esc(f.label) + '</option>').join('');
+    }
     const sel = document.getElementById('op-category');
     if (sel) {
       sel.innerHTML = _opCategories.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -7350,7 +7358,7 @@ function renderOpList() {
   }
   let body = '';
   cats.forEach(cat => {
-    body += '<tr class="op-cat-row"><td colspan="7">' + esc(cat) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="8">' + esc(cat) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(o.code);
       const sev = esc(o.severity || 'info');
@@ -7362,6 +7370,7 @@ function renderOpList() {
         + '<td><span class="op-pill ' + esc(cat) + '">' + esc(cat) + '</span></td>'
         + '<td><span class="' + reqCls + '">' + (o.required ? 'Oui' : '—') + '</span></td>'
         + '<td>' + (o.outil_type ? '<span class="op-pill calage">' + esc(outilTypeLabel(o.outil_type)) + '</span>' : '<span class="op-req">—</span>') + '</td>'
+        + '<td>' + (o.formulaire ? '<span class="op-pill technique">' + esc((_opFormulaires.find(f => f.code === o.formulaire) || {}).label || o.formulaire) + '</span>' : '<span class="op-req">—</span>') + '</td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-op-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-op-del="' + c + '">Supprimer</button>'
@@ -7369,7 +7378,7 @@ function renderOpList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Sévérité</th><th>Catégorie</th><th>Obligatoire</th><th>Outil changé</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Sévérité</th><th>Catégorie</th><th>Obligatoire</th><th>Outil changé</th><th>Formulaire</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-op-edit]').forEach(btn => {
     btn.addEventListener('click', () => openOpForm(btn.getAttribute('data-op-edit')));
@@ -7397,6 +7406,8 @@ function openOpForm(code) {
     document.getElementById('op-category').value = o.category || 'autre';
     const selOt = document.getElementById('op-outil-type');
     if (selOt) selOt.value = o.outil_type || '';
+    const selF = document.getElementById('op-formulaire');
+    if (selF) selF.value = o.formulaire || '';
     document.getElementById('op-required').checked = !!o.required;
   } else {
     title.textContent = 'Nouveau code';
@@ -7407,6 +7418,8 @@ function openOpForm(code) {
     document.getElementById('op-category').value = _opCategories[0] || 'autre';
     const selOtNew = document.getElementById('op-outil-type');
     if (selOtNew) selOtNew.value = '';
+    const selFNew = document.getElementById('op-formulaire');
+    if (selFNew) selFNew.value = '';
     document.getElementById('op-required').checked = false;
   }
 }
@@ -7424,6 +7437,7 @@ async function saveOpForm() {
     severity: document.getElementById('op-severity').value,
     category: document.getElementById('op-category').value,
     outil_type: document.getElementById('op-outil-type')?.value || '',
+    formulaire: document.getElementById('op-formulaire')?.value || '',
     required: document.getElementById('op-required').checked,
   };
   try {
