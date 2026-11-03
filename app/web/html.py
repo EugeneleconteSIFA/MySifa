@@ -1683,7 +1683,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_portail_tour.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_resize.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -10565,6 +10565,7 @@ function renderMobileNavbar(){
     grid:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
     chat:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
     ai:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+    outils:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5l-6 6a1.4 1.4 0 0 0 2 2l6-6a4 4 0 0 0 5-5.4l-2.5 2.5-2.1-.5-.5-2.1z"/></svg>',
   };
   function tab(id,ico,label,active,badge){
     const bdg=badge>0?('<span class="mobile-navbar-tab-badge">'+(badge>9?'9+':badge)+'</span>'):'';
@@ -10575,7 +10576,9 @@ function renderMobileNavbar(){
   }
   const tabs=[
     tab('home',   ICO.home, 'Accueil',      isPortal, 0),
-    tab('switch', ICO.grid, "Changer d'app", isCmdKOpen, 0),
+    // À l'accueil, le champ de recherche et les tuiles servent déjà à changer
+    // d'application : l'onglet porte les outils (mysifa_outils_mobile.js).
+    isPortal?tab('outils', ICO.outils, 'Outils', false, 0):tab('switch', ICO.grid, "Changer d'app", isCmdKOpen, 0),
     tab('msg',    ICO.chat, 'Messagerie',   isMessages, msgUnread),
   ];
   if(aiEnabled){
@@ -10590,6 +10593,8 @@ function renderMobileNavbar(){
       if(id==='home'){
         if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}
         window.location.href='/';
+      } else if(id==='outils'){
+        if(window.MySifaOutilsMobile)window.MySifaOutilsMobile.ouvrir();
       } else if(id==='switch'){
         if(window.MysifaCmdK&&typeof window.MysifaCmdK.toggle==='function'){
           window.MysifaCmdK.toggle('');

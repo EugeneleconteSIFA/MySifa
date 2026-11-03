@@ -3463,7 +3463,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <!-- Clients et fournisseurs alignés sur RVGI : bandeau de synchro,

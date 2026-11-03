@@ -532,7 +532,7 @@ body.cal-dragging{user-select:none}
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>

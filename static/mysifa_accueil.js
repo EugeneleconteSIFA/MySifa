@@ -1650,7 +1650,7 @@
       '<p class="mac-vide-p">Stocks à réapprovisionner, machines en marche, départs du jour… ils s\'affichent ici et se mettent à jour chaque minute.</p>' +
       '<ol class="mac-etapes">' +
       '<li><span class="mac-num">1</span><span>Ouvrez une appli.</span></li>' +
-      '<li><span class="mac-num">2</span><span>Cliquez sur <span class="mac-capico" title="Bouton de capture">' + ICONE_CAPTURE + '</span> en bas à droite<span class="mac-clavier">, ou faites <kbd>Alt</kbd>+<kbd>C</kbd></span>.</span></li>' +
+      '<li><span class="mac-num">2</span><span>' + (TELEPHONE.matches ? 'Ouvrez les outils au bord droit de l\'écran, puis « Ajouter à l\'accueil ».' : 'Cliquez sur <span class="mac-capico" title="Bouton de capture">' + ICONE_CAPTURE + '</span> en bas à droite<span class="mac-clavier">, ou faites <kbd>Alt</kbd>+<kbd>C</kbd></span>.') + '</span></li>' +
       '<li><span class="mac-num">3</span><span>Cliquez sur un bloc entouré, cochez les valeurs à afficher.</span></li>' +
       '</ol>' +
       '<div class="mac-essai"></div>' +
@@ -2146,7 +2146,9 @@
       MySifaGuides.boot().then(function () {
         var slot = racine && racine.querySelector(".mac-guide");
         if (slot && typeof MySifaGuides.bookBtn === "function") slot.innerHTML = MySifaGuides.bookBtn("accueil-widgets");
-        MySifaGuides.autoOpen("accueil-widgets");
+        // Le guide parle de colonne et d'Alt+C : il reste à portée sur le livre,
+        // mais ne s'impose pas à l'ouverture sur un téléphone.
+        if (!TELEPHONE.matches) MySifaGuides.autoOpen("accueil-widgets");
       });
     } catch (e) { /* guide indisponible : la colonne fonctionne sans */ }
   }

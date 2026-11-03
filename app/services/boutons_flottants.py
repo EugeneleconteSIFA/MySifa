@@ -26,6 +26,9 @@ le <head> de la page : le placement du dock (mysifa_dock.js) ignore déjà les
 éléments masqués, et aucune page n'a à connaître ce réglage. Les deux boutons
 sans icône propre (raccourcis Alt+C et Option+T) lisent en plus
 `window.MySifaBoutons.actif(cle)`.
+
+Sur téléphone, les boutons actifs ne flottent pas : ils sont listés dans une
+feuille (static/mysifa_outils_mobile.js), le réglage s'y applique de la même façon.
 """
 
 from __future__ import annotations

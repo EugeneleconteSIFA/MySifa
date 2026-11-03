@@ -88,6 +88,16 @@ La topbar mobile (`.mobile-topbar`) est toujours présente et contient :
 - `body.sb-open` l'affiche
 - Un overlay `.sidebar-overlay` ferme la sidebar au clic en dehors
 
+### Boutons flottants sur téléphone
+Sous 900 px, aucun bouton flottant : `static/mysifa_outils_mobile.js` masque ceux
+du dock et les range dans une feuille, ouverte par une poignée déplaçable au bord
+droit ou par l'onglet « Outils » de la barre du bas à l'accueil. Un nouvel outil
+flottant (`.mysifa-dock-extra`) y apparaît seul ; ne pas lui redonner de position
+sur téléphone. Ce fichier montre aussi une seule fenêtre d'accueil à la fois.
+
+Au doigt, `:hover` s'allume dès qu'on pose le doigt, y compris pour faire défiler,
+et reste allumé : ne pas colorer un élément tactile sur `:hover`.
+
 ### Liens de navigation
 Toujours inclure les liens vers les modules auxquels l'utilisateur a accès (vérifiés via le contexte de session). La cohérence des icônes entre pages est obligatoire — si un module utilise un certain SVG dans une page, il doit utiliser le même dans toutes les autres.
 

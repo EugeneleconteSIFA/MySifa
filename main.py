@@ -680,6 +680,8 @@ _BOUTONS_JS = (
     # Efface la barre sous une fenêtre ouverte, sur téléphone. Jamais inclus
     # par une page : c'est ici qu'il arrive partout.
     (b"/static/mysifa_dock_fenetres.js", None),
+    # Sur téléphone, range tous les boutons dans une feuille (poignée ou onglet).
+    (b"/static/mysifa_outils_mobile.js", None),
     (b"/static/mysifa_postit.js", "postit"),
     (b"/static/mysifa_calc.js", "calculette"),
     (b"/static/mysifa_ai_chat.js", "ia"),
@@ -697,7 +699,9 @@ _VERSION_ASSET = {
     b"/static/mysifa_ai_chat.css": b"?v=4",
     b"/static/mysifa_ai_chat.js": b"?v=4",
     b"/static/chat_url.js": b"?v=1",
+    b"/static/mysifa_dock.js": b"?v=4",
     b"/static/mysifa_dock_fenetres.js": b"?v=1",
+    b"/static/mysifa_outils_mobile.js": b"?v=1",
 }
 
 
