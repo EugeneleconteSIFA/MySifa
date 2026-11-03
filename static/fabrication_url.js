@@ -20,7 +20,7 @@
  *   mémoire produit, mouvements de stock de l'onglet Stock (entrée / sortie
  *   MP, entrée / sortie Z1 — formulaires indépendants de la saisie),
  *   onglet Qualité : filtres des pesées par front (pesees, pesees_dossier,
- *   pesees_periode).
+ *   pesees_periode, pesees_champs).
  * Hors adresse, volontairement : les étapes d'une saisie en cours (choix du
  * dossier à démarrer, début, fin, compteur, commentaire imposé par un seuil,
  * changement d'outil, annulation, dossier fictif, tête de sortie), les

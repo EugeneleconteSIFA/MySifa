@@ -14,7 +14,12 @@
 .pf-vide,.pf-erreur{font-size:13px;color:var(--muted);padding:18px 0;text-align:center}
 .pf-erreur{color:var(--danger)}
 .pf-alerte{font-size:13px;font-weight:700;color:var(--accent);margin-top:6px}
-.pf-legende{font-size:12px;color:var(--text2)}
+.pf-champs{display:flex;flex-wrap:wrap;gap:6px}
+.pf-champ-btn{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;color:var(--text2);cursor:pointer}
+.pf-champ-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pf-champ-btn.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.pf-courbe-titre{font-size:12px;color:var(--text2);margin-bottom:2px}
+.pf-courbe-titre b{color:var(--text);font-weight:700}
 .pf-section{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .pf-section-tete{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
 .pf-section-titre{font:inherit;font-size:14px;font-weight:700;color:var(--text);background:none;border:none;padding:0}

@@ -1363,7 +1363,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_pesees.css?v=3">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=4">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -1391,7 +1391,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <!-- Plaque confirmée au démarrage du dossier. -->
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
-<script src="/static/mysifa_pesees.js?v=2"></script>
+<script src="/static/mysifa_pesees.js?v=3"></script>
 <script src="/static/mysifa_poids_colle.js?v=3"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.

@@ -33,6 +33,7 @@ def _questions_valeur(items: list) -> list:
             continue
         out.append({
             "index": i,
+            "id": it.get("id") or "",
             "label": it.get("label") or f"Question {i + 1}",
             "unit": it.get("unit") or "",
             "multiple": bool(it.get("points_libres")),

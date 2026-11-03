@@ -1,6 +1,10 @@
 /*
  * MySifa — Pesées par front (saisie prod : onglet Qualité ; MyProd : fenêtre).
  *
+ * Des boutons choisissent les champs affichés (pesée par front par défaut,
+ * grammage de colle, release… en plus) : une courbe et des colonnes par
+ * champ choisi.
+ *
  * Les pesées d'étiquettes se saisissent dans une alerte de maintenance, une
  * mesure par front. Ici elles se relisent dossier par dossier, le plus
  * récemment pesé en haut : une courbe (moyenne des fronts, écart entre le
@@ -19,7 +23,8 @@
  *       porte l'état dans son adresse (url-etat.md). Une fermeture technique
  *       (Retour du navigateur) passe sansAdresse et ne prévient pas.
  *   MySifaPesees.adresse(e) / lireAdresse(u)   e ↔ paramètres d'URL
- *       (pesees=<machine|toutes>, pesees_dossier, pesees_periode).
+ *       (pesees=<machine|toutes>, pesees_dossier, pesees_periode,
+ *       pesees_champs=<id de question>,… quand ce n'est pas le défaut).
  *   <button data-pesees data-pesees-machine="…" data-pesees-dossier="…">
  *       ouvre la fenêtre, sans rien brancher (écoute déléguée sur le document)
  *
@@ -111,7 +116,7 @@
     }
     var jeton = ++P.jeton;
     P.charge = true; P.erreur = "";
-    signaler({ machine: f.machine, no_dossier: f.no_dossier, jours: f.jours });
+    signaler(etat());
     rendre();
     try {
       var r = await fetch("/api/maintenance/alertes/pesees" + (qs.length ? "?" + qs.join("&") : ""),
@@ -131,7 +136,48 @@
   function normaliser(opts) {
     opts = opts || {};
     return { machine: opts.machine || "", no_dossier: opts.no_dossier || "",
-             jours: opts.jours != null ? String(opts.jours) : (opts.no_dossier ? "" : DEFAUT) };
+             jours: opts.jours != null ? String(opts.jours) : (opts.no_dossier ? "" : DEFAUT),
+             champs: opts.champs && opts.champs.length ? opts.champs.slice() : null };
+  }
+  function etat() {
+    var f = P.filtres;
+    return f ? { machine: f.machine, no_dossier: f.no_dossier, jours: f.jours, champs: f.champs } : null;
+  }
+  function memesChamps(a, b) { return (a || []).join(",") === (b || []).join(","); }
+
+  // ── Champs affichés ────────────────────────────────────────────────────
+  function cleQ(q) { return q.id || String(q.index); }
+  function champsDefaut(qs) {
+    return qs.filter(function (q) { return q.multiple; }).map(cleQ);
+  }
+  // Questions choisies, dans l'ordre du questionnaire. Un choix qui ne
+  // correspond à aucune question de l'alerte retombe sur le défaut.
+  function choisies(qs) {
+    var voulu = P.filtres.champs || champsDefaut(qs);
+    var r = qs.filter(function (q) { return voulu.indexOf(cleQ(q)) >= 0; });
+    return r.length ? r : qs.filter(function (q) { return q.multiple; });
+  }
+  function boutonsChamps(qs) {
+    var actifs = choisies(qs).map(cleQ);
+    var barre = el("div", "pf-champs");
+    barre.setAttribute("role", "group");
+    barre.setAttribute("aria-label", "Champs affichés");
+    qs.forEach(function (q) {
+      var on = actifs.indexOf(cleQ(q)) >= 0;
+      var b = el("button", "pf-champ-btn" + (on ? " actif" : ""), q.label + (q.unit ? " (" + q.unit + ")" : ""));
+      b.type = "button";
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.addEventListener("click", function () {
+        var n = on ? actifs.filter(function (k) { return k !== cleQ(q); }) : actifs.concat([cleQ(q)]);
+        if (!n.length) return;  // au moins un champ affiché
+        n = qs.map(cleQ).filter(function (k) { return n.indexOf(k) >= 0; });
+        P.filtres.champs = memesChamps(n, champsDefaut(qs)) ? null : n;
+        signaler(etat());
+        rendre();
+      });
+      barre.appendChild(b);
+    });
+    return barre;
   }
   function ouvrir(opts) {
     P.mode = "modale";
@@ -154,7 +200,10 @@
   function allerVue(e) {
     var f = normaliser(e), g = P.filtres;
     vue(e);
-    if (g && f.machine === g.machine && f.no_dossier === g.no_dossier && f.jours === g.jours) return;
+    if (g && f.machine === g.machine && f.no_dossier === g.no_dossier && f.jours === g.jours) {
+      if (!memesChamps(f.champs, g.champs)) { g.champs = f.champs; rendre(); }
+      return;
+    }
     P.filtres = f;
     charger();
   }
@@ -224,6 +273,8 @@
     });
     var base = normales.length ? normales : toutes;
     var lo = Math.min.apply(null, base), hi = Math.max.apply(null, base);
+    // Pesée par front : trois décimales ; grammage, release : selon l'écart.
+    var dec = q.multiple ? 3 : (hi - lo < 1 ? 2 : 1);
     var marge = (hi - lo) * 0.15 || Math.abs(hi) * 0.05 || 1;
     lo -= marge; hi += marge;
 
@@ -239,7 +290,7 @@
     [lo + marge, (lo + hi) / 2, hi - marge].forEach(function (v) {
       s.appendChild(sv("line", { x1: G, x2: W - D, y1: y(v), y2: y(v), class: "pf-grille" }));
       var t = sv("text", { x: G - 6, y: y(v) + 4, "text-anchor": "end", class: "pf-axe" });
-      t.textContent = fmt(v, 3);
+      t.textContent = fmt(v, dec);
       s.appendChild(t);
     });
     [[0, "start"], [n - 1, "end"]].forEach(function (p, j) {
@@ -293,7 +344,8 @@
         bulle.appendChild(el("div", "pf-bulle-titre", dateCourte(l.ack_at) + " · " + (l.operateur || "—")));
         (l.valeurs[k] || []).forEach(function (v, j) {
           var r = el("div", aVerifier(l, q, j) ? "pf-bulle-ligne pf-hors" : "pf-bulle-ligne",
-                     q.libelle_point + " " + (j + 1) + " : " + fmt(v, 3) + unite(q) + (aVerifier(l, q, j) ? " · à vérifier" : ""));
+                     (q.multiple ? q.libelle_point + " " + (j + 1) : q.label) + " : " + (q.multiple ? fmt(v, 3) : fmtLibre(v)) + unite(q)
+                     + (aVerifier(l, q, j) ? " · à vérifier" : ""));
           bulle.appendChild(r);
         });
         bulle.hidden = false;
@@ -303,7 +355,13 @@
       cible.addEventListener("mouseleave", function () { bulle.hidden = true; });
       s.appendChild(cible);
     });
-    wrap.append(s, bulle);
+    var titre = el("div", "pf-courbe-titre");
+    titre.appendChild(el("b", null, q.label + (q.unit ? " (" + q.unit + ")" : "")));
+    if (q.multiple) {
+      titre.appendChild(el("span", null, " · trait : moyenne des " + q.libelle_point.toLowerCase()
+        + "s · barre : du plus léger au plus lourd · rouge : à vérifier"));
+    }
+    wrap.append(titre, s, bulle);
     return wrap;
   }
 
@@ -355,7 +413,7 @@
   }
 
   function section(a, g, largeur) {
-    var qs = a.questions, qm = qs.filter(function (q) { return q.multiple; });
+    var qs = choisies(a.questions), qm = qs.filter(function (q) { return q.multiple; });
     var cle = a.id + "|" + g.no_dossier;
     var nbF = 0;
     g.lignes.forEach(function (l) {
@@ -380,7 +438,7 @@
         g.nb_aberrants + " valeur" + (g.nb_aberrants > 1 ? "s" : "") + " à vérifier"));
     }
     s.appendChild(tete);
-    qm.forEach(function (q) {
+    qs.forEach(function (q) {
       var c = courbe(g, q, largeur);
       if (c) s.appendChild(c);
     });
@@ -404,11 +462,7 @@
           : "Aucune pesée sur les " + periode + "."));
         return;
       }
-      var qm = a.questions.filter(function (q) { return q.multiple; })[0];
-      if (qm) {
-        corps.appendChild(el("div", "pf-legende",
-          qm.label + " · trait : moyenne des " + qm.libelle_point.toLowerCase() + "s · barre : du plus léger au plus lourd · rouge : à vérifier"));
-      }
+      corps.appendChild(boutonsChamps(a.questions));
       gs.forEach(function (g) { corps.appendChild(section(a, g, largeur)); });
     });
   }
@@ -482,6 +536,7 @@
     if (e.no_dossier) p.pesees_dossier = e.no_dossier;
     var defaut = e.no_dossier ? "" : DEFAUT;
     if (e.jours !== defaut) p.pesees_periode = e.jours || "tout";
+    if (e.champs && e.champs.length) p.pesees_champs = e.champs.join(",");
     return p;
   }
   function lireAdresse(u) {
@@ -489,16 +544,17 @@
     if (!v || v.length > 80) return null;
     var dos = (u.get("pesees_dossier", "") || "").slice(0, 80);
     var per = u.get("pesees_periode", null, ["3", "7", "30", "90", "tout"]);
+    var ch = (u.get("pesees_champs", "") || "").split(",").filter(function (c) { return /^[A-Za-z0-9_-]{1,40}$/.test(c); });
     return { machine: v === "toutes" ? "" : v, no_dossier: dos,
-             jours: per === "tout" ? "" : (per || (dos ? "" : DEFAUT)) };
+             jours: per === "tout" ? "" : (per || (dos ? "" : DEFAUT)), champs: ch.length ? ch : null };
   }
 
   global.MySifaPesees = {
     ouvrir: ouvrir, fermer: fermer, vue: vue, allerVue: allerVue, retablir: retablir,
     adresse: adresse, lireAdresse: lireAdresse,
-    etat: function () { return P.filtres ? { machine: P.filtres.machine, no_dossier: P.filtres.no_dossier, jours: P.filtres.jours } : null; },
+    etat: etat,
     ouverte: function () { return !!document.getElementById("pf-overlay"); },
     surAdresse: function (fn) { if (typeof fn === "function") P.abonnes.push(fn); },
-    CLES: ["pesees", "pesees_dossier", "pesees_periode"],
+    CLES: ["pesees", "pesees_dossier", "pesees_periode", "pesees_champs"],
   };
 })(window);
