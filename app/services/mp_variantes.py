@@ -453,7 +453,10 @@ def definir_principal(
     # L'article devenu principal apporte son prix : passer de R5000 à R5050
     # change le prix en vigueur, pas seulement le nom du fournisseur.
     prix_article = _col(r, "prix_achat")
-    if fid is not None and prix_article and float(prix_article) > 0:
+    # Un article sans fournisseur (« Fournisseur non identifié », reprise
+    # d'inventaire) apporte son prix comme les autres : sa ligne de prix est
+    # celle dont le fournisseur est vide.
+    if prix_article and float(prix_article) > 0:
         mystock_prix.set_prix_fournisseur_matiere(
             conn, matiere_id=r["matiere_id"], fournisseur_id=fid, prix=float(prix_article),
             confirmer=True, user_id=user_id, user_name=user_name,
@@ -471,8 +474,9 @@ def definir_principal(
             or d["g_label"] or (("%g g/m²" % d["valeur_gsm"]) if d["valeur_gsm"] else "sans déclinaison")
         # Un prix à 0 veut dire « non renseigné » : il ne devient pas le prix
         # en vigueur (il pousserait 0 dans la valorisation).
-        a_prix = fid is not None and conn.execute(
-            "SELECT 1 FROM mp_matiere_prix WHERE declinaison_id=? AND fournisseur_id=? AND prix > 0",
+        a_prix = conn.execute(
+            """SELECT 1 FROM mp_matiere_prix
+                WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0) AND prix > 0""",
             (d["id"], fid),
         ).fetchone()
         if not a_prix:
@@ -492,13 +496,18 @@ def _pousse_prix(conn: sqlite3.Connection, r: sqlite3.Row) -> bool:
 
     Oui s'il est l'article principal de la matière, ou le seul article actif
     de son fournisseur : il n'y a alors aucune ambiguïté sur le prix à retenir.
+
+    « Fournisseur non identifié » (fournisseur vide) compte comme un
+    fournisseur : l'exclure laissait le prix saisi sur l'article sans effet,
+    Coûts matières et la valorisation restaient à « à compléter ».
     """
-    if not r["actif"] or r["fournisseur_id"] is None:
+    if not r["actif"]:
         return False
     if r["principal"]:
         return True
     n = conn.execute(
-        "SELECT COUNT(*) FROM mp_variantes WHERE matiere_id=? AND fournisseur_id=? AND actif=1",
+        """SELECT COUNT(*) FROM mp_variantes
+            WHERE matiere_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0) AND actif=1""",
         (r["matiere_id"], r["fournisseur_id"]),
     ).fetchone()[0]
     return n == 1
