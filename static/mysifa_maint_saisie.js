@@ -17,8 +17,8 @@
  * (catégorie « remplacements ») ; contrôles et nettoyages restent dans
  * MyMaintenance.
  *
- * Interventions et machines se choisissent en pastilles (écran tactile de
- * l'atelier). Les opérations récentes de la machine sont relues dans
+ * L'intervention se choisit dans un sélecteur, machine et durée en pastilles
+ * (écran tactile de l'atelier). Les opérations récentes de la machine sont relues dans
  * GET /api/maintenance/history, la source de l'écran Historique.
  *
  *   MySifaMaintSaisie.vue({machine, machines, role})   élément durable à
@@ -243,7 +243,15 @@
     f.envoyer.type = "button";
     f.envoyer.addEventListener("click", enregistrer);
     // Zones redessinées
-    f.codes = el("div", "mm-pastilles");
+    // Interventions : un sélecteur (le catalogue est trop long pour des
+    // pastilles), « Autre maintenance… » en dernier ouvre la description.
+    f.codes = el("select", "mm-input mm-select-code");
+    f.codes.setAttribute("aria-label", "Intervention réalisée");
+    f.codes.addEventListener("change", function () {
+      M.code = f.codes.value;
+      rendre();
+      if (M.code === AUTRE) f.titre.focus();
+    });
     f.machines = el("div", "mm-pastilles");
     f.durees = el("div", "mm-pastilles mm-pastilles-duree");
     f.etat = el("div", "mm-etat");
@@ -297,20 +305,17 @@
   }
 
   function dessinerForm(f) {
-    f.codes.textContent = "";
-    if (!M.codes) f.codes.appendChild(el("div", "mm-vide", "Chargement du catalogue…"));
-    (M.codes || []).forEach(function (c) {
-      var b = pastille(c.label, M.code === c.code, function () { M.code = M.code === c.code ? "" : c.code; rendre(); });
-      b.title = c.code;
-      f.codes.appendChild(b);
-    });
-    var autre = pastille("Autre maintenance", M.code === AUTRE, function () {
-      M.code = M.code === AUTRE ? "" : AUTRE;
-      rendre();
-      if (M.code === AUTRE) f.titre.focus();
-    }, "mm-pastille-autre");
-    if (M.code !== AUTRE) autre.insertBefore(icone("plus", 14), autre.firstChild);
-    f.codes.appendChild(autre);
+    // Options reconstruites seulement quand le catalogue change : un
+    // sélecteur ouvert ne se referme pas sous le doigt.
+    var cle = M.codes ? M.codes.map(function (c) { return c.code; }).join("|") : null;
+    if (f.codesCle !== cle) {
+      f.codesCle = cle;
+      f.codes.textContent = "";
+      f.codes.appendChild(new Option(M.codes ? "Choisir une intervention…" : "Chargement du catalogue…", ""));
+      (M.codes || []).forEach(function (c) { f.codes.appendChild(new Option(c.label, c.code)); });
+      f.codes.appendChild(new Option("Autre maintenance…", AUTRE));
+    }
+    if (f.codes.value !== M.code) f.codes.value = M.code;
     f.titreBloc.hidden = M.code !== AUTRE;
 
     var liste = M.machines.slice();
