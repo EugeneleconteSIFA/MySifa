@@ -133,8 +133,11 @@
   }
   async function appel(path, options) {
     const o = options || {};
+    // Un fichier (import du PDF d'un OF) part en multipart : c'est le
+    // navigateur qui pose l'en-tête et sa frontière, pas nous.
+    const json = !(o.body instanceof FormData);
     const r = await fetch(path, Object.assign({credentials: 'include'}, o, {
-      headers: Object.assign({'Content-Type': 'application/json'}, o.headers || {}),
+      headers: Object.assign(json ? {'Content-Type': 'application/json'} : {}, o.headers || {}),
     }));
     if (!r.ok) {
       let msg = 'Erreur ' + r.status;
@@ -992,17 +995,208 @@
       const b = document.querySelector('[data-dr-doc="' + type + '"]');
       if (!b) return;
       const id = E.docs[type];
-      b.disabled = !id;
-      b.style.opacity = id ? '' : '.5';
-      b.style.cursor = id ? 'pointer' : 'not-allowed';
-      b.title = id ? 'Aperçu ' + (type === 'of' ? 'de l\'OF' : 'de la fiche technique') : DOCS[type].absent;
+      // Un document absent n'est plus un bouton grisé : c'est depuis ici qu'on
+      // le rattache, sans repasser par Besoins matières.
+      b.disabled = false;
+      b.style.opacity = '';
+      b.style.cursor = 'pointer';
+      b.style.borderStyle = id ? 'solid' : 'dashed';
+      b.textContent = (id ? '' : '+ ') + DOCS[type].libelle;
+      b.title = id ? 'Aperçu ' + (type === 'of' ? 'de l\'OF' : 'de la fiche technique')
+        : DOCS[type].absent + ' Cliquer pour en ajouter un' + (type === 'of' ? '.' : 'e.');
     });
+  }
+
+  // ── Ajouter le document manquant ───────────────────────────────────────
+  // Mêmes routes que la modale de Besoins matières : on rattache un OF ou une
+  // fiche existants, on importe le PDF d'un OF (moteur d'import de MyProd), ou
+  // on crée la fiche. Tout s'écrit dans les tables de référence : le dossier
+  // est réparé partout, pas seulement dans ce contrôle. Les valeurs de la fiche
+  // créée se complètent ensuite ligne par ligne, avec « Compléter la fiche ».
+  const BTN_PETIT = 'padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);'
+    + 'color:var(--text);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap';
+  const CHAMP = 'padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);'
+    + 'color:var(--text);font-family:inherit;font-size:13px;min-width:0';
+
+  function ajoutStatut(txt, erreur) {
+    const s = document.querySelector('[data-dr-ajout-statut]');
+    if (!s) return;
+    s.textContent = txt || '';
+    s.style.color = erreur ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  function ajoutListe(type, data) {
+    const items = !data ? [] : (type === 'of' ? (data.ofs || []) : (data.fiches || []));
+    if (!items.length) {
+      return '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">'
+        + (data ? 'Aucun document trouvé — essayer une recherche.' : '—') + '</div>';
+    }
+    return items.map(it => {
+      const ref = type === 'of' ? (it.of_numero || '—') : (it.reference || '—');
+      const meta = type === 'of'
+        ? [it.reference, it.machine,
+           it.qte_etiquettes ? Number(it.qte_etiquettes).toLocaleString('fr-FR') + ' étiq.' : null,
+           it.date_creation].filter(Boolean).join(' · ')
+        : [it.designation, it.client, it.machine].filter(Boolean).join(' · ');
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;'
+        + 'border-bottom:1px solid var(--border)">'
+        + '<div style="min-width:0"><div style="font-weight:700;color:var(--text)">' + esc(ref) + '</div>'
+        + (meta ? '<div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          + esc(meta) + '</div>' : '')
+        + '</div><button type="button" data-dr-ajout-lier="' + esc(it.id) + '" data-dr-ajout-lib="' + esc(ref) + '" '
+        + 'style="' + BTN_PETIT + '">Rattacher</button></div>';
+    }).join('');
+  }
+
+  async function ajoutCharger(type, q) {
+    const zone = document.querySelector('[data-dr-ajout-liste]');
+    if (!zone) return;
+    ajoutStatut('Chargement…');
+    try {
+      E.ajout = await appel('/api/stock/besoins-matieres/dossier/' + E.entryId + '/documents'
+        + (q ? '?q=' + encodeURIComponent(q) : ''));
+      ajoutStatut('');
+    } catch (e) {
+      E.ajout = null;
+      ajoutStatut(e.message || 'Chargement impossible.', true);
+    }
+    zone.innerHTML = ajoutListe(type, E.ajout);
+    // Préremplit la fiche à créer avec ce que le dossier sait de lui-même.
+    const dos = (E.ajout && E.ajout.dossier) || {};
+    const refInp = document.querySelector('[data-dr-ft-champ="reference"]');
+    if (refInp && !refInp.value) refInp.value = dos.ref_produit || '';
+  }
+
+  // Le dossier a changé de documents : son calcul aussi. On rouvre le
+  // contrôle à neuf plutôt que de garder des lignes calculées sans eux.
+  async function ajoutTermine(message) {
+    toast(message, 'success');
+    await ouvrir(E.entryId, E.opts);
+  }
+
+  async function ajoutRattacher(type, id, libelle) {
+    ajoutStatut('Rattachement…');
+    try {
+      await appel('/api/stock/besoins-matieres/dossier/' + E.entryId
+        + (type === 'of' ? '/rattacher-of' : '/rattacher-fiche'),
+        {method: 'POST', body: JSON.stringify(type === 'of' ? {of_id: id} : {fiche_id: id})});
+      await ajoutTermine((type === 'of' ? 'OF ' : 'Fiche ') + libelle + ' rattaché' + (type === 'of' ? '.' : 'e.'));
+    } catch (e) {
+      ajoutStatut(e.message || 'Rattachement impossible.', true);
+    }
+  }
+
+  async function ajoutImporterOf(fichier) {
+    try {
+      ajoutStatut('Lecture du PDF…');
+      const fd = new FormData();
+      fd.append('file', fichier);
+      const champs = await appel('/api/of/parse', {method: 'POST', body: fd});
+      ajoutStatut('OF n° ' + (champs.of_numero || '?') + ' lu — enregistrement…');
+      const fd2 = new FormData();
+      fd2.append('file', fichier);
+      fd2.append('data', JSON.stringify(champs));
+      const cree = await appel('/api/of/validate', {method: 'POST', body: fd2});
+      await ajoutRattacher('of', cree.id, champs.of_numero || String(cree.id));
+    } catch (e) {
+      ajoutStatut('Import impossible : ' + (e.message || 'erreur inconnue'), true);
+    }
+  }
+
+  async function ajoutCreerFiche(bouton) {
+    const val = k => ((document.querySelector('[data-dr-ft-champ="' + k + '"]') || {}).value || '').trim();
+    const reference = val('reference');
+    if (!reference) { ajoutStatut('Référence produit obligatoire.', true); return; }
+    bouton.disabled = true;
+    ajoutStatut('Création de la fiche…');
+    try {
+      const cree = await appel('/api/fiches-techniques', {method: 'POST', body: JSON.stringify({
+        reference, designation: val('designation') || null, client: val('client') || null,
+        machine: ((E.data || {}).dossier || {}).machine || null,
+      })});
+      await ajoutRattacher('ft', cree.id, cree.reference || reference);
+    } catch (e) {
+      ajoutStatut(e.message || 'Création impossible.', true);
+      bouton.disabled = false;
+    }
+  }
+
+  function ouvrirAjout(type, zone) {
+    const dos = (E.data && E.data.dossier) || {};
+    const estOf = type === 'of';
+    zone.innerHTML = '<div style="border:1px dashed var(--border);border-radius:10px;background:var(--bg);padding:12px 14px">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">'
+      + '<span style="font-weight:700;color:var(--text)">' + esc(DOCS[type].absent) + '</span>'
+      + '<button type="button" data-dr-doc-fermer style="' + BTN_PETIT + '">Masquer</button></div>'
+      + '<input type="search" data-dr-ajout-q placeholder="'
+      + (estOf ? 'Rechercher un OF (n°, référence, machine)…' : 'Rechercher une fiche (référence, désignation, client)…')
+      + '" style="' + CHAMP + ';width:100%;box-sizing:border-box;margin-bottom:8px">'
+      + '<div data-dr-ajout-liste style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;'
+      + 'background:var(--card)"></div>'
+      + '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">'
+      + (estOf
+        ? '<div style="font-weight:600;color:var(--text);margin-bottom:4px">L\'OF n\'est pas encore dans MySifa ?</div>'
+          + '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'
+          + 'Déposer le PDF : il est lu, enregistré comme OF, puis rattaché à ce dossier.</div>'
+          + '<input type="file" accept=".pdf" data-dr-ajout-fichier hidden>'
+          + '<button type="button" data-dr-ajout-importer style="' + BTN_PETIT + '">Importer le PDF de l\'OF</button>'
+        : '<div style="font-weight:600;color:var(--text);margin-bottom:4px">La fiche n\'existe pas ?</div>'
+          + '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'
+          + 'Elle est créée puis rattachée à ce dossier. Support, adhésif, mandrin se complètent ensuite '
+          + 'ligne par ligne, ou dans MyProd.</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:8px">'
+          + '<input data-dr-ft-champ="reference" placeholder="Référence produit" style="' + CHAMP + '">'
+          + '<input data-dr-ft-champ="designation" placeholder="Désignation" style="' + CHAMP + '">'
+          + '<input data-dr-ft-champ="client" placeholder="Client" value="' + esc(dos.client || '') + '" style="' + CHAMP + '">'
+          + '</div>'
+          + '<button type="button" data-dr-ajout-creer style="' + BTN_PETIT + '">Créer et rattacher la fiche</button>')
+      + '</div>'
+      + '<div data-dr-ajout-statut style="margin-top:8px;font-size:12px;color:var(--muted)"></div></div>';
+
+    zone.querySelector('[data-dr-doc-fermer]').addEventListener('click', () => basculerDoc(type));
+    let minuterie = null;
+    zone.querySelector('[data-dr-ajout-q]').addEventListener('input', (ev) => {
+      clearTimeout(minuterie);
+      const q = (ev.target.value || '').trim();
+      minuterie = setTimeout(() => ajoutCharger(type, q), 250);
+    });
+    zone.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button');
+      if (!b) return;
+      if (b.hasAttribute('data-dr-ajout-lier')) {
+        b.disabled = true;
+        ajoutRattacher(type, Number(b.getAttribute('data-dr-ajout-lier')), b.getAttribute('data-dr-ajout-lib') || '');
+      } else if (b.hasAttribute('data-dr-ajout-importer')) {
+        zone.querySelector('[data-dr-ajout-fichier]').click();
+      } else if (b.hasAttribute('data-dr-ajout-creer')) {
+        ajoutCreerFiche(b);
+      }
+    });
+    const fichier = zone.querySelector('[data-dr-ajout-fichier]');
+    if (fichier) {
+      fichier.addEventListener('change', () => {
+        const f = fichier.files && fichier.files[0];
+        fichier.value = '';
+        if (f) ajoutImporterOf(f);
+      });
+    }
+    ajoutCharger(type, '');
   }
 
   function basculerDoc(type) {
     const zone = document.getElementById('dr-doc');
+    if (!zone) return;
     const id = E.docs && E.docs[type];
-    if (!zone || !id) return;
+    if (!id) {
+      const ouvertAjout = !zone.hidden && zone.dataset.type === type;
+      document.querySelectorAll('[data-dr-doc]').forEach(b => styleBouton(b, false));
+      if (ouvertAjout) { zone.hidden = true; zone.innerHTML = ''; zone.dataset.type = ''; return; }
+      zone.dataset.type = type;
+      zone.hidden = false;
+      styleBouton(document.querySelector('[data-dr-doc="' + type + '"]'), true);
+      ouvrirAjout(type, zone);
+      return;
+    }
     const ouvert = !zone.hidden && zone.dataset.type === type;
     document.querySelectorAll('[data-dr-doc]').forEach(b => styleBouton(b, false));
     if (ouvert) { zone.hidden = true; zone.innerHTML = ''; zone.dataset.type = ''; return; }
@@ -1031,7 +1225,7 @@
     E.opts = opts || {};
     E.entryId = entryId;
     fermerChoix();
-    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false; E.docs = {};
+    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false; E.docs = {}; E.ajout = null;
     const root = document.getElementById('mroot');
     if (!root) return;
     injecterStyle();

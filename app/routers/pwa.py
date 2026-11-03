@@ -1,14 +1,15 @@
-"""MySifa — PWA (manifest + service worker).
+"""MySifa — PWA (manifest + service worker), robots.txt et sitemap.xml.
 
 Permet l'installation « Ajouter à l'écran d'accueil » (mobile) / « Installer » (desktop).
 """
 
 import json
 
-from fastapi import APIRouter
-from fastapi.responses import Response
+from fastapi import APIRouter, Request
+from fastapi.responses import PlainTextResponse, Response
 
-from config import APP_VERSION, IS_STAGING
+from app.core.noindex import hote_indexable
+from config import APP_VERSION, IS_STAGING, public_base_url
 
 # Suffix des icônes MySifa (dark par défaut, -light en staging v1).
 _MYS_SFX = "-light" if IS_STAGING else ""
@@ -26,6 +27,29 @@ def _manifest_response(body: dict) -> Response:
         content=json.dumps(body, ensure_ascii=False),
         media_type=_MANIFEST_MEDIA_TYPE,
         headers=_MANIFEST_HEADERS,
+    )
+
+
+@router.get("/robots.txt", include_in_schema=False)
+def robots(request: Request):
+    if not hote_indexable(request.headers.get("host")):
+        return PlainTextResponse("User-agent: *\nDisallow: /\n")
+    base = public_base_url()
+    # Seule la page d'accueil est publique : le reste est derrière la connexion et répond « noindex ».
+    return PlainTextResponse("User-agent: *\nAllow: /$\nAllow: /static/\nDisallow: /\n\n"
+                             f"Sitemap: {base}/sitemap.xml\n")
+
+
+@router.get("/sitemap.xml", include_in_schema=False)
+def sitemap(request: Request):
+    if not hote_indexable(request.headers.get("host")):
+        return Response(status_code=404)
+    base = public_base_url()
+    return Response(
+        content=('<?xml version="1.0" encoding="UTF-8"?>\n'
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+                 f"  <url><loc>{base}/</loc></url>\n</urlset>\n"),
+        media_type="application/xml",
     )
 
 

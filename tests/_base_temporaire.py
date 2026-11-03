@@ -104,7 +104,17 @@ def _base_modele():
             os.remove(brouillon + suffixe)
         except OSError:
             pass
-    os.replace(brouillon, modele)
+    try:
+        os.replace(brouillon, modele)
+    except PermissionError:
+        # Windows : un test parallèle a publié le même modèle et l'a ouvert,
+        # le remplacer est refusé. Le sien vaut le nôtre.
+        if not modele.exists():
+            return brouillon
+        try:
+            os.remove(brouillon)
+        except OSError:
+            pass
     return str(modele)
 
 

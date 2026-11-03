@@ -189,6 +189,9 @@ class Chaine(unittest.TestCase):
 
         # Une facture pour les deux BL
         fa = pieces.transformer(c, [bl, bl2], "facture")
+        # Date figée : la facture naît datée du jour, et l'échéance attendue
+        # plus bas (30 jours fin de mois) en dépend.
+        pieces.enregistrer(c, fa, {"date_piece": "2026-10-14"}, None)
         f = pieces.charger(c, fa)
         self.assertEqual(sum(x["montant_ht_cents"] for x in f["lignes"]), 25000 + 8000)
         self.assertRegex(pieces.valider(c, fa), r"^\d{4}0001$")          # AAMM + compteur mensuel

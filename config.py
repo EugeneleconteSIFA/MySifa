@@ -43,7 +43,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.5.0"
+APP_VERSION = "3.5.1"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -122,14 +122,22 @@ APP_STATUS_TEXT = os.getenv("APP_STATUS_TEXT", "Service opérationnel")
 APP_TITLE = os.getenv("APP_TITLE", APP_NAME)
 
 # Onglet navigateur & SEO.
+# Titre et description de la page d'accueil publique (« / ») : ce que Google affiche.
+# Le titre commence par le nom de l'appli, 70 caractères au plus ; la description fait
+# 140 à 160 caractères. Seul « / » est indexable (voir SEO_INDEXABLE).
 APP_PAGE_TITLE = os.getenv(
     "APP_PAGE_TITLE",
-    f"{APP_NAME} — Portail interne {APP_ORG_NAME}",
+    f"{APP_NAME} · Gestion de production de {APP_ORG_NAME}, fabricant d'étiquettes",
 )
 APP_META_DESCRIPTION = os.getenv(
     "APP_META_DESCRIPTION",
-    f"Portail interne {APP_ORG_NAME} : production, stocks, planning et outils métier.",
+    f"{APP_NAME}, le portail de gestion de production de {APP_ORG_NAME}, fabricant d'étiquettes : "
+    "saisies opérateurs, planning machine, stocks, qualité et expéditions dans un seul outil.",
 )
+# Image d'aperçu des partages (Open Graph, 1200×630) et auteur cité dans les données structurées.
+APP_OG_IMAGE = os.getenv("APP_OG_IMAGE", "/static/og-mysifa.png")
+APP_AUTHOR_NAME = os.getenv("APP_AUTHOR_NAME", "Eugène Leconte")
+APP_AUTHOR_URL = os.getenv("APP_AUTHOR_URL", "https://www.kernse.fr/")
 
 # Thème visuel : dark cyan MySifa (défaut) ou clair navy/orange Kernse.
 # Active via KERNSE_THEME=1 dans le .env de l'instance client.
@@ -166,6 +174,10 @@ ENV_NAME = os.getenv("ENV_NAME", "v2").strip().lower()
 # ne tente meme pas l'import de sentry_sdk. Voir app/core/monitoring.py.
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 IS_STAGING = (ENV_NAME == "v1")
+# Référencement : seule la page d'accueil de l'instance de prod, sur son domaine public
+# (public_base_url()), est ouverte aux moteurs. Staging, ERP et toutes les autres pages
+# (modules, portail Espace, API) répondent « noindex » (app/core/noindex.py).
+SEO_INDEXABLE = os.getenv("SEO_INDEXABLE", "0" if IS_STAGING else "1").strip().lower() in {"1", "true", "yes"}
 
 # MIGRATIONS_DISABLED : désactive les migrations de schéma au boot.
 #
@@ -339,6 +351,18 @@ STOCK_UNITES_COMPTAGE = {
 def unites_comptage(categorie):
     """Unités de comptage proposées pour une catégorie, ou ()."""
     return STOCK_UNITES_COMPTAGE.get((categorie or "").strip().lower(), ())
+
+
+# Consommables dont le prix unitaire se saisit directement dans MyStock (fiche
+# matière et valorisation), par l'administration. Les matières de production
+# (frontal, glassine, complexe, adhésif, encre) gardent leur prix dans Coûts
+# matières, où vivent devise, transport et taxes.
+STOCK_CATEGORIES_PRIX_DIRECT = ("carton", "mandrin", "palette", "autre")
+
+
+def categorie_prix_direct(categorie):
+    """Le prix unitaire de cette catégorie se saisit-il dans MyStock ?"""
+    return (categorie or "").strip().lower() in STOCK_CATEGORIES_PRIX_DIRECT
 
 # Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
 # métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
@@ -1315,6 +1339,19 @@ CARTONS_EXCLUS = tuple(m.strip().lower() for m in os.getenv("CARTONS_EXCLUS", "c
 # Couches d'une matière enduite, de haut en bas : (catégorie MyStock, libellé).
 # Calculs bobine › Métrage additionne leurs épaisseurs (GET /api/tools/couches).
 COUCHES_MATIERE = (("frontal", "Frontal"), ("adhesif", "Adhésif"), ("glassine", "Glassine"))
+
+# Familles du référentiel « épaisseurs matière » (mp_metrage_epaisseurs) :
+# Métrage bobine lit les épaisseurs, Poids de colle les grammages.
+# `anilox` : dépôt d'encre (g/m²) d'un aplat à 100 %.
+MATIERE_FAMILLES = (("frontal", "Frontal"), ("glassine", "Glassine"),
+                    ("complexe", "Matière enduite"), ("anilox", "Anilox (encre)"))
+
+# Pesées par front (alertes_pesees.py) : une mesure est signalée « à vérifier »
+# quand elle s'écarte de la médiane de son dossier (au moins 4 mesures) ou,
+# pour une pesée par front, de la médiane des autres fronts de la même
+# validation (au moins 3 fronts). Écarts relatifs : 0.3 = 30 %.
+PESEES_ECART_DOSSIER = float(os.getenv("PESEES_ECART_DOSSIER", "0.3"))
+PESEES_ECART_FRONTS = float(os.getenv("PESEES_ECART_FRONTS", "0.15"))
 
 # ─── MyTools — convertisseur (repris de Prismix) ──────────────────
 # Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et

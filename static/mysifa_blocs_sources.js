@@ -85,9 +85,11 @@
     if (cle === "dates" && ctx.params.get("bloc_du")) {
       return Promise.resolve({ from: ctx.params.get("bloc_du"), to: ctx.params.get("bloc_au") || ctx.params.get("bloc_du") });
     }
+    // « deux_jours » : la dernière journée travaillée jusqu'à aujourd'hui.
+    var fin = cle === "deux_jours" ? iso(now) : null;
     return ctx.json("/api/production/dernier-jour-saisi?avant=" + encodeURIComponent(iso(hier)))
-      .then(function (d) { var j = (d && d.jour) || iso(hier); return { from: j, to: j }; })
-      .catch(function () { return { from: iso(hier), to: iso(hier) }; });
+      .then(function (d) { var j = (d && d.jour) || iso(hier); return { from: j, to: fin || j }; })
+      .catch(function () { return { from: iso(hier), to: fin || iso(hier) }; });
   }
 
   function paramsProd(ctx) {

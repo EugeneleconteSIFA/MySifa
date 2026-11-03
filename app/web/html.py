@@ -3,7 +3,6 @@ import json as _json
 from config import (
     APP_VERSION,
     APP_META_DESCRIPTION,
-    APP_PAGE_TITLE,
     THEME_COLOR_META,
     ENV_NAME,
     IS_STAGING,
@@ -49,6 +48,7 @@ from app.web.expe_notes_assets import (
     EXPE_ZONES_JS,
 )
 from app.web.expe_guide import EXPE_DEVIS_GUIDE_JS
+from app.web.components.seo_accueil import titre_et_seo
 from app.web.expe_pilotage_assets import EXPE_PILOTAGE_CSS, EXPE_PILOTAGE_JS
 from app.web.expe_emails_assets import EXPE_EMAILS_CSS, EXPE_EMAILS_JS
 from app.web.expe_carburant_assets import EXPE_CARBURANT_CSS, EXPE_CARBURANT_JS
@@ -94,7 +94,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0a0e17">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>__PAGE_TITLE__</title>
+__TITRE_SEO__
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
@@ -2406,6 +2406,7 @@ async function doLogin(email,password){
     }
     authEpoch++;
     kernseConnexion();
+    const tc=document.querySelector('title[data-titre-connecte]');if(tc)document.title=tc.dataset.titreConnecte;
     // Profil complet : la réponse login ne contient pas tous les champs (adresse, date_naissance).
     try{
       const me=await api('/api/auth/me');
@@ -11131,10 +11132,10 @@ _DEFAULT_CONFIG = {
 }
 
 
-# Rendu 100% déterminé par initial_app (le reste = constantes de config lues
+# Rendu 100% déterminé par initial_app et visiteur (le reste = constantes lues
 # au boot) : cache pour éviter 84 .replace() sur ~500 Ko à chaque hit.
 @_functools.lru_cache(maxsize=32)
-def render_frontend_html(initial_app: str = "portal") -> str:
+def render_frontend_html(initial_app: str = "portal", visiteur: bool = False) -> str:
     cfg = _MODULE_CONFIG.get(initial_app, _DEFAULT_CONFIG)
     # Bandeau : toujours dans le DOM. Visibilité initiale = IS_STAGING (rouge).
     # En prod : caché par défaut ; le JS d'impersonation le révèle pour le superadmin.
@@ -11180,7 +11181,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__FAV_SFX2__", fav_sfx)
         .replace("__FAV_ICO__", "/static/favicon-light-32.png" if IS_STAGING else "/static/favicon.ico")
         .replace("__TOUCH_ICON__", touch_icon)
-        .replace("__PAGE_TITLE__", page_title)
+        .replace("__TITRE_SEO__", titre_et_seo(initial_app, page_title, visiteur))
         .replace("__BRAND__", brand)
         .replace("__APP_TITLE__", cfg["app_title"])
         .replace("__MANIFEST__", cfg["manifest"])
@@ -11250,6 +11251,3 @@ def _js_escape(s: str) -> str:
          .replace("\n", "\\n")
          .replace("\r", "")
     )
-
-
-FRONTEND_HTML = render_frontend_html("portal")

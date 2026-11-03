@@ -265,6 +265,22 @@ body.sb-open .sidebar-overlay{display:block}
 .si-des{font-size:11px;color:var(--muted);margin-top:1px}
 .si-badge{font-family:monospace;font-size:11px;font-weight:700;color:var(--accent);
   background:var(--accent-bg);padding:3px 8px;border-radius:10px;white-space:nowrap}
+.search-item.is-active{background:var(--accent-bg)}
+.si-main{display:flex;align-items:center;gap:10px;min-width:0}
+.si-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:2px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0;
+  background:color-mix(in srgb,var(--si-c,var(--accent)) 14%,transparent);color:var(--si-c,var(--accent))}
+.si-type.t-produit{--si-c:var(--accent)}
+.si-type.t-matiere{--si-c:var(--c2)}
+.si-type.t-emplacement{--si-c:var(--c3)}
+.si-type.t-bobine{--si-c:var(--c4)}
+.search-section-head{display:flex;justify-content:space-between;align-items:center;padding-right:10px}
+.search-clear-recent{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--muted);font-size:11px;padding:3px 8px;cursor:pointer;font-family:inherit}
+.search-clear-recent:hover{color:var(--accent);border-color:var(--accent)}
+.ref-create-link{background:none;border:none;padding:0;color:var(--accent);font-weight:700;
+  font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
+.search-item.si-create{color:var(--accent);font-weight:700;font-size:13px;justify-content:flex-start;gap:8px}
 
 /* ── Content ── */
 .content{padding:16px;max-width:900px}
@@ -1803,6 +1819,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-bg-warn{background:var(--warn)}
 .mon-page .mon-bg-neutre{background:var(--muted)}
 .mon-page .mon-depart{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.mon-page .mon-parti{display:inline-block;margin-top:5px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);white-space:nowrap;cursor:help}
 .mon-page .mon-point{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .mon-page .mon-etat{padding:28px 16px;text-align:center;color:var(--muted)}
 .mon-page .mon-alerte{margin-bottom:12px;padding:10px 14px;border-radius:9px;background:var(--card);border:1px solid var(--warn);font-size:12.5px;color:var(--text)}
@@ -2233,6 +2250,11 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .empl-sugg-item:last-child{border-bottom:none}
 .empl-sugg-item:hover{background:var(--accent-bg);color:var(--accent)}
+.empl-suggestion-item{padding:11px 14px;cursor:pointer;font-size:13px;line-height:1.35;
+  border-bottom:1px solid var(--border);transition:background .1s}
+.empl-suggestion-item:last-child{border-bottom:none}
+.empl-suggestion-item:hover{background:var(--accent-bg)}
+.empl-suggestions:has(.empl-suggestion-item){max-height:270px}
 .unit-suggest-item{padding:10px 14px;cursor:pointer;font-family:inherit;font-size:13px;
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .unit-suggest-item:last-child{border-bottom:none}
@@ -2324,7 +2346,7 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .btn-sec:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 32%,transparent),0 0 20px color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent);border-color:color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);color:var(--accent)}
 .btn-sec:active{transform:translateY(1px)}
 .btn-confirm{border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;
-  cursor:pointer;font-family:inherit;color:#0a0e17}
+  cursor:pointer;font-family:inherit;color:white;background:var(--accent)}
 .btn-confirm.entree{background:var(--success)}
 .btn-confirm.sortie{background:var(--danger)}
 .btn-confirm.pf-entree{background:var(--pf-entree)}
@@ -2625,10 +2647,10 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=unite2"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite3"></script>
 <script src="/static/mysifa_scanner.js?v=1"></script>
-<script src="/static/mysifa_donnees_prod.js?v=16"></script>
-<script src="/static/mysifa_destockage.js?v=10"></script>
+<script src="/static/mysifa_donnees_prod.js?v=17"></script>
+<script src="/static/mysifa_destockage.js?v=11"></script>
 <script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -2639,7 +2661,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=7"></script>
+<script src="/static/stock_url.js?v=8"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -3324,15 +3346,71 @@ function el(tag, attrs, ...children) {
 let searchTimer = null;
 function doSearch(q) {
   S.searchQuery = q;
+  S.searchActive = -1;
   clearTimeout(searchTimer);
-  if (!q || q.length < 1) { S.searchResults = null; updateSearchResults(); return; }
+  if (!q || !q.trim()) { S.searchResults = null; updateSearchResults(); return; }
   searchTimer = setTimeout(async () => {
     try {
-      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+      const r = await api('/api/stock/search?q=' + encodeURIComponent(q.trim()) + '&limit=8&tout=1');
+      // Une réponse lente ne doit pas écraser celle d'une frappe plus récente.
+      if (S.searchQuery !== q) return;
       S.searchResults = r;
     } catch(e) {}
     updateSearchResults();
   }, 220);
+}
+
+// ── Recherches récentes (barre globale) ──────────────────────────
+// On retient ce qui a été OUVERT, pas le texte tapé : rouvrir « A121 » ou la
+// matière 2028Y en un clic, c'est ce qu'on vient chercher ici. Préférence
+// propre au poste, d'où le localStorage.
+const LS_STOCK_RECHERCHES = 'mystock_recherches_recentes';
+const STOCK_RECHERCHES_MAX = 5;
+function stockRecherchesRecentes() {
+  try {
+    const a = JSON.parse(localStorage.getItem(LS_STOCK_RECHERCHES) || '[]');
+    return Array.isArray(a) ? a.filter(x => x && x.type && x.cle != null).slice(0, STOCK_RECHERCHES_MAX) : [];
+  } catch (e) { return []; }
+}
+function stockRetenirRecherche(item) {
+  const cle = item.type + ':' + item.cle;
+  const reste = stockRecherchesRecentes().filter(x => (x.type + ':' + x.cle) !== cle);
+  const a = [{ type: item.type, cle: item.cle, libelle: item.libelle, detail: item.detail || '', negoce: !!item.negoce }, ...reste]
+    .slice(0, STOCK_RECHERCHES_MAX);
+  try { localStorage.setItem(LS_STOCK_RECHERCHES, JSON.stringify(a)); } catch (e) {}
+}
+function stockOublierRecherches() {
+  try { localStorage.removeItem(LS_STOCK_RECHERCHES); } catch (e) {}
+  updateSearchResults();
+}
+
+const STOCK_TYPES_RECHERCHE = {
+  produit: 'Produit', matiere: 'Matière', emplacement: 'Emplacement', bobine: 'Unité',
+};
+
+// Ouvre un résultat de la barre globale, quel que soit son type.
+function stockOuvrirResultat(item) {
+  stockRetenirRecherche(item);
+  S.searchResults = null;
+  const inp = document.getElementById('main-search');
+  if (inp) inp.blur();
+  if (item.type === 'produit') {
+    if (item.negoce) {
+      clearSearch();
+      if (S.tab !== 'negoce') goToTab('negoce');
+      loadNgDetail(item.libelle);
+    } else {
+      loadProduit(Number(item.cle));
+    }
+  } else if (item.type === 'matiere') {
+    loadMatiere(Number(item.cle));
+  } else if (item.type === 'emplacement') {
+    loadEmplacement(String(item.cle));
+  } else if (item.type === 'bobine') {
+    const b = bobEnsureState();
+    b.q = String(item.cle); b.etat = 'tous'; b.page = 0;
+    goToTab('bobines');
+  }
 }
 
 async function loadProduit(id) {
@@ -3941,7 +4019,8 @@ function invV2OpenAddProductModal() {
         suggWrap.innerHTML = '';
         if (!prods.length) { suggWrap.style.display = 'none'; return; }
         prods.forEach(p => {
-          const item = el('div', { cls:'empl-suggestion-item',
+          const unite = String(p.unite || '').trim();
+          const item = el('div', { cls:'empl-suggestion-item empl-sugg-item-with-unit',
             on:{ click: () => {
               refInp.value = p.reference;
               _pid = p.id; _ref = p.reference;
@@ -3952,8 +4031,11 @@ function invV2OpenAddProductModal() {
               try { qteInp.focus(); } catch(e){}
             }}
           },
-            el('span', { style:{ fontWeight:'700', marginRight:'8px' } }, p.reference),
-            el('span', { style:{ color:'var(--muted)', fontSize:'12px' } }, p.designation || '')
+            el('span', { cls:'empl-sugg-item-label' },
+              el('span', { style:{ fontWeight:'700', marginRight:'8px' } }, p.reference),
+              el('span', { style:{ color:'var(--muted)', fontSize:'12px' } }, p.designation || '')
+            ),
+            unite ? el('span', { cls:'empl-sugg-item-unit-badge' }, unite) : null
           );
           suggWrap.appendChild(item);
         });
@@ -3980,8 +4062,13 @@ function invV2OpenAddProductModal() {
           (p.reference || '').toUpperCase() === ref.toUpperCase()
         );
         if (!match) {
-          refError.textContent = 'Référence produit introuvable.';
-          refError.style.display = '';
+          stockRefIntrouvable(refError, ref, (prod) => {
+            _pid = prod.id; _ref = prod.reference;
+            _designation = prod.designation || ''; _unite = prod.unite || '';
+            refInp.value = prod.reference;
+            refError.style.display = 'none';
+            try { qteInp.focus(); } catch (e) {}
+          });
           return;
         }
         _pid = match.id; _ref = match.reference;
@@ -4415,6 +4502,84 @@ function _checkUnitQtyRange(unite, qte){
     return `Alerte unité/quantité : pour ${r.label}, la quantité attendue est entre ${r.min} et ${r.max}.`;
   }
   return null;
+}
+
+// ── Créer une référence produit (sans stock) ─────────────────────
+// Ouverte depuis la barre de recherche, les sélecteurs de référence produit
+// (« cette référence n'existe pas ») et le Référentiel. Elle ne crée que la
+// fiche : le stock s'ajoute ensuite par une entrée, comme pour toute référence.
+// Elle se pose PAR-DESSUS la fenêtre qui l'a ouverte, sans la fermer : la
+// saisie en cours (quantité, emplacement) n'est pas perdue.
+function openCreerRefProduitModal(seedRef, apres) {
+  document.querySelector('.ref-create-overlay')?.remove();
+  const overlay = el('div', { cls: 'modal-overlay ref-create-overlay', style: { zIndex: '10050' },
+    on: { click: e => { if (e.target === overlay) overlay.remove(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '460px' } });
+  sheet.addEventListener('click', e => e.stopPropagation());
+
+  const refInp = el('input', { cls: 'field-input', type: 'text', id: 'ref-create-ref',
+    placeholder: 'Ex. 973/0019', autocomplete: 'off', style: { direction: 'ltr', textTransform: 'uppercase' } });
+  refInp.value = String(seedRef || '').trim().toUpperCase();
+  const desInp = el('input', { cls: 'field-input', type: 'text', placeholder: 'Désignation (facultatif)', autocomplete: 'off' });
+  const uniteSel = el('select', { cls: 'field-input' });
+  allUnitLabels().forEach(u => {
+    const o = el('option', null, u); o.value = u;
+    if (u === 'étiquettes') o.selected = true;
+    uniteSel.appendChild(o);
+  });
+  const err = el('div', { style: { color: 'var(--danger)', fontSize: '12px', marginTop: '4px', display: 'none' } });
+
+  const confirmBtn = el('button', { cls: 'btn-confirm', type: 'button', on: { click: async () => {
+    const ref = refInp.value.trim().toUpperCase();
+    if (!ref) { err.textContent = 'Référence obligatoire.'; err.style.display = ''; refInp.focus(); return; }
+    confirmBtn.disabled = true;
+    try {
+      const body = { reference: ref, unite: uniteSel.value };
+      const des = desInp.value.trim();
+      if (des) body.designation = des;
+      const r = await api('/api/stock/produits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r || r.id == null) { confirmBtn.disabled = false; return; }
+      showToast(r.existing ? 'Référence ' + ref + ' déjà en base.' : 'Référence ' + ref + ' créée.', r.existing ? 'info' : 'success');
+      overlay.remove();
+      if (S.dashboard && S.dashboard.stats && !r.existing && S.dashboard.stats.nb_refs != null) S.dashboard.stats.nb_refs += 1;
+      if (typeof apres === 'function') apres({ id: r.id, reference: ref, designation: des || ref, unite: uniteSel.value, existing: !!r.existing });
+    } catch (e) {
+      err.textContent = e.message || 'Création impossible.'; err.style.display = '';
+      confirmBtn.disabled = false;
+    }
+  } } }, 'Créer la référence');
+  [refInp, desInp].forEach(i => i.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
+    if (e.key === 'Escape') { e.stopPropagation(); overlay.remove(); }
+  }));
+
+  sheet.append(
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Nouvelle référence produit'),
+    el('div', { cls: 'modal-sub' }, 'Crée la fiche produit, sans stock.'),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Référence *'), refInp, err),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Désignation'), desInp),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Unité de vente'), uniteSel),
+    el('div', { cls: 'modal-actions' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: () => overlay.remove() } }, 'Annuler'),
+      confirmBtn,
+    ),
+  );
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => { (refInp.value ? desInp : refInp).focus(); });
+}
+
+// Message « référence introuvable » d'un sélecteur de produit, avec le lien
+// qui crée la référence tapée et la sélectionne aussitôt.
+function stockRefIntrouvable(errEl, ref, onCree) {
+  errEl.innerHTML = '';
+  errEl.append('Référence produit introuvable.');
+  if (!S.stockReadOnly) {
+    errEl.append(' ', el('button', { type: 'button', cls: 'ref-create-link',
+      on: { click: () => openCreerRefProduitModal(ref, onCree) } }, 'Créer la référence ' + String(ref || '').toUpperCase()));
+  }
+  errEl.style.display = '';
 }
 
 async function createProduit(ref, commentaire, quantite, emplacement, uniteVente) {
@@ -4871,13 +5036,17 @@ function openEmplEntreeModal(codeEmpl) {
         suggWrap.innerHTML = '';
         if (!prods.length) { suggWrap.style.display = 'none'; return; }
         prods.forEach(p => {
-          const item = el('div', { cls:'empl-suggestion-item',
+          const unite = String(p.unite || '').trim();
+          const item = el('div', { cls:'empl-suggestion-item empl-sugg-item-with-unit',
             on:{ click: () => {
               refInp.value = p.reference; _pid = p.id;
               refError.style.display = 'none';
               suggWrap.innerHTML = ''; suggWrap.style.display = 'none';
             }}
-          }, el('span',{style:{fontWeight:'600',marginRight:'8px'}},p.reference), el('span',{style:{color:'var(--muted)',fontSize:'12px'}},p.designation||''));
+          }, el('span',{cls:'empl-sugg-item-label'},
+               el('span',{style:{fontWeight:'600',marginRight:'8px'}},p.reference),
+               el('span',{style:{color:'var(--muted)',fontSize:'12px'}},p.designation||'')),
+             unite ? el('span',{cls:'empl-sugg-item-unit-badge'},unite) : null);
           suggWrap.appendChild(item);
         });
         suggWrap.style.display = '';
@@ -4926,8 +5095,11 @@ function openEmplEntreeModal(codeEmpl) {
         const r = await api('/api/stock/search?q=' + encodeURIComponent(ref) + '&limit=10');
         const match = (r && r.produits || []).find(p => p.reference.toUpperCase() === ref);
         if (!match) {
-          refError.textContent = 'Référence produit non existante';
-          refError.style.display = '';
+          stockRefIntrouvable(refError, ref, (prod) => {
+            _pid = prod.id; refInp.value = prod.reference;
+            refError.style.display = 'none';
+            try { qteInp.focus(); } catch (e) {}
+          });
           return;
         }
         _pid = match.id;
@@ -5234,11 +5406,25 @@ function buildSearchBar() {
 
   const inp = el('input', {
     cls:'search-input', type:'text', id:'main-search',
-    placeholder:'Rechercher…',
+    placeholder:'Rechercher (produit, matière, emplacement, unité…)',
+    autocomplete:'off',
     style:{direction:'ltr'}
   });
   inp.addEventListener('input', e => doSearch(e.target.value));
-  inp.addEventListener('keydown', e => { if (e.key === 'Escape') clearSearch(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { clearSearch(); inp.blur(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') stockNavResultats(e);
+  });
+  // Champ vide : les dernières recherches s'affichent au focus.
+  inp.addEventListener('focus', () => { if (!inp.value.trim()) updateSearchResults(); });
+  inp.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (!inp.value.trim() && document.activeElement !== inp) {
+        const w = document.getElementById('search-results-wrap');
+        if (w) w.innerHTML = '';
+      }
+    }, 180);
+  });
 
   const iconSvg = (kind) => {
     const common = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
@@ -5268,59 +5454,116 @@ function buildSearchBar() {
   return wrap;
 }
 
+function stockNavResultats(e) {
+  const items = [...document.querySelectorAll('#search-results-wrap .search-item')];
+  if (!items.length) return;
+  e.preventDefault();
+  let i = S.searchActive == null ? -1 : S.searchActive;
+  if (e.key === 'Enter') {
+    (items[i >= 0 ? i : 0]).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    return;
+  }
+  i = e.key === 'ArrowDown' ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+  S.searchActive = i;
+  items.forEach((x, k) => x.classList.toggle('is-active', k === i));
+  items[i].scrollIntoView({ block: 'nearest' });
+}
+
+// Une ligne de résultat. mousedown plutôt que click : le champ perd le focus
+// au clic, et la liste des récentes se fermerait avant que le clic n'arrive.
+function stockLigneResultat(item, badge) {
+  return el('div', { cls: 'search-item', on: { mousedown: (e) => { e.preventDefault(); stockOuvrirResultat(item); } } },
+    el('div', { cls: 'si-main' },
+      el('span', { cls: 'si-type t-' + item.type }, STOCK_TYPES_RECHERCHE[item.type] || item.type),
+      el('div', { style: { minWidth: '0' } },
+        el('div', { cls: 'si-ref' }, item.libelle),
+        item.detail ? el('div', { cls: 'si-des' }, item.detail) : null,
+      ),
+    ),
+    badge != null && badge !== '' ? el('div', { cls: 'si-badge' }, badge) : null,
+  );
+}
+
 function updateSearchResults() {
   let wrap = document.getElementById('search-results-wrap');
   if (!wrap) return;
   wrap.innerHTML = '';
-  const q = S.searchQuery;
-  const res = S.searchResults;
-  if (!res || !q) return;
-  const { produits=[], emplacements=[] } = res;
-  if (!produits.length && !emplacements.length) {
-    wrap.appendChild(el('div',{cls:'search-results'},el('div',{cls:'card-empty'},'Aucun résultat pour \"'+q+'\"')));
+  S.searchActive = -1;
+  const q = String(S.searchQuery || '').trim();
+  if (!q) {
+    const inp = document.getElementById('main-search');
+    if (!inp || document.activeElement !== inp) return;
+    const recentes = stockRecherchesRecentes();
+    if (!recentes.length) return;
+    wrap.appendChild(el('div', { cls: 'search-results' },
+      el('div', { cls: 'search-section-head' },
+        el('div', { cls: 'search-section-title' }, 'Recherches récentes'),
+        el('button', { cls: 'search-clear-recent', type: 'button',
+          on: { mousedown: (e) => { e.preventDefault(); stockOublierRecherches(); } } }, 'Effacer'),
+      ),
+      ...recentes.map(it => stockLigneResultat(it)),
+    ));
     return;
   }
-  const box = el('div',{cls:'search-results'});
+  const res = S.searchResults;
+  if (!res) return;
+  const { produits = [], emplacements = [], matieres = [], bobines = [] } = res;
+  const box = el('div', { cls: 'search-results' });
+
   if (produits.length) {
-    box.appendChild(el('div',{cls:'search-section-title'},'📦 Produits'));
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Produits'));
     produits.forEach(p => {
-      const isNegoce = (p.type === 'negoce');
-      box.appendChild(
-        el('div',{cls:'search-item',on:{click:()=>{
-          if (isNegoce) {
-            S.searchResults = null; clearSearch();
-            if (S.tab !== 'negoce') goToTab('negoce');
-            loadNgDetail(p.reference);
-          } else {
-            loadProduit(p.id);
-          }
-        }}},
-          el('div',null,
-            el('div',{cls:'si-ref'},p.reference),
-            el('div',{cls:'si-des'},p.designation + (isNegoce ? ' · négoce' : '')),
-          ),
-          el('div',{cls:'si-badge'},fU(p.stock_total, p.unite))
-        )
-      );
+      const negoce = (p.type === 'negoce');
+      box.appendChild(stockLigneResultat({
+        type: 'produit', cle: p.id, libelle: p.reference, negoce,
+        detail: (p.designation || '') + (negoce ? ' · négoce' : ''),
+      }, fU(p.stock_total, p.unite)));
+    });
+  }
+  if (matieres.length) {
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Matières premières'));
+    matieres.forEach(m => {
+      const des = (m.designation && m.designation !== m.reference) ? m.designation : '';
+      box.appendChild(stockLigneResultat({
+        type: 'matiere', cle: m.id, libelle: m.reference || m.designation || ('#' + m.id),
+        detail: [des, m.emplacement ? 'en ' + m.emplacement : ''].filter(Boolean).join(' · '),
+      }, m.categorie || ''));
     });
   }
   if (emplacements.length) {
-    box.appendChild(el('div',{cls:'search-section-title'},'📍 Emplacements'));
-    emplacements.forEach(e => box.appendChild(
-      el('div',{cls:'search-item',on:{click:()=>loadEmplacement(e.emplacement)}},
-        el('div',null,
-          el('div',{cls:'si-ref'},stockEmplLabel(e.emplacement)),
-          el('div',{cls:'si-des'},
-            isStockEmplacementAuSol(e.emplacement)
-              ? 'Stock à expédier · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-              : isStockEmplacementSortieProd(e.emplacement)
-                ? 'Sortie de prod · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-                : e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-          ),
-        ),
-        el('div',{cls:'si-badge'},fN(e.total_unites))
-      )
-    ));
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Emplacements'));
+    emplacements.forEach(e => {
+      const n = e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '');
+      const detail = isStockEmplacementAuSol(e.emplacement) ? 'Stock à expédier · ' + n
+        : isStockEmplacementSortieProd(e.emplacement) ? 'Sortie de prod · ' + n : n;
+      box.appendChild(stockLigneResultat({
+        type: 'emplacement', cle: e.emplacement, libelle: stockEmplLabel(e.emplacement), detail,
+      }, fN(e.total_unites)));
+    });
+  }
+  if (bobines.length) {
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Unités (bobines)'));
+    bobines.forEach(b => {
+      const etat = b.etat === 'stock' ? 'en stock' : b.etat === 'consommee' ? 'consommée' : (b.etat || '');
+      box.appendChild(stockLigneResultat({
+        type: 'bobine', cle: b.code_barre, libelle: b.code_barre,
+        detail: [b.matiere_reference || '', b.lot_fournisseur ? 'lot ' + b.lot_fournisseur : '', etat].filter(Boolean).join(' · '),
+      }, b.metrage_restant != null ? fN(b.metrage_restant) + ' m' : ''));
+    });
+  }
+
+  // La référence tapée n'existe pas telle quelle : on propose de la créer.
+  const refTapee = q.toUpperCase();
+  const existe = produits.some(p => String(p.reference || '').toUpperCase() === refTapee);
+  const proposerCreation = !S.stockReadOnly && !existe && refTapee.length >= 3;
+  const vide = !produits.length && !matieres.length && !emplacements.length && !bobines.length;
+  if (vide) box.appendChild(el('div', { cls: 'card-empty' }, 'Aucun résultat pour « ' + q + ' »'));
+  if (proposerCreation) {
+    box.appendChild(el('div', { cls: 'search-item si-create', on: { mousedown: (e) => {
+      e.preventDefault();
+      clearSearch();
+      openCreerRefProduitModal(refTapee, (prod) => loadProduit(prod.id));
+    } } }, iconEl('plus-circle', 14), 'Créer la référence produit « ' + refTapee + ' »'));
   }
   wrap.appendChild(box);
 }
@@ -5843,6 +6086,14 @@ function buildReferentielCard() {
   if (!S.stockReadOnly) {
     actions.appendChild(el('button', {
       cls: 'btn-ghost-sm', type: 'button',
+      on: { click: () => openCreerRefProduitModal('', async () => {
+        await loadDashboard();
+        if (String(S.refClientQ || '').trim()) await loadRefClientSearch(S.refClientQ);
+        renderReferentielView();
+      }) },
+    }, iconEl('plus-circle', 14), ' Nouvelle référence'));
+    actions.appendChild(el('button', {
+      cls: 'btn-ghost-sm', type: 'button',
       on: { click: () => { S.importRefsOpen = true; S.importRefsPreview = null; render(); } },
     }, iconEl('upload', 14), ' Importer'));
   }
@@ -5860,7 +6111,7 @@ function buildReferentielCard() {
     ),
     el('div', { cls: 'ref-card-body' },
       el('p', { cls: 'ref-card-desc' },
-        'Importez ou exportez le référentiel des références produit et de leur unité de vente (CSV ou Excel).'
+        'Créez une référence produit, ou importez et exportez le référentiel des références et de leur unité de vente (CSV ou Excel).'
       )
     )
   );
@@ -9077,6 +9328,14 @@ function matiereRefEditPayload(item, fields) {
       payload.unites_par_palette = upp;
     }
   }
+  if (fields.prixInp) {
+    const raw = (fields.prixInp.value || '').replace(',', '.').trim();
+    const prix = raw === '' ? 0 : parseFloat(raw);
+    if (isNaN(prix) || prix < 0) {
+      return { error: 'Prix unitaire invalide — valeur positive attendue.' };
+    }
+    if (Math.abs(prix - Number(item.prix_unitaire || 0)) > 1e-9) payload.prix_unitaire = prix;
+  }
   if (fields.isMandrin && fields.ltInp) {
     // Toujours envoyée, même vide, pour autoriser l'effacement de la longueur.
     const raw = (fields.ltInp.value || '').replace(',', '.').trim();
@@ -9605,7 +9864,9 @@ function appendMatiereRefEditFields(parent, item) {
   function refreshLongueurTube() {
     const lt = parseFloat((ltInp.value || '').replace(',', '.'));
     const upp = parseFloat((uppInp.value || '').replace(',', '.'));
-    if (lt > 0 && upp > 0) {
+    if (lt > 0 && unChk.checked) {
+      ltHint.textContent = 'Longueur du tube acheté.';
+    } else if (lt > 0 && upp > 0) {
       ltHint.textContent = 'Une palette représente ' + fN(upp) + ' tubes, soit '
         + fN(Math.round(lt * upp / 1000)) + ' m de mandrin à découper.';
     } else if (lt > 0) {
@@ -9618,8 +9879,34 @@ function appendMatiereRefEditFields(parent, item) {
   }
   ltInp.addEventListener('input', refreshLongueurTube);
   uppInp.addEventListener('input', refreshLongueurTube);
+  unChk.addEventListener('change', refreshLongueurTube);
   refreshLongueurTube();
   ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp, ltHint);
+
+  // ── Prix unitaire des consommables (bagues, cartons, palettes…) ───────────
+  // Saisi ici par l'administration ; les matières de production gardent leur
+  // prix dans Coûts matières (config.STOCK_CATEGORIES_PRIX_DIRECT).
+  const prixDirect = !!item.prix_direct && isMatieresAdmin();
+  const prixInp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,35' } });
+  prixInp.value = Number(item.prix_unitaire) > 0 ? String(item.prix_unitaire) : '';
+  const prixLbl = el('label', null, '');
+  const prixHint = el('div', { cls: 'mp-hint' }, '');
+  function refreshPrixLabel() {
+    const c = (item.categorie || '').toLowerCase();
+    const u = (hasCond && unChk.checked) ? (unSel.value || uniteAchat)
+      : hasCond ? uniteAchat
+      : c === 'palette' ? 'palette' : 'unité';
+    prixLbl.textContent = 'Prix unitaire (€ / ' + u + ')';
+    const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+    const prix = parseFloat((prixInp.value || '').replace(',', '.'));
+    prixHint.textContent = (hasCond && !unChk.checked && upp > 0 && prix > 0)
+      ? 'Soit ' + (prix * upp).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' € la palette de ' + fN(upp) + ' ' + uniteAchat + 's.'
+      : 'Repris dans la valorisation et dans Coûts matières.';
+  }
+  [prixInp, uppInp].forEach(i => i.addEventListener('input', refreshPrixLabel));
+  [unChk, unSel].forEach(i => i.addEventListener('change', refreshPrixLabel));
+  refreshPrixLabel();
+  const prixWrap = prixDirect ? el('div', { cls: 'mp-field' }, prixLbl, prixInp, prixHint) : null;
 
   // ── Conditionnement à l'achat des adhésifs ────────────────────────────────
   // Le stock est au kilo ; ces deux champs décrivent comment l'adhésif ARRIVE
@@ -9714,6 +10001,7 @@ function appendMatiereRefEditFields(parent, item) {
       fscWrap,
     ),
     sectionConditionnement,
+    prixWrap ? mpFormSection('Prix', prixWrap) : null,
     mpFormSection('Stock & inventaire',
       el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
       el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
@@ -9729,7 +10017,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, unSel, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, unSel, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc, prixInp: prixWrap ? prixInp : null };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -10821,7 +11109,9 @@ function mtrSetOpen(v) {
 async function mtrChargerEpaisseurs() {
   try {
     const d = await api('/api/stock/metrage-epaisseurs');
-    MTR.epaisseurs = Array.isArray(d) ? d : [];
+    // Le référentiel porte aussi les grammages (Poids de colle, saisie prod) :
+    // seules les lignes avec une épaisseur servent ici.
+    MTR.epaisseurs = Array.isArray(d) ? d.filter(t => t.microns != null) : [];
   } catch (e) {
     MTR.epaisseurs = [];
   }
@@ -10933,7 +11223,7 @@ function mtrRender() {
 }
 
 function mtrRenderEdition(body) {
-  const lignes = (MTR.epaisseurs || []).map(t => ({ libelle: t.libelle, microns: t.microns }));
+  const lignes = (MTR.epaisseurs || []).map(t => ({ id: t.id, libelle: t.libelle, microns: t.microns }));
   const liste = el('div', { cls: 'mtr-edit' });
   const errEl = el('div', { cls: 'mtr-err' });
   const dessiner = () => {
@@ -10957,15 +11247,16 @@ function mtrRenderEdition(body) {
   enregistrer.addEventListener('click', async () => {
     errEl.textContent = '';
     const items = lignes
-      .map(l => ({ libelle: String(l.libelle || '').trim(), microns: String(l.microns || '').replace(',', '.') }))
+      .map(l => ({ id: l.id, libelle: String(l.libelle || '').trim(), microns: String(l.microns || '').replace(',', '.') }))
       .filter(l => l.libelle || l.microns);
     enregistrer.disabled = true;
     try {
-      MTR.epaisseurs = await api('/api/stock/metrage-epaisseurs', {
+      const d = await api('/api/stock/metrage-epaisseurs', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ perimetre: 'epaisseur', items }),
       });
+      MTR.epaisseurs = (Array.isArray(d) ? d : []).filter(t => t.microns != null);
       MTR.edit = false;
       showToast('Épaisseurs enregistrées.', 'success');
       mtrRender();
@@ -13155,7 +13446,7 @@ function renderModalInventaireMatiere(data) {
     style: { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '10px', flexWrap: 'wrap' },
   },
     el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
-    el('button', { cls: 'btn-confirm', on: { click: async () => {
+    el('button', { cls: 'btn-confirm inventaire', on: { click: async () => {
       // Construire les lignes valides (comptée renseignée)
       const payload = [];
       lignes.forEach(li => {
@@ -19937,7 +20228,8 @@ function monDesignation(l) {
 function monColonnes(page) {
   const statut = {
     cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1],
-    txt: l => monStatutDef(page, l.statut)[1], td: l => el('td', { cls: 'mon-cell' }, monBadge(page, l.statut)),
+    txt: l => monStatutDef(page, l.statut)[1] + ((l.departs_apres || []).length ? ' parti' : ''),
+    td: l => el('td', { cls: 'mon-cell' }, monBadge(page, l.statut), monPartiPastille(l)),
   };
   if (page === 'expedition') return [
     statut,
@@ -20217,6 +20509,17 @@ function monLienProduit(ref) {
     'Fiche produit ' + ref + ' ↗');
 }
 
+// Production → stock : la référence est partie (départ MyExpé ou BL RVGI)
+// dans les jours qui ont suivi la production.
+function monPartiPastille(l) {
+  const deps = l.departs_apres || [];
+  if (!deps.length) return null;
+  const p = deps[0];
+  const titre = deps.map(d => fD(d.jour) + (d.no_bl ? ' · BL ' + d.no_bl : '') + (d.client ? ' · ' + d.client : '')).join('\n');
+  return el('div', { cls: 'mon-parti', title: titre },
+    '→ parti le ' + monCourt(p.jour) + (deps.length > 1 ? ' +' + (deps.length - 1) : ''));
+}
+
 function monDetailProduction(l) {
   const d = l.detail || {};
   const u = l.unite;
@@ -20250,6 +20553,16 @@ function monDetailProduction(l) {
         ['Emplacement', x => x.emplacement],
         ['Quantité', x => monQteExacte(x.quantite, u), true],
       ], 'Plus rien en stock pour ce dossier.', monTotal(d.restants, u)),
+      monSection('Départs après la production', l.departs_apres, [
+        ['Date', x => fD(x.jour)],
+        ['Origine', x => x.source === 'depart'
+          ? el('span', { cls: 'mon-depart' }, el('span', { cls: 'mon-point mon-bg-' + (x.statut === 'valide' ? 'ok' : 'neutre') }), 'MyExpé · ' + (MON_STATUT_DEPART[x.statut] || x.statut || '—'))
+          : 'BL RVGI'],
+        ['Client', x => x.client, 'libre'],
+        ['BL', x => x.no_bl],
+        ['Quantité', x => x.quantite ? monQteExacte(x.quantite, u) : '', true],
+        ['', x => x.depart_id ? el('a', { cls: 'mon-det-lien', href: '/expe?onglet=suivi_departs' + (x.jour ? '&jour=' + encodeURIComponent(x.jour) : '') + '&depart=' + encodeURIComponent(x.depart_id) }, 'Ouvrir ↗') : null],
+      ], 'Aucun départ de cette référence dans les ' + ((monEnsureState().data || {}).fenetre_expe_jours || 7) + ' jours qui ont suivi la production.'),
     ));
 }
 
@@ -22041,8 +22354,10 @@ function buildReception() {
         loadReceptionRvgi();
       }}
     }, iconEl('download', 13), ' Depuis l\'ERP',
-       (S.rvgiFile && S.rvgiFile.total
-        ? el('span', { cls: 'recep-hist-lot' }, String(S.rvgiFile.total)) : null)),
+       // Même compte que la pastille de la sidebar : lignes à intégrer ET
+       // entrées à valider.
+       (rvgiNbEnAttente()
+        ? el('span', { cls: 'recep-hist-lot' }, String(rvgiNbEnAttente())) : null)),
     el('button', {
       cls: 'recep-subtab' + (sub === 'rvgi-historique' ? ' active' : ''),
       on: { click: () => {
@@ -22127,7 +22442,9 @@ async function loadReceptionRvgi() {
 
 function rvgiNbEnAttente() {
   const f = S.rvgiFile;
-  return f ? Number(f.total != null ? f.total : (f.lignes || []).length) || 0 : 0;
+  if (!f) return 0;
+  return (Number(f.total != null ? f.total : (f.lignes || []).length) || 0)
+    + (f.a_valider || []).length;
 }
 
 // Met à jour la pastille de la sidebar sans reconstruire la page.
@@ -22313,7 +22630,8 @@ function buildReceptionRvgi() {
   }
 
   const lignes = f.lignes || [];
-  if (!lignes.length) {
+  const aValider = f.a_valider || [];
+  if (!lignes.length && !aValider.length) {
     // État vide au format des autres écrans de MyStock (bes-empty) : la
     // classe `muted` n'existe pas ici, la phrase sortait en gros texte noir.
     wrap.appendChild(el('div', { cls: 'bes-empty' },
@@ -22323,7 +22641,30 @@ function buildReceptionRvgi() {
         + (f.depuis ? ' depuis le ' + _fmtDate(f.depuis) : '') + '.')));
     return wrap;
   }
+  if (lignes.length) wrap.appendChild(rvgiBlocAIntegrer(f, lignes));
+  if (aValider.length) wrap.appendChild(rvgiBlocAValider(aValider));
+  return wrap;
+}
 
+// Les entrées faites par la synchro restent dans la file tant que personne ne
+// les a relues : le stock est déjà à jour, la réception n'est pas encore
+// vérifiée. Une fois validée, la ligne passe dans l'historique.
+function rvgiBlocAValider(aValider) {
+  const bloc = el('div', { style: 'margin-top:18px' });
+  bloc.appendChild(el('div', { style: 'display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 12px' },
+    el('span', { style: 'font-size:15px;font-weight:700;color:var(--text)' }, 'Entrées en stock à valider'),
+    el('span', { style: 'font-size:13px;color:var(--text2)' },
+      el('b', null, String(aValider.length)),
+      ' réception' + (aValider.length > 1 ? 's' : '') + ' entrée' + (aValider.length > 1 ? 's' : '')
+      + ' par la synchro — article, quantité et BL à vérifier')));
+  const tbody = el('tbody');
+  aValider.forEach(l => tbody.appendChild(rvgiLigneEntree(l, loadReceptionRvgi)));
+  bloc.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, el('table', { cls: 'bes-table' }, rvgiTheadEntrees(), tbody)));
+  return bloc;
+}
+
+function rvgiBlocAIntegrer(f, lignes) {
+  const wrap = el('div');
   const pretes = lignes.filter(l => l.integrable);
   wrap.appendChild(el('div', {
     style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 12px' },
@@ -22389,10 +22730,12 @@ function buildRvgiHistorique() {
     return wrap;
   }
   const q = (S.rvgiHistoQ || '').trim().toLowerCase();
+  // Seulement les réceptions validées : celles qui attendent une validation
+  // sont dans « Depuis l'ERP ».
   const toutes = h.lignes || [];
   const lignes = q ? toutes.filter(l => [
       l.fournisseur, l.article, l.libelle, l.libelle_technique, l.matiere_ref, l.matiere_designation,
-      l.integre_par, l.ref_br, l.numero, l.operateur_erp,
+      l.integre_par, l.valide_par, l.ref_br, l.numero, l.operateur_erp,
     ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)) : toutes;
 
   const search = el('input', {
@@ -22411,18 +22754,40 @@ function buildRvgiHistorique() {
     search,
     el('span', { style: 'font-size:13px;color:var(--text2)' },
       el('b', null, String(lignes.length)),
-      ' réception' + (lignes.length > 1 ? 's' : '') + ' entrée' + (lignes.length > 1 ? 's' : '') + ' en stock'
+      ' réception' + (lignes.length > 1 ? 's' : '') + ' validée' + (lignes.length > 1 ? 's' : '')
       + (q ? ' (sur ' + toutes.length + ')' : ''))));
 
   if (!lignes.length) {
     wrap.appendChild(el('div', { cls: 'bes-empty' },
-      q ? 'Aucune réception pour « ' + S.rvgiHistoQ.trim() + ' ».' : 'Aucune réception RVGI entrée en stock pour le moment.'));
+      q ? 'Aucune réception pour « ' + S.rvgiHistoQ.trim() + ' ».' : 'Aucune réception RVGI validée pour le moment.'));
     return wrap;
   }
-  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
   const tbody = el('tbody');
-  lignes.forEach(l => {
-    tbody.appendChild(el('tr', l.matiere_fsc ? { cls: 'recep-ligne-fsc' } : null,
+  lignes.forEach(l => tbody.appendChild(rvgiLigneEntree(l, loadRvgiHistorique)));
+  const table = el('table', { cls: 'bes-table' }, rvgiTheadEntrees(), tbody);
+  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
+  return wrap;
+}
+
+// Une réception entrée en stock, dans l'historique comme dans la file des
+// entrées à valider : mêmes colonnes, pour qu'une ligne validée se retrouve à
+// l'identique d'un écran à l'autre.
+function rvgiTheadEntrees() {
+  return el('thead', null, el('tr', null,
+    el('th', null, 'Livraison'),
+    el('th', null, 'Commande RVGI'),
+    el('th', null, 'Article RVGI'),
+    el('th', null, 'Référence MySifa'),
+    el('th', { cls: 'num' }, 'Quantité'),
+    el('th', null, 'Saisie RVGI'),
+    el('th', null, 'Pièces'),
+    el('th', null, 'Entrée MySifa'),
+    el('th', null, 'Validation')));
+}
+
+function rvgiLigneEntree(l, apres) {
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
+  return el('tr', l.matiere_fsc ? { cls: 'recep-ligne-fsc' } : null,
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
         l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null),
@@ -22450,7 +22815,7 @@ function buildRvgiHistorique() {
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.saisie_erp)),
         el('div', { style: petit }, l.operateur_erp != null ? 'opérateur RVGI n° ' + l.operateur_erp : '—')),
-      recepCelluleDocuments(l, loadRvgiHistorique),
+      recepCelluleDocuments(l, apres),
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.integre_at)),
         el('div', { style: petit }, l.integre_par ? 'par ' + l.integre_par : '—'),
@@ -22460,21 +22825,74 @@ function buildRvgiHistorique() {
           style: 'margin-top:6px',
           on: { click: (ev) => rvgiAnnulerEntree(l, ev.currentTarget) },
         }, iconEl('rotate-ccw', 12), ' Annuler l\'entrée')),
-    ));
-  });
-  const table = el('table', { cls: 'bes-table' },
-    el('thead', null, el('tr', null,
-      el('th', null, 'Livraison'),
-      el('th', null, 'Commande RVGI'),
-      el('th', null, 'Article RVGI'),
-      el('th', null, 'Référence MySifa'),
-      el('th', { cls: 'num' }, 'Quantité'),
-      el('th', null, 'Saisie RVGI'),
-      el('th', null, 'Pièces'),
-      el('th', null, 'Entrée MySifa'))),
-    tbody);
-  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
-  return wrap;
+      rvgiCelluleValidation(l),
+    );
+}
+
+// Validation d'une réception entrée en stock. Le stock ne bouge pas : la
+// cellule dit qui a relu la ligne (article, quantité, BL), ou qu'il reste à
+// le faire. Une entrée faite à la main est validée par son auteur.
+function rvgiCelluleValidation(l) {
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
+  const td = el('td', { style: 'white-space:nowrap;vertical-align:top' });
+  if (l.valide_at) {
+    td.appendChild(el('div', { style: 'font-weight:700;color:var(--success)' }, '✓ Validée'));
+    td.appendChild(el('div', { style: petit },
+      _rvgiFmtDateHeure(l.valide_at) + (l.valide_par ? ' · ' + l.valide_par : '')));
+    if (!S.stockReadOnly) {
+      td.appendChild(el('button', {
+        type: 'button', cls: 'recep-rvgi-mini', style: 'margin-top:6px',
+        attrs: { title: 'Remettre cette réception parmi celles à valider' },
+        on: { click: (ev) => rvgiValider(l, false, ev.currentTarget) },
+      }, 'Retirer la validation'));
+    }
+    return td;
+  }
+  td.appendChild(el('span', {
+    style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
+      + 'background:var(--bg);border:1px solid var(--warn);color:var(--warn)' }, 'À valider'));
+  if (!S.stockReadOnly) {
+    td.appendChild(el('div', { style: 'margin-top:6px' }, el('button', {
+      type: 'button', cls: 'btn-sm',
+      attrs: { title: 'Article, quantité et BL vérifiés : la réception est correcte' },
+      on: { click: (ev) => rvgiValider(l, true, ev.currentTarget) },
+    }, 'Valider')));
+  }
+  return td;
+}
+
+async function rvgiValider(l, valide, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/stock/reception-rvgi/' + l.lif_id + '/valider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valide }),
+    });
+    // Validée, la ligne quitte la file pour l'historique ; dévalidée, elle y
+    // revient. On la retire sur place plutôt que de recharger : la page ne
+    // doit pas sauter sous la souris de qui en valide une série.
+    l.valide_at = r.valide_at;
+    l.valide_par = r.valide_par;
+    if (valide) {
+      if (S.rvgiFile && S.rvgiFile.a_valider) {
+        S.rvgiFile.a_valider = S.rvgiFile.a_valider.filter(x => x.lif_id !== l.lif_id);
+      }
+      S.rvgiHisto = null;
+    } else {
+      if (S.rvgiHisto && S.rvgiHisto.lignes) {
+        S.rvgiHisto.lignes = S.rvgiHisto.lignes.filter(x => x.lif_id !== l.lif_id);
+      }
+      S.rvgiFile = null;
+      loadRvgiCountBackground();
+    }
+    rvgiMajBadgeNav();
+    showToast(valide ? 'Réception validée.' : 'Validation retirée — la ligne est de retour dans « Depuis l\'ERP ».', 'success');
+    renderContent();
+  } catch (e) {
+    showToast((valide ? 'Validation impossible : ' : 'Retrait impossible : ') + ((e && e.message) || e), 'error');
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Défait une entrée validée par erreur : le stock est repris par une sortie
@@ -23887,6 +24305,16 @@ function valAbbrUnite(u) {
   return s || '';
 }
 
+function valUniteLibelle(u, n) {
+  // Unité accordée à la quantité : « 0,45 palette », « 9,63 palettes ».
+  // Pluriel au-delà de 1 ; le kilo et le mètre ne s'accordent pas.
+  let s = (u || '').toLowerCase();
+  if (s === 'unite') s = 'unité';
+  if (!s || !(Math.abs(Number(n || 0)) > 1)) return s;
+  if (s === 'kg' || s === 'm' || /[sx]$/.test(s)) return s;
+  return s + 's';
+}
+
 function valFormatPrixDetail(n) {
   // Comme valFormatEuroDetail mais sans unité (pour composer le sous-titre).
   const num = Number(n || 0);
@@ -24578,24 +25006,42 @@ function buildValorisationTableRow(item) {
   const desText = item.libelle_technique || '—';
   const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') }, desText);
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
-    valFormatQte(item.quantite),
-    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || '')
+    el('div', { style: 'white-space:nowrap' },
+      valFormatQte(item.quantite),
+      el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' },
+        valUniteLibelle(item.unite, item.quantite))
+    )
   );
+  // Quantité convertie par le conditionnement (400 cartons par palette) :
+  // le calcul s'affiche, sinon la valorisation ne se refait pas de tête.
+  const uppQte = Number(item.unites_par_palette || 0);
+  if (item.avec_conditionnement && !item.stock_a_l_unite && uppQte > 0) {
+    const uAchat = item.unite_achat || 'unité';
+    const totalUnites = Number(item.quantite || 0) * uppQte;
+    tdQte.appendChild(el('div', {
+      style: 'font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap',
+      title: 'Conditionnement : ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + ' par palette',
+    }, '× ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + '/pal. = '
+      + valFormatQte(totalUnites) + ' ' + valUniteLibelle(uAchat, totalUnites)));
+  }
 
   // Plus de colonne « Prix unitaire » : elle montrait le miroir de Coûts
   // matières dans la devise d'achat, pas un prix en euros. Les prix viennent
   // des colonnes Sous-total achat € et Prix de vente. Le conditionnement
   // (métrage par bobine, unités par palette) se règle depuis les actions.
   let cfgBtn = null;
-  if (item.laizee || item.avec_conditionnement) {
+  const prixSeul = !item.laizee && !item.avec_conditionnement && !!item.prix_direct && isMatieresAdmin();
+  if (item.laizee || item.avec_conditionnement || prixSeul) {
     const aConfigurer = item.laizee
       ? !((item.metres_lineaires_par_bobine || 0) > 0)
+      : prixSeul ? !((item.prix_unitaire || 0) > 0)
       : !((item.unites_par_palette || 0) > 0);
-    const libelle = item.laizee ? 'Métrage' : 'Conditionnement';
+    const libelle = item.laizee ? 'Métrage' : prixSeul ? 'Prix' : 'Conditionnement';
     cfgBtn = el('button', {
       type: 'button',
       title: item.laizee ? 'Éditer le métrage par bobine'
-        : 'Éditer le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
+        : prixSeul ? 'Saisir le prix unitaire'
+        : 'Éditer le prix et le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
       style: 'background:var(--card);border:1px solid ' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--border)')
         + ';border-radius:6px;padding:4px 8px;cursor:pointer;color:' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--text2)')
         + ';font-size:11px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap',
@@ -24610,7 +25056,7 @@ function buildValorisationTableRow(item) {
   // "Valorisée" = prix > 0 ET (si conditionnement requis) unites_par_palette > 0
   const valored = (item.prix_unitaire || 0) > 0
     && (!item.avec_conditionnement || (item.unites_par_palette || 0) > 0);
-  const valColor = valored ? 'var(--text)' : 'var(--muted)';
+  const valColor = item.devalorise ? 'var(--danger)' : (valored ? 'var(--text)' : 'var(--muted)');
   // Une ligne est « réelle » dès qu'au moins un flag (USD, taxe ou transport) est actif
   // ET produit un ajustement (multiplicateur ≠ 1 OU forfait transport > 0).
   const hasReel = valored
@@ -24733,13 +25179,43 @@ function buildValorisationTableRow(item) {
   const lienCm = valLienCoutsMatieres(item, 'Coûts matières');
   lienCm.style.marginTop = '0';
   lienCm.style.whiteSpace = 'nowrap';
-  const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), histBtn];
+  // Stock à jeter : la ligne compte pour (-1) × sa valorisation.
+  const devalBtn = el('button', {
+    type: 'button',
+    title: item.devalorise
+      ? 'Stock à jeter, soustrait de la valorisation. Cliquer pour le revaloriser.'
+      : 'Marquer comme stock à jeter : la ligne sera soustraite de la valorisation.',
+    style: 'border:1px solid var(--danger);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;'
+      + 'display:inline-flex;align-items:center;gap:4px;white-space:nowrap;'
+      + (item.devalorise ? 'background:var(--danger);color:white;font-weight:700'
+                         : 'background:var(--card);color:var(--danger)'),
+    on: { click: () => valBasculerDevalorisation(item) },
+  });
+  devalBtn.appendChild(iconEl('trash-2', 11));
+  devalBtn.appendChild(el('span', null, item.devalorise ? 'Dévalorisé' : 'Dévalorisation'));
+  if (item.devalorise) tr.style.background = 'color-mix(in srgb, var(--danger) 7%, transparent)';
+  const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), devalBtn, histBtn];
   const tdHist = el('td', {
     style: 'padding:10px 12px;text-align:center;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrixReel, tdVente, tdVal, tdHist);
   return tr;
+}
+
+async function valBasculerDevalorisation(item) {
+  const voulu = !item.devalorise;
+  try {
+    await api('/api/stock/valorisation/devalorisation/' + (item.matiere_id || item.id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ laize_id: item.laize_id || null, devalorise: voulu }),
+    });
+    showToast(voulu ? 'Stock dévalorisé.' : 'Dévalorisation retirée.', 'success');
+    await loadValorisation();
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+  }
 }
 
 // Cellule de prix issue de Coûts matières, à l'échelle de la ligne (bobine,
@@ -24923,27 +25399,50 @@ async function openValorisationConditionnementModal(matiereId) {
   box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px' },
     (item.reference || '') + ' — ' + (item.designation || '')));
 
-  const uniteAchat = item.unite_achat || 'unité';
+  // Une bague tenue à l'unité se paie à la bague, pas au tube.
+  const sansPalette = !!item.stock_a_l_unite || !item.avec_conditionnement;
+  const uniteAchat = sansPalette ? (item.unite_achat && !item.stock_a_l_unite ? item.unite_achat
+    : (item.unite === 'unite' ? 'unité' : (item.unite || 'unité'))) : (item.unite_achat || 'unité');
   const prixUnit = Number(item.prix_unitaire || 0);
-  const uppInp = el('input', { type: 'number', step: '1', min: '0',
-    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  const champStyle = 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums';
+  const labelStyle = 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px';
+  const uppInp = el('input', { type: 'number', step: '1', min: '0', style: champStyle });
   uppInp.value = String(Number(item.unites_par_palette || 0) || '');
+  // Consommable : le prix unitaire se saisit ici (administration). Sinon il
+  // reste en lecture seule, il appartient à Coûts matières.
+  const prixEditable = !!item.prix_direct && isMatieresAdmin();
+  const prixInp = prixEditable
+    ? el('input', { type: 'number', step: '0.0001', min: '0', placeholder: 'Ex. 0,35', style: champStyle })
+    : null;
+  if (prixInp) prixInp.value = prixUnit > 0 ? String(prixUnit) : '';
+  const prixSaisi = () => prixInp ? (parseFloat((prixInp.value || '').replace(',', '.')) || 0) : prixUnit;
 
-  box.appendChild(valBlocPrixLectureSeule(item,
-    prixUnit > 0
-      ? prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/' + uniteAchat
-      : 'non valorisé'));
-  box.appendChild(el('div', { style: 'height:14px' }));
-  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, uniteAchat + ' par palette'));
-  box.appendChild(uppInp);
+  if (prixInp) {
+    box.appendChild(el('label', { style: labelStyle }, 'Prix unitaire (€ / ' + uniteAchat + ')'));
+    box.appendChild(prixInp);
+  } else {
+    box.appendChild(valBlocPrixLectureSeule(item,
+      prixUnit > 0
+        ? prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/' + uniteAchat
+        : 'non valorisé'));
+  }
+  // Tenue à l'unité, palette, autre : pas de conditionnement à saisir.
+  if (!sansPalette) {
+    box.appendChild(el('div', { style: 'height:14px' }));
+    box.appendChild(el('label', { style: labelStyle }, uniteAchat + ' par palette'));
+    box.appendChild(uppInp);
+  }
 
   // Aperçu prix palette : le prix vient de Coûts matières, seul le
   // conditionnement bouge ici.
   const preview = el('div', { style: 'margin-top:12px;font-size:12px;color:var(--text2);background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:10px 12px' });
   const updatePreview = () => {
-    const u = parseFloat((uppInp.value || '').replace(',', '.')) || 0;
-    if (prixUnit > 0 && u > 0) {
-      const total = prixUnit * u;
+    const u = sansPalette ? 1 : (parseFloat((uppInp.value || '').replace(',', '.')) || 0);
+    const prix = prixSaisi();
+    if (sansPalette) {
+      preview.textContent = 'Valorisation = quantité × prix unitaire.';
+    } else if (prix > 0 && u > 0) {
+      const total = prix * u;
       preview.innerHTML = '';
       preview.append(
         el('span', { style: 'color:var(--muted)' }, 'Prix palette calculé : '),
@@ -24955,6 +25454,7 @@ async function openValorisationConditionnementModal(matiereId) {
     }
   };
   uppInp.addEventListener('input', updatePreview);
+  if (prixInp) prixInp.addEventListener('input', updatePreview);
   updatePreview();
   box.appendChild(preview);
 
@@ -24968,15 +25468,26 @@ async function openValorisationConditionnementModal(matiereId) {
     type: 'button',
     style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
     on: { click: async () => {
-      const upp = parseFloat((uppInp.value || '').replace(',', '.'));
-      if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
+      const corps = {};
+      if (!sansPalette) {
+        const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+        if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
+        corps.unites_par_palette = upp;
+      }
+      if (prixInp) {
+        const raw = (prixInp.value || '').replace(',', '.').trim();
+        const prix = raw === '' ? 0 : parseFloat(raw);
+        if (isNaN(prix) || prix < 0) { showToast('Prix unitaire invalide — valeur positive attendue.', 'danger'); return; }
+        if (Math.abs(prix - prixUnit) > 1e-9) corps.prix_unitaire = prix;
+      }
+      if (!Object.keys(corps).length) { root.innerHTML = ''; return; }
       try {
         await api('/api/stock/matieres/' + matiereId, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ unites_par_palette: upp }),
+          body: JSON.stringify(corps),
         });
-        showToast('Conditionnement enregistré.', 'success');
+        showToast('prix_unitaire' in corps ? 'Prix et conditionnement enregistrés.' : 'Conditionnement enregistré.', 'success');
         root.innerHTML = '';
         await loadValorisation();
       } catch (e) {
@@ -24989,7 +25500,7 @@ async function openValorisationConditionnementModal(matiereId) {
 
   overlay.appendChild(box);
   root.appendChild(overlay);
-  setTimeout(() => uppInp.focus(), 50);
+  setTimeout(() => (prixInp || uppInp).focus(), 50);
 }
 
 /**

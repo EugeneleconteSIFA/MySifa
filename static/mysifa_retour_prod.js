@@ -409,6 +409,18 @@
 
   /* ── Feuille atelier ────────────────────────────────────────── */
 
+  // Historique des pesées par front (static/mysifa_pesees.js, chargé par
+  // la page hôte) : le bouton porte ses filtres, l'écoute est déléguée.
+  function boutonPesees(machine, dossier, flottant) {
+    if (!global.MySifaPesees) return "";
+    return '<button type="button" class="rp-btn-mini" data-pesees="1"'
+         + ' data-pesees-machine="' + escAttr(machine || "") + '"'
+         + ' data-pesees-dossier="' + escAttr(dossier || "") + '"'
+         + ' title="Pesées d’étiquettes front par front' + (dossier ? ' sur ce dossier' : '') + '"'
+         + (flottant ? ' style="float:right;margin-left:6px"' : ' style="align-self:flex-start"')
+         + '>Pesées par front</button>';
+  }
+
   function renderFeuille(d, frise) {
     var p = d.production || {}, per = d.periode || {};
 
@@ -433,6 +445,7 @@
       h += '<div class="rp-equipe"><b>Aux commandes</b><br>'
          + d.conducteurs.map(escHtml).join(" · ") + '</div>';
     }
+    h += boutonPesees(d.toutes_machines ? "" : d.machine, "");
     h += '</div>';
 
     h += '<div class="rp-bloc"><div class="rp-titre">Production</div><div class="rp-kpis">'
@@ -784,6 +797,7 @@
     var h = (opts.fermer !== false
               ? '<button class="rp-btn-mini" id="rp-close" style="float:right">Fermer</button>'
               : '')
+          + boutonPesees("", cr.no_dossier, true)
           + '<h3 class="rp-cr-titre">' + escHtml(cr.no_dossier) + '</h3>'
           + '<div class="rp-cr-sous">' + escHtml(id.client || "—") + ' · '
           + escHtml(id.designation || "—") + ' · ' + escHtml(id.machine || "—")

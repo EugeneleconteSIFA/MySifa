@@ -395,8 +395,18 @@ def list_saisies(
         stock_rows = []
 
     rows_out = [dict(r) for r in rows]
+    # Un code de changement d'outil porte son propre compteur ; une autre
+    # ligne de calage n'en porte pas (_ligne_du_compteur) — l'écran de
+    # correction en a besoin pour savoir quel relevé il montre.
+    try:
+        from app.services.outils import codes_par_type
+        with get_db() as conn3:
+            codes_outil = set(codes_par_type(conn3))
+    except Exception:
+        codes_outil = set()
     for r in rows_out:
         r["kind"] = "prod"
+        r["changement_outil"] = str(r.get("operation_code") or "").strip() in codes_outil
     rows_out.extend(stock_rows)
     # v2.3.39 : merge des alertes validées comme des saisies. Mêmes filtres
     # (operateur = user_nom, machine, no_dossier, dates). Non-admin ne voit
@@ -973,6 +983,43 @@ async def modifier_dossier_alerte(ack_id: int, request: Request):
     return {"success": True}
 
 
+def _ligne_du_compteur(conn, ex):
+    """La saisie qui porte le compteur qu'on corrige depuis `ex`.
+
+    Le relevé de fin de calage est écrit sur le « Production » qui ferme le
+    calage, et sa mention (« Fin de calage · compteur X m · calage Y m ») sur
+    la ligne de calage juste avant. Corriger le compteur depuis cette ligne
+    de calage écrivait donc un second compteur à côté du vrai : la mention
+    changeait, le métrage de calage restait calculé sur l'ancien relevé.
+    Une ligne de calage qui n'est pas un changement d'outil renvoie au
+    « Production » qui la suit sur la machine ; sinon, la ligne elle-même."""
+    if (ex["operation_category"] or "") != "calage":
+        return ex
+    try:
+        from app.services.outils import codes_par_type
+        if str(ex["operation_code"] or "").strip() in codes_par_type(conn):
+            return ex
+    except Exception:
+        return ex
+    return _production_qui_ferme(conn, ex) or ex
+
+
+def _production_qui_ferme(conn, ex):
+    """Le « Production » qui suit immédiatement `ex` sur la machine, s'il y
+    en a un : c'est lui qui porte le relevé de fin de calage."""
+    suiv = conn.execute(
+        """SELECT * FROM production_data
+            WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+              AND COALESCE(operation_category,'') NOT IN ('alert_ack','stock_pf','stock_mp')
+              AND (date_operation > ? OR (date_operation = ? AND id > ?))
+            ORDER BY date_operation ASC, id ASC LIMIT 1""",
+        (ex["id"], ex["machine"] or "", ex["date_operation"], ex["date_operation"], ex["id"]),
+    ).fetchone()
+    if suiv and (suiv["operation_category"] or "") == "production":
+        return suiv
+    return None
+
+
 def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
     """Écrit le compteur relevé d'une saisie corrigée dans MyProd.
 
@@ -991,6 +1038,13 @@ def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
             raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
         if nouveau < 0:
             raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
+    cible = _ligne_du_compteur(conn, ex)
+    if cible["id"] != ex["id"]:
+        # La mise à jour générale vient d'écrire la valeur sur la ligne de
+        # calage, comme le faisait toute correction avant celle-ci : le
+        # relevé n'a qu'une place, on l'en retire.
+        conn.execute("UPDATE production_data SET metrage_compteur=NULL WHERE id=?", (ex["id"],))
+        row_id, ex = cible["id"], cible
     ancien = ex["metrage_compteur"] if "metrage_compteur" in ex.keys() else None
     if (ancien is None and nouveau is None) or (
             ancien is not None and nouveau is not None and abs(float(ancien) - nouveau) < 0.5):
@@ -1017,6 +1071,31 @@ def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
                 WHERE (trim(nom)=trim(?) OR trim(code)=trim(?))
                   AND (dernier_metrage IS NULL OR dernier_metrage < ?)""",
             (nouveau, com["machine"], com["machine"], nouveau))
+
+
+def _recaler_compteur_machine(conn, machine) -> None:
+    """Compteur machine = relevé de la saisie la plus récente qui en porte un."""
+    machine = str(machine or "").strip()
+    if not machine:
+        return
+    row = conn.execute(
+        """SELECT ctr FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
+                 FROM production_data
+                WHERE COALESCE(est_annule,0)=0 AND trim(machine)=?
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (machine,),
+    ).fetchone()
+    if row is None:
+        return
+    conn.execute("UPDATE machines SET dernier_metrage=? WHERE trim(nom)=? OR trim(code)=?",
+                 (float(row[0]), machine, machine))
 
 
 @router.put("/api/saisies/{row_id}")
@@ -1069,7 +1148,7 @@ async def update_saisie(row_id: int, request: Request):
                date_operation=?,machine=?,no_dossier=?,client=?,designation=?,
                quantite_a_traiter=?,quantite_traitee=?,
                metrage_prevu=?,metrage_reel=?,
-               metrage_total_debut=?,metrage_total_fin=?,
+               metrage_total_debut=?,metrage_total_fin=?,metrage_compteur=?,
                commentaire=?,
                modifie_par=?,modifie_le=?,modifie_note=?,data=? WHERE id=?""",
             (operateur_new,
@@ -1085,15 +1164,47 @@ async def update_saisie(row_id: int, request: Request):
              body.get("metrage_reel")        if "metrage_reel"        in body else _ex("metrage_reel"),
              body.get("metrage_total_debut") if "metrage_total_debut" in body else _ex("metrage_total_debut"),
              body.get("metrage_total_fin")   if "metrage_total_fin"   in body else _ex("metrage_total_fin"),
-             body.get("commentaire")         if "commentaire"         in body else _ex("commentaire"),
+             body.get("metrage_compteur")    if "metrage_compteur"    in body else _ex("metrage_compteur"),
+             body.get("commentaire")        if "commentaire"         in body else _ex("commentaire"),
              user["email"], datetime.now().isoformat(), body.get("note", ""),
              json.dumps(new_data, default=str), row_id)
         )
+        # Un compteur corrigé recale le compteur machine sur le dernier relevé
+        # de la machine. Il ne fait que monter à la saisie : sans ce recalage,
+        # un zéro en trop corrigé après coup laissait le compteur gonflé, et
+        # chaque saisie suivante était refusée comme « inférieure ».
+        if any(k in body for k in ("metrage_prevu", "metrage_reel", "metrage_total_debut",
+                                   "metrage_total_fin", "metrage_compteur")):
+            try:
+                _recaler_compteur_machine(conn, body.get("machine", _ex("machine")))
+                if str(body.get("machine", _ex("machine")) or "").strip() != str(_ex("machine") or "").strip():
+                    _recaler_compteur_machine(conn, _ex("machine"))
+            except Exception:
+                pass
         # Dossier ou machine changés : la saisie change de créneau.
         # Compteur relevé en cours de dossier (changement d'outil, fin de
         # calage) : corrigeable ici. Le commentaire qui le cite suit.
         if "metrage_compteur" in body:
             _maj_compteur_releve(conn, row_id, ex, body.get("metrage_compteur"))
+            # Le relevé a pu changer de ligne (fin de calage) : compteur
+            # machine recalé sur l'état final.
+            try:
+                _recaler_compteur_machine(conn, body.get("machine", _ex("machine")))
+            except Exception:
+                pass
+        # Un changement d'outil qui ferme un calage a deux relevés : le sien
+        # (au démontage) et celui du « Production » qui suit, qui fait le
+        # métrage de calage. Ce second relevé se corrige ici aussi.
+        if "compteur_fin_calage" in body and (ex["operation_category"] or "") == "calage":
+            prod = _production_qui_ferme(conn, ex)
+            if prod is None:
+                raise HTTPException(status_code=409,
+                                    detail="Aucune saisie « Production » ne ferme ce calage.")
+            _maj_compteur_releve(conn, prod["id"], prod, body.get("compteur_fin_calage"))
+            try:
+                _recaler_compteur_machine(conn, prod["machine"])
+            except Exception:
+                pass
         if (str(body.get("no_dossier", _ex("no_dossier")) or "").strip() != str(_ex("no_dossier") or "").strip()
                 or str(body.get("machine", _ex("machine")) or "").strip() != str(_ex("machine") or "").strip()):
             try:

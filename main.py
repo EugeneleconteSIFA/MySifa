@@ -16,10 +16,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE, COOKIE_NAME
 from app.core.audit_middleware import AuditMiddleware
 from app.core.requete_courante import RequeteCouranteMiddleware
 from app.web.html import render_frontend_html
+from app.core.noindex import CHEMINS_PUBLICS, NoindexMiddleware
 
 from routers.auth       import router as auth_router
 from routers.imports    import router as router_imports
@@ -108,6 +109,7 @@ from app.routers.qualite_eudr import router as qualite_eudr_router
 from app.routers.qualite_formulaires import router as qualite_formulaires_router
 from app.routers.maintenance_alertes_ia import router as maintenance_alertes_ia_router
 from app.routers.maintenance_alertes_stats import router as maintenance_alertes_stats_router
+from app.routers.poids_colle import router as poids_colle_router
 from app.routers.portail_espace import router_api as portail_espace_api_router
 from app.routers.portail_espace import router_html as portail_espace_html_router
 from app.routers.qualite_eudr import router_api as eudr_portail_api_router
@@ -466,7 +468,7 @@ async def router_hote_erp(request: Request, call_next):
     p = request.scope.get("path") or "/"
     dans_prefixe = p == ERP2_PREFIXE or p.startswith(ERP2_PREFIXE + "/")
     if hote in ERP2_HOSTS:
-        if not dans_prefixe and not p.startswith(("/api/", "/static/", "/uploads/")):
+        if not dans_prefixe and not p.startswith(("/api/", "/static/", "/uploads/")) and p not in CHEMINS_PUBLICS[1:]:
             nouveau = ERP2_PREFIXE + p
             request.scope["path"] = nouveau
             request.scope["raw_path"] = nouveau.encode("utf-8")
@@ -809,6 +811,10 @@ app.add_middleware(AuditMiddleware)
 # (app/core/requete_courante.py).
 app.add_middleware(RequeteCouranteMiddleware)
 
+# Référencement : X-Robots-Tag « noindex » partout sauf l'accueil public de la prod
+# (app/core/noindex.py).
+app.add_middleware(NoindexMiddleware)
+
 # Compression des reponses (>1 Ko). Ajoute en dernier => middleware le plus
 # externe : compresse apres l'injection du bandeau staging (qui lit le HTML
 # en clair). Pages HTML inline 250-780 Ko => ~5-8x plus legeres sur le reseau.
@@ -903,6 +909,7 @@ app.include_router(qualite_eudr_router)
 app.include_router(qualite_formulaires_router)
 app.include_router(maintenance_alertes_ia_router)
 app.include_router(maintenance_alertes_stats_router)
+app.include_router(poids_colle_router)
 app.include_router(portail_espace_api_router)
 app.include_router(portail_espace_html_router)
 app.include_router(eudr_portail_html_router)
@@ -994,8 +1001,9 @@ def favicon():
 
 
 @app.get("/", response_class=HTMLResponse)
-def serve_frontend():
-    return render_frontend_html("portal")
+def serve_frontend(request: Request):
+    # Sans cookie de session : visiteur ou moteur, qui reçoit le titre et les balises de l'accueil public.
+    return render_frontend_html("portal", visiteur=not request.cookies.get(COOKIE_NAME))
 
 @app.get("/users")
 def users_redirect():

@@ -315,7 +315,7 @@
     if(_PAGES_FILTRES.indexOf(S.page)!==-1){
       var fv=S.fv||{};
       var pr=_datePresets().filter(function(x){return x.from===fv.date_from&&x.to===fv.date_to;})[0];
-      if(pr){ if(pr.key!=='yesterday') p.periode=pr.key; }
+      if(pr){ if(pr.key!==_periodeDefaut()) p.periode=pr.key; }
       else if(fv.date_from||fv.date_to){ p.du=fv.date_from||''; p.au=fv.date_to||''; }
       p.machine=(fv.machines||[]).slice();
       p.operateur=(fv.operateurs||[]).slice();
@@ -421,6 +421,11 @@
     produits:{page:null,
       ouvrir:function(){ var M=window.MySifaProduitMemoire; if(M) M.openListe(); },
       fermer:function(){ _pmemFermer(); }},
+    // Historique des pesées par front (mysifa_pesees.js) : ouvert depuis le
+    // Retour de prod, mais un calque sur toute page (page:null).
+    pesees:{page:null, extra:['pesees_dossier','pesees_periode','pesees_champs'],
+      ouvrir:function(v,u){ var P=window.MySifaPesees, e=P&&P.lireAdresse(u); if(e) P.ouvrir(e); },
+      fermer:function(){ if(window.MySifaPesees) MySifaPesees.fermer(true); }},
     reglages:{page:'production',
       ouvrir:function(v){ if(v==='ecarts') openReglagesEcarts(); },
       fermer:function(){ fermerReglagesEcarts(true); }},
@@ -456,6 +461,22 @@
       prodSyncUrl();
     });
   }
+  // Le calque des pesées signale ses filtres à chaque changement : il se
+  // déclare dans S.urlModale, comme la mémoire produit.
+  var _peseesBranche=false;
+  function _peseesBrancher(){
+    if(_peseesBranche||!window.MySifaPesees||!MySifaPesees.surAdresse) return;
+    _peseesBranche=true;
+    MySifaPesees.surAdresse(function(e){
+      if(e){
+        var p=MySifaPesees.adresse(e), id=p.pesees; delete p.pesees;
+        S.urlModale={cle:'pesees', id:id, extra:Object.keys(p).length?p:null};
+      }else if(S.urlModale&&S.urlModale.cle==='pesees'){
+        S.urlModale=null;
+      }else return;
+      prodSyncUrl();
+    });
+  }
   function _prodModaleCourante(){
     if(S.ofEditModal&&S.ofEditModal.id) return {cle:'of',id:S.ofEditModal.id};
     if(S.ficheEditModal&&S.ficheEditModal.id) return {cle:'fiche',id:S.ficheEditModal.id};
@@ -480,6 +501,7 @@
 
   function prodSyncUrl(){
     _pmemBrancher();
+    _peseesBrancher();
     if(!window.MySifaUrl||!S.user||S.app==='login') return;
     try{ var r=_prodParams(); MySifaUrl.ecrire(r.params,{navigation:r.nav}); }catch(e){}
   }
@@ -517,9 +539,9 @@
       var pr=k?_datePresets().filter(function(x){return x.key===k;})[0]:null;
       if(pr){ S.fv.date_from=pr.from; S.fv.date_to=pr.to; }
       else if(u.get('du')){ S.fv.date_from=u.get('du'); S.fv.date_to=u.get('au')||u.get('du'); }
-      else if(complet){
-        var y=_datePresets().filter(function(x){return x.key==='yesterday';})[0];
-        S.fv.date_from=y.from; S.fv.date_to=y.to;
+      else{
+        // Pas de période dans l'adresse : celle par défaut de l'écran.
+        _appliquerPeriodeDefaut();
       }
       if(complet||u.a('machine')) S.fv.machines=u.tous('machine');
       if(complet||u.a('operateur')) S.fv.operateurs=u.tous('operateur');
@@ -8427,8 +8449,20 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
   // Compteur relevé en cours de dossier : changement d'outil (plaque,
   // contre-partie, magnétique…) et « Production » qui ferme un calage.
-  const compteurAvant = (prefill && prefill.metrage_compteur!=null && prefill.metrage_compteur!=='') ? Number(prefill.metrage_compteur) : null;
+  // Sur une ligne de calage (hors changement d'outil), le relevé est celui
+  // du « Production » qui ferme le calage : c'est lui que le serveur corrige
+  // (_ligne_du_compteur) et lui qui fait le métrage de calage.
+  const releveFinCalage = !!(prefill && (prefill.operation_category||'') === 'calage'
+    && !prefill.changement_outil && prefill._fin_calage && prefill._fin_calage.ctr != null);
+  const compteurAvant = releveFinCalage ? Number(prefill._fin_calage.ctr)
+    : (prefill && prefill.metrage_compteur!=null && prefill.metrage_compteur!=='') ? Number(prefill.metrage_compteur) : null;
   const metrageCompteurI  = h('input', { type: 'number', placeholder: '0', min: '0', step: '1', value: compteurAvant!=null ? compteurAvant : '' });
+  // Changement d'outil qui ferme un calage : son propre compteur, plus celui
+  // du « Production » qui suit, d'où sort le métrage de calage.
+  const finCalageOutil = !!(prefill && (prefill.operation_category||'') === 'calage'
+    && prefill.changement_outil && prefill._fin_calage && prefill._fin_calage.ctr != null);
+  const finCalageAvant = finCalageOutil ? Number(prefill._fin_calage.ctr) : null;
+  const compteurFinCalageI = h('input', { type: 'number', placeholder: '0', min: '0', step: '1', value: finCalageAvant!=null ? finCalageAvant : '' });
   // Fin de production : le choix de l'opérateur (« Dossier terminé » / « À
   // reprendre plus tard ») se corrige ici ; le serveur rejoue planning et série.
   const finDossierAvant = (prefill && prefill.fin_dossier!=null && prefill.fin_dossier!=='') ? String(Number(prefill.fin_dossier)) : '';
@@ -8511,11 +8545,15 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
       ),
       h('div', { className: 'form-row', 'data-role':'cpt-releve', style:{display:'none'} },
         h('div', null,
-          h('label', null, 'Compteur relevé (m)'),
+          h('label', null, releveFinCalage ? 'Compteur à la fin du calage (m)' : 'Compteur relevé (m)'),
           metrageCompteurI
         ),
-        h('div', { style:{fontSize:'12px',color:'var(--muted)',alignSelf:'end',paddingBottom:'10px'} },
-          'Compteur machine noté au changement ou à la fin du calage. Le commentaire suit la correction.')
+        finCalageOutil
+          ? h('div', null,
+              h('label', null, 'Compteur à la fin du calage (m)'),
+              compteurFinCalageI)
+          : h('div', { style:{fontSize:'12px',color:'var(--muted)',alignSelf:'end',paddingBottom:'10px'} },
+              'Compteur machine noté au changement ou à la fin du calage. Le commentaire suit la correction.')
       ),
       h('div', { className: 'form-row', 'data-role':'fin-dossier', style:{display:'none'} },
         h('div', { style:{ gridColumn:'span 2' } },
@@ -8611,6 +8649,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
               const v = brut === '' ? null : parseFloat(brut);
               if(brut !== '' && (!isFinite(v) || v < 0)){ toast('Compteur invalide — un nombre de mètres.', 'error'); return; }
               if(v !== compteurAvant) corps.metrage_compteur = v;
+              if(finCalageOutil){
+                const b2 = String(compteurFinCalageI.value||'').trim();
+                const v2 = b2 === '' ? null : parseFloat(b2);
+                if(b2 !== '' && (!isFinite(v2) || v2 < 0)){ toast('Compteur invalide — un nombre de mètres.', 'error'); return; }
+                if(v2 != null && v2 !== finCalageAvant) corps.compteur_fin_calage = v2;
+              }
             }
             // Envoyé seulement s'il change : le serveur rejoue alors planning et série.
             if(code === CODE_FIN_DOS && finDossierSel.value !== '' && finDossierSel.value !== finDossierAvant){
@@ -10416,7 +10460,7 @@ function saisiesMarquerFinsCalage(rows){
       const ctr = r.metrage_compteur != null ? parseFloat(r.metrage_compteur) : null;
       const metres = (ctr != null && st.ctrAvant != null && ctr >= st.ctrAvant) ? ctr - st.ctrAvant : null;
       (st.derniere || r)._fin_calage = {minutes: (isFinite(t0) && isFinite(t1) && t1 >= t0) ? Math.round((t1-t0)/60000) : null,
-                       metres: metres};
+                       metres: metres, ctr: ctr};
       st.debut = null;
     } else {
       st.debut = null;
@@ -11041,6 +11085,9 @@ function _datePresets(){
     {key:'yesterday',
      label: dernierJour === veille ? 'Hier' : 'Dernier jour',
      from: dernierJour, to: dernierJour},
+    {key:'deux_jours',
+     label: dernierJour === veille ? "Hier et aujourd'hui" : "Dernier jour et aujourd'hui",
+     from: dernierJour, to: fmt(today)},
     {key:'last7',     label:'7 derniers jours',  from:fmt(last7Start),    to:fmt(today)},
     {key:'last30',    label:'30 derniers jours', from:fmt(last30Start),   to:fmt(today)},
     {key:'thisMonth', label:'Mois en cours',     from:fmt(monthStart),    to:fmt(today)},
@@ -11048,6 +11095,24 @@ function _datePresets(){
   ];
 }
 
+
+// Période par défaut selon l'écran : la vue d'ensemble regarde la semaine,
+// la liste des saisies la veille travaillée et le jour même (ce qu'un
+// opérateur vient relire), le reste la dernière journée travaillée.
+function _periodeDefaut(){
+  const sous = S.page==='production' ? (S.subPage||'kpis') : null;
+  if(sous==='kpis') return 'last7';
+  if(S.page==='saisies' || sous==='saisies') return 'deux_jours';
+  return 'yesterday';
+}
+function _periodeCourante(){
+  const p = _datePresets().filter(x => x.from === S.fv.date_from && x.to === S.fv.date_to)[0];
+  return p ? p.key : null;
+}
+function _appliquerPeriodeDefaut(){
+  const p = _datePresets().filter(x => x.key === _periodeDefaut())[0];
+  if(p){ S.fv.date_from = p.from; S.fv.date_to = p.to; }
+}
 
 // Widget d'accueil (mysifa_blocs.js) : la période et les machines filtrées ne
 // sont pas dans l'URL. On les déclare à la capture, sous forme de raccourci
@@ -11063,8 +11128,8 @@ window.mysifaBlocsContexte = function(){
 
 // Ouverture depuis un indicateur d'accueil : on remet la période et les
 // machines capturées (paramètres posés par mysifaBlocsContexte ci-dessus).
-// « Hier » n'est pas reposé : c'est déjà le défaut de la page, résolu en
-// dernière journée travaillée par chargerDernierJourSaisi.
+// « Hier » posé sur la veille calendaire : chargerDernierJourSaisi le
+// remplace par la dernière journée travaillée.
 (function(){
   try{
     const sp = new URLSearchParams(location.search || '');
@@ -11075,7 +11140,7 @@ window.mysifaBlocsContexte = function(){
     if(k === 'dates' && sp.get('bloc_du')){
       S.fv.date_from = sp.get('bloc_du');
       S.fv.date_to = sp.get('bloc_au') || sp.get('bloc_du');
-    } else if(k && k !== 'yesterday'){
+    } else if(k){
       const p = _datePresets().filter(x => x.key === k)[0];
       if(p){ S.fv.date_from = p.from; S.fv.date_to = p.to; }
     }
@@ -11103,6 +11168,11 @@ async function chargerDernierJourSaisi(){
     // touche, on la remplace par la derniere journee travaillee : ouvrir la
     // page un lundi sur un dimanche vide n'apprend rien. Un filtre deja
     // modifie n'est jamais ecrase.
+    if(S.fv.date_from === veille && S.fv.date_to === _datePresets().filter(x => x.key === 'deux_jours')[0].to && d.jour !== veille){
+      S.fv.date_from = d.jour;
+      await applyF();
+      return;
+    }
     if(S.fv.date_from === veille && S.fv.date_to === veille && d.jour !== veille){
       S.fv.date_from = d.jour;
       S.fv.date_to = d.jour;
@@ -11535,6 +11605,13 @@ function _prodVueCss(){
     +'.ps-l:hover{background:var(--bg)}'
     +'.ps-l.actif{background:var(--accent-bg);box-shadow:inset 3px 0 0 var(--accent)}'
     +'.ps-l-nom{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    // Dossier en cours sur une machine : puce verte qui clignote.
+    +'.ps-l-live{display:none;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:1px;'
+    +'animation:ps-clignote 1.4s ease-in-out infinite}'
+    +'.ps-l.en-cours .ps-l-live{display:inline-block}'
+    +'@keyframes ps-clignote{0%,100%{opacity:1}50%{opacity:.25}}'
+    +'@media (prefers-reduced-motion:reduce){.ps-l-live{animation:none}}'
+    +'.perf-eco .ps-l-live,.reduce-anim .ps-l-live{animation:none}'
     +'.ps-l.actif .ps-l-nom{color:var(--accent)}'
     +'.ps-l-sous{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}'
     +'.ps-barre{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--bg)}'
@@ -11550,6 +11627,7 @@ function _prodVueCss(){
     +'.ps-fiche-no{font-size:20px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}'
     +'.ps-fiche-client{font-size:14px;font-weight:600;color:var(--text);margin-top:2px}'
     +'.ps-fiche-meta{font-size:12px;color:var(--muted);margin-top:2px}'
+    +'.ps-fiche-meta-ident{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-top:4px}'
     +'.ps-fiche-defaut{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
     +'vertical-align:3px;color:var(--accent);background:var(--accent-bg)}'
     +'.ps-fiche-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}'
@@ -11579,7 +11657,7 @@ function _psDetailCharger(no, cible, hote){
   if(cache && cache.html){ cible.innerHTML = cache.html; _psBoutonSignaler(no, cible, hote); return; }
   cible.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Chargement des saisies…</div>';
   api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no)).then(d=>{
-    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d, {fiche:true})
+    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d, {fiche:true, no})
       : '<div style="color:var(--danger)">Affichage indisponible — rechargez la page.</div>';
     S.psDetailCache[no] = {html};
     if(cible.isConnected){ cible.innerHTML = html; _psBoutonSignaler(no, cible, hote); }
@@ -11594,6 +11672,19 @@ function _psDetailCharger(no, cible, hote){
 function _psBoutonSignaler(no, cible, hote){
   const panneau = cible.querySelector('.dp');
   if(!panneau || !hote) return;
+  // Format et laize à côté de la machine : une ligne de moins dans la fiche.
+  const ident = panneau.querySelector('.dp-ident-tete');
+  const tete = hote.closest('.ps-fiche-tete');
+  if(ident && tete){
+    const bloc = tete.firstElementChild;
+    let meta = bloc && bloc.querySelector('.ps-fiche-meta');
+    if(!meta && bloc){ meta = h('div',{className:'ps-fiche-meta'}); bloc.appendChild(meta); }
+    if(meta){
+      const ancienne = meta.querySelector('.dp-ident-tete'); if(ancienne) ancienne.remove();
+      meta.classList.add('ps-fiche-meta-ident');
+      meta.appendChild(ident);
+    }
+  }
   const ancien = hote.querySelector('.ps-outils'); if(ancien) ancien.remove();
   const styleBtn = {display:'inline-flex',alignItems:'center',gap:'6px',background:'var(--bg)',
     border:'1px solid var(--border)',padding:'5px 9px',borderRadius:'8px',fontSize:'12px',fontWeight:'600',color:'var(--text2)'};
@@ -11635,7 +11726,7 @@ async function openAlertesDossier(no){
     try{
       const d = await api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no));
       if(!d || !window.MySifaDonneesProd) return;
-      S.psDetailCache[no] = {html: window.MySifaDonneesProd.html(d, {fiche:true})};
+      S.psDetailCache[no] = {html: window.MySifaDonneesProd.html(d, {fiche:true, no})};
     }catch(e){ toast((e && e.message) || 'Alertes indisponibles.','error'); return; }
   }
   // HTML produit par mysifa_donnees_prod.js (donnees echappees a la source).
@@ -12281,7 +12372,18 @@ async function loadMachineStatus(){
     }
   }catch(e){}
 }
+// Dossiers en cours : ceux qu'une machine allumée affiche dans « Statut
+// machines ». Les lignes « Par dossier » portent leur référence et prennent
+// la classe `en-cours` (puce verte) — rejoué à chaque relevé, sans render().
+function _psEnCoursMaj(racine){
+  const enCours = new Set(Object.values(S.machineStatus || {})
+    .filter(m => m && m.dossier && m.statut_key && m.statut_key !== 'eteinte')
+    .map(m => String(m.dossier.no_dossier || '').trim()).filter(Boolean));
+  (racine || document).querySelectorAll('[data-ps-dossier]').forEach(b =>
+    b.classList.toggle('en-cours', enCours.has(b.getAttribute('data-ps-dossier'))));
+}
 function updateMachineStatusDOM(){
+  _psEnCoursMaj();
   const ms=S.machineStatus;
   // Portrait telephone : les tuiles ne sont pas des .mst-card, et sans cette
   // branche le rafraichissement toutes les 15 s mettrait S.machineStatus a
@@ -13214,7 +13316,12 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
+        const auDefaut = _periodeCourante() === _periodeDefaut();
         S.subPage=t.key;
+        if(auDefaut && _periodeCourante() !== _periodeDefaut()){
+          _appliquerPeriodeDefaut();
+          await applyF();
+        }
         _syncProdHash();
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
         else{stopMachineStatusPolling();}
@@ -13762,9 +13869,10 @@ function renderProdKpis(){
     const tot = cal + prd + arr;
     const pc = v => tot > 0 ? (v / tot * 100).toFixed(1) + '%' : '0%';
     return h('button',Object.assign({type:'button',className:'ps-l'+(o.actif?' actif':''),
-        title:o.title||'', onClick:o.onClick}, o.actif?{'aria-current':'true'}:{}),
+        title:o.title||'', onClick:o.onClick}, o.actif?{'aria-current':'true'}:{},
+        o.dossier?{'data-ps-dossier':o.dossier}:{}),
       h('span',{style:{minWidth:0}},
-        h('span',{className:'ps-l-nom'}, o.nom),
+        h('span',{className:'ps-l-nom'}, o.dossier ? h('i',{className:'ps-l-live',title:'En cours sur une machine'}) : null, o.nom),
         o.sous ? h('span',{className:'ps-l-sous'}, o.sous) : null),
       h('span',{style:{minWidth:0}},
         h('span',{className:'ps-barre'},
@@ -13776,11 +13884,15 @@ function renderProdKpis(){
         h('span',{className:'ps-l-vit'}, vitEl(o.vit)),
         h('span',{className:'ps-l-met'}, fN(o.met||0) + ' m')));
   };
-  const _psCarte = (titre, compte, bloc, lignes) => h('div',{className:'card',
-      'data-bloc':bloc, 'data-bloc-valeur-lignes':String(lignes.length)},
-    h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,titre),
-      h('span',{style:{fontSize:'11px',color:'var(--muted)'}},compte)),
-    h('div',null,...lignes));
+  const _psCarte = (titre, compte, bloc, lignes) => {
+    const c = h('div',{className:'card',
+        'data-bloc':bloc, 'data-bloc-valeur-lignes':String(lignes.length)},
+      h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,titre),
+        h('span',{style:{fontSize:'11px',color:'var(--muted)'}},compte)),
+      h('div',null,...lignes));
+    _psEnCoursMaj(c);
+    return c;
+  };
 
   // Fiche du dossier choisi. Par défaut : le dernier dossier terminé (il a
   // son 89) — celui en cours n'a pas encore ses chiffres définitifs.
@@ -13876,7 +13988,7 @@ function renderProdKpis(){
       colonne.push(_psCarte('Par dossier', rowsAgg.length+' · par heure de fin', 'prod.ensemble.par-dossier',
         rowsAgg.map(r=>{
           const no = String(r.no_dossier||'');
-          return _psLigne({nom:no, sous:prodSynthCleanClient(r.client) || '—',
+          return _psLigne({nom:no, dossier:no, sous:prodSynthCleanClient(r.client) || '—',
             cal:r.temps_calage_min, prd:r.temps_prod_min, arr:r.temps_arret_min, met:r.metrage_m,
             vit:vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0)),
             actif:no===actif, title:'Afficher la fiche du dossier',
