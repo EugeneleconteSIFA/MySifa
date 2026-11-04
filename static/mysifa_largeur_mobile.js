@@ -9,11 +9,12 @@
  * - un tableau ou une bande d'onglets trop large défile dans son propre bloc.
  *
  * Plutôt qu'une correction par écran, qui en oublierait, la page est surveillée :
- * dès qu'une zone de page déborde, ce qui la déborde est contenu. Le contrôle ne
- * coûte qu'une comparaison de largeurs tant que rien ne déborde.
+ * dès qu'une zone de page déborde, ce qui la déborde est contenu avant que l'image
+ * suivante ne soit peinte, pour ne pas voir l'écran large puis se resserrer. Le
+ * contrôle ne coûte qu'une comparaison de largeurs tant que rien ne déborde.
  *
- * Injecté par main.py dans toutes les pages connectées. Sur ordinateur, ce fichier
- * ne change rien.
+ * Injecté par main.py en tête du <head> de toutes les pages, pour observer la page
+ * dès sa construction. Sur ordinateur, ce fichier ne change rien.
  */
 (function () {
   'use strict';
@@ -33,6 +34,8 @@
     '.msf-tableau-defile{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}' +
     '.msf-rangee-souple{flex-wrap:wrap!important;max-width:100%}' +
     '.msf-rangee-souple>*{max-width:100%;min-width:0}' +
+    // Rangées connues : à la bonne largeur dès la première image.
+    '.maint-chip-group,.recep-subtabs,.sifa-tabs{flex-wrap:wrap;max-width:100%;min-width:0}' +
     '}';
   document.head.appendChild(st);
 
@@ -87,14 +90,21 @@
     if (cs.display === 'inline-flex') el.style.display = 'flex';
   }
 
+  var examines = new WeakMap();
+
   function controler() {
     if (!ecran.matches || window.__MYSIFA_IMPRESSION__) return;
     var zones = document.querySelectorAll(ZONES);
     for (var i = 0; i < zones.length; i++) {
       var z = zones[i];
-      if (z.scrollWidth <= z.clientWidth + 2 || z.clientWidth === 0) continue;
+      var large = z.scrollWidth;
+      if (large <= z.clientWidth + 2 || z.clientWidth === 0) continue;
+      // Reste déjà examiné (un texte sans espace…) : pas de nouveau parcours de la
+      // page à chaque image tant que sa largeur ne bouge pas.
+      if (examines.get(z) === large) continue;
       var limite = z.getBoundingClientRect().left + z.clientWidth;
       debordements(z, limite).forEach(contenir);
+      examines.set(z, z.scrollWidth);
       // Rien de ce qui reste (ombre, décalage de quelques pixels) ne fait glisser la page.
       if (getComputedStyle(z).overflowX !== 'visible') z.style.overflowX = 'hidden';
     }
@@ -103,18 +113,13 @@
   var prevu = null;
   function planifier() {
     if (prevu) return;
-    prevu = setTimeout(function () {
+    // Juste avant que le navigateur peigne ce qui vient de changer.
+    prevu = requestAnimationFrame(function () {
       prevu = null;
       controler();
-    }, 250);
+    });
   }
 
-  function demarrer() {
-    controler();
-    new MutationObserver(planifier).observe(document.body, { childList: true, subtree: true });
-    window.addEventListener('resize', planifier);
-  }
-
-  if (document.body) demarrer();
-  else document.addEventListener('DOMContentLoaded', demarrer);
+  new MutationObserver(planifier).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener('resize', planifier);
 })();

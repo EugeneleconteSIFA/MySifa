@@ -12527,12 +12527,7 @@ function _mpmNbFiltres(){
 }
 
 // Barre collante — remplace .filters-panel en portrait.
-function renderMpmBar(){
-  const n = _mpmNbFiltres();
-  // La topbar mobile est collante (z-index 50) : sans ce relevé, la barre
-  // de periode se cale a top:0 et passe DERRIERE elle au defilement. On
-  // mesure au lieu de coder une hauteur en dur — elle change avec le
-  // bandeau staging et avec la longueur du sous-titre.
+function mpmCalerEntete(){
   requestAnimationFrame(function(){
     try{
       const r  = document.documentElement;
@@ -12549,12 +12544,22 @@ function renderMpmBar(){
       let decTb = 0;
       try{ decTb = parseFloat(window.getComputedStyle(tb).top) || 0; }catch(e){}
       if(hTb) r.style.setProperty('--mpm-top', (decTb + hTb)+'px');
-      if(hBa) r.style.setProperty('--mpm-bar-h', hBa+'px');
+      // 0 sur une page sans barre de période (Traçabilité…) : les onglets se collent
+      // alors sous la topbar, sans laisser un espace où le contenu défile.
+      r.style.setProperty('--mpm-bar-h', hBa+'px');
       // Hauteur totale de l'en-tete colle : les en-tetes de jour de la liste
       // des saisies s'y calent, sinon ils glissent dessous et disparaissent.
       if(hTb) r.style.setProperty('--mpm-sticky', (decTb+hTb+hBa+hOn)+'px');
     }catch(e){}
   });
+}
+function renderMpmBar(){
+  const n = _mpmNbFiltres();
+  // La topbar mobile est collante (z-index 50) : sans ce relevé, la barre
+  // de periode se cale a top:0 et passe DERRIERE elle au defilement. On
+  // mesure au lieu de coder une hauteur en dur — elle change avec le
+  // bandeau staging et avec la longueur du sous-titre.
+  mpmCalerEntete();
   return h('div',{className:'mpm-bar'},
     h('button',{type:'button',className:'mpm-per','aria-label':'Changer la période',
       onClick:()=>openMpmFiltres()},
@@ -15192,6 +15197,8 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
       // de dossier) occupe trois ecrans avant le premier chiffre. Elle
       // devient une barre de periode collante qui ouvre une feuille.
       containerKids.push(_mpmPortrait() ? renderMpmBar() : renderFilters());
+    }else if(_mpmPortrait()){
+      mpmCalerEntete();
     }
     containerKids.push(pageContent);
     // Le conteneur est a 1200px pour toute l'application. Les Points de
