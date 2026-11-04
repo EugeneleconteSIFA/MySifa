@@ -442,6 +442,9 @@ body.light .cal-allday-row{background:#f8fafc}
   .cal-week-num,.cal-mini-wrap,.cal-toggle,.cal-gear-btn{display:none!important}
 }
 @media(max-width:900px){
+  /* Le mois tient dans la largeur du téléphone, un seul jour aussi. La semaine et
+     ses sept colonnes restent plus larges : elles défilent dans .cal-body. */
+  .cal-month,.cal-time-wrap.cal-day-single{min-width:0}
   .cal-mobile-view-sel{display:block}
   .mobile-topbar-sub{display:none}
   .cal-view-tabs,.cal-shortcuts-wrap{display:none!important}

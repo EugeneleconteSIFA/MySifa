@@ -1869,8 +1869,8 @@ body.light .hist-badge-mvt-inventaire{color:#7c3aed}
   .hist-filters-card.collapsed .hist-filters-grid,.hist-filters-card.collapsed .hist-filters-actions{display:none}
   .hist-filters-grid{grid-template-columns:1fr 1fr;gap:10px}
   .hist-head{flex-direction:column;align-items:stretch}
-  .hist-head-actions{width:100%}
-  .hist-head-actions .hist-export-btn{width:100%;justify-content:center}
+  .hist-head-actions{width:100%;flex-wrap:wrap}
+  .hist-head-actions .hist-export-btn{flex:1 1 130px;width:auto;justify-content:center}
   .hist-table-wrap{display:none}
   .hist-cards{display:flex}
   .hist-results-head{flex-direction:column;align-items:stretch}

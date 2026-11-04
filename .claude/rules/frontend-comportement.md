@@ -100,6 +100,14 @@ sur téléphone. Ce fichier montre aussi une seule fenêtre d'accueil à la fois
 Au doigt, `:hover` s'allume dès qu'on pose le doigt, y compris pour faire défiler,
 et reste allumé : ne pas colorer un élément tactile sur `:hover`.
 
+### Largeur sur téléphone
+Sous 900 px, une page ne défile jamais en largeur : `static/mysifa_largeur_mobile.js`,
+injecté partout par `main.py`, surveille les zones de page et contient ce qui les
+élargit (rangée de boutons à la ligne, tableau ou bande d'onglets qui défile dans
+son propre bloc). Il rattrape ce qu'un écran oublie, mais un écran neuf doit tenir
+de lui-même : pas de `min-width` fixe sur un conteneur de page, `flex-wrap` sur une
+rangée de boutons, un `overflow-x:auto` autour d'un tableau large.
+
 ### Liens de navigation
 Toujours inclure les liens vers les modules auxquels l'utilisateur a accès (vérifiés via le contexte de session). La cohérence des icônes entre pages est obligatoire — si un module utilise un certain SVG dans une page, il doit utiliser le même dans toutes les autres.
 

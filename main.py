@@ -659,6 +659,9 @@ _TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=5" defer></scr
 # Même logique pour la capture de blocs en widget d'accueil (mysifa_blocs.js) :
 # un bloc capturable doit l'être sur toutes les pages, sans liste à tenir.
 _BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></script>'.encode()
+# Téléphone : aucune page ne déborde en largeur. Toutes les pages, y compris celles
+# qui n'ont pas les boutons flottants (MyRH).
+_LARGEUR_TAG = b'<script src="/static/mysifa_largeur_mobile.js?v=1"></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 _HEAD_OPEN_RE = re.compile(rb"<head(?:\s[^>]*)?>", re.IGNORECASE)
 
@@ -702,7 +705,7 @@ _VERSION_ASSET = {
     b"/static/chat_url.js": b"?v=1",
     b"/static/mysifa_dock.js": b"?v=4",
     b"/static/mysifa_dock_fenetres.js": b"?v=1",
-    b"/static/mysifa_outils_mobile.js": b"?v=2",
+    b"/static/mysifa_outils_mobile.js": b"?v=3",
 }
 
 
@@ -752,7 +755,7 @@ async def inject_tache_quick(request: Request, call_next):
     # Les portails fournisseur/expédition sont publics : pas de session MySifa,
     # donc rien à y injecter.
     p = request.url.path
-    _tags = b"".join(t for t in (_TACHE_QUICK_TAG, _BLOCS_TAG) if t not in body)
+    _tags = b"".join(t for t in (_TACHE_QUICK_TAG, _BLOCS_TAG, _LARGEUR_TAG) if t not in body)
     _tete = b""
     # Le site vitrine (/website) est une maquette du site public : aucun outil
     # interne (boutons flottants, raccourci tâche, capture de blocs) n'y apparaît.
