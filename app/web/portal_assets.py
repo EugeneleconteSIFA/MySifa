@@ -833,17 +833,13 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 
   /* A traiter : les compteurs deja servis un par un, rendus tapables. */
   .portal-atraiter{width:100%}
-  /* Gerer les favoris : l'etoile devient une vraie cible, et toucher une tuile
-     l'epingle au lieu de l'ouvrir. */
+  /* Gerer les favoris : toucher une tuile l'epingle au lieu de l'ouvrir. La rangee
+     ou elle se trouve dit son etat : une etoile recouvrirait la pastille du coin. */
   .portal-fav-gerer{display:block;width:100%;min-height:42px;margin:10px 0 0;padding:0 12px;
     background:var(--card);border:1px solid var(--border);border-radius:10px;
     font:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer}
   .portal-apps-block--favedit .portal-fav-gerer{background:var(--accent);border-color:var(--accent);color:#fff}
   .portal-apps-block--favedit .portal-apps--repliees{display:grid!important}
-  .portal-apps-block--favedit .portal-app .portal-app-star{display:flex!important;
-    top:3px;left:auto;right:3px;width:32px;height:32px;color:var(--muted);pointer-events:none}
-  .portal-apps-block--favedit .portal-app .portal-app-star svg{width:21px;height:21px}
-  .portal-apps-block--favedit .portal-app .portal-app-star.on{color:var(--warn)}
   /* Feuille d'une tuile (appui maintenu) : titre, epingle, raccourcis du module. */
   .portal-feuille-titre{padding:2px 22px 10px;font-size:15px;font-weight:800;color:var(--text);
     border-bottom:1px solid var(--border);margin-bottom:6px}
