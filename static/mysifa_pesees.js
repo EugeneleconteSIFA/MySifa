@@ -1,5 +1,7 @@
 /*
- * MySifa — Pesées par front (saisie prod : onglet Qualité ; MyProd : fenêtre).
+ * MySifa — Inspections des produits finis : pesées par front et autres
+ * mesures des alertes d'inspection (saisie prod : onglet Qualité ; MyProd :
+ * fenêtre et fiche dossier).
  *
  * Des boutons choisissent les champs affichés (pesée par front par défaut,
  * grammage de colle, release… en plus) : une courbe et des colonnes par
@@ -18,6 +20,9 @@
  *       poser dans la page (onglet Qualité) : le premier appel charge, les
  *       suivants rendent le même élément, état et défilement compris.
  *   MySifaPesees.allerVue(e)   applique un état lu dans l'adresse à la vue
+ *   MySifaPesees.dossier(cible, no_dossier)   le même rendu (boutons de
+ *       champs, courbes, tableau, valeurs à vérifier) pour un seul dossier,
+ *       posé dans `cible` : fiche dossier de MyProd. État propre à la cible.
  *   MySifaPesees.surAdresse(fn)   fn({machine, no_dossier, jours}) à chaque
  *       changement de filtre, fn(null) à la fermeture de la fenêtre : la page
  *       porte l'état dans son adresse (url-etat.md). Une fermeture technique
@@ -152,13 +157,23 @@
   }
   // Questions choisies, dans l'ordre du questionnaire. Un choix qui ne
   // correspond à aucune question de l'alerte retombe sur le défaut.
-  function choisies(qs) {
-    var voulu = P.filtres.champs || champsDefaut(qs);
+  // X : contexte d'affichage — {etat: {champs}, deplies, redessiner(),
+  // champsChanges(), titreClic(g) | null}. PRINCIPAL pour la fenêtre et
+  // l'onglet ; un contexte par fiche dossier (dossier()).
+  var PRINCIPAL = {
+    get etat() { return P.filtres; },
+    get deplies() { return P.deplies; },
+    redessiner: function () { rendre(); },
+    champsChanges: function () { signaler(etat()); },
+    titreClic: function (g) { P.filtres.no_dossier = g.no_dossier; P.filtres.jours = ""; P.defil = 0; charger(); },
+  };
+  function choisies(qs, X) {
+    var voulu = (X || PRINCIPAL).etat.champs || champsDefaut(qs);
     var r = qs.filter(function (q) { return voulu.indexOf(cleQ(q)) >= 0; });
     return r.length ? r : qs.filter(function (q) { return q.multiple; });
   }
-  function boutonsChamps(qs) {
-    var actifs = choisies(qs).map(cleQ);
+  function boutonsChamps(qs, X) {
+    var actifs = choisies(qs, X).map(cleQ);
     var barre = el("div", "pf-champs");
     barre.setAttribute("role", "group");
     barre.setAttribute("aria-label", "Champs affichés");
@@ -171,9 +186,9 @@
         var n = on ? actifs.filter(function (k) { return k !== cleQ(q); }) : actifs.concat([cleQ(q)]);
         if (!n.length) return;  // au moins un champ affiché
         n = qs.map(cleQ).filter(function (k) { return n.indexOf(k) >= 0; });
-        P.filtres.champs = memesChamps(n, champsDefaut(qs)) ? null : n;
-        signaler(etat());
-        rendre();
+        X.etat.champs = memesChamps(n, champsDefaut(qs)) ? null : n;
+        X.champsChanges();
+        X.redessiner();
       });
       barre.appendChild(b);
     });
@@ -366,7 +381,7 @@
   }
 
   // ── Tableau d'un dossier ───────────────────────────────────────────────
-  function tableau(g, qs, nbF, cle) {
+  function tableau(g, qs, nbF, cle, X) {
     var t = el("table", "pf-table"), thead = el("thead"), tr = el("tr");
     ["Date", "Opérateur"].forEach(function (h) { tr.appendChild(el("th", null, h)); });
     qs.forEach(function (q) {
@@ -375,7 +390,7 @@
     });
     thead.appendChild(tr);
     t.appendChild(thead);
-    var tb = el("tbody"), toutes = !!P.deplies[cle];
+    var tb = el("tbody"), toutes = !!X.deplies[cle];
     var lignes = toutes ? g.lignes : g.lignes.slice(0, LIGNES_VISIBLES);
     lignes.forEach(function (l) {
       var r = el("tr");
@@ -406,14 +421,15 @@
       var plus = el("button", "pf-plus", toutes ? "Afficher les " + LIGNES_VISIBLES + " dernières"
                                                 : "Afficher les " + g.lignes.length + " pesées");
       plus.type = "button";
-      plus.addEventListener("click", function () { P.deplies[cle] = !toutes; rendre(); });
+      plus.addEventListener("click", function () { X.deplies[cle] = !toutes; X.redessiner(); });
       w.appendChild(plus);
     }
     return w;
   }
 
-  function section(a, g, largeur) {
-    var qs = choisies(a.questions), qm = qs.filter(function (q) { return q.multiple; });
+  function section(a, g, largeur, X) {
+    X = X || PRINCIPAL;
+    var qs = choisies(a.questions, X), qm = qs.filter(function (q) { return q.multiple; });
     var cle = a.id + "|" + g.no_dossier;
     var nbF = 0;
     g.lignes.forEach(function (l) {
@@ -421,11 +437,12 @@
     });
     var s = el("section", "pf-section");
     var tete = el("div", "pf-section-tete");
-    var titre = el(g.no_dossier ? "button" : "span", "pf-section-titre", g.no_dossier || "Sans dossier");
-    if (g.no_dossier) {
+    var lien = !!(g.no_dossier && X.titreClic);
+    var titre = el(lien ? "button" : "span", "pf-section-titre", g.no_dossier || "Sans dossier");
+    if (lien) {
       titre.type = "button";
       titre.title = "Tout l'historique de ce dossier";
-      titre.addEventListener("click", function () { P.filtres.no_dossier = g.no_dossier; P.filtres.jours = ""; P.defil = 0; charger(); });
+      titre.addEventListener("click", function () { X.titreClic(g); });
     }
     tete.appendChild(titre);
     var n = g.lignes.length, der = g.lignes[0], prem = g.lignes[n - 1];
@@ -442,7 +459,7 @@
       var c = courbe(g, q, largeur);
       if (c) s.appendChild(c);
     });
-    s.appendChild(tableau(g, qs, nbF, cle));
+    s.appendChild(tableau(g, qs, nbF, cle, X));
     return s;
   }
 
@@ -462,7 +479,7 @@
           : "Aucune pesée sur les " + periode + "."));
         return;
       }
-      corps.appendChild(boutonsChamps(a.questions));
+      corps.appendChild(boutonsChamps(a.questions, PRINCIPAL));
       gs.forEach(function (g) { corps.appendChild(section(a, g, largeur)); });
     });
   }
@@ -483,9 +500,9 @@
     if (P.mode !== "vue") {
       m = el("div", "pf-modal");
       m.setAttribute("role", "dialog");
-      m.setAttribute("aria-label", "Pesées par front");
+      m.setAttribute("aria-label", "Inspections des produits finis");
       var tete = el("div", "pf-tete");
-      tete.appendChild(el("div", "pf-titre", "Pesées par front"));
+      tete.appendChild(el("div", "pf-titre", "Inspections des produits finis"));
       var x = el("button", "pf-fermer", "×");
       x.type = "button";
       x.setAttribute("aria-label", "Fermer");
@@ -520,6 +537,39 @@
     }
   }
 
+  // ── Un dossier, dans une fiche ─────────────────────────────────────────
+  // Tout l'historique du dossier ; la machine et le nombre de pesées sont
+  // déjà dans la fiche, la section n'a pas de titre de dossier cliquable.
+  function dossier(cible, no) {
+    if (!cible || !no) return;
+    var X = { etat: { champs: null }, deplies: {}, data: null, erreur: "",
+              champsChanges: function () {}, titreClic: null };
+    X.redessiner = function () {
+      if (!cible.isConnected && X.data) return;
+      var largeur = (cible.clientWidth || 640) - 30;
+      cible.textContent = "";
+      if (X.erreur) { cible.appendChild(el("div", "pf-erreur", X.erreur)); return; }
+      if (!X.data) { cible.appendChild(el("div", "pf-vide", "Chargement des pesées…")); return; }
+      var rien = true;
+      (X.data.alertes || []).forEach(function (a) {
+        var g = (a.dossiers || [])[0];
+        if (!g) return;
+        rien = false;
+        var bloc = el("div", "pf-dossier-fiche");
+        bloc.appendChild(boutonsChamps(a.questions, X));
+        bloc.appendChild(section(a, g, largeur, X));
+        cible.appendChild(bloc);
+      });
+      if (rien) cible.appendChild(el("div", "pf-vide", "Aucune pesée sur ce dossier."));
+    };
+    X.redessiner();
+    fetch("/api/maintenance/alertes/pesees?no_dossier=" + encodeURIComponent(no),
+          { credentials: "include", cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("Pesées indisponibles (" + r.status + ")."); return r.json(); })
+      .then(function (d) { X.data = d; X.redessiner(); })
+      .catch(function (e) { X.erreur = e.message || "Pesées indisponibles."; X.redessiner(); });
+  }
+
   document.addEventListener("click", function (e) {
     var b = e.target && e.target.closest && e.target.closest("[data-pesees]");
     if (!b) return;
@@ -550,7 +600,7 @@
   }
 
   global.MySifaPesees = {
-    ouvrir: ouvrir, fermer: fermer, vue: vue, allerVue: allerVue, retablir: retablir,
+    ouvrir: ouvrir, fermer: fermer, vue: vue, allerVue: allerVue, retablir: retablir, dossier: dossier,
     adresse: adresse, lireAdresse: lireAdresse,
     etat: etat,
     ouverte: function () { return !!document.getElementById("pf-overlay"); },

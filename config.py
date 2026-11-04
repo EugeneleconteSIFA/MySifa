@@ -43,7 +43,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.5.1"
+APP_VERSION = "3.6.0"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -363,6 +363,15 @@ STOCK_CATEGORIES_PRIX_DIRECT = ("carton", "mandrin", "palette", "autre")
 def categorie_prix_direct(categorie):
     """Le prix unitaire de cette catégorie se saisit-il dans MyStock ?"""
     return (categorie or "").strip().lower() in STOCK_CATEGORIES_PRIX_DIRECT
+
+
+# Transport d'un produit fini importé, ajouté à son prix de valorisation sur
+# demande (bouton de la ligne) : transport = prix HT / diviseur. 9 → 1/9e.
+PF_TRANSPORT_IMPORT_DIVISEUR = float(os.getenv("PF_TRANSPORT_IMPORT_DIVISEUR", "9"))
+
+# Unités de contenant tenues pour identiques quand on reprend un prix RVGI sur
+# un produit fini (un produit « carton » vendu à la « boite »).
+PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
 
 # Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
 # métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
@@ -1352,6 +1361,12 @@ MATIERE_FAMILLES = (("frontal", "Frontal"), ("glassine", "Glassine"),
 # validation (au moins 3 fronts). Écarts relatifs : 0.3 = 30 %.
 PESEES_ECART_DOSSIER = float(os.getenv("PESEES_ECART_DOSSIER", "0.3"))
 PESEES_ECART_FRONTS = float(os.getenv("PESEES_ECART_FRONTS", "0.15"))
+
+# Formulaire qu'un code opération ouvre au poste avant que la saisie ne parte
+# (operation_codes.formulaire, Paramètres › Opérations). « maintenance » :
+# intervention, machine, date, commentaire, enregistrés dans MyMaintenance
+# (static/mysifa_maint_saisie.js).
+OPERATION_FORMULAIRES = (("maintenance", "Opération de maintenance (MyMaintenance)"),)
 
 # ─── MyTools — convertisseur (repris de Prismix) ──────────────────
 # Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et

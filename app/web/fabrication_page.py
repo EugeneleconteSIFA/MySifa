@@ -600,6 +600,7 @@ body.light table.fab-table tr.fab-row-last td{
   letter-spacing:.4px;color:var(--muted);border:1px solid var(--border);
   border-radius:20px;padding:2px 7px;white-space:nowrap}
 .fab-outil-vide{font-size:12px;color:var(--muted);padding:6px 2px}
+.fab-outil-meme{margin-bottom:8px}
 .fab-outil-choisi{display:flex;align-items:center;gap:5px;margin-top:6px;
   font-size:12px;font-weight:700;color:var(--success)}
 /* Plaque confirmée au démarrage : la proposition de la fiche en gros, deux
@@ -820,16 +821,25 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
   padding:20px 24px;gap:18px;
 }
 .fab-prod-head{margin-bottom:2px}
-/* Onglet Qualité : pesées (static/mysifa_pesees.css) puis opérations de
-   maintenance (static/mysifa_maint_saisie.css) ; tout l'onglet défile. */
-.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 28px;gap:14px}
+/* Onglet Qualité : deux sous-onglets, pesées (static/mysifa_pesees.css) et
+   opérations de maintenance (static/mysifa_maint_saisie.css) ; tout
+   l'onglet défile. */
+/* Marge basse : le dock (outils en bas à droite) ne recouvre pas le bouton
+   d'enregistrement en fin de défilement. */
+.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 96px;gap:14px}
 /* Les blocs gardent leur hauteur : la vue des pesées est réglée pour
    remplir une fenêtre (flex:1, min-height:0), ici elle rétrécissait et
    débordait sous la section maintenance. */
 .fab-qualite>*{flex-shrink:0}
 .fab-qualite .pf-vue{flex:none;min-height:auto}
 .fab-qualite .pf-corps{padding-bottom:4px}
-.fab-qualite .mm-section{margin-top:6px}
+/* Sous-onglets de Qualité : les cartes de l'onglet Stock, la carte ouverte
+   marquée. Elles disent d'emblée que l'onglet a deux parties. */
+.fab-qualite-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.fab-qualite-nav .fab-prod-card[aria-pressed="true"]{border:2px solid var(--accent);background:var(--accent-bg);padding:15px 17px}
+.fab-qualite-nav .fab-prod-card[aria-pressed="true"] .fab-prod-card-title{color:var(--accent)}
+.fab-prod-card-pesees .fab-prod-card-ico{background:var(--accent)}
+.fab-prod-card-maintenance .fab-prod-card-ico{background:var(--c4)}
 .fab-prod-head-title{
   font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
 }
@@ -1369,8 +1379,8 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_pesees.css?v=4">
-<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=6">
+<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=5">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -1394,13 +1404,13 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>if(window.MySifaProduitMemoire)window.MySifaProduitMemoire.regler({ongletParDefaut:'documents',ofUnParUn:true});</script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/fabrication_url.js?v=4"></script>
+<script src="/static/fabrication_url.js?v=5"></script>
 <!-- Plaque confirmée au démarrage du dossier. -->
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
-<script src="/static/mysifa_pesees.js?v=3"></script>
-<script src="/static/mysifa_maint_saisie.js?v=1"></script>
-<script src="/static/mysifa_poids_colle.js?v=3"></script>
+<script src="/static/mysifa_pesees.js?v=5"></script>
+<script src="/static/mysifa_maint_saisie.js?v=5"></script>
+<script src="/static/mysifa_poids_colle.js?v=4"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
   window.mysifaPoidsColleContexte = function () {
@@ -1593,6 +1603,7 @@ let S = {
   ofEditModal: null,
   ofSelected: new Set(),   // Set d'ids d'OFs sélectionnés
   ofSubTab: 'of',        // 'of' | 'fiche'
+  qualiteSous: 'pesees', // onglet Qualité : 'pesees' | 'maintenance'
   ficheSearch: '',
   fichePage: 0,
   ficheTotal: 0,
@@ -1975,6 +1986,9 @@ function icon(name,size=16){
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     scale:'<path d="M12 3v18"/><path d="M5 21h14"/><path d="M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0z"/><path d="M17 7l-3 7a3 3 0 0 0 6 0z"/>',
+    // Inspections des produits finis (onglet Qualité) et widget Poids de
+    // colle (static/mysifa_poids_colle.js) : balance à afficheur, pastille « 5 ».
+    balance:'<path d="M11.5 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H9.5"/><circle cx="17.5" cy="17.5" r="5"/><path d="M19.2 14.6h-3l-.4 2.7c.4-.3.9-.4 1.4-.4a1.65 1.65 0 0 1 0 3.3c-.6 0-1.1-.2-1.5-.6" stroke-width="1.6"/>',
     // Onglet Qualité : un check au-dessus d'une main ouverte.
     qualite:'<circle cx="12" cy="6" r="4.5"/><path d="m10 6 1.4 1.4 2.8-2.8"/><g transform="translate(0 2.5)"><path d="M11 14h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16"/><path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 15 6 6"/></g>',
   };
@@ -2857,6 +2871,14 @@ function handleOpTrigger(code, label, cat){
   // rien sans une phrase — c'est a ceux-la, et a eux seuls, qu'on demande un
   // commentaire. Exiger un texte partout ferait taper « RAS » partout, et on
   // aurait perdu la seule chose que ce champ apporte.
+  // Opération de maintenance : intervention, machine, date et commentaire
+  // d'abord, enregistrés dans MyMaintenance ; la saisie part ensuite, avec
+  // l'intervention en commentaire. Annuler n'enregistre rien. C'est l'attribut
+  // `formulaire` du code (Paramètres › Opérations) qui décide, pas son numéro.
+  if(opFormulaire(code)==='maintenance' && window.MySifaMaintSaisie){
+    void ouvrirOperationMaintenance(code, label);
+    return;
+  }
   // Changement d'outil : la saisie part tout de suite (l'heure du clic est la
   // bonne), et triggerOp ouvre le formulaire sur la reponse du serveur.
   if(opOutilType(code)){
@@ -5389,25 +5411,39 @@ function renderStatsPanel(){
    Machine par défaut : celle de l'opérateur. */
 // Défilement de l'onglet : le panneau est recréé à chaque render().
 let _fabQualiteHaut = 0;
+// Lien « Inspections des produits finis » du widget Poids de colle.
+window.mysifaAllerInspections = () => { set({qualiteSous:'pesees'}); void switchFabTab('qualite'); };
+function _fabQualiteSous(sous){
+  if(sous === S.qualiteSous) return;
+  _fabQualiteHaut = 0;
+  set({qualiteSous: sous});
+}
 function renderQualitePanel(){
   const P = window.MySifaPesees, MM = window.MySifaMaintSaisie;
   const machine = (S.machine && S.machine.nom) || '';
+  const sous = S.qualiteSous === 'maintenance' ? 'maintenance' : 'pesees';
+  const carte = (cle, icone, titre, texte) => h('button',{
+      type:'button', className:'fab-prod-card fab-prod-card-'+cle,
+      'aria-pressed': sous===cle ? 'true' : 'false', onClick:()=>_fabQualiteSous(cle)},
+    h('div',{className:'fab-prod-card-ico'}, svgIcon(icone,22)),
+    h('div',{className:'fab-prod-card-txt'},
+      h('div',{className:'fab-prod-card-title'}, titre),
+      h('div',{className:'fab-prod-card-sub'}, texte)));
   const wrap = h('div',{className:'fab-main fab-qualite',
       onScroll:e=>{ _fabQualiteHaut = e.currentTarget.scrollTop; }},
-    h('div',{className:'fab-prod-head'},
-      h('h2',{className:'fab-prod-head-title'}, 'Pesées par front'),
-      h('div',{className:'fab-prod-head-sub'},
-        'Pesées d’étiquettes saisies dans les alertes d’inspection, dossier par dossier.')));
-  if(P) wrap.appendChild(P.vue({machine}));
+    h('div',{className:'fab-qualite-nav',role:'group','aria-label':'Qualité'},
+      carte('pesees', 'balance', 'Inspections des produits finis', 'Pesées et mesures, dossier par dossier'),
+      carte('maintenance', 'tool', 'Opérations de maintenance', 'Enregistrer une intervention')));
   // Opérations de maintenance : enregistrées dans MyMaintenance.
-  if(MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',
+  if(sous === 'maintenance' && MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',
     machines:(S.machines || []).map(m => m.nom).filter(Boolean)}));
-  if(!P && !MM) wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.'));
+  else if(sous === 'pesees' && P) wrap.appendChild(P.vue({machine}));
+  else wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.'));
   // Sortie puis remise dans la page, les vues perdent focus et défilement :
   // les modules les ont suivis et les rendent une fois la page reconstruite.
   queueMicrotask(()=>{
     if(wrap.isConnected) wrap.scrollTop = _fabQualiteHaut;
-    if(P) P.retablir();
+    if(P && sous === 'pesees') P.retablir();
   });
   return wrap;
 }
@@ -7610,6 +7646,22 @@ function renderCompteurCalageModal(){
    de la recherche. Le formulaire s'ouvre donc derrière une saisie déjà
    enregistrée, et « Annuler » la supprime. */
 
+function opFormulaire(code){
+  const o = OPS && OPS[code];
+  return (o && o.formulaire) ? String(o.formulaire) : '';
+}
+async function ouvrirOperationMaintenance(code, label){
+  if(!(S.machines || []).length) await loadMachines();
+  MySifaMaintSaisie.modale({
+    titre: code+' - '+label,
+    machine: (S.machine && S.machine.nom) || '',
+    machines: (S.machines || []).map(m => m.nom).filter(Boolean),
+    role: (S.user && S.user.role) || '',
+    apres: info => triggerOp(code, label,
+      {commentaire: info.libelle + (info.commentaire ? ' — ' + info.commentaire : '')}),
+  });
+}
+
 function opOutilType(code){
   const o = OPS && OPS[code];
   return (o && o.outil_type) ? String(o.outil_type) : '';
@@ -7685,7 +7737,9 @@ async function enregistrerChangementOutil(){
     showToast('Indiquez la '+nature+' démontée et la '+nature+' montée.','danger');
     return;
   }
-  if(S.outilAvant.id === S.outilApres.id){
+  // Même référence : admise pour une nature qui le permet (un cliché porte
+  // plusieurs tapis d'encrage), refusée sinon. Le serveur contrôle pareil.
+  if(S.outilAvant.id === S.outilApres.id && !ctx.meme_reference){
     showToast('La '+nature+' montée est la même que la '+nature+' démontée.','danger');
     return;
   }
@@ -7813,11 +7867,21 @@ function champOutil(role, ctx){
           +' posée sur cette machine. Corrigez si ce n\'est pas celle-là.'
         : 'Aucun changement de '+nature.toLowerCase()
           +' n\'a encore été saisi sur cette machine — cherchez le numéro.')
-    : 'La recherche interroge le référentiel, RVGI et les fiches techniques.';
+    : (ctx.meme_reference
+        ? 'Même référence, autre tapis : « Même '+nature.toLowerCase()+' ». Sinon, cherchez le numéro.'
+        : 'La recherche interroge le référentiel, RVGI et les fiches techniques.');
+  // Côté montée, pour une nature qui l'admet : remonter la référence démontée.
+  const memeBtn = (role==='apres' && ctx.meme_reference && S.outilAvant
+      && !(S.outilApres && S.outilApres.id === S.outilAvant.id))
+    ? h('button',{type:'button', className:'fab-btn fab-btn-ghost fab-btn-sm fab-outil-meme',
+        onClick:()=>{ S.outilApres = S.outilAvant; S.outilQApres = S.outilAvant.numero; S.outilResApres = null; render(); }},
+        svgIcon('refresh-ccw',13),' Même '+nature.toLowerCase()+' ('+S.outilAvant.numero+')')
+    : null;
 
   return h('div',{className:'fab-field'},
     h('label',null, nature+(role==='avant'?' démontée':' montée')),
     h('div',{className:'fab-field-hint'}, hint),
+    memeBtn,
     inp,
     choisi ? h('div',{className:'fab-outil-choisi'},
       svgIcon('check',13),' ', choisi.numero,

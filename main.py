@@ -516,6 +516,11 @@ _STAGING_BANDEAU_CSS = (
     ".staging-bandeau::before{content:\"●\";color:#fef2f2;font-size:9px;line-height:1}"
     "body{padding-top:24px!important}"
     "body .sidebar{top:24px!important}"
+    # Une sidebar en 100vh décalée de 24 px perdait ses 24 derniers pixels
+    # (version, déconnexion) sous le bas de l'écran. Sous 900 px elle est un
+    # tiroir fixe, borné en haut et en bas : rien à corriger.
+    "@media (min-width:901px){body .sidebar{height:calc(100vh - 24px)!important;"
+    "min-height:calc(100vh - 24px)!important;max-height:calc(100vh - 24px)!important}}"
     "body .mobile-topbar{top:24px!important}"
     "@media (max-width:600px){.staging-bandeau{white-space:nowrap;overflow:hidden;justify-content:flex-start;padding:0 8px}}"
     "</style>"

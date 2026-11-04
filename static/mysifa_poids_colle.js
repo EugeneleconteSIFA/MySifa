@@ -22,8 +22,9 @@
 (function (global) {
   "use strict";
 
-  // Balance à afficheur et pastille euro : ce que pèse, et coûte, la colle.
-  var ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H9.5"/><circle cx="17.5" cy="17.5" r="5"/><path d="M19.6 15.4a2.7 2.7 0 1 0 0 4.2" stroke-width="1.6"/><path d="M14.6 16.8h3.2M14.6 18.3h3.2" stroke-width="1.4"/></svg>';
+  // Balance à afficheur, pastille « 5 » : même icône que la carte
+  // « Inspections des produits finis » de l'onglet Qualité.
+  var ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H9.5"/><circle cx="17.5" cy="17.5" r="5"/><path d="M19.2 14.6h-3l-.4 2.7c.4-.3.9-.4 1.4-.4a1.65 1.65 0 0 1 0 3.3c-.6 0-1.1-.2-1.5-.6" stroke-width="1.6"/></svg>';
   var LS = "mysifa_poids_colle_v1";
   var W = { open: false, data: null, charge: false, edit: false, erreur: "", saisie: null };
 
@@ -285,10 +286,12 @@
     body.appendChild(el("div", "pc-aide", "Valeurs de grammage indicatives : le poids du frontal se prend sur chaque bobine et s'annote dessus."));
     var liens = el("div", "pc-liens");
     if (global.MySifaPesees) {
-      var h = el("button", "pc-lien", "Historique des pesées par front");
+      var h = el("button", "pc-lien", "Inspections des produits finis");
       h.type = "button";
       h.addEventListener("click", function () {
-        global.MySifaPesees.ouvrir({ machine: ctx.machine || "", no_dossier: "" });
+        // Saisie prod : l'onglet Qualité ; ailleurs, la fenêtre.
+        if (typeof global.mysifaAllerInspections === "function") { ouvrir(false); global.mysifaAllerInspections(); }
+        else global.MySifaPesees.ouvrir({ machine: ctx.machine || "", no_dossier: "" });
       });
       liens.appendChild(h);
     }

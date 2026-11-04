@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
 from app.services import encres_rvgi as _encres_rvgi
+from app.services import pf_prix_achat as _pf_prix_achat
 from app.services import valo_cloture as _valo_cloture
 from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
@@ -42,6 +43,7 @@ from config import (
     STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
     ROLES_SETTINGS_LOGISTIQUE,
     ROLES_TRACA_VIEWER,
+    PF_TRANSPORT_IMPORT_DIVISEUR,
     categorie_prix_direct,
     unites_comptage,
 )
@@ -9501,6 +9503,17 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
     return _appliquer_devalorisation(conn, items)
 
 
+def _pf_transport_empreinte(conn) -> tuple:
+    """Change dès qu'un transport import est posé ou retiré (clé de cache)."""
+    try:
+        r = conn.execute(
+            "SELECT COALESCE(SUM(transport_import), 0), COALESCE(MAX(transport_maj_le), '') FROM pf_valorisation"
+        ).fetchone()
+        return (int(r[0]), r[1])
+    except sqlite3.OperationalError:
+        return (0, "")
+
+
 def _devalorisations(conn) -> set[tuple[int, int]]:
     """Lignes marquées « à jeter » : {(matiere_id, laize_id ou 0)}."""
     try:
@@ -9921,6 +9934,7 @@ def get_valorisation_trend(request: Request, days: int = 30):
             _table_max_id(conn, "mp_valorisation_historique"),
             _table_max_id(conn, "pf_valorisation_historique"),
             tuple(sorted(_devalorisations(conn))),
+            _pf_transport_empreinte(conn),
             round(_get_taux_eur_usd(conn), 6),
             round(_get_import_tax_pct(conn), 4),
             round(_get_charge_production_pct(conn), 4),
@@ -10683,19 +10697,24 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
     Pour les produits facturés au mille (unité = étiquette[s]), le prix HT stocké
     correspond au prix pour 1000 unités. La valorisation = qte * prix / 1000.
     """
+    cols_v = {r[1] for r in conn.execute("PRAGMA table_info(pf_valorisation)").fetchall()}
+    transport_sql = "COALESCE(v.transport_import, 0)" if "transport_import" in cols_v else "0"
     rows = conn.execute(
         """
         SELECT p.id, p.reference, p.designation, p.unite,
                COALESCE(p.type, 'fabrique') AS type,
                v.prix_unitaire_ht, v.source_prix, v.statut, v.date_derniere_cmd,
-               v.updated_at, v.updated_by_name
+               v.updated_at, v.updated_by_name, %s AS transport_import
         FROM produits p
         LEFT JOIN pf_valorisation v ON v.produit_id = p.id
         ORDER BY p.reference ASC
-        """
+        """ % transport_sql
     ).fetchall()
     stock_fab = _pf_valo_pick_stock(conn, "fabrique")
     stock_neg = _pf_valo_pick_stock(conn, "negoce")
+    # Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
+    # défaut dernière commande client (cf. app/services/pf_prix_achat.py).
+    taux_usd = _get_taux_eur_usd(conn)
     out: list[dict] = []
     for r in rows:
         ptype = r["type"]
@@ -10705,7 +10724,16 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
         unite = r["unite"] or ""
         par_mille = _pf_is_unite_par_mille(unite)
         divisor = 1000.0 if par_mille else 1.0
-        valorisation = round(stock * prix / divisor, 2)
+        source_prix = r["source_prix"]
+        achat = None
+        if prix <= 0:
+            achat = _pf_prix_achat.prix_rvgi(r["reference"], par_mille, taux_usd, unite, stock)
+            if achat:
+                prix = achat["prix"]
+                source_prix = achat["source"]
+        transport = bool(r["transport_import"]) and prix > 0
+        prix_effectif = _pf_prix_avec_transport(prix, transport)
+        valorisation = round(stock * prix_effectif / divisor, 2)
         out.append({
             "id": pid,
             "reference": r["reference"],
@@ -10717,7 +10745,14 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
             "quantite": round(stock, 4),
             "prix_unitaire_ht": prix,
             "valorisation": valorisation,
-            "source_prix": r["source_prix"],
+            "source_prix": source_prix,
+            "prix_origine": achat["origine"] if achat else ("valorisation" if prix > 0 else None),
+            "achat_fournisseur": achat["fournisseur"] if achat else None,
+            "achat_detail": achat["detail"] if achat else None,
+            "transport_import": transport,
+            "transport_part": "1/%g" % PF_TRANSPORT_IMPORT_DIVISEUR,
+            "transport_ht": round(prix_effectif - prix, 6),
+            "prix_avec_transport": round(prix_effectif, 6),
             "statut": r["statut"],
             "date_derniere_cmd": r["date_derniere_cmd"],
             "updated_at": r["updated_at"],
@@ -10725,6 +10760,13 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
             "has_price": prix > 0,
         })
     return out
+
+
+def _pf_prix_avec_transport(prix: float, transport: bool) -> float:
+    """Prix HT augmenté du transport d'un produit importé (prix / diviseur)."""
+    if not transport or prix <= 0 or PF_TRANSPORT_IMPORT_DIVISEUR <= 0:
+        return prix
+    return prix + prix / PF_TRANSPORT_IMPORT_DIVISEUR
 
 
 def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) -> list[dict]:
@@ -10748,9 +10790,13 @@ def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) 
         new_qte = float(stock_pf.get(pid, it.get("quantite") or 0))
         new_prix = float(prix_map[pid]) if pid in prix_map else float(it.get("prix_unitaire_ht") or 0)
         divisor = 1000.0 if it.get("par_mille") else 1.0
+        transport = bool(it.get("transport_import")) and new_prix > 0
+        prix_effectif = _pf_prix_avec_transport(new_prix, transport)
         it["quantite"] = round(new_qte, 4)
         it["prix_unitaire_ht"] = new_prix
-        it["valorisation"] = round(new_qte * new_prix / divisor, 2)
+        it["transport_ht"] = round(prix_effectif - new_prix, 6)
+        it["prix_avec_transport"] = round(prix_effectif, 6)
+        it["valorisation"] = round(new_qte * prix_effectif / divisor, 2)
         it["has_price"] = new_prix > 0
     return items
 
@@ -10908,6 +10954,45 @@ async def update_valorisation_pf(produit_id: int, request: Request):
             items, charge_prod_pct=charge, storage_fees_pct=storage
         ),
     }
+
+
+@router.put("/api/stock/valorisation/pf/{produit_id}/transport")
+async def update_valorisation_pf_transport(produit_id: int, request: Request):
+    """Ajoute (ou retire) le transport d'un produit importé à son prix de
+    valorisation. Body : {"transport": true | false}."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    actif = 1 if body.get("transport") else 0
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        prod = conn.execute("SELECT reference FROM produits WHERE id=?", (produit_id,)).fetchone()
+        if not prod:
+            raise HTTPException(404, "Produit introuvable.")
+        conn.execute(
+            """INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, transport_import,
+                                            transport_maj_le, transport_maj_par)
+               VALUES (?, 0, ?, ?, ?)
+               ON CONFLICT(produit_id) DO UPDATE SET
+                 transport_import = excluded.transport_import,
+                 transport_maj_le = excluded.transport_maj_le,
+                 transport_maj_par = excluded.transport_maj_par""",
+            (produit_id, actif, now, user_name),
+        )
+        conn.commit()
+        items = _pf_valo_query(conn)
+        charge = _get_charge_production_pct(conn)
+        storage = _get_storage_fees_pct(conn)
+    log_action(
+        user=user, action="UPDATE", module="stock",
+        objet=f"Transport import {prod['reference']}",
+        detail={"produit_id": produit_id, "transport": bool(actif),
+                "part": f"1/{PF_TRANSPORT_IMPORT_DIVISEUR:g}"},
+        ip=request.client.host if request.client else None,
+    )
+    _pf_enrich_charges(items, charge_prod_pct=charge, storage_fees_pct=storage)
+    item = next((x for x in items if x["id"] == produit_id), None)
+    return {"ok": True, "item": item}
 
 
 @router.get("/api/stock/valorisation/pf/{produit_id}/historique")

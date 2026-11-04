@@ -2649,7 +2649,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=unite3"></script>
 <script src="/static/mysifa_scanner.js?v=1"></script>
-<script src="/static/mysifa_donnees_prod.js?v=17"></script>
+<script src="/static/mysifa_donnees_prod.js?v=18"></script>
 <script src="/static/mysifa_destockage.js?v=11"></script>
 <script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
@@ -2661,6 +2661,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/mysifa_haut_de_page.js?v=1" defer></script>
 <script src="/static/stock_url.js?v=8"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -3488,6 +3489,15 @@ function stockMpRefLink(matiereId, label, options) {
   if (!mid) return el('span', null, txt);
   const href = stockDeepLinkUrl({ tab: 'matieres', matiere: mid });
   const baseStyle = opts.style || 'text-decoration:none';
+  // nouvelOnglet : la fiche s'ouvre à côté, la page courante (valorisation
+  // filtrée, défilée) reste où elle est.
+  if (opts.nouvelOnglet) {
+    return el('a', {
+      cls: 'mvt-ref-link', href: href, target: '_blank', rel: 'noopener',
+      style: baseStyle, title: opts.title || null,
+      on: { click: (e) => e.stopPropagation() },
+    }, txt);
+  }
   return el('a', {
     cls: 'mvt-ref-link',
     href: href,
@@ -11029,7 +11039,9 @@ async function mpReactiverMatiere(x) {
 (function mpInstallerBulles() {
   if (window.__mpBulles) return;
   window.__mpBulles = true;
-  const PORTEE = '.mp-detail, .hist-page, .mp-modal';
+  // .val-mp-table : tableau des matières de la valorisation (actions en icônes,
+  // l'infobulle native y arrivait tard et sans le style MySifa).
+  const PORTEE = '.mp-detail, .hist-page, .mp-modal, .val-mp-table, .val-pf-table';
   let bulle = null;
   let cible = null;
   const cacher = () => { if (bulle) bulle.classList.remove('on'); cible = null; };
@@ -24260,8 +24272,11 @@ async function loadValorisationTrend() {
     v.trend.points = [];
   } finally {
     v.trend.loading = false;
-    // Re-render juste la card total (via full render pour rester simple)
-    renderValorisationView(true);
+    // Seules les cartes du haut portent la courbe : on ne reconstruit qu'elles.
+    // Un rendu complet refaisait tout le tableau des matières pour un graphe.
+    const kpis = document.querySelector('#scroll-area .val-kpis');
+    if (kpis && S.tab === 'valorisation') kpis.replaceWith(buildValorisationKpis());
+    else renderValorisationView(true);
   }
 }
 
@@ -24829,7 +24844,30 @@ function buildValorisationKpis() {
     ...kpiPFChildren
   );
 
-  wrap.append(kpiTotal, kpiMP, kpiPF);
+  // ── Dévalorisation : le stock marqué « à jeter », déjà soustrait des totaux ──
+  // On l'affiche à part pour qu'il se lise : sans cette carte, une baisse du
+  // total ne disait pas si elle venait d'un stock jeté ou d'un prix.
+  const devalItems = (v.items || []).filter(it => it.devalorise);
+  const devalMontant = devalItems.reduce((acc, it) => acc + Math.abs(valItemAchat(it)), 0);
+  const nbDeval = devalItems.length;
+  const kpiDeval = el('div', { style:
+    'background:var(--card);border:1px solid ' + (nbDeval ? 'var(--danger)' : 'var(--border)')
+    + ';border-radius:12px;padding:16px 18px;' + (nbDeval ? 'cursor:pointer' : ''),
+    title: nbDeval ? 'Afficher les lignes dévalorisées' : null,
+    on: nbDeval ? { click: () => {
+      v.query = ''; v.filterCategorie = null; v.filterSousSection = null;
+      v.sortColumn = 'valorisation'; v.sortDirection = 'asc';
+      renderValorisationView(true);
+    } } : null },
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Dévalorisation'),
+    el('div', { style: 'font-size:24px;font-weight:800;color:' + (nbDeval ? 'var(--danger)' : 'var(--muted)') },
+      nbDeval ? '− ' + valFormatEuro(devalMontant) : '0 €'),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
+      nbDeval ? nbDeval + ' ligne' + (nbDeval > 1 ? 's' : '') + ' de stock à jeter, soustraite' + (nbDeval > 1 ? 's' : '') + ' du total'
+              : 'Aucun stock à jeter')
+  );
+
+  wrap.append(kpiTotal, kpiMP, kpiPF, kpiDeval);
   // Widget d'accueil (app/services/blocs_registre.py) : les montants mis en
   // avant par les cartes — le réel quand il est affiché en gros, la base
   // sinon. Une date figée se capture aussi : elle devient le filtre
@@ -24974,6 +25012,46 @@ function buildValorisationCategoriePills() {
 // ces valeurs et les affiche — les endpoints correspondants restent en place
 // côté serveur pour les reprises et les scripts.
 
+// Largeurs des colonnes du tableau des matières : [min, max] en px. Le min
+// tient sur th (min-width), le max sur le contenu des cellules de texte (un
+// max-width sur une cellule de tableau est ignoré par les navigateurs).
+const VAL_COLS = {
+  categorie: [96, 140], commercial: [200, 320], technique: [220, 400],
+  quantite: [110, 190], achat: [130, 200], vente: [120, 190], valo: [110, 170],
+};
+
+// Bouton d'action carré, icône seule : le libellé passe dans l'infobulle.
+function valBoutonIcone(icone, titre, couleur, bordure, fond, onClick) {
+  // Survol : fond qui s'assombrit et bordure accentuée ; un bouton plein
+  // (dévalorisé) s'éclaircit à peine. mouseleave rend exactement le repos.
+  const plein = fond !== 'var(--card)';
+  const b = el('button', {
+    type: 'button', title: titre, 'aria-label': titre,
+    style: 'width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;'
+      + 'border-radius:8px;cursor:pointer;flex:0 0 auto;transition:all .15s;'
+      + 'border:1px solid ' + bordure + ';background:' + fond + ';color:' + couleur,
+    on: {
+      click: onClick,
+      mouseenter: (e) => {
+        const t = e.currentTarget;
+        if (plein) { t.style.filter = 'brightness(1.1)'; return; }
+        t.style.background = 'var(--bg)';
+        t.style.borderColor = bordure === 'var(--border)' ? 'var(--accent)' : bordure;
+        if (couleur === 'var(--text2)') t.style.color = 'var(--accent)';
+      },
+      mouseleave: (e) => {
+        const t = e.currentTarget;
+        t.style.filter = '';
+        t.style.background = fond;
+        t.style.borderColor = bordure;
+        t.style.color = couleur;
+      },
+    },
+  });
+  b.appendChild(iconEl(icone, 14));
+  return b;
+}
+
 function buildValorisationTableRow(item) {
   const rowKey = item.row_key || ('m' + item.id);
   const tr = el('tr', { 'data-row-key': rowKey, style: 'border-bottom:1px solid var(--border)' });
@@ -24989,8 +25067,9 @@ function buildValorisationTableRow(item) {
   const refLabel = item.libelle_commercial || item.designation || item.reference || '';
   const matiereId = item.matiere_id || item.id;
   const refLink = stockMpRefLink(matiereId, refLabel, {
-    title: 'Ouvrir la matière' + (item.reference ? ' · ' + item.reference : ''),
+    title: 'Ouvrir la matière dans un nouvel onglet' + (item.reference ? ' · ' + item.reference : ''),
     style: 'text-decoration:none;color:var(--text);font-weight:700;font-size:13px',
+    nouvelOnglet: true,
   });
   const refChildren = [refLink];
   if (item.laizee && item.laize_label) {
@@ -25002,9 +25081,11 @@ function buildValorisationTableRow(item) {
       'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(251,146,60,0.15);color:#fb923c;font-size:11px;font-weight:700;font-family:inherit' },
       'Aucune laize'));
   }
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)' }, ...refChildren);
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)' },
+    el('div', { style: 'max-width:' + VAL_COLS.commercial[1] + 'px' }, ...refChildren));
   const desText = item.libelle_technique || '—';
-  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') }, desText);
+  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') },
+    el('div', { style: 'max-width:' + VAL_COLS.technique[1] + 'px' }, desText));
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     el('div', { style: 'white-space:nowrap' },
       valFormatQte(item.quantite),
@@ -25015,11 +25096,11 @@ function buildValorisationTableRow(item) {
   // Quantité convertie par le conditionnement (400 cartons par palette) :
   // le calcul s'affiche, sinon la valorisation ne se refait pas de tête.
   const uppQte = Number(item.unites_par_palette || 0);
-  if (item.avec_conditionnement && !item.stock_a_l_unite && uppQte > 0) {
+  if (item.avec_conditionnement && !item.stock_a_l_unite && uppQte > 1) {
     const uAchat = item.unite_achat || 'unité';
     const totalUnites = Number(item.quantite || 0) * uppQte;
     tdQte.appendChild(el('div', {
-      style: 'font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap',
+      style: 'font-size:10px;color:var(--muted);margin-top:2px',
       title: 'Conditionnement : ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + ' par palette',
     }, '× ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + '/pal. = '
       + valFormatQte(totalUnites) + ' ' + valUniteLibelle(uAchat, totalUnites)));
@@ -25037,20 +25118,17 @@ function buildValorisationTableRow(item) {
       : prixSeul ? !((item.prix_unitaire || 0) > 0)
       : !((item.unites_par_palette || 0) > 0);
     const libelle = item.laizee ? 'Métrage' : prixSeul ? 'Prix' : 'Conditionnement';
-    cfgBtn = el('button', {
-      type: 'button',
-      title: item.laizee ? 'Éditer le métrage par bobine'
-        : prixSeul ? 'Saisir le prix unitaire'
-        : 'Éditer le prix et le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
-      style: 'background:var(--card);border:1px solid ' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--border)')
-        + ';border-radius:6px;padding:4px 8px;cursor:pointer;color:' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--text2)')
-        + ';font-size:11px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap',
-      on: { click: () => item.laizee
+    const titre = (item.laizee ? 'Métrage par bobine'
+        : prixSeul ? 'Prix unitaire'
+        : 'Prix et conditionnement (' + (item.unite_achat || 'unité') + ' par palette)')
+      + (aConfigurer ? ' — ' + libelle.toLowerCase() + ' à renseigner' : '');
+    cfgBtn = valBoutonIcone('edit', titre,
+      aConfigurer ? 'var(--warn)' : 'var(--text2)',
+      aConfigurer ? 'var(--warn)' : 'var(--border)',
+      'var(--card)',
+      () => item.laizee
         ? openValorisationParamsModal(item.matiere_id)
-        : openValorisationConditionnementModal(item.matiere_id || item.id) },
-    });
-    cfgBtn.appendChild(iconEl('edit', 11));
-    cfgBtn.appendChild(el('span', null, aConfigurer ? libelle + ' ?' : libelle));
+        : openValorisationConditionnementModal(item.matiere_id || item.id));
   }
 
   // "Valorisée" = prix > 0 ET (si conditionnement requis) unites_par_palette > 0
@@ -25170,33 +25248,35 @@ function buildValorisationTableRow(item) {
     style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
     on: {
       click: () => openValorisationHistorique(item.matiere_id || item.id),
-      mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-      mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
+      mouseenter: (e) => { const t = e.currentTarget; t.style.background = 'var(--bg)'; t.style.color = 'var(--accent)'; t.style.borderColor = 'var(--accent)'; },
+      mouseleave: (e) => { const t = e.currentTarget; t.style.background = 'var(--card)'; t.style.color = 'var(--text2)'; t.style.borderColor = 'var(--border)'; },
     },
   });
   histBtn.appendChild(iconEl('clock', 14));
 
-  const lienCm = valLienCoutsMatieres(item, 'Coûts matières');
-  lienCm.style.marginTop = '0';
-  lienCm.style.whiteSpace = 'nowrap';
+  // Lien Coûts matières en icône seule, même gabarit que les autres actions.
+  const lienCm = valLienCoutsMatieres(item, '');
+  lienCm.textContent = '';
+  lienCm.appendChild(iconEl('external-link', 14));
+  lienCm.title = 'Ouvrir dans Coûts matières' + (item.reference ? ' — ' + item.reference : '');
+  lienCm.setAttribute('aria-label', 'Ouvrir dans Coûts matières');
+  Object.assign(lienCm.style, { marginTop: '0', width: '28px', height: '28px', padding: '0',
+    justifyContent: 'center', borderRadius: '8px', flex: '0 0 auto', transition: 'all .15s' });
+  lienCm.addEventListener('mouseenter', () => { lienCm.style.background = 'var(--bg)'; });
+  lienCm.addEventListener('mouseleave', () => { lienCm.style.background = 'var(--card)'; });
   // Stock à jeter : la ligne compte pour (-1) × sa valorisation.
-  const devalBtn = el('button', {
-    type: 'button',
-    title: item.devalorise
-      ? 'Stock à jeter, soustrait de la valorisation. Cliquer pour le revaloriser.'
-      : 'Marquer comme stock à jeter : la ligne sera soustraite de la valorisation.',
-    style: 'border:1px solid var(--danger);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;'
-      + 'display:inline-flex;align-items:center;gap:4px;white-space:nowrap;'
-      + (item.devalorise ? 'background:var(--danger);color:white;font-weight:700'
-                         : 'background:var(--card);color:var(--danger)'),
-    on: { click: () => valBasculerDevalorisation(item) },
-  });
-  devalBtn.appendChild(iconEl('trash-2', 11));
-  devalBtn.appendChild(el('span', null, item.devalorise ? 'Dévalorisé' : 'Dévalorisation'));
+  const devalBtn = valBoutonIcone('trash-2',
+    item.devalorise
+      ? 'Dévalorisé : stock à jeter, soustrait de la valorisation. Cliquer pour le revaloriser.'
+      : 'Dévalorisation : marquer comme stock à jeter, la ligne sera soustraite de la valorisation.',
+    item.devalorise ? 'white' : 'var(--danger)',
+    'var(--danger)',
+    item.devalorise ? 'var(--danger)' : 'var(--card)',
+    () => valBasculerDevalorisation(item));
   if (item.devalorise) tr.style.background = 'color-mix(in srgb, var(--danger) 7%, transparent)';
   const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), devalBtn, histBtn];
   const tdHist = el('td', {
-    style: 'padding:10px 12px;text-align:center;white-space:nowrap'
+    style: 'padding:10px 12px;text-align:right;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrixReel, tdVente, tdVal, tdHist);
@@ -25609,11 +25689,11 @@ function buildValorisationTable() {
   const v = valEnsureState();
   const rows = valFilteredItems();
 
-  const wrap = el('div', { style:
+  const wrap = el('div', { cls: 'val-mp-table', style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
   const tableWrap = el('div', { style: 'overflow-x:auto' });
-  const table = el('table', { style: 'width:100%;border-collapse:collapse;min-width:880px' });
+  const table = el('table', { style: 'width:100%;border-collapse:collapse' });
 
   const arrow = (col) => {
     if (v.sortColumn !== col) return '';
@@ -25624,24 +25704,26 @@ function buildValorisationTable() {
   const thStyleC = thStyle + ';text-align:center;cursor:default';
 
   const thChildren = [
-    el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
-    el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
+    // Bornes de largeur : VAL_COLS. La colonne Actions se serre sur ses
+    // boutons (width:1%), les libellés prennent la place libre jusqu'à leur max.
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.categorie[0] + 'px', on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.commercial[0] + 'px', on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.technique[0] + 'px', on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.quantite[0] + 'px', on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
   ];
   thChildren.push(
-    el('th', { style: thStyleR + ';color:var(--success, #16a34a)',
+    el('th', { style: thStyleR + ';color:var(--success, #16a34a);min-width:' + VAL_COLS.achat[0] + 'px',
       on: { click: () => valToggleSort('prix_unitaire_reel') },
       title: "Sous-total d'achat (prix + transport + taxes) converti en euros, calculé par Coûts matières."
     }, 'Sous-total achat €' + arrow('prix_unitaire_reel')),
-    el('th', { style: thStyleR,
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.vente[0] + 'px',
       on: { click: () => valToggleSort('prix_vente') },
       title: "Sous-total d'achat en euros + marge de la catégorie (Coûts matières)."
     }, 'Prix de vente' + arrow('prix_vente')),
   );
   thChildren.push(
-    el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
-    el('th', { style: thStyleC }, 'Actions'),
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.valo[0] + 'px', on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+    el('th', { style: thStyleC + ';width:1%;text-align:right' }, 'Actions'),
   );
   const thead = el('thead', null, el('tr', null, ...thChildren));
 
@@ -25805,7 +25887,8 @@ async function loadValorisationPF() {
   const pf = valPFEnsureState();
   const v = valEnsureState();
   pf.loading = true;
-  renderValorisationView(true);
+  // Pas de rendu complet ici : il reconstruisait le tableau des matières
+  // juste pour marquer la section PF « en chargement ». Le rendu de fin suffit.
   try {
     const qs = v.snapshotDate ? ('?date=' + encodeURIComponent(v.snapshotDate)) : '';
     const data = await api('/api/stock/valorisation/pf' + qs);
@@ -26210,7 +26293,23 @@ function buildValorisationPFTableRow(item) {
   if (!item.has_price) {
     tdPrix.appendChild(el('div', { style: 'font-size:10px;color:#fb923c;font-weight:700;margin-top:3px' }, 'Sans prix'));
   } else if (item.source_prix) {
-    tdPrix.appendChild(el('div', { style: 'font-size:10px;color:var(--muted);margin-top:3px' }, item.source_prix));
+    // Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
+    // défaut dernière commande client, à défaut tarif article. Tiers et
+    // conversion au survol.
+    const achat = ['achat_rvgi', 'commande_rvgi', 'tarif_rvgi'].includes(item.prix_origine);
+    const titre = achat
+      ? [item.achat_fournisseur, item.achat_detail].filter(Boolean).join(' · ')
+      : null;
+    tdPrix.appendChild(el('div', {
+      style: 'font-size:10px;margin-top:3px;color:' + (achat ? 'var(--accent)' : 'var(--muted)'),
+      title: titre || null,
+    }, item.source_prix));
+  }
+  // Transport d'un produit importé : ajouté au prix, il est nommé à part.
+  if (item.transport_import && Number(item.transport_ht) > 0) {
+    tdPrix.appendChild(el('div', { style: 'font-size:10px;margin-top:2px;color:var(--text2);font-variant-numeric:tabular-nums' },
+      '+ transport ' + (item.transport_part || '') + ' : ' + valFormatPrixDetail(item.transport_ht)
+      + ' → ' + valFormatPrixDetail(item.prix_avec_transport) + ' € HT/' + prixUniteLabel));
   }
 
   // Valorisation
@@ -26237,7 +26336,21 @@ function buildValorisationPFTableRow(item) {
     on: { click: () => openPFHistorique(item.id) },
   });
   histBtn.appendChild(iconEl('clock', 14));
-  const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
+  // Transport d'un produit importé : bascule, pleine quand il est ajouté.
+  const transportActif = !!item.transport_import;
+  const part = item.transport_part || '';
+  const transportBtn = valBoutonIcone('truck',
+    transportActif
+      ? 'Transport ajouté (' + part + ' du prix HT). Cliquer pour le retirer.'
+      : (item.has_price ? 'Ajouter le prix du transport (' + part + ' du prix HT) — produit importé'
+                        : 'Pas de prix : rien sur quoi calculer le transport'),
+    transportActif ? 'white' : 'var(--text2)',
+    transportActif ? 'var(--accent)' : 'var(--border)',
+    transportActif ? 'var(--accent)' : 'var(--card)',
+    () => valBasculerTransportPF(item));
+  if (!item.has_price && !transportActif) { transportBtn.disabled = true; transportBtn.style.opacity = '.4'; transportBtn.style.cursor = 'default'; }
+  const tdHist = el('td', { style: 'padding:10px 12px;text-align:right;white-space:nowrap' },
+    el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, transportBtn, histBtn));
 
   tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal);
   if (tdCharges) tr.append(tdCharges);
@@ -26245,10 +26358,25 @@ function buildValorisationPFTableRow(item) {
   return tr;
 }
 
+async function valBasculerTransportPF(item) {
+  const voulu = !item.transport_import;
+  try {
+    await api('/api/stock/valorisation/pf/' + item.id + '/transport', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transport: voulu }),
+    });
+    showToast(voulu ? 'Transport ajouté.' : 'Transport retiré.', 'success');
+    await loadValorisationPF();
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+  }
+}
+
 function buildValorisationPFTable() {
   const pf = valPFEnsureState();
   const rows = pfFilteredItems();
-  const wrap = el('div', { style:
+  const wrap = el('div', { cls: 'val-pf-table', style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
   const tableWrap = el('div', { style: 'overflow-x:auto' });
@@ -26277,7 +26405,7 @@ function buildValorisationPFTable() {
       el('th', { style: thStyleR + ';color:#16a34a', on: { click: () => valTogglePFSort('charges_prod') }, title: 'Charge de production + frais de stockage appliqués à la valorisation' }, 'Dont charges de prod.' + arrow('charges_prod')),
     );
   }
-  headerCells.push(el('th', { style: thStyleC }, 'Historique'));
+  headerCells.push(el('th', { style: thStyleC + ';width:1%;text-align:right' }, 'Actions'));
   const thead = el('thead', null, el('tr', null, ...headerCells));
   const emptyColspan = canSeeChargesCol ? '8' : '7';
 
@@ -27015,7 +27143,8 @@ async function openValorisationClotureModal() {
 
 function buildValorisation() {
   const v = valEnsureState();
-  const root = el('div', { style: 'padding:18px 20px;max-width:1400px;margin:0 auto' });
+  // Pleine largeur : le tableau des matières a besoin de place pour ses libellés.
+  const root = el('div', { style: 'padding:18px 20px' });
 
   const head = el('div', { style: 'margin-bottom:18px' },
     el('h2', { style: 'font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px' }, 'Valorisation du stock'),

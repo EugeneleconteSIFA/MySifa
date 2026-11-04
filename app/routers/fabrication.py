@@ -751,7 +751,10 @@ def _valider_changement_outil(
             status_code=400,
             detail=f"Indiquez la {nature} démontée et la {nature} montée.",
         )
-    if o_avant == o_apres:
+    # Même référence : refusée, sauf pour une nature qui l'admet
+    # (`outil_types.meme_reference` — un cliché porte plusieurs tapis).
+    meme = o_avant == o_apres
+    if meme and not (ref_outils.get_type(conn, outil_type) or {}).get("meme_reference"):
         raise HTTPException(
             status_code=400,
             detail=f"La {nature} montée est la même que la {nature} démontée.",
@@ -777,8 +780,9 @@ def _valider_changement_outil(
     compteur_txt = f"{int(m_ctr):,}".replace(",", " ")
     trace = (
         f"{ref_outils.label_type(conn, outil_type)} "
-        f"{outils_saisis['démontée']['numero']} → {outils_saisis['montée']['numero']}"
-        f" · compteur {compteur_txt} m"
+        + (f"{outils_saisis['montée']['numero']} remonté" if meme else
+           f"{outils_saisis['démontée']['numero']} → {outils_saisis['montée']['numero']}")
+        + f" · compteur {compteur_txt} m"
     )
     reste = (commentaire or "").strip()
     return f"{trace} — {reste}" if reste else trace
@@ -798,6 +802,9 @@ def _contexte_changement_outil(conn, outil_type, machine_obj):
     return {
         "outil_type": outil_type,
         "type_label": ref_outils.label_type(conn, outil_type),
+        # La même référence peut-elle être remontée ? (le poste propose alors
+        # « Même … » côté montée).
+        "meme_reference": bool((ref_outils.get_type(conn, outil_type) or {}).get("meme_reference")),
         "machine": machine_obj.get("nom"),
         "dernier_metrage": (
             float(machine_obj["dernier_metrage"])

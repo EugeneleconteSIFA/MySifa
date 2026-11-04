@@ -167,11 +167,14 @@
   }
   function barreAlignement() {
     const { h } = X();
-    const b = (nom, bulle, fn) => h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': bulle, 'aria-label': bulle, onclick: fn }, icone(nom));
-    return h('div', { cls: 'es-barre-align' },
+    const b = (nom, bulle, fn) => h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': bulle, 'data-libelle': bulle, 'aria-label': bulle,
+      'data-mini': nom.startsWith('dist_') ? 3 : 1, onclick: fn }, icone(nom));
+    const barre = h('div', { cls: 'es-barre-align' },
       b('gauche', 'Gauche', () => aligner('gauche')), b('centre_h', 'Centrer', () => aligner('centre_h')), b('droite', 'Droite', () => aligner('droite')),
       b('haut', 'Haut', () => aligner('haut')), b('centre_v', 'Milieu', () => aligner('centre_v')), b('bas', 'Bas', () => aligner('bas')),
       b('dist_h', 'Distribuer', () => distribuer('h')), b('dist_v', 'Répartir', () => distribuer('v')));
+    majBarre(barre);
+    return barre;
   }
   function barreOutils() {
     const { h } = X();
@@ -353,7 +356,21 @@
     toast(n + ' mention' + (n > 1 ? 's' : '') + ' traduite' + (n > 1 ? 's' : '') + ' — à relire.');
   }
 
-  function majBarre() { /* la barre d'alignement agit sur la sélection courante : rien à redessiner */ }
+  // La barre agit sur la sélection courante : sans objet déplaçable, elle est grisée et dit pourquoi.
+  function majBarre(barre) {
+    barre = barre || document.querySelector('.es-barre-align');
+    if (!barre) return;
+    const n = selection().length;
+    const choisis = ED().multi.size || (ED().sel ? 1 : 0);
+    barre.querySelectorAll('button').forEach(bt => {
+      const ok = n >= +bt.dataset.mini;
+      bt.disabled = !ok;
+      bt.dataset.bulle = ok ? bt.dataset.libelle
+        : !choisis ? bt.dataset.libelle + ' — choisir un objet'
+        : n < choisis && n < +bt.dataset.mini ? bt.dataset.libelle + ' — objet figé, déverrouiller son calque'
+        : bt.dataset.libelle + ' — trois objets au moins';
+    });
+  }
 
   window.EtiqSpec = Object.assign(window.EtiqSpec || {}, {
     miseEnPage: { dessinerFond, dessinerDessus, aimanter, reperes, barreAlignement, barreOutils, majBarre, proprietesTexte, proprieteCouleur,

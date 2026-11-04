@@ -104,6 +104,9 @@ def _row_to_type(r) -> Dict[str, Any]:
         "source_types": (champ("source_types") or "").strip() or None,
         # Confirmée au démarrage d'un dossier : migration `outils_au_demarrage`.
         "au_demarrage": bool(champ("au_demarrage")),
+        # Même référence démontée puis remontée admise (cliché : plusieurs
+        # tapis d'encrage) : migration `outils_meme_reference`.
+        "meme_reference": bool(champ("meme_reference")),
     }
 
 
@@ -113,6 +116,8 @@ def list_types(conn, *, inclure_inactifs: bool = False) -> List[Dict[str, Any]]:
     src = ", source_table, source_types" if "source_table" in cols else ""
     if "au_demarrage" in cols:
         src += ", au_demarrage"
+    if "meme_reference" in cols:
+        src += ", meme_reference"
     rows = conn.execute(
         f"""SELECT cle, label, label_pluriel, ordre, actif{src}
             FROM {TABLE_TYPES} {where} ORDER BY ordre, label"""
@@ -125,6 +130,8 @@ def get_type(conn, type_cle: str) -> Optional[Dict[str, Any]]:
     src = ", source_table, source_types" if "source_table" in cols else ""
     if "au_demarrage" in cols:
         src += ", au_demarrage"
+    if "meme_reference" in cols:
+        src += ", meme_reference"
     r = conn.execute(
         f"""SELECT cle, label, label_pluriel, ordre, actif{src}
             FROM {TABLE_TYPES} WHERE cle = ?""",
