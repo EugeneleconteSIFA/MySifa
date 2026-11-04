@@ -26267,15 +26267,13 @@ function buildValorisationPFTableRow(item) {
   // Quantité stock
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     valFormatQte(item.quantite),
-    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || ''),
+    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, valUniteLibelle(item.unite, item.quantite)),
   );
 
-  // Prix unitaire HT — lecture seule.
-  //
-  // Comme pour les matières premières, la valorisation ne saisit plus de prix :
-  // elle affiche ce que la source de vérité lui donne. Ici cette source est
-  // l'import de la feuille de facturation (bouton « Importer Excel » au-dessus
-  // du tableau), pas une saisie ligne à ligne.
+  // Prix unitaire HT. Il vient de l'import de la feuille de facturation, à
+  // défaut de RVGI (achat, commande, facture, tarif). Le crayon permet de le
+  // corriger à la main quand aucune source n'est juste ; la saisie est
+  // historisée comme un import.
   const uniteLow = (item.unite || '').toLowerCase()
     .replace(/é/g, 'e').replace(/è/g, 'e').replace(/ê/g, 'e');
   const parMille = item.par_mille || uniteLow === 'etiquette' || uniteLow === 'etiquettes';
@@ -26296,7 +26294,7 @@ function buildValorisationPFTableRow(item) {
     // Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
     // défaut dernière commande client, à défaut tarif article. Tiers et
     // conversion au survol.
-    const achat = ['achat_rvgi', 'commande_rvgi', 'tarif_rvgi'].includes(item.prix_origine);
+    const achat = ['achat_rvgi', 'commande_rvgi', 'facture_rvgi', 'tarif_rvgi'].includes(item.prix_origine);
     const titre = achat
       ? [item.achat_fournisseur, item.achat_detail].filter(Boolean).join(' · ')
       : null;
@@ -26349,13 +26347,72 @@ function buildValorisationPFTableRow(item) {
     transportActif ? 'var(--accent)' : 'var(--card)',
     () => valBasculerTransportPF(item));
   if (!item.has_price && !transportActif) { transportBtn.disabled = true; transportBtn.style.opacity = '.4'; transportBtn.style.cursor = 'default'; }
+  const editBtn = valBoutonIcone('edit', 'Saisir le prix à la main (€ HT/' + prixUniteLabel + ')',
+    'var(--text2)', 'var(--border)', 'var(--card)', () => valEditerPrixPF(item, prixUniteLabel));
   const tdHist = el('td', { style: 'padding:10px 12px;text-align:right;white-space:nowrap' },
-    el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, transportBtn, histBtn));
+    el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, editBtn, transportBtn, histBtn));
 
   tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal);
   if (tdCharges) tr.append(tdCharges);
   tr.append(tdHist);
   return tr;
+}
+
+function valEditerPrixPF(item, uniteLabel) {
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  const fermer = () => { root.innerHTML = ''; };
+  const overlay = el('div', {
+    'data-modal': 'pf-prix',
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) fermer(); } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:440px;padding:18px 20px' });
+  const actuel = Number(item.prix_unitaire_ht) || 0;
+  const inp = el('input', { type: 'number', min: '0', step: 'any', id: 'pf-prix-saisie',
+    style: 'width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  if (actuel > 0) inp.value = String(actuel);
+  const enregistrer = async () => {
+    const v = parseFloat(String(inp.value).replace(',', '.'));
+    if (!(v >= 0)) { showToast('Prix invalide — saisir un nombre positif.', 'danger'); return; }
+    saveBtn.disabled = true;
+    try {
+      await api('/api/stock/valorisation/pf/' + item.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prix_unitaire_ht: v }),
+      });
+      fermer();
+      showToast('Prix enregistré.', 'success');
+      await loadValorisationPF();
+    } catch (e) {
+      showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+      saveBtn.disabled = false;
+    }
+  };
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') enregistrer(); if (e.key === 'Escape') fermer(); });
+  const saveBtn = el('button', { type: 'button',
+    style: 'padding:10px 16px;border:none;border-radius:8px;background:var(--accent);color:white;cursor:pointer;font-size:13px;font-weight:700',
+    on: { click: enregistrer } }, 'Enregistrer');
+  box.append(
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Prix à la main'),
+    el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px' }, item.reference || ''),
+    el('div', { style: 'font-size:12px;color:var(--text2);margin-bottom:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: item.designation || '' }, item.designation || ''),
+    el('label', { for: 'pf-prix-saisie', style: 'display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, '€ HT/' + uniteLabel),
+    inp,
+    el('div', { style: 'font-size:12px;color:var(--muted);margin-top:8px' },
+      (item.source_prix ? 'Source actuelle : ' + item.source_prix + '. ' : '')
+      + 'La saisie remplace le prix importé et figure dans l\'historique. 0 rend la main à RVGI.'),
+    el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px' },
+      el('button', { type: 'button',
+        style: 'padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;font-size:13px;font-weight:600',
+        on: { click: fermer } }, 'Annuler'),
+      saveBtn),
+  );
+  overlay.appendChild(box);
+  root.innerHTML = '';
+  root.appendChild(overlay);
+  requestAnimationFrame(() => { inp.focus(); inp.select(); });
 }
 
 async function valBasculerTransportPF(item) {

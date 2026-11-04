@@ -10810,7 +10810,11 @@ def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) 
         # clôture qui dépasse le stock du soir (stock entré après la date)
         # amène la ligne à zéro, elle ne retranche rien de la valeur.
         new_qte = max(0.0, new_qte)
-        new_prix =float(prix_map[pid]) if pid in prix_map else float(it.get("prix_unitaire_ht") or 0)
+        # Un prix historisé à 0 veut dire « pas renseigné » (un import a remis
+        # 1077/0035 à zéro le 19/06) : il ne masque pas le prix courant, qui
+        # vient alors de RVGI ou d'une saisie à la main.
+        hist = float(prix_map.get(pid) or 0)
+        new_prix = hist if hist > 0 else float(it.get("prix_unitaire_ht") or 0)
         divisor = 1000.0 if it.get("par_mille") else 1.0
         transport = bool(it.get("transport_import")) and new_prix > 0
         prix_effectif = _pf_prix_avec_transport(new_prix, transport)
@@ -10946,10 +10950,11 @@ async def update_valorisation_pf(produit_id: int, request: Request):
         else:
             conn.execute(
                 """
-                INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, updated_at, updated_by, updated_by_name)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, source_prix, updated_at, updated_by, updated_by_name)
+                VALUES (?, ?, 'Saisi à la main', ?, ?, ?)
                 ON CONFLICT(produit_id) DO UPDATE SET
                     prix_unitaire_ht = excluded.prix_unitaire_ht,
+                    source_prix = excluded.source_prix,
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by,
                     updated_by_name = excluded.updated_by_name
