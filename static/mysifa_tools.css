@@ -31,7 +31,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 @media(max-width:768px){.mobile-topbar{display:flex}}
-.mobile-menu-btn,.mobile-home-btn{background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.mobile-menu-btn,.mobile-home-btn{width:40px;height:40px;flex-shrink:0;background:var(--card);border:1px solid var(--border);color:var(--text2);cursor:pointer;padding:0;border-radius:10px;display:flex;align-items:center;justify-content:center}
 .mobile-home-btn{margin-left:auto}
 .mobile-menu-btn:hover,.mobile-home-btn:hover{color:var(--accent);border-color:var(--accent)}
 .mobile-topbar-title{font-size:14px;font-weight:700;color:var(--text)}

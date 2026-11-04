@@ -126,11 +126,11 @@ body.sb-open .sidebar-overlay{display:block}
 /* ── Mobile topbar ── */
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 @media(max-width:768px){.mobile-topbar{display:flex}}
-.mobile-menu-btn{background:none;border:none;color:var(--text2);cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center}
 .mobile-topbar-title{font-size:14px;font-weight:700;color:var(--text)}
 .mobile-topbar-sub{font-size:11px;color:var(--muted)}
-.mobile-home-btn{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:4px;border-radius:6px;transition:.15s}
-.mobile-home-btn:hover{color:var(--accent)}
+.mobile-menu-btn,.mobile-home-btn{width:40px;height:40px;flex-shrink:0;padding:0;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.mobile-menu-btn:hover,.mobile-home-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.mobile-home-btn{margin-left:auto}
 
 /* ── Content ── */
 .content{padding:28px 32px;max-width:1280px;width:100%}
@@ -407,7 +407,9 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         <div class="mobile-topbar-title">Qualité</div>
         <div class="mobile-topbar-sub" id="mobile-sub">Non-conformités</div>
       </div>
-      <button type="button" class="mobile-home-btn" onclick="location.href='/'">⌂</button>
+      <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
+      </button>
     </div>
 
     <div class="content" id="content"></div>

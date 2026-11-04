@@ -108,6 +108,13 @@ son propre bloc). Il rattrape ce qu'un écran oublie, mais un écran neuf doit t
 de lui-même : pas de `min-width` fixe sur un conteneur de page, `flex-wrap` sur une
 rangée de boutons, un `overflow-x:auto` autour d'un tableau large.
 
+### Écran de chargement sur téléphone
+`app/services/ecran_chargement.py`, posé en tête du `<head>` par `main.py` sur toutes les
+pages : logo et barre sur un dégradé du thème, à l'ouverture et entre deux applis. Il se
+retire dès que `.portal-page` ou `.mobile-topbar` existe et que `#root` n'est plus vide.
+Une page sans ces repères le garde jusqu'à la fin de son chargement. Changer le logo ou
+les couleurs par défaut impose de refaire les images de `static/demarrage/`.
+
 ### Liens de navigation
 Toujours inclure les liens vers les modules auxquels l'utilisateur a accès (vérifiés via le contexte de session). La cohérence des icônes entre pages est obligatoire — si un module utilise un certain SVG dans une page, il doit utiliser le même dans toutes les autres.
 
