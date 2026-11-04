@@ -604,6 +604,19 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   }
   body.sb-open .sidebar{transform:translateX(0)}
   .rh-content{padding:12px 14px}
+  /* Chaque machine défile seule, son titre reste en place, et une machine à un
+     seul poste ne défile pas du tout. */
+  .rh-grid-wrap{overflow:visible}
+  .rh-machine-block{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .rh-machine-section-hdr{position:sticky;left:0;z-index:7}
+  .rh-grid{min-width:0}
+  .rh-grid thead th.rh-poste-col{width:88px;min-width:88px;max-width:88px;white-space:normal;padding:8px;font-size:9.5px;line-height:1.25}
+  .rh-grid thead th.rh-week-col{min-width:150px}
+  .rh-poste-label{padding:6px 6px 6px 8px!important;white-space:normal;width:88px;min-width:88px;max-width:88px}
+  .rh-poste-label-inner{flex-direction:column;align-items:flex-start;gap:4px}
+  /* La colonne reste figée pendant le défilement : un fond translucide y laisse
+     passer les noms de la colonne voisine. */
+  .rh-grid .rh-cur-week-row .rh-poste-label{background:color-mix(in srgb,var(--accent) 13%,var(--bg))!important}
 }
 
 /* ── Loading ──────────────────────────────────────────── */

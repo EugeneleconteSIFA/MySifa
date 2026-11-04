@@ -14,6 +14,7 @@
  *                  n'entre jamais dans l'adresse)
  *   contact=1      fenêtre « Contacter le support » (S.contactOpen)
  *   colonne « Mes tableaux de bord » (static/mysifa_accueil.js) :
+ *   tableaux=1       écran des tableaux de bord (téléphone)
  *   personnaliser=1  mode Personnaliser
  *   indicateur=<id>  questionnaire « Modifier l'indicateur » d'un widget
  *   demande=1        « Faire une demande de tableau de bord »
@@ -21,7 +22,8 @@
  * eux : on le lit dans le DOM et on le rejoue par leurs propres boutons,
  * sans toucher à ces deux fichiers (servis en ?v=APP_VERSION).
  * Hors adresse : sélection multiple de messages, vue mobile liste/détail,
- * renommage en place d'un widget, repli de la colonne (préférence du compte).
+ * renommage en place d'un widget, repli de la colonne sur ordinateur (préférence
+ * du compte).
  */
 let _portUrlPrete = false;
 let _portDemarre = false;
@@ -37,6 +39,7 @@ function _portColonne() {
   if (!indic) _portIndicateur = null;
   return {
     racine: r,
+    tableaux: !!(r && !r.classList.contains('repliee') && matchMedia('(max-width:899px)').matches),
     personnaliser: !!(r && r.classList.contains('edition')),
     indicateur: indic ? _portIndicateur : null,
     demande: !!document.querySelector(_PORT_PAN_DEMANDE),
@@ -67,6 +70,7 @@ function portailParams() {
   }
   if (S.contactOpen) { p.contact = 1; nav += '|contact'; }
   const col = _portColonne();
+  if (col.tableaux) { p.tableaux = 1; nav += '|tableaux'; }
   if (col.personnaliser) { p.personnaliser = 1; nav += '|personnaliser'; }
   if (col.indicateur) { p.indicateur = col.indicateur; nav += '|indicateur:' + col.indicateur; }
   else if (col.demande) { p.demande = 1; nav += '|demande'; }
@@ -102,11 +106,14 @@ async function _portColonneAller(u, complet) {
   const veutPerso = u.get('personnaliser') === '1';
   const indic = u.get('indicateur', null);
   const veutDemande = u.get('demande') === '1';
-  if (!veutPerso && !indic && !veutDemande && !complet) return;
+  const veutTableaux = u.get('tableaux') === '1' || veutPerso || !!indic || veutDemande;
+  if (!veutTableaux && !complet) return;
   // La colonne se monte après le portail (widgets chargés par l'API).
   await _portAttendre(() => document.querySelector('#mysifa-accueil .mac-perso'));
   const col = _portColonne();
   if (!col.racine) return;
+  // `tableaux=1` seul est déjà appliqué par la colonne à son démarrage.
+  if (matchMedia('(max-width:899px)').matches && veutTableaux !== col.tableaux) col.racine.querySelector('.mac-repli').click();
   const pan = document.querySelector('.mysifa-cap-pan');
   const panVoulu = indic ? 'indicateur:' + indic : (veutDemande ? 'demande' : '');
   const panActuel = col.indicateur ? 'indicateur:' + col.indicateur : (col.demande ? 'demande' : (pan ? 'autre' : ''));

@@ -1705,7 +1705,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page (url-etat.md) : portail, MyExpé, MyCompta, MyRH ; chacun inactif hors de son chemin. -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/portail_url.js?v=2"></script>
+<script src="/static/portail_url.js?v=3"></script>
 <script src="/static/expe_url.js?v=3"></script>
 <script src="/static/compta_url.js?v=1"></script>
 <script src="/static/myrh_url.js?v=5"></script>
@@ -10591,7 +10591,12 @@ function renderMobileNavbar(){
       e.stopPropagation();
       const id=btn.getAttribute('data-nav');
       if(id==='home'){
-        if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}
+        if(S.app==='portal'){
+          // Depuis l'écran des tableaux de bord, Accueil ramène aux applications.
+          const _colonne=document.getElementById('mysifa-accueil');
+          if(_colonne&&!_colonne.classList.contains('repliee')){_colonne.querySelector('.mac-repli').click();return;}
+          window.scrollTo({top:0,behavior:'smooth'});return;
+        }
         window.location.href='/';
       } else if(id==='outils'){
         if(window.MySifaOutilsMobile)window.MySifaOutilsMobile.ouvrir();
