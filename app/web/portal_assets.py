@@ -286,6 +286,16 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
    basculait la classe sans que rien ne disparaisse. */
 .portal-apps--repliees{display:none!important}
 .portal-apps--favoris{margin-bottom:22px}
+.portal-apps-section{width:100%}
+/* Rangée vide et titre sans objet : seulement pendant un glissement, comme cible. */
+.portal-apps-section--vide,.portal-apps-sec--glisse{display:none}
+.portal-apps-block--glisse .portal-apps-section--vide{display:block}
+.portal-apps-block--glisse .portal-apps-sec--glisse{display:flex}
+.portal-apps-block--glisse .portal-apps--repliees{display:flex!important}
+.portal-apps-block--glisse .portal-apps-section--vide .portal-apps{min-height:96px;align-content:center;
+  border:2px dashed color-mix(in srgb,var(--accent,#22d3ee) 55%,transparent);border-radius:14px}
+.portal-apps-block--glisse .portal-apps-section--vide .portal-apps:empty::before{content:attr(data-vide);
+  grid-column:1 / -1;align-self:center;width:100%;padding:0 12px;text-align:center;font-size:13px;font-weight:600;color:var(--muted)}
 
 /* ── ⌘K badge in the Google search input ── */
 .portal-search button.portal-search-cmdk-badge,
@@ -833,13 +843,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 
   /* A traiter : les compteurs deja servis un par un, rendus tapables. */
   .portal-atraiter{width:100%}
-  /* Gerer les favoris : toucher une tuile l'epingle au lieu de l'ouvrir. La rangee
-     ou elle se trouve dit son etat : une etoile recouvrirait la pastille du coin. */
-  .portal-fav-gerer{display:block;width:100%;min-height:42px;margin:10px 0 0;padding:0 12px;
-    background:var(--card);border:1px solid var(--border);border-radius:10px;
-    font:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer}
-  .portal-apps-block--favedit .portal-fav-gerer{background:var(--accent);border-color:var(--accent);color:#fff}
-  .portal-apps-block--favedit .portal-apps--repliees{display:grid!important}
+  .portal-apps-block--glisse .portal-apps--repliees{display:grid!important}
   /* Feuille d'une tuile (appui maintenu) : titre, epingle, raccourcis du module. */
   .portal-feuille-titre{padding:2px 22px 10px;font-size:15px;font-weight:800;color:var(--text);
     border-bottom:1px solid var(--border);margin-bottom:6px}
@@ -1357,11 +1361,11 @@ function portalGetDragInsertBefore(container,x,y){
 }
 async function savePortalAppsOrder(ids){
   try{
-    const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
+    // Pas de message : la tuile à sa nouvelle place suffit, et un message redessine
+    // le portail à son apparition et à sa disparition, sous un doigt qui glisse déjà
+    // la tuile suivante.
     await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({portal_apps_order:ids})});
     S.user={...S.user,portal_apps_order:ids};
-    const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
-    if(!same)toast('Ordre du portail enregistré');
   }catch(e){toast(e.message||'Enregistrement impossible','danger');}
 }
 // Appui maintenu puis lâché sur une tuile, au doigt : ce que la souris trouve au
@@ -1410,7 +1414,17 @@ function portalTuileFeuille(tile){
   bd.onpointerdown=()=>{appuiVoile=true;};
   bd.onclick=()=>{if(appuiVoile)closeProfileSheet();};
 }
-let _portalFavEdition=false;
+// Glissement qui change les favoris : ordre et favoris partent ensemble, et
+// l'écran suit sans attendre la réponse.
+function savePortalDisposition(ids,favs){
+  S.user={...S.user,portal_apps_order:ids,portal_apps_favoris:favs};
+  render();
+  ++_portalFavDernier;
+  const envoi=_portalFavFile.then(()=>api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({portal_apps_order:ids,portal_apps_favoris:favs})}));
+  _portalFavFile=envoi.catch(()=>{});
+  envoi.catch(e=>{toast(e.message||'Enregistrement impossible','danger');});
+}
 /* « À traiter » et « Atelier maintenant » : le portail se dessine plusieurs fois,
    et sur un téléphone ces deux blocs sont ce qu'on vient lire. Chaque dessin les
    remplit aussitôt avec les derniers chiffres connus, marqués comme anciens tant
@@ -1474,7 +1488,7 @@ function attachPortalReorder(appsWrap){
   let dragState=null;
 
   function ensurePlaceholder(){
-    let ph=appsWrap.querySelector('.portal-app--placeholder');
+    let ph=document.querySelector('.portal-apps .portal-app--placeholder');
     if(ph)return ph;
     ph=document.createElement('div');
     ph.className='portal-app portal-app--placeholder';
@@ -1557,14 +1571,48 @@ function attachPortalReorder(appsWrap){
     appsWrap.insertBefore(ph,tile);
     tile.style.display='none';
     dragState.placeholder=ph;
+    const bloc=appsWrap.closest('.portal-apps-block');
+    if(bloc)bloc.classList.add('portal-apps-block--glisse');
+    lancerDefilement();
   }
 
   function movePlaceholder(clientX,clientY){
     const ph=dragState&&dragState.placeholder;
     if(!ph)return;
-    const after=portalGetDragInsertBefore(appsWrap,clientX,clientY);
-    if(after==null||after===ph)appsWrap.appendChild(ph);
-    else appsWrap.insertBefore(ph,after);
+    // La rangée visée est la plus proche du doigt, verticalement.
+    const bloc=appsWrap.closest('.portal-apps-block');
+    let cible=appsWrap, ecart=Infinity;
+    (bloc?bloc.querySelectorAll('.portal-apps--reorderable'):[appsWrap]).forEach(z=>{
+      const r=z.getBoundingClientRect();
+      if(!r.width||!r.height)return;
+      const d=clientY<r.top?r.top-clientY:(clientY>r.bottom?clientY-r.bottom:0);
+      if(d<ecart){ecart=d;cible=z;}
+    });
+    const after=portalGetDragInsertBefore(cible,clientX,clientY);
+    if(after==null||after===ph)cible.appendChild(ph);
+    else cible.insertBefore(ph,after);
+  }
+
+  // Le doigt près d'un bord fait défiler : l'autre rangée peut être hors de l'écran.
+  function lancerDefilement(){
+    const st=dragState;
+    const bloc=appsWrap.closest('.portal-apps-block');
+    const interne=bloc&&getComputedStyle(bloc).overflowY==='auto'&&bloc.scrollHeight>bloc.clientHeight;
+    const pas=()=>{
+      if(dragState!==st)return;
+      const y=st.dernierY;
+      if(y!=null){
+        const haut=interne?bloc.getBoundingClientRect().top+40:96;
+        const bas=interne?bloc.getBoundingClientRect().bottom-40:innerHeight-120;
+        const v=y<haut?-Math.min(14,(haut-y)/4+3):(y>bas?Math.min(14,(y-bas)/4+3):0);
+        if(v){
+          if(interne)bloc.scrollTop+=v;else window.scrollBy(0,v);
+          movePlaceholder(st.dernierX,y);
+        }
+      }
+      requestAnimationFrame(pas);
+    };
+    requestAnimationFrame(pas);
   }
 
   function finishDrag(ev){
@@ -1573,6 +1621,8 @@ function attachPortalReorder(appsWrap){
     clearTouchPress(dragState);
     dragState=null;
     clearDocumentListeners();
+    const blocGlisse=appsWrap.closest('.portal-apps-block');
+    if(blocGlisse)blocGlisse.classList.remove('portal-apps-block--glisse');
     if(!active){
       // Appui bref : la tuile s'allume le temps que l'application s'ouvre.
       if(touch&&ev&&ev.type==='pointerup'){
@@ -1584,7 +1634,7 @@ function attachPortalReorder(appsWrap){
 
     tile.style.display='';
     if(ph&&ph.parentNode){
-      appsWrap.insertBefore(tile,ph);
+      ph.parentNode.insertBefore(tile,ph);
       ph.parentNode.removeChild(ph);
     }
     if(ghost&&ghost.parentNode)ghost.parentNode.removeChild(ghost);
@@ -1604,10 +1654,15 @@ function attachPortalReorder(appsWrap){
     const ids=portalOrdreComplet();
     const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
     const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
-    if(!same){
+    const favAvant=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
+    const favs=[];
+    document.querySelectorAll('.portal-apps--favoris .portal-app[data-portal-id]').forEach(n=>favs.push(n.getAttribute('data-portal-id')));
+    const favChange=favs.length!==favAvant.length||favs.some(v=>favAvant.indexOf(v)===-1);
+    if(favChange||!same){
       _portalDragSuppressClick=true;
       setTimeout(()=>{_portalDragSuppressClick=false;},450);
-      savePortalAppsOrder(ids);
+      if(favChange)savePortalDisposition(ids,favs);
+      else savePortalAppsOrder(ids);
     }
   }
 
@@ -1630,6 +1685,8 @@ function attachPortalReorder(appsWrap){
   }
 
   function deplacerFantome(x,y){
+    dragState.dernierX=x;
+    dragState.dernierY=y;
     const {ghost,offX,offY}=dragState;
     ghost.style.left=(x-offX)+'px';
     ghost.style.top=(y-offY)+'px';
@@ -1675,7 +1732,6 @@ function attachPortalReorder(appsWrap){
     if(!tile||!appsWrap.contains(tile))return;
     if(tile.classList.contains('portal-app--busy'))return;
     if(tile.getAttribute('draggable')==='false')return;
-    if(tile.closest('.portal-apps-block--favedit'))return;
     dragState={
       tile,
       startX:e.clientX,
@@ -2050,8 +2106,8 @@ function renderPortal(){
   const favIds=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
   const favTiles=orderedTiles.filter(t=>favIds.indexOf(t.id)!==-1);
   const restTiles=orderedTiles.filter(t=>favIds.indexOf(t.id)===-1);
-  const favWrap=h('div',{className:'portal-apps portal-apps--reorderable portal-apps--favoris'},...favTiles.map(t=>t.el));
-  const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...restTiles.map(t=>t.el));
+  const favWrap=h('div',{className:'portal-apps portal-apps--reorderable portal-apps--favoris','data-vide':'Déposer ici pour ajouter aux favoris'},...favTiles.map(t=>t.el));
+  const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable','data-vide':'Déposer ici pour retirer des favoris'},...restTiles.map(t=>t.el));
   const secTitre=(titre,fin)=>h('div',{className:'portal-apps-sec'},
     h('h3',null,titre),
     h('span',{className:'portal-apps-sec-trait'}),
@@ -2079,54 +2135,33 @@ function renderPortal(){
     const replie=!appsWrap.classList.contains('portal-apps--repliees');
     ecrireRepli(replie);majRepli(replie);
   });
-  // Téléphone : l'étoile n'est pas sur les tuiles. Ce bouton la fait apparaître,
-  // pour qui ne connaît pas l'appui maintenu, ou là où il ne répond pas.
   const _surTelephone=window.matchMedia('(max-width:900px)').matches;
-  const btnGererFav=_surTelephone?h('button',{
-    type:'button',
-    className:'portal-fav-gerer',
-    onClick:(e)=>{
-      e.stopPropagation();
-      _portalFavEdition=!_portalFavEdition;
-      render();
-    }
-  },_portalFavEdition?'Terminer':'Gérer les favoris'):null;
-  const appsBlock=h('div',{className:'portal-apps-block'+((_surTelephone&&_portalFavEdition)?' portal-apps-block--favedit':''),style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
-    favTiles.length?secTitre('Favoris'):null,
-    favTiles.length?favWrap:null,
-    (favTiles.length&&restTiles.length)?secTitre('Toutes les applications',btnRepli):null,
-    appsWrap,
-    btnGererFav,
+  // Les deux rangées existent toujours : une tuile glissée doit pouvoir rejoindre
+  // celle qui est vide. Une rangée vide ne s'affiche que pendant le glissement.
+  const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
+    h('div',{className:'portal-apps-section'+(favTiles.length?'':' portal-apps-section--vide')},
+      secTitre('Favoris'),
+      favWrap
+    ),
+    h('div',{className:'portal-apps-section'+(restTiles.length?'':' portal-apps-section--vide')},
+      (()=>{
+        const t=secTitre('Toutes les applications',(favTiles.length&&restTiles.length)?btnRepli:null);
+        if(!(favTiles.length&&restTiles.length))t.classList.add('portal-apps-sec--glisse');
+        return t;
+      })(),
+      appsWrap
+    ),
     apps.length?h('div',{className:'portal-apps-hint'},
       _surTelephone
-        ?(_portalFavEdition
-          ?'Toucher une application pour l\'ajouter aux favoris ou l\'en retirer.'
-          :'Maintenir une tuile : glisser pour la déplacer, lâcher pour l\'épingler ou ouvrir ses raccourcis.')
-        :favTiles.length
-        ?'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile épingle une application en favori (ordre et favoris enregistrés pour votre compte).'
-        :'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile, au survol, épingle une application en favori.'):null
+        ?'Maintenir une tuile puis la glisser : pour la déplacer, l\'ajouter aux favoris ou l\'en retirer. La lâcher sans bouger ouvre ses raccourcis.'
+        :'Glisser une tuile pour réorganiser les accès, l\'ajouter aux favoris ou l\'en retirer. L\'étoile, au survol, fait de même (ordre et favoris enregistrés pour votre compte).'):null
   );
-  // Mode Gérer les favoris : pris avant l'ouverture de l'application par la tuile.
-  appsBlock.addEventListener('click',e=>{
-    if(!appsBlock.classList.contains('portal-apps-block--favedit'))return;
-    const tuile=e.target.closest('.portal-app[data-portal-id]');
-    if(!tuile)return;
-    e.preventDefault();e.stopPropagation();
-    const cur=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris.slice():[];
-    const id=tuile.getAttribute('data-portal-id');
-    const i=cur.indexOf(id);
-    if(i===-1)cur.push(id);else cur.splice(i,1);
-    // Retour immédiat : le serveur répond après, et un second toucher part de cet état.
-    S.user={...S.user,portal_apps_favoris:cur};
-    render();
-    savePortalAppsFavoris(cur);
-  },true);
   // Le repli n'a de sens qu'avec des favoris : sans eux, tout masquer laisserait
   // un portail vide.
   if(favTiles.length&&restTiles.length)majRepli(lireRepli());
   setTimeout(()=>{
-    if(restTiles.length)attachPortalReorder(appsWrap);
-    if(favTiles.length)attachPortalReorder(favWrap);
+    attachPortalReorder(appsWrap);
+    attachPortalReorder(favWrap);
     portalAttacherVolets();
   },0);
 
