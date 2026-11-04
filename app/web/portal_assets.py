@@ -833,6 +833,17 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 
   /* A traiter : les compteurs deja servis un par un, rendus tapables. */
   .portal-atraiter{width:100%}
+  /* Gerer les favoris : l'etoile devient une vraie cible, et toucher une tuile
+     l'epingle au lieu de l'ouvrir. */
+  .portal-fav-gerer{display:block;width:100%;min-height:42px;margin:10px 0 0;padding:0 12px;
+    background:var(--card);border:1px solid var(--border);border-radius:10px;
+    font:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer}
+  .portal-apps-block--favedit .portal-fav-gerer{background:var(--accent);border-color:var(--accent);color:#fff}
+  .portal-apps-block--favedit .portal-apps--repliees{display:grid!important}
+  .portal-apps-block--favedit .portal-app .portal-app-star{display:flex!important;
+    top:3px;left:auto;right:3px;width:32px;height:32px;color:var(--muted);pointer-events:none}
+  .portal-apps-block--favedit .portal-app .portal-app-star svg{width:21px;height:21px}
+  .portal-apps-block--favedit .portal-app .portal-app-star.on{color:var(--warn)}
   /* Feuille d'une tuile (appui maintenu) : titre, epingle, raccourcis du module. */
   .portal-feuille-titre{padding:2px 22px 10px;font-size:15px;font-weight:800;color:var(--text);
     border-bottom:1px solid var(--border);margin-bottom:6px}
@@ -905,6 +916,11 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 
 @media (min-width:520px) and (max-width:900px){
   .portal-mcol,.portal-atelier{max-width:min(100%,560px)}
+}
+/* Telephone : les tableaux de bord sont un ecran a part, pas un bloc pose
+   au-dessus des applications (bouton en haut a gauche, mysifa_accueil.js). */
+@media (max-width:899px){
+  body.mysifa-accueil-on:not(.mysifa-accueil-repliee) #root:has(.portal-page){display:none}
 }
 
 /* Portrait : l'ordre de lecture est bonjour → chercher → ce qui m'attend →
@@ -1395,6 +1411,7 @@ function portalTuileFeuille(tile){
   bd.onpointerdown=()=>{appuiVoile=true;};
   bd.onclick=()=>{if(appuiVoile)closeProfileSheet();};
 }
+let _portalFavEdition=false;
 function attachPortalReorder(appsWrap){
   if(appsWrap._portalDndBound)return;
   appsWrap._portalDndBound=true;
@@ -1423,6 +1440,8 @@ function attachPortalReorder(appsWrap){
     document.removeEventListener('pointermove',onPointerMove,true);
     document.removeEventListener('pointerup',onPointerUp,true);
     document.removeEventListener('pointercancel',onPointerUp,true);
+    document.removeEventListener('touchend',onTouchFin,true);
+    document.removeEventListener('touchcancel',onTouchFin,true);
   }
 
   function armTouchHold(tile){
@@ -1455,6 +1474,8 @@ function attachPortalReorder(appsWrap){
     dragState.offX=e.clientX-rect.left;
     dragState.offY=e.clientY-rect.top;
     dragState.active=true;
+    document.addEventListener('touchend',onTouchFin,true);
+    document.addEventListener('touchcancel',onTouchFin,true);
 
     const ghost=tile.cloneNode(true);
     ghost.classList.add('portal-app--ghost');
@@ -1475,7 +1496,14 @@ function attachPortalReorder(appsWrap){
     ].join(';');
     document.body.appendChild(ghost);
     dragState.ghost=ghost;
+    dragState.rect=rect;
+    // Au doigt, la tuile ne quitte sa place qu'au premier déplacement : un appui
+    // maintenu puis lâché ne fait qu'ouvrir sa feuille, et Safari ne perd pas le
+    // doigt posé sur un élément devenu invisible.
+    if(!dragState.touch)libererPlace(tile,rect);
+  }
 
+  function libererPlace(tile,rect){
     const ph=ensurePlaceholder();
     ph.style.width=rect.width+'px';
     ph.style.minHeight=rect.height+'px';
@@ -1549,18 +1577,28 @@ function attachPortalReorder(appsWrap){
       activateDrag(dragState.tile,e);
     }
     e.preventDefault();
-    if(dragState.touch&&!dragState.moved){
-      if(Math.abs(dx)<=TOUCH_SLOP&&Math.abs(dy)<=TOUCH_SLOP)return;
-      dragState.moved=true;
-    }
+    // Tuile attrapée au doigt : c'est touchmove qui la déplace.
+    if(dragState.touch)return;
+    deplacerFantome(e.clientX,e.clientY);
+  }
+
+  function deplacerFantome(x,y){
     const {ghost,offX,offY}=dragState;
-    ghost.style.left=(e.clientX-offX)+'px';
-    ghost.style.top=(e.clientY-offY)+'px';
-    movePlaceholder(e.clientX,e.clientY);
+    ghost.style.left=(x-offX)+'px';
+    ghost.style.top=(y-offY)+'px';
+    movePlaceholder(x,y);
+  }
+
+  // Safari peut annuler les événements pointeur sur un appui long (pointercancel)
+  // alors que le doigt est toujours posé : une fois la tuile attrapée, seuls les
+  // événements touch décident de la suite.
+  function onTouchFin(){
+    if(dragState&&dragState.active&&dragState.touch)finishDrag({type:'pointerup'});
   }
 
   function onPointerUp(e){
     if(!dragState||e.pointerId!==dragState.pointerId)return;
+    if(dragState.active&&dragState.touch)return;
     finishDrag(e);
   }
 
@@ -1568,7 +1606,16 @@ function attachPortalReorder(appsWrap){
   // Une fois la tuile attrapée, le doigt la déplace : la page ne défile plus.
   // À poser avant le début du geste, Safari ignore un écouteur ajouté en cours.
   appsWrap.addEventListener('touchmove',e=>{
-    if(dragState&&dragState.active&&e.cancelable)e.preventDefault();
+    if(!dragState||!dragState.active||!dragState.touch)return;
+    if(e.cancelable)e.preventDefault();
+    const t=e.touches[0];
+    if(!t)return;
+    if(!dragState.moved){
+      if(Math.abs(t.clientX-dragState.startX)<=TOUCH_SLOP&&Math.abs(t.clientY-dragState.startY)<=TOUCH_SLOP)return;
+      dragState.moved=true;
+      libererPlace(dragState.tile,dragState.rect);
+    }
+    deplacerFantome(t.clientX,t.clientY);
   },{passive:false});
   appsWrap.addEventListener('contextmenu',e=>{
     if(dragState&&dragState.touch)e.preventDefault();
@@ -1581,6 +1628,7 @@ function attachPortalReorder(appsWrap){
     if(!tile||!appsWrap.contains(tile))return;
     if(tile.classList.contains('portal-app--busy'))return;
     if(tile.getAttribute('draggable')==='false')return;
+    if(tile.closest('.portal-apps-block--favedit'))return;
     dragState={
       tile,
       startX:e.clientX,
@@ -1984,18 +2032,48 @@ function renderPortal(){
     const replie=!appsWrap.classList.contains('portal-apps--repliees');
     ecrireRepli(replie);majRepli(replie);
   });
-  const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
+  // Téléphone : l'étoile n'est pas sur les tuiles. Ce bouton la fait apparaître,
+  // pour qui ne connaît pas l'appui maintenu, ou là où il ne répond pas.
+  const _surTelephone=window.matchMedia('(max-width:900px)').matches;
+  const btnGererFav=_surTelephone?h('button',{
+    type:'button',
+    className:'portal-fav-gerer',
+    onClick:(e)=>{
+      e.stopPropagation();
+      _portalFavEdition=!_portalFavEdition;
+      render();
+    }
+  },_portalFavEdition?'Terminer':'Gérer les favoris'):null;
+  const appsBlock=h('div',{className:'portal-apps-block'+((_surTelephone&&_portalFavEdition)?' portal-apps-block--favedit':''),style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
     favTiles.length?secTitre('Favoris'):null,
     favTiles.length?favWrap:null,
     (favTiles.length&&restTiles.length)?secTitre('Toutes les applications',btnRepli):null,
     appsWrap,
+    btnGererFav,
     apps.length?h('div',{className:'portal-apps-hint'},
-      window.matchMedia('(max-width:900px)').matches
-        ?'Maintenir une tuile : glisser pour la déplacer, lâcher pour l\'épingler ou ouvrir ses raccourcis.'
+      _surTelephone
+        ?(_portalFavEdition
+          ?'Toucher une application pour l\'ajouter aux favoris ou l\'en retirer.'
+          :'Maintenir une tuile : glisser pour la déplacer, lâcher pour l\'épingler ou ouvrir ses raccourcis.')
         :favTiles.length
         ?'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile épingle une application en favori (ordre et favoris enregistrés pour votre compte).'
         :'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile, au survol, épingle une application en favori.'):null
   );
+  // Mode Gérer les favoris : pris avant l'ouverture de l'application par la tuile.
+  appsBlock.addEventListener('click',e=>{
+    if(!appsBlock.classList.contains('portal-apps-block--favedit'))return;
+    const tuile=e.target.closest('.portal-app[data-portal-id]');
+    if(!tuile)return;
+    e.preventDefault();e.stopPropagation();
+    const cur=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris.slice():[];
+    const id=tuile.getAttribute('data-portal-id');
+    const i=cur.indexOf(id);
+    if(i===-1)cur.push(id);else cur.splice(i,1);
+    // Retour immédiat : le serveur répond après, et un second toucher part de cet état.
+    S.user={...S.user,portal_apps_favoris:cur};
+    render();
+    savePortalAppsFavoris(cur);
+  },true);
   // Le repli n'a de sens qu'avec des favoris : sans eux, tout masquer laisserait
   // un portail vide.
   if(favTiles.length&&restTiles.length)majRepli(lireRepli());
@@ -2809,10 +2887,17 @@ function portalVoletChevron(tile){
   });
   return b;
 }
+let _portalFavFile=Promise.resolve(), _portalFavDernier=0;
 async function savePortalAppsFavoris(ids){
+  // Deux touchers rapprochés : enregistrés dans l'ordre, et seule la réponse du
+  // dernier redessine, sinon la précédente rétablirait un état déjà dépassé.
+  const n=++_portalFavDernier;
+  const envoi=_portalFavFile.then(()=>api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({portal_apps_favoris:ids})}));
+  _portalFavFile=envoi.catch(()=>{});
   try{
-    await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({portal_apps_favoris:ids})});
+    await envoi;
+    if(n!==_portalFavDernier)return;
     S.user={...S.user,portal_apps_favoris:ids};
     render();
   }catch(e){toast(e.message||'Enregistrement impossible','danger');}
