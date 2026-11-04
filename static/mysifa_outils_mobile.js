@@ -2,9 +2,10 @@
  *
  * Messagerie, assistant IA, calculette, post-it, capture, outils propres à une
  * appli : empilés en bas à droite, ces boutons recouvraient le contenu de toutes
- * les pages. Sous 900 px ils sont masqués, et une seule entrée les remplace : une
- * poignée fine au bord droit, que le doigt peut déplacer si elle gêne, ou
- * l'onglet « Outils » de la barre du bas quand la page en a un.
+ * les pages. Sous 900 px ils sont masqués, et une seule entrée les remplace : un
+ * bouton dans la barre du haut, à côté du retour à l'accueil, ou l'onglet « Outils »
+ * de la barre du bas à l'accueil. Une page qui n'a ni l'un ni l'autre garde une
+ * poignée fine au bord droit, que le doigt peut déplacer si elle gêne.
  *
  * Les boutons d'origine restent dans la page, invisibles : la feuille les
  * déclenche par un clic, et chaque outil garde son code et ses réglages. Un
@@ -21,6 +22,7 @@
   var ecran = window.matchMedia('(max-width: 900px)');
   var CLE_POS = 'mysifa_outils_poignee_y';
   var SEUIL_GLISSER = 8;
+  var ICONE_OUTILS = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5l-6 6a1.4 1.4 0 0 0 2 2l6-6a4 4 0 0 0 5-5.4l-2.5 2.5-2.1-.5-.5-2.1z"/></svg>';
   var ICONE_POIGNEE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>';
 
   // Les libellés des outils connus ; un outil propre à une page (.mysifa-dock-extra)
@@ -55,9 +57,13 @@
     // Cible tactile élargie vers l'intérieur de l'écran, sans masquer davantage.
     '#msf-outils-poignee::before{content:"";position:absolute;inset:-6px 0 -6px -10px}' +
     '#msf-outils-poignee.glisse{color:var(--accent);border-color:var(--accent)}' +
-    '#msf-outils-pastille{position:absolute;top:-5px;left:-5px;min-width:16px;height:16px;padding:0 4px;' +
+    '#msf-outils-haut{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;' +
+    'padding:0;margin:0 0 0 auto;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+    '#msf-outils-haut + .mobile-home-btn{margin-left:0}' +
+    '#msf-outils-haut[hidden]{display:none}' +
+    '#msf-outils-pastille,#msf-outils-haut-pastille{position:absolute;top:-5px;left:-5px;min-width:16px;height:16px;padding:0 4px;' +
     'border-radius:8px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center}' +
-    '#msf-outils-pastille:empty{display:none}' +
+    '#msf-outils-pastille:empty,#msf-outils-haut-pastille:empty{display:none}' +
     'body.mysifa-dock-sous-fenetre #msf-outils-poignee,html.mysifa-capture #msf-outils-poignee{display:none}' +
     '.msf-outils-voile{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45)}' +
     '.msf-outils-feuille{position:fixed;left:0;right:0;bottom:0;z-index:9001;background:var(--card);' +
@@ -76,19 +82,13 @@
     'font-size:11px;font-weight:800;line-height:20px;text-align:center}' +
     '.msf-outils-vide{padding:14px;font-size:14px;color:var(--muted);text-align:center}' +
     '}' +
-    // Bandeau superadmin de 24 px : le titre et « Simuler : » ne tiennent pas à côté des listes.
-    '@media (max-width: 600px){' +
-    '.staging-bandeau:has(.msf-imp-slot:not([hidden]))>.msf-imp-msg{display:none}' +
-    '.staging-bandeau .msf-imp-slot{margin-left:0;flex:1;min-width:0}' +
-    '.staging-bandeau .msf-imp-slot>span{display:none}' +
-    '.staging-bandeau .msf-imp-slot select{flex:1;min-width:0;max-width:none;padding:0 4px;line-height:1}' +
-    '.staging-bandeau .msf-imp-slot button{padding:0 6px;font-size:10px;line-height:1;flex:0 0 auto}' +
-    '}' +
     '@media (min-width: 901px){#msf-outils-poignee{display:none}}';
   document.head.appendChild(st);
 
   var poignee = null;
   var pastille = null;
+  var boutonHaut = null;
+  var pastilleHaut = null;
 
   function nonLus() {
     var b = document.getElementById('cw-bubble-badge');
@@ -219,14 +219,63 @@
     });
   }
 
+  // Le bouton de la barre du haut prend l'aspect du retour à l'accueil de la page,
+  // chaque appli ayant le sien. Les pages redessinent leur barre : il y revient.
+  function poserBoutonHaut() {
+    var home = null;
+    if (ecran.matches) {
+      home = Array.prototype.filter.call(document.querySelectorAll('.mobile-topbar .mobile-home-btn'), function (b) {
+        return b.getBoundingClientRect().width > 0;
+      })[0] || null;
+    }
+    if (!home) {
+      if (boutonHaut && boutonHaut.parentNode) boutonHaut.parentNode.removeChild(boutonHaut);
+      return false;
+    }
+    if (boutonHaut.nextElementSibling !== home) {
+      var cs = getComputedStyle(home);
+      boutonHaut.style.width = cs.width;
+      boutonHaut.style.height = cs.height;
+      boutonHaut.style.borderRadius = cs.borderRadius;
+      boutonHaut.style.border = cs.border;
+      boutonHaut.style.background = cs.background;
+      boutonHaut.style.color = cs.color;
+      home.parentNode.insertBefore(boutonHaut, home);
+    }
+    return true;
+  }
+
+  // Une barre collante vit dans la zone qui défile de sa page : celle-ci commence
+  // déjà sous le bandeau. Le décalage de 24 px s'y ajoutait, et le contenu défilait
+  // dans l'espace laissé au-dessus de la barre.
+  function collerBarre() {
+    Array.prototype.forEach.call(document.querySelectorAll('.mobile-topbar'), function (t) {
+      if (!ecran.matches) { t.style.removeProperty('top'); return; }
+      var cs = getComputedStyle(t);
+      if (cs.position !== 'sticky') return;
+      for (var p = t.parentElement; p && p !== document.body; p = p.parentElement) {
+        var o = getComputedStyle(p).overflowY;
+        if (o === 'auto' || o === 'scroll' || o === 'hidden') {
+          t.style.setProperty('top', '0px', 'important');
+          return;
+        }
+      }
+    });
+  }
+
   function majPoignee() {
     if (!poignee) return;
+    collerBarre();
+    var outils = outilsDisponibles().length > 0;
+    var dansBarre = outils && poserBoutonHaut();
+    boutonHaut.hidden = !outils;
     // La barre du bas a déjà son onglet Outils : pas de seconde entrée.
     var onglet = document.querySelector('.mobile-navbar-tab[data-nav="outils"]');
     var viaOnglet = !!(onglet && onglet.getBoundingClientRect().width > 0);
-    poignee.hidden = !ecran.matches || viaOnglet || !outilsDisponibles().length;
+    poignee.hidden = !ecran.matches || viaOnglet || dansBarre || !outils;
     var n = nonLus();
     if (pastille.textContent !== n) pastille.textContent = n;
+    if (pastilleHaut.textContent !== n) pastilleHaut.textContent = n;
     // L'assistant s'annonce après le premier dessin de la barre du bas.
     var ia = document.getElementById('ai-chat-root');
     if (ia && ia.style.display === 'block' && document.querySelector('.mobile-navbar') &&
@@ -246,12 +295,32 @@
     pastille.id = 'msf-outils-pastille';
     poignee.appendChild(pastille);
     document.body.appendChild(poignee);
+    boutonHaut = document.createElement('button');
+    boutonHaut.type = 'button';
+    boutonHaut.id = 'msf-outils-haut';
+    boutonHaut.setAttribute('aria-label', 'Outils');
+    boutonHaut.title = 'Outils';
+    boutonHaut.innerHTML = ICONE_OUTILS;
+    pastilleHaut = document.createElement('span');
+    pastilleHaut.id = 'msf-outils-haut-pastille';
+    boutonHaut.appendChild(pastilleHaut);
+    boutonHaut.addEventListener('click', ouvrir);
     placer(positionEnregistree());
     brancherGeste();
     majPoignee();
     // Les outils arrivent après le chargement, l'onglet aussi, et les non-lus changent.
     setInterval(majPoignee, 3000);
     setTimeout(majPoignee, 800);
+    // Une barre redessinée perd le bouton : il revient à l'image suivante.
+    var prevu = false;
+    new MutationObserver(function () {
+      if (prevu) return;
+      prevu = true;
+      requestAnimationFrame(function () {
+        prevu = false;
+        if (ecran.matches && !boutonHaut.isConnected) majPoignee();
+      });
+    }).observe(document.body, { childList: true, subtree: true });
     window.addEventListener('resize', function () {
       placer(positionEnregistree());
       majPoignee();

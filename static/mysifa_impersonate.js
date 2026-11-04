@@ -92,6 +92,19 @@
       +   '.staging-bandeau{font-size:10px;gap:6px;padding:0 6px}'
       +   '.staging-bandeau .msf-imp-slot select{max-width:110px}'
       + '}'
+      // Téléphone : le titre et « Simuler : » ne tiennent pas à côté des listes, et le
+      // texte d'une liste ne doit pas dépasser des 20 px du bandeau.
+      + '@media (max-width:600px){'
+      +   '.staging-bandeau{white-space:nowrap}'
+      +   '.staging-bandeau:has(.msf-imp-slot:not([hidden])):not(.impersonating)>.msf-imp-msg,'
+      +   '.staging-bandeau .msf-imp-slot>span{display:none}'
+      +   '.staging-bandeau:has(.msf-imp-slot:not([hidden]))::before{display:none}'
+      +   '.staging-bandeau .msf-imp-actions,.staging-bandeau .msf-imp-slot{margin-left:0;flex:1 1 auto;min-width:0}'
+      +   '.staging-bandeau .msf-imp-slot select{flex:1 1 0;width:0;min-width:0!important;min-height:0!important;max-width:none;'
+      +     'height:20px!important;padding:0 4px!important;font-size:11px!important;line-height:normal!important;'
+      +     '-webkit-appearance:none;appearance:none;text-overflow:ellipsis}'
+      +   '.staging-bandeau .msf-imp-slot button{padding:0 6px;font-size:10px;line-height:1;flex:0 0 auto;min-height:0!important;width:auto!important}'
+      + '}'
       + 'body.has-staging-bandeau{padding-top:24px}'
       + 'body.has-staging-bandeau .sidebar{height:calc(100vh - 24px);top:24px}'
       + 'body.has-staging-bandeau .mobile-topbar{top:24px}';

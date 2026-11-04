@@ -1215,7 +1215,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 </body>
 </html>"""
 

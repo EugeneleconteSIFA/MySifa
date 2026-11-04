@@ -90,8 +90,10 @@ La topbar mobile (`.mobile-topbar`) est toujours présente et contient :
 
 ### Boutons flottants sur téléphone
 Sous 900 px, aucun bouton flottant : `static/mysifa_outils_mobile.js` masque ceux
-du dock et les range dans une feuille, ouverte par une poignée déplaçable au bord
-droit ou par l'onglet « Outils » de la barre du bas à l'accueil. Un nouvel outil
+du dock et les range dans une feuille, ouverte par un bouton posé à côté du retour
+à l'accueil de la `.mobile-topbar` (une nouvelle page n'a rien à faire s'il porte la
+classe `.mobile-home-btn`), par l'onglet « Outils » de la barre du bas à l'accueil,
+ou à défaut par une poignée déplaçable au bord droit. Un nouvel outil
 flottant (`.mysifa-dock-extra`) y apparaît seul ; ne pas lui redonner de position
 sur téléphone. Ce fichier montre aussi une seule fenêtre d'accueil à la fois.
 
