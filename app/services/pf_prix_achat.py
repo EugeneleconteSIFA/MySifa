@@ -26,8 +26,10 @@ l'import) prend, de la même façon, le prix de sa dernière commande CLIENT
 (2024+) » étant le dernier prix de vente. L'achat passe avant la vente : un
 produit qu'on achète se valorise à ce qu'il coûte.
 
-À défaut de toute commande convertible, le TARIF article en vigueur
-(`fic_artv`, date de validité non dépassée) donne le prix.
+À défaut de commande, la dernière FACTURE client (`vte_ligne`) : un article
+vendu sans commande saisie, ou avant leur reprise, n'a que des factures.
+À défaut de toute pièce convertible, le TARIF article (`fic_artv`) : celui en
+vigueur, sinon le dernier échu, nommé comme tel à l'écran.
 
 Un produit tenu au carton ou à la bobine mais vendu au mille se valorise au
 carton (à la bobine) avec le nombre d'étiquettes par contenant lu dans les
@@ -95,7 +97,7 @@ _REF = re.compile(r"^\s*([0-9A-Za-z]+)\s*/\s*([0-9A-Za-z]+)")
 # Référence saisie sans la barre : « 10770035 » = 1077/0035 (code2 sur 4 chiffres).
 _REF_COLLEE = re.compile(r"^\s*(\d{1,4})(\d{4})\s*$")
 
-_CACHE = {"empreinte": None, "achats": None, "ventes": None, "tarifs": None}
+_CACHE = {"empreinte": None, "achats": None, "ventes": None, "factures": None, "tarifs": None}
 
 
 def cle_reference(reference) -> str:
@@ -193,21 +195,34 @@ def _unites(c, presentes) -> dict:
 
 def _lire_ventes() -> dict:
     """{« code1/code2 »: dernière ligne de commande client à prix}, brut."""
+    return _lire_documents_client("cde", "amjc", "Commande")
+
+
+def _lire_factures() -> dict:
+    """{« code1/code2 »: dernière ligne de facture client à prix}, brut.
+
+    Un produit vendu avant la reprise des commandes dans RVGI, ou facturé sans
+    commande saisie, n'a que des factures (`vte_ligne`). Les avoirs sont
+    écartés par le montant de ligne négatif."""
+    return _lire_documents_client("vte", "amjf", "Facture")
+
+
+def _lire_documents_client(table: str, col_date: str, nature: str) -> dict:
     with miroir.get_erp_db() as c:
         presentes = miroir.tables_presentes(c)
-        if not {"cde_ligne", "cde_entete"} <= set(presentes):
+        if not {table + "_ligne", table + "_entete"} <= set(presentes):
             return {}
         ua = _unites(c, presentes)
         rows = c.execute(
-            """SELECT l.code1, l.code2, l.pun, l.cuv, l.vuv,
+            f"""SELECT l.code1, l.code2, l.pun, l.cuv, l.vuv,
                       l.des1, l.des2, l.des3, l.des4,
-                      e.numero, e.amjc, e.devise, e.rs
-                 FROM cde_ligne l
-                 JOIN cde_entete e ON e.numero = l.numero AND e.corbeille = 0
-                WHERE l.corbeille = 0 AND l.pun > 0
+                      e.numero, e.{col_date} AS amjc, e.devise, e.rs
+                 FROM {table}_ligne l
+                 JOIN {table}_entete e ON e.numero = l.numero AND e.corbeille = 0
+                WHERE l.corbeille = 0 AND l.pun > 0 AND COALESCE(l.htn, 0) >= 0
                   AND COALESCE(l.code1, '') <> ''
-                  AND e.amjc <= datetime('now', '+1 day')
-                ORDER BY e.amjc DESC, l.id DESC"""
+                  AND e.{col_date} <= datetime('now', '+1 day')
+                ORDER BY e.{col_date} DESC, l.id DESC"""
         ).fetchall()
     out = {}
     for r in rows:
@@ -226,7 +241,7 @@ def _lire_ventes() -> dict:
             "date": str(r["amjc"] or "")[:10],
             "fournisseur": (r["rs"] or "").strip(),
             "textes": [r["des1"], r["des2"], r["des3"], r["des4"]],
-            "nature": "Commande",
+            "nature": nature,
         }
     return out
 
@@ -245,17 +260,23 @@ def _lire_tarifs() -> dict:
             ):
                 k = "%s/%s" % (str(r["code1"]).strip(), str(r["code2"] or "").strip())
                 textes[k] = [r["libc1"], r["libc2"], r["libc3"], r["libc4"]]
+        # Le tarif en vigueur d'abord ; à défaut le dernier tarif échu, qui
+        # reste le dernier prix connu de l'article (601/0192 : 440 €/mille,
+        # échu fin 2023, jamais commandé depuis).
         rows = c.execute(
-            """SELECT code1, code2, pv, cuv, amj, amjv FROM fic_artv
+            """SELECT code1, code2, pv, cuv, amj, amjv,
+                      CASE WHEN amjv >= date('now') THEN 1 ELSE 0 END AS en_vigueur
+                 FROM fic_artv
                 WHERE corbeille = 0 AND pv > 0 AND COALESCE(code1, '') <> ''
-                  AND amjv >= date('now') AND amj <= datetime('now', '+1 day')
-                ORDER BY amj DESC, id DESC"""
+                  AND amj <= datetime('now', '+1 day')
+                ORDER BY en_vigueur DESC, amj DESC, id DESC"""
         ).fetchall()
     out = {}
     for r in rows:
         k = "%s/%s" % (str(r["code1"]).strip(), str(r["code2"] or "").strip())
         if k in out:
             continue
+        echu = not r["en_vigueur"]
         cuv = str(r["cuv"] or "").strip()
         lib, nombre = ua.get(cuv, ("", 0.0))
         out[k] = {
@@ -268,7 +289,8 @@ def _lire_tarifs() -> dict:
             "date": str(r["amj"] or "")[:10],
             "fournisseur": "",
             "textes": textes.get(k, []),
-            "nature": "Tarif",
+            "nature": "Tarif échu" if echu else "Tarif",
+            "echu_le": str(r["amjv"] or "")[:10] if echu else None,
         }
     return out
 
@@ -323,7 +345,7 @@ def _lire_achats() -> dict:
 def _lignes(cle: str, lire) -> dict:
     emp = _empreinte()
     if emp != _CACHE["empreinte"]:
-        _CACHE.update(empreinte=emp, achats=None, ventes=None, tarifs=None)
+        _CACHE.update(empreinte=emp, achats=None, ventes=None, factures=None, tarifs=None)
     if emp is not None and _CACHE[cle] is not None:
         return _CACHE[cle]
     try:
@@ -343,6 +365,10 @@ def ventes_brutes() -> dict:
     return _lignes("ventes", _lire_ventes)
 
 
+def factures_brutes() -> dict:
+    return _lignes("factures", _lire_factures)
+
+
 def tarifs_bruts() -> dict:
     return _lignes("tarifs", _lire_tarifs)
 
@@ -353,7 +379,7 @@ def prix_rvgi(reference, par_mille: bool, taux_usd: float, unite_produit: str = 
     vigueur, ramené à l'unité de valorisation. None si aucun ne se convertit
     sans deviner."""
     k = cle_reference(reference)
-    for lignes in (achats_bruts(), ventes_brutes(), tarifs_bruts()):
+    for lignes in (achats_bruts(), ventes_brutes(), factures_brutes(), tarifs_bruts()):
         brut = lignes.get(k)
         res = prix_achat(brut, par_mille, taux_usd, unite_produit, quantite) if brut else None
         if res:
@@ -432,7 +458,8 @@ def prix_achat(achat: dict, par_mille: bool, taux_usd: float, unite_produit: str
     return {
         "prix": round(prix, 6),
         "source": _source(achat),
-        "origine": {"Commande": "commande_rvgi", "Tarif": "tarif_rvgi"}.get(achat.get("nature"), "achat_rvgi"),
+        "origine": {"Commande": "commande_rvgi", "Facture": "facture_rvgi", "Tarif": "tarif_rvgi",
+                    "Tarif échu": "tarif_rvgi"}.get(achat.get("nature"), "achat_rvgi"),
         "fournisseur": achat["fournisseur"],
         "detail": detail,
     }
@@ -440,6 +467,8 @@ def prix_achat(achat: dict, par_mille: bool, taux_usd: float, unite_produit: str
 
 def _source(achat: dict) -> str:
     nature = achat.get("nature") or "Achat"
+    if achat.get("echu_le"):
+        return "Tarif RVGI échu le %s" % _date_fr(achat["echu_le"])
     if achat.get("numero") is None:
         return "%s RVGI · %s" % (nature, _date_fr(achat["date"]))
     return "%s RVGI n°%s · %s" % (nature, achat["numero"], _date_fr(achat["date"]))

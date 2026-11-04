@@ -16,10 +16,18 @@ Ce que le module fait
 2. **Lier** chaque produit MyStock existant à son article (`rvgi_article`).
 3. **Créer** ceux qui manquent, avec le libellé de l'ERP.
 
+4. **Compléter** la désignation d'un produit qui n'en a pas de vraie : vide,
+   ou recopie de sa propre référence (« 245/0145 » désigné « 245/0145 »).
+   C'est ce que laissent les créations à la volée (saisie d'une réception,
+   d'un déstockage, d'un inventaire sur une référence inconnue) : un code à
+   la place du libellé, dans toutes les listes de produits finis.
+
 Ce qu'il ne fait jamais
 -----------------------
 Il ne réécrit ni la désignation ni l'unité d'un produit qui existe déjà
-(décision d'Eugène, 23/10/2026) : ce que MyStock a saisi prime. Il ne change
+(décision d'Eugène, 23/10/2026) : ce que MyStock a saisi prime. Une
+désignation qui n'est que la référence n'est pas une saisie, c'est un
+emplacement vide — c'est la seule qu'il remplace (point 4). Il ne change
 pas le type d'un produit — une référence connue comme fabriquée et annoncée
 en négoce par l'ERP est comptée en conflit, pas convertie. Et il ne supprime
 rien : un article sorti de RVGI garde son produit et son stock.
@@ -179,10 +187,79 @@ def synchroniser(conn: sqlite3.Connection, erp: sqlite3.Connection) -> Dict[str,
     if vus:
         conn.executemany("UPDATE produits SET rvgi_vu_le=? WHERE id=?", vus)
 
+    completes = completer_designations(conn, erp)
+
     return {
         "crees": crees,
         "lies": lies,
+        "completes": completes,
         "deja_lies": deja_lies,
         "nb_conflits": nb_conflits,
         "conflits": conflits,
     }
+
+
+# « 83/0005 PALETTE BOX », « 931/0002 - COHESIO 2 » : un code article suivi
+# d'une précision saisie à la main. Le libellé est celui de l'article.
+_CODE_EN_TETE = re.compile(r"^\s*([0-9]+)\s*/\s*([0-9]+)")
+
+
+def designation_provisoire(designation_actuelle: Any, reference: Any) -> bool:
+    """Vide, ou recopie de la référence : un emplacement, pas une saisie."""
+    d = _txt(designation_actuelle).upper()
+    return not d or d == _txt(reference).upper()
+
+
+def _codes_candidats(produit: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """(code1, code2) sous lesquels chercher l'article RVGI d'un produit."""
+    codes: List[Tuple[str, str]] = []
+    article = _txt(produit.get("rvgi_article"))
+    if "/" in article:
+        c1, c2 = article.split("/", 1)
+        codes.append((c1.strip(), c2.strip()))
+    m = _CODE_EN_TETE.match(_txt(produit.get("reference")))
+    if m and (m.group(1), m.group(2)) not in codes:
+        codes.append((m.group(1), m.group(2)))
+    return codes
+
+
+def _libelle_article(erp: sqlite3.Connection, code1: str, code2: str) -> str:
+    """Libellé de l'article, code2 comparé tel quel puis sans ses zéros
+    (« 112/12 » saisi pour l'article 112/0012)."""
+    r = erp.execute(
+        "SELECT libc1, libc2, libc3 FROM fic_art "
+        "WHERE corbeille = 0 AND code1 = ? AND code2 = ? LIMIT 1",
+        (code1, code2)).fetchone()
+    if r is None and code2.isdigit():
+        r = erp.execute(
+            "SELECT libc1, libc2, libc3 FROM fic_art "
+            "WHERE corbeille = 0 AND code1 = ? AND code2 GLOB '[0-9]*' "
+            "AND CAST(code2 AS INTEGER) = ? LIMIT 1",
+            (code1, int(code2))).fetchone()
+    return designation(dict(r)) if r is not None else ""
+
+
+def completer_designations(conn: sqlite3.Connection, erp: sqlite3.Connection) -> int:
+    """Donne le libellé RVGI aux produits dont la désignation n'est que le code.
+
+    Ne touche à aucune désignation réellement saisie. Un article dont RVGI
+    n'a pas non plus de libellé reste tel quel : mieux vaut le code que rien.
+    Rend le nombre de produits complétés ; ne valide pas (`commit`).
+    """
+    maintenant = _maintenant()
+    completes = 0
+    for r in conn.execute(
+        "SELECT id, reference, designation, rvgi_article FROM produits"
+    ).fetchall():
+        produit = dict(r)
+        if not designation_provisoire(produit["designation"], produit["reference"]):
+            continue
+        for code1, code2 in _codes_candidats(produit):
+            libelle = _libelle_article(erp, code1, code2)
+            if libelle:
+                conn.execute(
+                    "UPDATE produits SET designation = ?, updated_at = ? WHERE id = ?",
+                    (libelle, maintenant, produit["id"]))
+                completes += 1
+                break
+    return completes
