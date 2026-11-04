@@ -16,7 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE, COOKIE_NAME
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE, COOKIE_NAME, KERNSE_THEME
 from app.core.audit_middleware import AuditMiddleware
 from app.core.requete_courante import RequeteCouranteMiddleware
 from app.web.html import render_frontend_html
@@ -779,6 +779,11 @@ async def inject_tache_quick(request: Request, call_next):
     # Dans le <head> : la page est contenue dès sa construction, sans image trop large.
     if not p.startswith("/portail/") and not _vitrine and _LARGEUR_TAG not in body:
         _tete = _LARGEUR_TAG + _tete
+    # Écran de chargement sur téléphone : le premier élément du document, pour remplacer
+    # la page blanche. Une réponse sans <head> n'est pas une page qu'on ouvre.
+    if not p.startswith(("/portail/", "/api/", "/static/")) and not _vitrine and not KERNSE_THEME and _HEAD_OPEN_RE.search(body):
+        from app.services import ecran_chargement as _ec
+        _tete = _ec.tete_de_page() + (_ec.images_demarrage() if p == "/" else b"") + _tete
     if _tete:
         _h = _HEAD_OPEN_RE.search(body)
         if _h:

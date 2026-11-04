@@ -222,7 +222,7 @@ __NAV__
         <div class="mobile-topbar-sub" id="mobile-sub">Boîte à outils</div>
       </div>
       <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil" data-bulle="Portail">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
       </button>
     </div>
     <div class="content" id="content"></div>
