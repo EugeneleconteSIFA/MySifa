@@ -80,6 +80,16 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+// Accueil sur téléphone : ces deux réponses partent avant le reste de la page,
+// devant la vingtaine d'appels du démarrage (portalBlocCharger).
+if(location.pathname==='/'&&window.matchMedia('(max-width:900px)').matches){
+  window.__portailAvance={};
+  [['a-traiter','/api/portail/a-traiter'],['atelier','/api/portail/atelier']].forEach(function(c){
+    window.__portailAvance[c[0]]=fetch(c[1],{credentials:'include'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});
+  });
+}
+</script>
 <meta name="description" content="__META_DESCRIPTION__">
 <link rel="icon" href="__FAV_ICO__" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon__FAV_SFX__-32.png">
@@ -1972,6 +1982,16 @@ function set(u){
   }
   render();
 }
+// Un compteur qui arrive ne reconstruit pas l'accueil sur téléphone : seule la
+// barre du bas l'affiche, et reconstruire remplacerait les tuiles sous le doigt.
+function setCompteur(u){
+  if(S.app==='portal'&&window.matchMedia('(max-width:900px)').matches){
+    Object.assign(S,u);
+    try{renderMobileNavbar();}catch(_){}
+    return;
+  }
+  set(u);
+}
 function toast(m,t='success'){set({toast:{message:m,type:t}});setTimeout(()=>set({toast:null}),3500);}
 function showToast(message,type){
   const t=type==='danger'?'error':(type==='success'?'success':'success');
@@ -2252,7 +2272,11 @@ async function checkAuth(){
     if(_handleProdQueryRouting()) return;
     if(await _loadInitialAppData()) return;
   }
-  else{S.user=null;S.app='login';}
+  else{
+    S.user=null;S.app='login';
+    // Demandées sans session : à refaire après la connexion.
+    window.__portailAvance=null;
+  }
   render();
   if(S.user&&window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(S.user));
 }
@@ -2263,7 +2287,7 @@ function isSuperAdmin(u){return !!(u && u.role==='superadmin');}
 async function loadMessagesUnread(){
   if(!isSuperAdmin(S.user))return;
   const r=await api('/api/messages/unread-count');
-  if(r && typeof r.count==='number' && r.count!==S.msgUnread) set({msgUnread:r.count});
+  if(r && typeof r.count==='number' && r.count!==S.msgUnread) setCompteur({msgUnread:r.count});
 }
 // Pastille « mes tâches » : tâches ouvertes qui me sont assignées. L'endpoint
 // répond 0 plutôt qu'une erreur pour un rôle non autorisé — une pastille ne
@@ -2280,7 +2304,7 @@ function _peutVoirTaches(u){
 async function loadTachesCount(){
   if(!_peutVoirTaches(S.user))return;
   const r=await api('/api/taches/badge');
-  if(r && typeof r.count==='number' && r.count!==S.tachesCount) set({tachesCount:r.count});
+  if(r && typeof r.count==='number' && r.count!==S.tachesCount) setCompteur({tachesCount:r.count});
 }
 // Pastille « invitations » : alimentée par mysifa_cal_rappel.js, qui interroge
 // déjà /api/calendrier/notifications une fois par minute pour la pop-up de
@@ -2288,7 +2312,7 @@ async function loadTachesCount(){
 function ecouterInvitationsCalendrier(){
   window.addEventListener('mysifa:cal-invitations',function(e){
     const n=Number((e&&e.detail&&e.detail.nombre)||0);
-    if(n!==Number(S.calInvitCount||0))set({calInvitCount:n});
+    if(n!==Number(S.calInvitCount||0))setCompteur({calInvitCount:n});
   });
   if(window.MySifaCalRappel&&window.MySifaCalRappel.rafraichir){
     window.MySifaCalRappel.rafraichir();
@@ -2451,6 +2475,7 @@ async function doLogout(){
   await api('/api/auth/logout',{method:'POST'});
   try{ if(typeof clearPostitsUi==='function') clearPostitsUi(); }catch(e){}
   try{ MySifaTheme.applyDefault(); }catch(e){}
+  try{portalBlocsOublier();}catch(e){}
   S.user=null;S.app='login';S.historique=null;S.production=null;S.traceabilite=null;
   S.tracFilters={ref:'',client:'',machine:'',statut:''};S.tracSort={col:null,dir:'asc'};
   S.stockGlobale=null;S.stockInvPriorites=[];S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
@@ -8255,13 +8280,13 @@ async function loadFiches(){
 async function loadPendingOfCount(){
   try{
     const data=await api('/api/admin/of-link-pending/count');
-    set({
+    setCompteur({
       pendingOfCount:Number(data&&data.count||0),
       pendingOfAmbigus:Number(data&&data.ambigus||0),
       pendingOfSansOf:Number(data&&data.sans_of||0),
     });
   }catch(e){
-    set({pendingOfCount:0,pendingOfAmbigus:0,pendingOfSansOf:0});
+    setCompteur({pendingOfCount:0,pendingOfAmbigus:0,pendingOfSansOf:0});
   }
 }
 

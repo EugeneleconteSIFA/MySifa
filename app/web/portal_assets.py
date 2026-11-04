@@ -846,6 +846,9 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   .portal-feuille-corps{padding:4px 2px 0;border-top:1px solid var(--border);margin-top:6px}
   .portal-feuille-corps .portal-vol-item{min-height:48px}
   /* Rien à traiter : le bloc s'efface, les tuiles remontent. */
+  .portal-bloc--ancien .msf-sect b::after{content:' · actualisation…';font-weight:500;
+    text-transform:none;letter-spacing:0}
+  .portal-bloc--ancien .portal-atraiter-body,.portal-bloc--ancien .portal-atelier-body{opacity:.72}
   .portal-atraiter--vide{display:none}
 
   /* Atelier maintenant : etat instantane des machines. */
@@ -1408,6 +1411,54 @@ function portalTuileFeuille(tile){
   bd.onclick=()=>{if(appuiVoile)closeProfileSheet();};
 }
 let _portalFavEdition=false;
+/* « À traiter » et « Atelier maintenant » : le portail se dessine plusieurs fois,
+   et sur un téléphone ces deux blocs sont ce qu'on vient lire. Chaque dessin les
+   remplit aussitôt avec les derniers chiffres connus, marqués comme anciens tant
+   que la réponse n'est pas là, puis une seule requête les actualise. La première
+   est lancée dès le <head> de la page (window.__portailAvance, html.py). */
+const PORTAL_BLOC_FRAIS_MS=30000;
+const PORTAL_BLOC_GARDE_MS=24*3600*1000;
+const PORTAL_BLOC_URLS={'a-traiter':'/api/portail/a-traiter','atelier':'/api/portail/atelier'};
+const _portalBlocs={};
+function _portalBlocCle(cle){
+  // Le rôle simulé par un superadmin ne voit pas les mêmes chiffres que le sien.
+  return 'mysifa_portail_bloc_'+cle+'_'+(S.user&&S.user.id)+'_'+((S.user&&S.user.effective_role)||'');
+}
+function portalBlocsOublier(){
+  Object.keys(_portalBlocs).forEach(k=>delete _portalBlocs[k]);
+  try{
+    Object.keys(localStorage).forEach(k=>{if(k.indexOf('mysifa_portail_bloc_')===0)localStorage.removeItem(k);});
+  }catch(e){}
+}
+function portalBlocCharger(cle,dessiner){
+  const stock=_portalBlocCle(cle);
+  let b=_portalBlocs[stock];
+  if(!b){
+    b=_portalBlocs[stock]={d:null,frais:0,prom:null};
+    try{
+      const lu=JSON.parse(localStorage.getItem(stock)||'null');
+      if(lu&&Date.now()-lu.t<PORTAL_BLOC_GARDE_MS)b.d=lu.d;
+    }catch(e){}
+  }
+  const aJour=Date.now()-b.frais<PORTAL_BLOC_FRAIS_MS;
+  if(b.d)dessiner(b.d,aJour);
+  if(aJour)return;
+  if(!b.prom){
+    const avance=window.__portailAvance&&window.__portailAvance[cle];
+    if(avance)window.__portailAvance[cle]=null;
+    b.prom=(avance||fetch(PORTAL_BLOC_URLS[cle],{credentials:'include'}).then(r=>r.ok?r.json():null).catch(()=>null))
+      .then(d=>{
+        b.prom=null;
+        if(d){
+          b.d=d;b.frais=Date.now();
+          try{localStorage.setItem(stock,JSON.stringify({t:b.frais,d}));}catch(e){}
+        }
+        return d;
+      });
+  }
+  // Un dessin plus récent a pu remplacer celui-ci : il s'est abonné de son côté.
+  b.prom.then(d=>{if(d)dessiner(d,true);});
+}
 function attachPortalReorder(appsWrap){
   if(appsWrap._portalDndBound)return;
   appsWrap._portalDndBound=true;
@@ -2245,14 +2296,8 @@ function renderPortal(){
     _mobGoogleBtn
   );
 
-  // Le nombre de lignes de la dernière fois réserve la place : les tuiles ne
-  // sautent pas sous le doigt quand la réponse arrive, ni quand le portail se
-  // reconstruit. Sans ligne la dernière fois, le bloc part masqué.
-  const _atCle='mysifa_portail_atraiter_n';
-  const _atAvant=(()=>{try{return parseInt(localStorage.getItem(_atCle),10)||0;}catch(e){return 0;}})();
   const _atraiterBody=h('div',{className:'portal-atraiter-body'});
-  if(_atAvant>0)_atraiterBody.style.minHeight=(_atAvant*58)+'px';
-  const _atraiterBlock=h('div',{className:'portal-atraiter'+(_atAvant>0?'':' portal-atraiter--vide')},
+  const _atraiterBlock=h('div',{className:'portal-atraiter portal-atraiter--vide'},
     h('div',{className:'msf-sect'},h('b',null,'À traiter')),
     _atraiterBody
   );
@@ -2271,11 +2316,7 @@ function renderPortal(){
     );
   }
 
-  setTimeout(()=>{
-    fetch('/api/portail/a-traiter',{credentials:'include'})
-      .then(r=>r.ok?r.json():null)
-      .then(d=>{
-        if(!d)return;
+  portalBlocCharger('a-traiter',(d,frais)=>{
         const e=d.expe||{}, q=d.qualite||{}, rh=d.rh_coffre||{}, tk=d.taches||{};
 
         // La pastille de la tuile MyExpé suit les notifications par service
@@ -2335,14 +2376,11 @@ function renderPortal(){
         }
 
         while(_atraiterBody.firstChild)_atraiterBody.removeChild(_atraiterBody.firstChild);
-        _atraiterBody.style.minHeight='';
         _atraiterBody.className='portal-atraiter-body'+(rows.length?' msf-rows':'');
         rows.forEach(r=>_atraiterBody.appendChild(r));
         _atraiterBlock.classList.toggle('portal-atraiter--vide',!rows.length);
-        try{localStorage.setItem(_atCle,String(rows.length));}catch(e){}
-      })
-      .catch(()=>{});
-  },0);
+        _atraiterBlock.classList.toggle('portal-bloc--ancien',!frais);
+  });
 
   // ── Atelier maintenant ────────────────────────────────────────────────
   const _atelierBody=h('div',{className:'portal-atelier-body'});
@@ -2353,12 +2391,11 @@ function renderPortal(){
     ),
     _atelierBody
   );
-  setTimeout(()=>{
-    fetch('/api/portail/atelier',{credentials:'include'})
-      .then(r=>r.ok?r.json():null)
-      .then(d=>{
-        const ms=(d&&Array.isArray(d.machines))?d.machines:[];
-        if(!ms.length)return;
+  portalBlocCharger('atelier',(d,frais)=>{
+        const ms=Array.isArray(d.machines)?d.machines:[];
+        while(_atelierBody.firstChild)_atelierBody.removeChild(_atelierBody.firstChild);
+        _atelierBlock.classList.toggle('portal-atelier--vide',!ms.length);
+        _atelierBlock.classList.toggle('portal-bloc--ancien',!frais);
         ms.forEach(m=>{
           const quiEl=h('span',{className:'portal-mach-qui'});
           if(m.etat==='libre'){
@@ -2395,10 +2432,7 @@ function renderPortal(){
             h('span',{className:'portal-mach-pct'},(m.avancement_pct!==null&&m.avancement_pct!==undefined)?(m.avancement_pct+' %'):'—')
           ));
         });
-        _atelierBlock.classList.remove('portal-atelier--vide');
-      })
-      .catch(()=>{});
-  },0);
+  });
 
   const portalEl=h('div',{className:'portal-page'},
     _mobileHeader,
