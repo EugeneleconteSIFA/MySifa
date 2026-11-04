@@ -2383,7 +2383,7 @@ if(window.MySifaSidebar)MySifaSidebar.configure({user:{
   }
 })();
 </script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 </body>
 </html>
 """

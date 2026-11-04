@@ -1690,7 +1690,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <div id="gsm-backdrop" class="gsm-backdrop" aria-hidden="true"></div>
 <div id="gsm-modal" class="gsm-modal" role="dialog" aria-modal="true" aria-label="Recherche Google" aria-hidden="true"></div>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_portail_tour.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_dock.js?v=4"></script>

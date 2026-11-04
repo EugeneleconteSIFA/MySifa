@@ -522,6 +522,7 @@ _STAGING_BANDEAU_CSS = (
     "@media (min-width:901px){body .sidebar{height:calc(100vh - 24px)!important;"
     "min-height:calc(100vh - 24px)!important;max-height:calc(100vh - 24px)!important}}"
     "body .mobile-topbar{top:24px!important}"
+    "@media (max-width:600px){.staging-bandeau{white-space:nowrap;overflow:hidden;justify-content:flex-start;padding:0 8px}}"
     "</style>"
 )
 _STAGING_BANDEAU_HTML = (
@@ -706,7 +707,7 @@ _VERSION_ASSET = {
     b"/static/chat_url.js": b"?v=1",
     b"/static/mysifa_dock.js": b"?v=4",
     b"/static/mysifa_dock_fenetres.js": b"?v=1",
-    b"/static/mysifa_outils_mobile.js": b"?v=1",
+    b"/static/mysifa_outils_mobile.js": b"?v=2",
 }
 
 

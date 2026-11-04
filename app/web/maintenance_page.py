@@ -11118,7 +11118,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
      d'alerte — c'est une interruption, pas une consultation. -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack5"></script>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 
 <!-- Modal saisie créneau (opérateur : ouvre au clic sur une carte).
      Liste toutes les ops du créneau, chacune avec son propre bouton
