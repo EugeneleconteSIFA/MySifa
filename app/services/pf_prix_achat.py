@@ -1,4 +1,4 @@
-"""Prix d'achat RVGI des produits finis sous-traités.
+"""Prix RVGI des produits finis : commande d'achat, à défaut commande client.
 
 Un produit fini fabriqué chez SIFA tire son prix de valorisation des commandes
 clients (import de la feuille « Valorisation »). Un produit SOUS-TRAITÉ n'a pas
@@ -19,6 +19,12 @@ Conversions :
   par rouleau, que RVGI ne porte qu'en texte libre (« Box: 15 rolls of 2000
   labels ») sur la fiche d'achat ou la ligne de commande ;
 - les dollars passent en euros au taux de Coûts matières (`eur_usd_rate`).
+
+Un produit FABRIQUÉ absent de l'import Excel (feuille figée à la date de
+l'import) prend, de la même façon, le prix de sa dernière commande CLIENT
+(`cde_ligne`, unité `cuv`) : c'est la règle de l'import lui-même, « ERP
+(2024+) » étant le dernier prix de vente. L'achat passe avant la vente : un
+produit qu'on achète se valorise à ce qu'il coûte.
 
 Ce qui ne se convertit pas sans deviner (unité inconnue, rouleau sans nombre
 d'étiquettes, devise sans taux) est laissé de côté : un prix faux est pire
@@ -56,9 +62,30 @@ _ROUL = r"(?:rolls?|rouleaux?|bobines?)"
 _ETIQ_PAR_ROULEAU = (
     re.compile(_ROUL + r"\s*(?:of|de|:)?\s*" + _N + r"\s*" + _ETIQ, re.IGNORECASE),
     re.compile(_N + r"\s*" + _ETIQ + r"\s*(?:/|par|per|by)\s*" + _ROUL, re.IGNORECASE),
+    # Désignation SIFA « B1000/Etiq. 35 x 20 mm » : bobine de 1000 étiquettes.
+    re.compile(r"\bB\s?(\d[\d\s.]*\d|\d)\s*/\s*" + _ETIQ, re.IGNORECASE),
 )
 
-_CACHE = {"empreinte": None, "achats": None}
+# Nombre d'étiquettes PAR CARTON, même prudence : « Carton de 13.500
+# étiquettes », « C17.550/Etiquette 55 x 83 mm ».
+_CART = r"(?:cartons?|box(?:es)?)"
+_ETIQ_PAR_CARTON = (
+    re.compile(_CART + r"\s*(?:of|de|:)?\s*" + _N + r"\s*" + _ETIQ, re.IGNORECASE),
+    re.compile(_N + r"\s*" + _ETIQ + r"\s*(?:/|par|per|by)\s*" + _CART, re.IGNORECASE),
+    re.compile(r"\bC\s?(\d[\d\s.]*\d|\d)\s*/\s*" + _ETIQ, re.IGNORECASE),
+)
+_UA_CARTON = re.compile(r"carton", re.IGNORECASE)
+
+# Référence MySifa → clé RVGI « code1/code2 » : « 1153/0005 - BOX DE 510 000 »
+# désigne l'article 1153/0005.
+_REF = re.compile(r"^\s*([0-9A-Za-z]+)\s*/\s*([0-9A-Za-z]+)")
+
+_CACHE = {"empreinte": None, "achats": None, "ventes": None}
+
+
+def cle_reference(reference) -> str:
+    m = _REF.match(str(reference or ""))
+    return "%s/%s" % (m.group(1), m.group(2)) if m else str(reference or "").strip()
 
 
 def _empreinte():
@@ -84,10 +111,25 @@ def _nombre(txt) -> Optional[float]:
 
 
 def etiquettes_par_rouleau(*textes) -> Optional[float]:
+    return _etiquettes_par(_ETIQ_PAR_ROULEAU, textes)
+
+
+def etiquettes_par_carton(*textes) -> Optional[float]:
+    return _etiquettes_par(_ETIQ_PAR_CARTON, textes)
+
+
+def _sans_accent(txt) -> str:
+    t = str(txt or "").strip().lower()
+    for a, b in (("é", "e"), ("è", "e"), ("ê", "e"), ("à", "a")):
+        t = t.replace(a, b)
+    return t[:-1] if t.endswith("s") else t
+
+
+def _etiquettes_par(motifs, textes) -> Optional[float]:
     for t in textes:
         if not t:
             continue
-        for motif in _ETIQ_PAR_ROULEAU:
+        for motif in motifs:
             m = motif.search(str(t))
             if m:
                 n = _nombre(m.group(1))
@@ -96,16 +138,61 @@ def etiquettes_par_rouleau(*textes) -> Optional[float]:
     return None
 
 
+def _unites(c, presentes) -> dict:
+    ua = {}
+    if "fic_ua" in presentes:
+        for r in c.execute("SELECT code, lib1, nombre FROM fic_ua WHERE corbeille = 0"):
+            ua[str(r["code"] or "").strip()] = (str(r["lib1"] or "").strip(), float(r["nombre"] or 0))
+    return ua
+
+
+def _lire_ventes() -> dict:
+    """{« code1/code2 »: dernière ligne de commande client à prix}, brut."""
+    with miroir.get_erp_db() as c:
+        presentes = miroir.tables_presentes(c)
+        if not {"cde_ligne", "cde_entete"} <= set(presentes):
+            return {}
+        ua = _unites(c, presentes)
+        rows = c.execute(
+            """SELECT l.code1, l.code2, l.pun, l.cuv, l.vuv,
+                      l.des1, l.des2, l.des3, l.des4,
+                      e.numero, e.amjc, e.devise, e.rs
+                 FROM cde_ligne l
+                 JOIN cde_entete e ON e.numero = l.numero AND e.corbeille = 0
+                WHERE l.corbeille = 0 AND l.pun > 0
+                  AND COALESCE(l.code1, '') <> ''
+                  AND e.amjc <= datetime('now', '+1 day')
+                ORDER BY e.amjc DESC, l.id DESC"""
+        ).fetchall()
+    out = {}
+    for r in rows:
+        k = "%s/%s" % (str(r["code1"]).strip(), str(r["code2"] or "").strip())
+        if k in out:
+            continue
+        cuv = str(r["cuv"] or "").strip()
+        lib, nombre = ua.get(cuv, ("", 0.0))
+        out[k] = {
+            "pun": float(r["pun"]),
+            "cua": cuv,
+            "ua_libelle": lib or cuv,
+            "ua_nombre": nombre or float(r["vuv"] or 0) or 1.0,
+            "devise": str(r["devise"] or "").strip().upper(),
+            "numero": r["numero"],
+            "date": str(r["amjc"] or "")[:10],
+            "fournisseur": (r["rs"] or "").strip(),
+            "textes": [r["des1"], r["des2"], r["des3"], r["des4"]],
+            "nature": "Commande",
+        }
+    return out
+
+
 def _lire_achats() -> dict:
     """{« code1/code2 »: dernière ligne d'achat}, brut, depuis le miroir."""
     with miroir.get_erp_db() as c:
         presentes = miroir.tables_presentes(c)
         if not {"cdf_ligne", "cdf_entete"} <= set(presentes):
             return {}
-        ua = {}
-        if "fic_ua" in presentes:
-            for r in c.execute("SELECT code, lib1, nombre FROM fic_ua WHERE corbeille = 0"):
-                ua[str(r["code"] or "").strip()] = (str(r["lib1"] or "").strip(), float(r["nombre"] or 0))
+        ua = _unites(c, presentes)
         textes_fiche = {}
         if "fic_arta" in presentes:
             for r in c.execute(
@@ -121,6 +208,7 @@ def _lire_achats() -> dict:
                  JOIN cdf_entete e ON e.numero = l.numero AND e.corbeille = 0
                 WHERE l.corbeille = 0 AND l.htn > 0 AND l.pun > 0
                   AND COALESCE(l.code1, '') <> ''
+                  AND e.amjc <= datetime('now', '+1 day')
                 ORDER BY e.amjc DESC, l.id DESC"""
         ).fetchall()
     out = {}
@@ -140,28 +228,58 @@ def _lire_achats() -> dict:
             "date": str(r["amjc"] or "")[:10],
             "fournisseur": (r["rs"] or "").strip(),
             "textes": [r["des1"], r["des2"], r["des3"], r["des4"]] + textes_fiche.get(k, []),
+            "nature": "Achat",
         }
     return out
 
 
-def achats_bruts() -> dict:
+def _lignes(cle: str, lire) -> dict:
     emp = _empreinte()
-    if emp is not None and emp == _CACHE["empreinte"] and _CACHE["achats"] is not None:
-        return _CACHE["achats"]
+    if emp != _CACHE["empreinte"]:
+        _CACHE.update(empreinte=emp, achats=None, ventes=None)
+    if emp is not None and _CACHE[cle] is not None:
+        return _CACHE[cle]
     try:
-        achats = _lire_achats()
+        lignes = lire()
     except Exception:
-        logger.exception("prix d'achat PF : lecture du miroir RVGI impossible")
+        logger.exception("prix PF : lecture du miroir RVGI impossible (%s)", cle)
         return {}
-    _CACHE.update(empreinte=emp, achats=achats)
-    return achats
+    _CACHE[cle] = lignes
+    return lignes
 
 
-def prix_achat(achat: dict, par_mille: bool, taux_usd: float) -> Optional[dict]:
+def achats_bruts() -> dict:
+    return _lignes("achats", _lire_achats)
+
+
+def ventes_brutes() -> dict:
+    return _lignes("ventes", _lire_ventes)
+
+
+def prix_rvgi(reference, par_mille: bool, taux_usd: float, unite_produit: str = "",
+              quantite: float = 0) -> Optional[dict]:
+    """Dernier achat, à défaut dernière commande client, ramené à l'unité de
+    valorisation. None si aucun ne se convertit sans deviner."""
+    k = cle_reference(reference)
+    for lignes in (achats_bruts(), ventes_brutes()):
+        brut = lignes.get(k)
+        res = prix_achat(brut, par_mille, taux_usd, unite_produit, quantite) if brut else None
+        if res:
+            return res
+    return None
+
+
+def prix_achat(achat: dict, par_mille: bool, taux_usd: float, unite_produit: str = "",
+               quantite: float = 0) -> Optional[dict]:
     """Prix d'achat ramené à l'unité de valorisation, en euros, ou None.
 
     `par_mille` : le produit se valorise au mille d'étiquettes.
     `taux_usd` : 1 USD = taux_usd € (0 = non renseigné).
+    `unite_produit` : unité de stock d'un produit qui ne se compte pas en
+    étiquettes (carton, bobine) — un prix dans la même unité se reprend tel quel.
+    `quantite` : stock du produit. Plus de cartons en stock qu'un carton ne
+    contient d'étiquettes, c'est un stock compté en étiquettes sous une unité
+    « carton » : le prix du carton le multiplierait par des millions d'euros.
     """
     devise = achat["devise"]
     if devise in _DEVISES_EURO:
@@ -179,6 +297,12 @@ def prix_achat(achat: dict, par_mille: bool, taux_usd: float) -> Optional[dict]:
                 return None
             par_etiquette = pun / n
             detail = "%s étiq./rouleau" % format(int(n), ",").replace(",", " ")
+        elif _UA_CARTON.search(lib):
+            n = etiquettes_par_carton(*achat["textes"])
+            if not n:
+                return None
+            par_etiquette = pun / n
+            detail = "%s étiq./carton" % format(int(n), ",").replace(",", " ")
         elif nombre > 1:
             par_etiquette = pun / nombre  # « Mille » (1000), « Cent » (100)…
         elif _UA_UNITE.search(lib) or achat["cua"] in ("U", "15"):
@@ -187,14 +311,25 @@ def prix_achat(achat: dict, par_mille: bool, taux_usd: float) -> Optional[dict]:
             return None
         prix = par_etiquette * 1000.0 * change
     else:
-        if not (_UA_UNITE.search(lib) or achat["cua"] in ("U", "15")):
+        meme_unite = bool(unite_produit) and _sans_accent(lib) == _sans_accent(unite_produit)
+        if not (meme_unite or _UA_UNITE.search(lib) or achat["cua"] in ("U", "15")):
             return None
+        if meme_unite and quantite > 0:
+            if _UA_CARTON.search(lib):
+                n = etiquettes_par_carton(*achat["textes"])
+            elif _UA_ROULEAU.search(lib):
+                n = etiquettes_par_rouleau(*achat["textes"])
+            else:
+                n = None
+            if n and quantite >= n:
+                return None
         prix = pun * change
     if devise in _DEVISES_USD:
         detail = (detail + " · " if detail else "") + "USD × %s" % format(taux_usd, "g")
     return {
         "prix": round(prix, 6),
-        "source": "Achat RVGI n°%s · %s" % (achat["numero"], _date_fr(achat["date"])),
+        "source": "%s RVGI n°%s · %s" % (achat.get("nature") or "Achat", achat["numero"], _date_fr(achat["date"])),
+        "origine": "commande_rvgi" if achat.get("nature") == "Commande" else "achat_rvgi",
         "fournisseur": achat["fournisseur"],
         "detail": detail,
     }
