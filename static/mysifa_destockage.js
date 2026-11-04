@@ -26,7 +26,7 @@
   'use strict';
 
   const E = { opts: null, data: null, cand: {}, rows: [], entryId: null, edition: null, paravent: false,
-    choix: null };
+    complexe: false, choix: null };
 
   const UNITES = {ml: ['ml', 'ml'], kg: ['kg', 'kg'], bobine: ['bobine', 'bobines'],
     tube: ['tube', 'tubes'], palette: ['palette', 'palettes'], carton: ['carton', 'cartons'],
@@ -173,6 +173,35 @@
   // enroulée — aucun mandrin ne sort, quoi que dise le calcul.
   function sansMandrin(r) { return E.paravent && r.ligne.kind === 'mandrin'; }
 
+  // Matière complexée (04/11/2026) : la bobine passée embarque déjà adhésif
+  // et glassine, même si la fiche technique annonce un frontal. Les lignes
+  // calculées d'adhésif et de glassine sont alors ramenées à zéro — ce qui
+  // rend au stock ce qui en était déjà sorti. Une ligne ajoutée à la main
+  // reste saisissable : c'est qu'on en a réellement remis.
+  function sansComplexe(r) {
+    return E.complexe && !r.ligne.ajout && ['adhesif', 'glassine'].includes(r.ligne.kind);
+  }
+
+  function neutralisee(r) { return sansMandrin(r) || sansComplexe(r); }
+
+  // Un complexe retenu sur la ligne support alors que le serveur a raisonné
+  // sur un frontal (lignes adhésif / glassine non marquées « inclus ») : la
+  // case se coche d'elle-même à l'ouverture.
+  function complexeDetecte() {
+    const support = E.rows.some(r => r.ligne.kind === 'support' && r.mid
+      && ((candidat(r.mid) || {}).categorie || '').toLowerCase() === 'complexe');
+    return support && E.rows.some(r => ['adhesif', 'glassine'].includes(r.ligne.kind)
+      && !r.ligne.ajout && !r.ligne.inclus_complexe);
+  }
+
+  // Coche « Lever la réserve » quand plus aucune ligne ne reste à compléter.
+  function proposerLeverReserve() {
+    const lever = document.getElementById('dr-lever');
+    if (!lever) return;
+    const reste = E.rows.some(r => !neutralisee(r) && !r.mid && !r.ligne.facultative && !r.ligne.ajout);
+    if (!reste) lever.checked = true;
+  }
+
   function cleLigne(l) { return (l.kind || '') + '|' + (l.source_value || '') + '|' + (l.hors_fiche ? l.matiere_id : ''); }
 
   function preparer(d, garder) {
@@ -218,6 +247,7 @@
     E.rows.forEach(r => {
       if (r.mid && r.lid == null) r.lid = laizeParDefaut(candidat(r.mid));
     });
+    if (!garder && complexeDetecte()) E.complexe = true;
   }
 
   function boutonPetit(attr, i, libelle) {
@@ -407,12 +437,13 @@
         : (l.remplace && r.mid === l.matiere_id ? 'remplace « ' + esc(l.remplace.matiere_ref || '') + ' »' : ''));
     const sous = [laizeManque, remplace, (l.hors_fiche && !l.ajout) ? 'ajoutée à la main' : '',
       l.depuis_of ? 'd\'après l\'OF (fiche technique vide)' : '',
-      l.inclus_complexe ? 'déjà dans le complexe — à ne sortir que si on en a ajouté' : '',
+      (l.inclus_complexe && !sansComplexe(r)) ? 'déjà dans le complexe — à ne sortir que si on en a ajouté' : '',
       (l.attendue && r.mid) ? 'absente de la fiche technique' : '',
-      sansMandrin(r) ? 'conditionnement paravent — pas de mandrin' : ''].filter(Boolean)
+      sansMandrin(r) ? 'conditionnement paravent — pas de mandrin' : '',
+      sansComplexe(r) ? 'matière complexée — déjà dans la bobine' : ''].filter(Boolean)
       .join('<span style="color:var(--muted)"> · </span>');
 
-    const paravent = sansMandrin(r);
+    const paravent = neutralisee(r);
     const bloque = paravent || !r.mid || conv.facteur_stock == null;
     const step = conv.entier ? '1' : (conv.unite_reelle === 'ml' ? '1' : '0.001');
     const u = conv.unite_reelle || l.besoin_unite || '';
@@ -685,7 +716,15 @@
     if (c && c.conversion && c.conversion.entier) r.val = Math.round(Number(r.val || 0));
     if (!avant && c && !r.val && r.ligne.consomme) r.val = Number(r.ligne.consomme);
     if (E.edition && E.edition.i === i) E.edition = null;
+    const devientComplexe = !E.complexe && r.ligne.kind === 'support' && !r.ligne.ajout
+      && c && (c.categorie || '').toLowerCase() === 'complexe';
+    if (devientComplexe) {
+      E.complexe = true;
+      const cb = document.getElementById('dr-complexe');
+      if (cb) cb.checked = true;
+    }
     rendreLignes();
+    if (devientComplexe) proposerLeverReserve();
     if (r.ligne.ajout && mid) {
       const q = document.querySelector('[data-dr-q="' + i + '"]');
       if (q && !q.disabled) { q.focus(); q.select(); }
@@ -853,7 +892,10 @@
       + '<button type="button" class="dr-ajout" data-dr-ajout><span style="font-size:16px;line-height:1">+</span> Ajouter une matière</button>'
       + '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">'
       + '<input type="checkbox" id="dr-paravent"' + (E.paravent ? ' checked' : '') + '> Conditionnement paravent'
-      + '<span style="font-weight:400;color:var(--muted)">— pas de mandrin</span></label></div>'
+      + '<span style="font-weight:400;color:var(--muted)">— pas de mandrin</span></label>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">'
+      + '<input type="checkbox" id="dr-complexe"' + (E.complexe ? ' checked' : '') + '> Matière complexée'
+      + '<span style="font-weight:400;color:var(--muted)">— pas d\'adhésif ni de glassine</span></label></div>'
       + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">' + lever + boutons + '</div>';
   }
 
@@ -903,6 +945,13 @@
     body.addEventListener('change', (ev) => {
       const t = ev.target;
       if (t.id === 'dr-paravent') { E.paravent = t.checked; rendreLignes(); return; }
+      if (t.id === 'dr-complexe') {
+        E.complexe = t.checked;
+        if (E.edition && E.rows[E.edition.i] && sansComplexe(E.rows[E.edition.i])) E.edition = null;
+        rendreLignes();
+        if (E.complexe) proposerLeverReserve();
+        return;
+      }
       if (t.hasAttribute('data-dr-nat')) changerNature(Number(t.getAttribute('data-dr-nat')), t.value);
       else if (t.hasAttribute('data-dr-lz')) {
         const r = E.rows[Number(t.getAttribute('data-dr-lz'))];
@@ -1225,7 +1274,7 @@
     E.opts = opts || {};
     E.entryId = entryId;
     fermerChoix();
-    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false; E.docs = {}; E.ajout = null;
+    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false; E.complexe = false; E.docs = {}; E.ajout = null;
     const root = document.getElementById('mroot');
     if (!root) return;
     injecterStyle();
@@ -1290,7 +1339,7 @@
       // « 0 + quantité ».
       (r.ligne.cles_initiales || []).forEach(([mid, lid]) =>
         lignes.push({matiere_id: mid, laize_id: lid ?? null, quantite_reelle: 0}));
-      if (!r.mid || sansMandrin(r)) continue;
+      if (!r.mid || neutralisee(r)) continue;
       const c = candidat(r.mid);
       const conv = (c && c.conversion) || {};
       const q = Number(r.val || 0);
@@ -1322,7 +1371,8 @@
         try { await lier(i, E.rows[i].mid); } catch (e) { /* l'association est un confort, pas une condition */ }
       }
       const r = await appel('/api/stock/destockage/' + E.entryId + '/ajuster', {
-        method: 'POST', body: JSON.stringify({lignes, lever_reserve: !!(lever && lever.checked)})});
+        method: 'POST', body: JSON.stringify({lignes, lever_reserve: !!(lever && lever.checked),
+          complexe: E.complexe})});
       const n = (r.ajustements || []).length;
       fermer();
       if (E.opts.onChange) {
