@@ -148,8 +148,8 @@ setTimeout(masquer,8000);});
 
 # Écrans d'iPhone : (largeur, hauteur, densité). iOS ne prend l'image que si la taille
 # correspond exactement ; les images sont dans static/demarrage/, en clair et en sombre.
-# iOS ne connaît pas la palette à ce stade : elles sont neutres (logo d'une seule teinte,
-# sans dégradé), pour ne pas annoncer un thème qui n'est pas forcément celui de la personne.
+# iOS ne connaît pas la palette à ce stade : elles sont unies, sans logo ni dégradé. Le
+# logo n'apparaît qu'une fois, sur l'écran de chargement, aux couleurs de la personne.
 _IPHONES = (
     (320, 568, 2), (375, 667, 2), (414, 736, 3), (375, 812, 3), (414, 896, 2), (414, 896, 3),
     (360, 780, 3), (390, 844, 3), (393, 852, 3), (428, 926, 3), (430, 932, 3), (402, 874, 3),
@@ -169,7 +169,7 @@ def images_demarrage() -> bytes:
         for nom, mode in (("clair", "light"), ("sombre", "dark")):
             balises.append(
                 f'<link rel="apple-touch-startup-image" media="{ecran} and (prefers-color-scheme:{mode})" '
-                f'href="/static/demarrage/{w * r}x{h * r}_{nom}.png?v=2">'
+                f'href="/static/demarrage/{w * r}x{h * r}_{nom}.png?v=3">'
             )
     return "".join(balises).encode("utf-8")
 
