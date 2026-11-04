@@ -10712,9 +10712,8 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
     ).fetchall()
     stock_fab = _pf_valo_pick_stock(conn, "fabrique")
     stock_neg = _pf_valo_pick_stock(conn, "negoce")
-    # Sous-traitance : sans prix venu des commandes, le prix est celui de la
-    # dernière commande d'achat RVGI (cf. app/services/pf_prix_achat.py).
-    achats = _pf_prix_achat.achats_bruts()
+    # Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
+    # défaut dernière commande client (cf. app/services/pf_prix_achat.py).
     taux_usd = _get_taux_eur_usd(conn)
     out: list[dict] = []
     for r in rows:
@@ -10728,8 +10727,7 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
         source_prix = r["source_prix"]
         achat = None
         if prix <= 0:
-            brut = achats.get((r["reference"] or "").strip())
-            achat = _pf_prix_achat.prix_achat(brut, par_mille, taux_usd) if brut else None
+            achat = _pf_prix_achat.prix_rvgi(r["reference"], par_mille, taux_usd, unite, stock)
             if achat:
                 prix = achat["prix"]
                 source_prix = achat["source"]
@@ -10748,7 +10746,7 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
             "prix_unitaire_ht": prix,
             "valorisation": valorisation,
             "source_prix": source_prix,
-            "prix_origine": "achat_rvgi" if achat else ("valorisation" if prix > 0 else None),
+            "prix_origine": achat["origine"] if achat else ("valorisation" if prix > 0 else None),
             "achat_fournisseur": achat["fournisseur"] if achat else None,
             "achat_detail": achat["detail"] if achat else None,
             "transport_import": transport,

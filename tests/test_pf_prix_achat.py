@@ -63,6 +63,23 @@ check("refus : rouleau sans nombre d'étiquettes",
 check("refus : dollars sans taux", pa.prix_achat(achat(devise="DOL"), True, 0), None)
 check("refus : devise inconnue", pa.prix_achat(achat(devise="GBP"), True, 0.86), None)
 check("refus : produit à l'unité acheté au mille", pa.prix_achat(achat(), False, 0.86), None)
+check("bobine : « B1000/Etiq. 35 x 20 mm »", pa.etiquettes_par_rouleau("B1000/Etiq. 35 x 20 mm, 1 couleur."), 1000.0)
+check("référence : « 1153/0005 - BOX DE 510 000 »", pa.cle_reference("1153/0005 - BOX DE 510 000"), "1153/0005")
+v = pa.prix_achat(achat(pun=1.06, cua="5", ua_libelle="Bobine", ua_nombre=1.0, nature="Commande", numero=9931000,
+                        date="2025-11-19", textes=["B1000/Etiq. 35 x 20 mm", "Bobine de 1000 étiquettes"]), True, 0.86)
+check("vente 382/0100 : 1,06 €/bobine de 1000 → €/mille", v and v["prix"], 1.06)
+check("vente : la source cite la commande client", v and v["source"], "Commande RVGI n°9931000 · 19/11/2025")
+check("vente : origine commande", v and v["origine"], "commande_rvgi")
+check("refus : vente au carton sans nombre d'étiquettes", pa.prix_achat(achat(cua="1", ua_libelle="Carton", ua_nombre=1.0, nature="Commande"), True, 0.86), None)
+carton = dict(cua="1", ua_libelle="Carton", ua_nombre=1.0, nature="Commande", textes=["Carton de 13.500 étiquettes,"])
+check("vente au carton de 13 500 → €/mille", round(pa.prix_achat(achat(pun=25.11, **carton), True, 0)["prix"], 4), 1.86)
+check("carton : « C17.550/Etiquette »", pa.etiquettes_par_carton("C17.550/Etiquette 55 x 83 mm."), 17550.0)
+check("produit au carton vendu au carton : repris tel quel",
+      pa.prix_achat(achat(pun=44.9, **carton), False, 0, "carton", 570)["prix"], 44.9)
+check("refus : 842 400 « cartons » de 13 500 étiquettes (stock en étiquettes)",
+      pa.prix_achat(achat(pun=44.9, **carton), False, 0, "carton", 842400), None)
+check("refus : produit en bobine vendu au carton",
+      pa.prix_achat(achat(pun=44.9, **carton), False, 0, "bobine", 10), None)
 check("produit à l'unité acheté à l'unité", pa.prix_achat(achat(pun=4.5, cua="U", ua_libelle="Unité", ua_nombre=1.0), False, 0)["prix"], 4.5)
 
 print()
