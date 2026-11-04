@@ -369,6 +369,10 @@ def categorie_prix_direct(categorie):
 # demande (bouton de la ligne) : transport = prix HT / diviseur. 9 → 1/9e.
 PF_TRANSPORT_IMPORT_DIVISEUR = float(os.getenv("PF_TRANSPORT_IMPORT_DIVISEUR", "9"))
 
+# Unités de contenant tenues pour identiques quand on reprend un prix RVGI sur
+# un produit fini (un produit « carton » vendu à la « boite »).
+PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
+
 # Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
 # métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
 # minute) : le déstockage refuse de s'en servir, les écrans affichent « erreur

@@ -26294,8 +26294,9 @@ function buildValorisationPFTableRow(item) {
     tdPrix.appendChild(el('div', { style: 'font-size:10px;color:#fb923c;font-weight:700;margin-top:3px' }, 'Sans prix'));
   } else if (item.source_prix) {
     // Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
-    // défaut dernière commande client. Tiers et conversion au survol.
-    const achat = item.prix_origine === 'achat_rvgi' || item.prix_origine === 'commande_rvgi';
+    // défaut dernière commande client, à défaut tarif article. Tiers et
+    // conversion au survol.
+    const achat = ['achat_rvgi', 'commande_rvgi', 'tarif_rvgi'].includes(item.prix_origine);
     const titre = achat
       ? [item.achat_fournisseur, item.achat_detail].filter(Boolean).join(' · ')
       : null;
