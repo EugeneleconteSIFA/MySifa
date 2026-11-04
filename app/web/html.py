@@ -11121,8 +11121,14 @@ try{
       if(!sessionStorage.getItem(k)){
         sessionStorage.setItem(k,'1');
         navigator.serviceWorker.getRegistrations()
-          .then(rs=>Promise.all(rs.map(r=>r.unregister().catch(()=>false))))
-          .then(()=>{ try{ location.reload(); }catch(e){} });
+          .then(rs=>{
+            // Rien à nettoyer, rien à recharger. Sans ce test, l'app installée, dont
+            // chaque lancement est une nouvelle session, chargeait l'accueil deux fois.
+            if(!rs.length)return;
+            return Promise.all(rs.map(r=>r.unregister().catch(()=>false)))
+              .then(()=>{ try{ location.reload(); }catch(e){} });
+          })
+          .catch(()=>{});
       }
     }
   }
