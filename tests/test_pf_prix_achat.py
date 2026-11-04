@@ -76,8 +76,23 @@ check("vente au carton de 13 500 → €/mille", round(pa.prix_achat(achat(pun=2
 check("carton : « C17.550/Etiquette »", pa.etiquettes_par_carton("C17.550/Etiquette 55 x 83 mm."), 17550.0)
 check("produit au carton vendu au carton : repris tel quel",
       pa.prix_achat(achat(pun=44.9, **carton), False, 0, "carton", 570)["prix"], 44.9)
-check("refus : 842 400 « cartons » de 13 500 étiquettes (stock en étiquettes)",
-      pa.prix_achat(achat(pun=44.9, **carton), False, 0, "carton", 842400), None)
+r = pa.prix_achat(achat(pun=45.455, **dict(carton, textes=["C17.550/Etiquette 55 x 83 mm."])), False, 0, "carton", 842400)
+check("842 400 « cartons » de 17 550 : stock en étiquettes, prix à l'étiquette",
+      r and round(r["prix"] * 842400, 2), 2181.82)
+mille = dict(cua="11", ua_libelle="Mille", ua_nombre=1000.0, nature="Commande")
+check("produit au carton vendu au mille : « Carton de 10 bobines soit 3.000 étiq. »",
+      pa.prix_achat(achat(pun=4.97, textes=["Carton de 10 bobines soit 3.000 étiq."], **mille), False, 0, "carton", 100)["prix"], 14.91)
+check("produit en bobine vendu au mille : « Bobine de 10.000 étiquettes »",
+      pa.prix_achat(achat(pun=1.2, textes=["Bobine de 10.000 étiquettes"], **mille), False, 0, "bobine", 108)["prix"], 12.0)
+check("refus : produit au carton vendu au mille sans nombre par carton",
+      pa.prix_achat(achat(pun=4.97, **mille), False, 0, "carton", 100), None)
+check("unité abrégée : « B 100 F » = « bobine 100 feuille »", pa.meme_unite("B 100 F", "bobine 100 feuille"), True)
+check("contenants équivalents : boite = carton", pa.meme_unite("Boite", "carton"), True)
+check("unités différentes : bobine ≠ carton", pa.meme_unite("Bobine", "carton"), False)
+check("référence sans barre : « 10770035 »", pa.cle_reference("10770035"), "1077/0035")
+t = pa.prix_achat(achat(pun=14.41, nature="Tarif", numero=None, date="2026-07-30"), True, 0)
+check("tarif : source sans numéro", t and t["source"], "Tarif RVGI · 30/07/2026")
+check("tarif : origine", t and t["origine"], "tarif_rvgi")
 check("refus : produit en bobine vendu au carton",
       pa.prix_achat(achat(pun=44.9, **carton), False, 0, "bobine", 10), None)
 check("produit à l'unité acheté à l'unité", pa.prix_achat(achat(pun=4.5, cua="U", ua_libelle="Unité", ua_nombre=1.0), False, 0)["prix"], 4.5)
