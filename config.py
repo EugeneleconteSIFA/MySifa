@@ -364,6 +364,11 @@ def categorie_prix_direct(categorie):
     """Le prix unitaire de cette catégorie se saisit-il dans MyStock ?"""
     return (categorie or "").strip().lower() in STOCK_CATEGORIES_PRIX_DIRECT
 
+
+# Transport d'un produit fini importé, ajouté à son prix de valorisation sur
+# demande (bouton de la ligne) : transport = prix HT / diviseur. 9 → 1/9e.
+PF_TRANSPORT_IMPORT_DIVISEUR = float(os.getenv("PF_TRANSPORT_IMPORT_DIVISEUR", "9"))
+
 # Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
 # métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
 # minute) : le déstockage refuse de s'en servir, les écrans affichent « erreur

@@ -11041,7 +11041,7 @@ async function mpReactiverMatiere(x) {
   window.__mpBulles = true;
   // .val-mp-table : tableau des matières de la valorisation (actions en icônes,
   // l'infobulle native y arrivait tard et sans le style MySifa).
-  const PORTEE = '.mp-detail, .hist-page, .mp-modal, .val-mp-table';
+  const PORTEE = '.mp-detail, .hist-page, .mp-modal, .val-mp-table, .val-pf-table';
   let bulle = null;
   let cible = null;
   const cacher = () => { if (bulle) bulle.classList.remove('on'); cible = null; };
@@ -26293,7 +26293,22 @@ function buildValorisationPFTableRow(item) {
   if (!item.has_price) {
     tdPrix.appendChild(el('div', { style: 'font-size:10px;color:#fb923c;font-weight:700;margin-top:3px' }, 'Sans prix'));
   } else if (item.source_prix) {
-    tdPrix.appendChild(el('div', { style: 'font-size:10px;color:var(--muted);margin-top:3px' }, item.source_prix));
+    // Sous-traitance : prix de la dernière commande d'achat RVGI, faute de
+    // prix dans les commandes. Fournisseur et conversion au survol.
+    const achat = item.prix_origine === 'achat_rvgi';
+    const titre = achat
+      ? [item.achat_fournisseur, item.achat_detail].filter(Boolean).join(' · ')
+      : null;
+    tdPrix.appendChild(el('div', {
+      style: 'font-size:10px;margin-top:3px;color:' + (achat ? 'var(--accent)' : 'var(--muted)'),
+      title: titre || null,
+    }, item.source_prix));
+  }
+  // Transport d'un produit importé : ajouté au prix, il est nommé à part.
+  if (item.transport_import && Number(item.transport_ht) > 0) {
+    tdPrix.appendChild(el('div', { style: 'font-size:10px;margin-top:2px;color:var(--text2);font-variant-numeric:tabular-nums' },
+      '+ transport ' + (item.transport_part || '') + ' : ' + valFormatPrixDetail(item.transport_ht)
+      + ' → ' + valFormatPrixDetail(item.prix_avec_transport) + ' € HT/' + prixUniteLabel));
   }
 
   // Valorisation
@@ -26320,7 +26335,21 @@ function buildValorisationPFTableRow(item) {
     on: { click: () => openPFHistorique(item.id) },
   });
   histBtn.appendChild(iconEl('clock', 14));
-  const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
+  // Transport d'un produit importé : bascule, pleine quand il est ajouté.
+  const transportActif = !!item.transport_import;
+  const part = item.transport_part || '';
+  const transportBtn = valBoutonIcone('truck',
+    transportActif
+      ? 'Transport ajouté (' + part + ' du prix HT). Cliquer pour le retirer.'
+      : (item.has_price ? 'Ajouter le prix du transport (' + part + ' du prix HT) — produit importé'
+                        : 'Pas de prix : rien sur quoi calculer le transport'),
+    transportActif ? 'white' : 'var(--text2)',
+    transportActif ? 'var(--accent)' : 'var(--border)',
+    transportActif ? 'var(--accent)' : 'var(--card)',
+    () => valBasculerTransportPF(item));
+  if (!item.has_price && !transportActif) { transportBtn.disabled = true; transportBtn.style.opacity = '.4'; transportBtn.style.cursor = 'default'; }
+  const tdHist = el('td', { style: 'padding:10px 12px;text-align:right;white-space:nowrap' },
+    el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, transportBtn, histBtn));
 
   tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal);
   if (tdCharges) tr.append(tdCharges);
@@ -26328,10 +26357,25 @@ function buildValorisationPFTableRow(item) {
   return tr;
 }
 
+async function valBasculerTransportPF(item) {
+  const voulu = !item.transport_import;
+  try {
+    await api('/api/stock/valorisation/pf/' + item.id + '/transport', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transport: voulu }),
+    });
+    showToast(voulu ? 'Transport ajouté.' : 'Transport retiré.', 'success');
+    await loadValorisationPF();
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+  }
+}
+
 function buildValorisationPFTable() {
   const pf = valPFEnsureState();
   const rows = pfFilteredItems();
-  const wrap = el('div', { style:
+  const wrap = el('div', { cls: 'val-pf-table', style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
   const tableWrap = el('div', { style: 'overflow-x:auto' });
@@ -26360,7 +26404,7 @@ function buildValorisationPFTable() {
       el('th', { style: thStyleR + ';color:#16a34a', on: { click: () => valTogglePFSort('charges_prod') }, title: 'Charge de production + frais de stockage appliqués à la valorisation' }, 'Dont charges de prod.' + arrow('charges_prod')),
     );
   }
-  headerCells.push(el('th', { style: thStyleC }, 'Historique'));
+  headerCells.push(el('th', { style: thStyleC + ';width:1%;text-align:right' }, 'Actions'));
   const thead = el('thead', null, el('tr', null, ...headerCells));
   const emptyColspan = canSeeChargesCol ? '8' : '7';
 
