@@ -10019,9 +10019,27 @@ def get_valorisation_cloture(request: Request, date: str | None = None):
     if not snapshot_date:
         raise HTTPException(400, "Date de clôture obligatoire (AAAA-MM-JJ, passée).")
     with get_db() as conn:
+        mouvements = _valo_cloture.candidats(conn, snapshot_date)
+        # Stock reconstitué au soir de la clôture, SANS les rattachements : une
+        # correction dont l'écart le dépasse porte sur du stock entré après la
+        # date, et l'écran le signale avant qu'on la rattache.
+        stock_pf = _pf_stock_snapshot_at_date(conn, snapshot_date)
+        stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
+        for m in mouvements:
+            parts = (m.get("cle_stock") or "").split(":")
+            try:
+                if parts[0] == "pf":
+                    q = stock_pf.get(int(parts[1]), 0.0)
+                elif parts[0] == "mp" and parts[2]:
+                    q = stock_l.get((int(parts[1]), int(parts[2])), 0.0)
+                else:
+                    q = stock_nl.get(int(parts[1]), 0.0)
+            except (IndexError, ValueError):
+                q = None
+            m["stock_soir"] = round(float(q), 4) if q is not None else None
         return {
             "cloture": _valo_cloture.lire(conn, snapshot_date),
-            "mouvements": _valo_cloture.candidats(conn, snapshot_date),
+            "mouvements": mouvements,
         }
 
 
@@ -10788,7 +10806,11 @@ def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) 
         except (TypeError, ValueError, KeyError):
             continue
         new_qte = float(stock_pf.get(pid, it.get("quantite") or 0))
-        new_prix = float(prix_map[pid]) if pid in prix_map else float(it.get("prix_unitaire_ht") or 0)
+        # Même plancher que les matières : une correction rattachée à la
+        # clôture qui dépasse le stock du soir (stock entré après la date)
+        # amène la ligne à zéro, elle ne retranche rien de la valeur.
+        new_qte = max(0.0, new_qte)
+        new_prix =float(prix_map[pid]) if pid in prix_map else float(it.get("prix_unitaire_ht") or 0)
         divisor = 1000.0 if it.get("par_mille") else 1.0
         transport = bool(it.get("transport_import")) and new_prix > 0
         prix_effectif = _pf_prix_avec_transport(new_prix, transport)

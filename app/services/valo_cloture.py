@@ -151,7 +151,7 @@ def candidats(conn, date_cloture: str) -> list[dict]:
     out: list[dict] = []
     mp = conn.execute(
         """SELECT m.id, m.created_at, m.type_mouvement, m.quantite_avant, m.quantite_apres,
-                  m.note, m.created_by_name, m.unite_saisie,
+                  m.note, m.created_by_name, m.unite_saisie, m.matiere_id, m.laize_id,
                   mp.reference, mp.designation, mp.categorie, l.label AS laize
            FROM mp_mouvements m
            LEFT JOIN matieres_premieres mp ON mp.id = m.matiere_id
@@ -161,11 +161,12 @@ def candidats(conn, date_cloture: str) -> list[dict]:
         (fin,),
     ).fetchall()
     for r in mp:
-        out.append(_ligne("mp", r, r["laize"], r["categorie"], rattaches, date_cloture))
+        cle = f"mp:{r['matiere_id']}:{r['laize_id'] if r['laize_id'] is not None else ''}"
+        out.append(_ligne("mp", r, r["laize"], r["categorie"], rattaches, date_cloture, cle))
     exclues = " AND ".join(["COALESCE(m.note,'') NOT LIKE ?"] * (len(_NOTES_PF_ACTIVITE) + 1))
     pf = conn.execute(
         f"""SELECT m.id, m.created_at, m.type_mouvement, m.quantite_avant, m.quantite_apres,
-                   m.note, m.created_by_name, m.emplacement,
+                   m.note, m.created_by_name, m.emplacement, m.produit_id,
                    p.reference, p.designation, p.unite
             FROM mouvements_stock m
             LEFT JOIN produits p ON p.id = m.produit_id
@@ -174,11 +175,12 @@ def candidats(conn, date_cloture: str) -> list[dict]:
         (fin, *[n + "%" for n in _NOTES_PF_ACTIVITE], NOTE_CONVERSION_UNITE + "%"),
     ).fetchall()
     for r in pf:
-        out.append(_ligne("pf", r, r["emplacement"], r["unite"], rattaches, date_cloture))
+        out.append(_ligne("pf", r, r["emplacement"], r["unite"], rattaches, date_cloture,
+                          f"pf:{r['produit_id']}"))
     return out
 
 
-def _ligne(source, r, detail, complement, rattaches, date_cloture) -> dict:
+def _ligne(source, r, detail, complement, rattaches, date_cloture, cle_stock) -> dict:
     avant = float(r["quantite_avant"] or 0)
     apres = float(r["quantite_apres"] or 0)
     autre = rattaches.get((source, int(r["id"])))
@@ -198,6 +200,9 @@ def _ligne(source, r, detail, complement, rattaches, date_cloture) -> dict:
         "ecart": round(apres - avant, 4),
         "rattache": autre == date_cloture,
         "rattache_ailleurs": autre if autre and autre != date_cloture else None,
+        # Regroupe les corrections d'un même stock (produit, ou matière × laize) :
+        # l'écran compare leur somme au stock reconstitué au soir de la clôture.
+        "cle_stock": cle_stock,
     }
 
 

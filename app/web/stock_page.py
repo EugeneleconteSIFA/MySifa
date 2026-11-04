@@ -27037,6 +27037,22 @@ async function openValorisationClotureModal() {
   body.appendChild(limiteRow);
   const compteur = el('div', { style: 'font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600' });
   body.appendChild(compteur);
+  // Corrections cochées dont la somme dépasse le stock reconstitué au soir de
+  // la clôture : elles portent sur du stock entré après la date. La
+  // valorisation ramène la ligne à zéro, mais l'écart rattaché est faux.
+  const alerte = el('div', { style: 'display:none;font-size:12px;color:var(--danger);background:var(--bg);border:1px solid var(--danger);border-radius:8px;padding:8px 12px;margin-bottom:8px' });
+  body.appendChild(alerte);
+  const depassements = () => {
+    const somme = {}, stock = {};
+    for (const m of mvts) {
+      if (!m.cle_stock || m.stock_soir == null || !coche.has(m.source + ':' + m.id)) continue;
+      somme[m.cle_stock] = (somme[m.cle_stock] || 0) + (Number(m.ecart) || 0);
+      stock[m.cle_stock] = Number(m.stock_soir) || 0;
+    }
+    const out = {};
+    for (const c in somme) { if (stock[c] + somme[c] < -0.0001) out[c] = { stock: stock[c], somme: somme[c] }; }
+    return out;
+  };
   const liste = el('div');
   body.appendChild(liste);
 
@@ -27058,6 +27074,12 @@ async function openValorisationClotureModal() {
       majCompteur();
       return;
     }
+    const dep = depassements();
+    const nbDep = Object.keys(dep).length;
+    alerte.style.display = nbDep ? 'block' : 'none';
+    alerte.textContent = nbDep
+      ? nbDep + ' stock(s) passent sous zéro au ' + frDate(date) + ' avec les corrections cochées. Elles portent sur du stock entré après la clôture : à décocher, ou la ligne sera ramenée à zéro.'
+      : '';
     for (const g of groupes) {
       const lignes = g.lignes.filter(correspond);
       if (!lignes.length) continue;
@@ -27092,12 +27114,15 @@ async function openValorisationClotureModal() {
           cb.disabled = !!m.rattache_ailleurs;
           cb.addEventListener('change', () => { if (cb.checked) coche.add(k); else coche.delete(k); renderListe(); });
           const ecartCol = m.ecart > 0 ? 'var(--success)' : (m.ecart < 0 ? 'var(--danger)' : 'var(--muted)');
-          const row = el('label', { style: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;cursor:pointer' });
+          const d = coche.has(k) ? dep[m.cle_stock] : null;
+          const row = el('label', { style: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;cursor:pointer' + (d ? ';box-shadow:inset 3px 0 0 var(--danger)' : '') });
           row.appendChild(cb);
           row.appendChild(el('div', { style: 'flex:1;min-width:0' },
             el('div', { style: 'font-weight:600;color:var(--text)' }, (m.reference || '—') + (m.detail ? ' · ' + m.detail : '')),
             el('div', { style: 'color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
-              m.designation + (m.par ? ' · ' + m.par : '') + (m.rattache_ailleurs ? ' · rattaché à la clôture du ' + frDate(m.rattache_ailleurs) : ''))));
+              m.designation + (m.par ? ' · ' + m.par : '') + (m.rattache_ailleurs ? ' · rattaché à la clôture du ' + frDate(m.rattache_ailleurs) : '')),
+            d ? el('div', { style: 'color:var(--danger);font-weight:600' },
+              'Dépasse le stock du ' + frDate(date) + ' : ' + fmtQ(d.stock) + ' en stock, ' + fmtQ(d.somme) + ' rattachés') : null));
           row.appendChild(el('div', { style: 'text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums' },
             el('div', { style: 'color:var(--text2)' }, fmtQ(m.avant) + ' → ' + fmtQ(m.apres) + (m.complement && m.source === 'pf' ? ' ' + m.complement : '')),
             el('div', { style: 'font-weight:700;color:' + ecartCol }, (m.ecart > 0 ? '+' : '') + fmtQ(m.ecart))));
