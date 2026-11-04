@@ -111,15 +111,25 @@
   }
 
   var prevu = null;
+  var dernier = 0;
   function planifier() {
-    if (prevu) return;
-    // Juste avant que le navigateur peigne ce qui vient de changer.
-    prevu = requestAnimationFrame(function () {
-      prevu = null;
-      controler();
-    });
+    // Page en construction : l'écran de chargement la cache, et mesurer à chaque image
+    // la ralentirait. Le contrôle se fait à la fin de la construction.
+    if (prevu || document.readyState === 'loading') return;
+    var attente = Math.max(0, 120 - (Date.now() - dernier));
+    var lancer = function () {
+      // Juste avant que le navigateur peigne ce qui vient de changer.
+      prevu = requestAnimationFrame(function () {
+        prevu = null;
+        dernier = Date.now();
+        controler();
+      });
+    };
+    if (attente) { prevu = -1; setTimeout(function () { prevu = null; lancer(); }, attente); }
+    else lancer();
   }
 
   new MutationObserver(planifier).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('DOMContentLoaded', planifier);
   window.addEventListener('resize', planifier);
 })();

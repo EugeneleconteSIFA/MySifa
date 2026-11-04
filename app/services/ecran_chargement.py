@@ -9,8 +9,11 @@ page : `main.py` le pose partout.
 Quand il s'affiche, sous 900 px seulement :
 
 - à l'ouverture de l'app ou à un rechargement : tout de suite ;
-- en passant d'une appli à l'autre : après 250 ms, pour ne pas clignoter quand la
-  page est rapide. En attendant, le fond a déjà la couleur du thème, jamais blanc.
+- en passant d'une appli à l'autre : dès le toucher (tuile, bouton Accueil, lien),
+  sur la page qu'on quitte, puis tout de suite sur la suivante. Sinon, rien ne bouge
+  entre le toucher et la réponse du serveur, et l'app paraît ne pas avoir réagi ;
+- pour une navigation qu'on n'a pas vu partir : après 250 ms, pour ne pas clignoter
+  quand la page est rapide. En attendant, le fond a déjà la couleur du thème.
 
 Les changements d'onglet et les actualisations ne rechargent pas la page : ils ne
 passent pas par ici. Au bout de 10 s, il propose de réessayer ; au bout de 20 s, il
@@ -80,11 +83,13 @@ _STYLE = (
     "#msf-charge .w{font-size:min(11vw,44px);font-weight:800;letter-spacing:-.037em;line-height:1;color:var(--c-x)}"
     "#msf-charge .w span{color:var(--c-a)}"
     "#msf-charge .tr{position:relative;width:min(30vw,120px);height:4px;border-radius:2px;background:var(--c-l);overflow:hidden}"
-    "#msf-charge .tr i{position:absolute;top:0;bottom:0;left:-36%;width:36%;border-radius:2px;background:var(--c-a);"
-    "animation:msf-charge-barre 1.25s ease-in-out infinite}"
-    "@keyframes msf-charge-barre{0%{left:-36%}100%{left:100%}}"
-    "html.perf-eco #msf-charge .tr i,html.reduce-anim #msf-charge .tr i{animation:none;left:32%}"
-    "@media (prefers-reduced-motion:reduce){#msf-charge .tr i{animation:none;left:32%}}"
+    # transform et pas left : l'animation tourne hors du fil principal, elle reste fluide
+    # pendant que la page lit son code, ce qui est justement le moment où on la voit.
+    "#msf-charge .tr i{position:absolute;top:0;bottom:0;left:0;width:36%;border-radius:2px;background:var(--c-a);"
+    "transform:translateX(-100%);will-change:transform;animation:msf-charge-barre 1.25s ease-in-out infinite}"
+    "@keyframes msf-charge-barre{from{transform:translateX(-100%)}to{transform:translateX(278%)}}"
+    "html.perf-eco #msf-charge .tr i,html.reduce-anim #msf-charge .tr i{animation:none;transform:translateX(90%)}"
+    "@media (prefers-reduced-motion:reduce){#msf-charge .tr i{animation:none;transform:translateX(90%)}}"
     "#msf-charge .lent{position:absolute;left:24px;right:24px;bottom:max(64px,env(safe-area-inset-bottom,0px));"
     "display:flex;flex-direction:column;align-items:center;gap:12px;font-size:14px;text-align:center;color:var(--c-x)}"
     "#msf-charge .lent[hidden]{display:none}"
@@ -114,19 +119,37 @@ h.appendChild(el);}
 function masquer(){if(fini)return;fini=true;clearInterval(v);clearTimeout(a);h.style.backgroundColor='';
 if(el){el.classList.add('fin');var e=el;setTimeout(function(){e.remove();},200);}}
 var nav=performance.getEntriesByType&&performance.getEntriesByType('navigation')[0];
-var interne=false;try{interne=!!document.referrer&&new URL(document.referrer).origin===location.origin&&(!nav||nav.type==='navigate');}catch(e){}
+var interne=false;try{interne=!!document.referrer&&new URL(document.referrer).origin===location.origin&&(!nav||nav.type==='navigate');
+var t=sessionStorage.getItem('msf_charge_nav');if(t&&Date.now()-t<6000)interne=false;sessionStorage.removeItem('msf_charge_nav');}catch(e){}
 var a=setTimeout(montrer,interne?250:0);if(!interne)montrer();
 addEventListener('load',function(){charge=true;});
 var v=setInterval(function(){if(pret())masquer();},50);
 setTimeout(function(){if(!fini&&el)el.querySelector('.lent').hidden=false;},10000);
 setTimeout(masquer,20000);
 addEventListener('pageshow',function(e){if(e.persisted)masquer();});
+// Toucher qui va changer de page : l'écran part de la page qu'on quitte.
+function quitte(n){if(n.closest('.portal-app--busy,.portal-app--disabled,.portal-app--placeholder'))return false;
+try{if(typeof _portalDragSuppressClick!=='undefined'&&_portalDragSuppressClick)return false;}catch(e){}
+if(n.matches('a[href]')){if(n.hasAttribute('download')||(n.target&&n.target!=='_self'))return false;
+var u=new URL(n.href,location.href);return u.origin===location.origin&&(u.protocol==='http:'||u.protocol==='https:')&&(u.pathname!==location.pathname)&&u.pathname.indexOf('/api/')!==0;}
+if(n.matches('.mobile-home-btn'))return location.pathname!=='/';
+return true;}
+// Après les gestionnaires de la page : un lien repris par son routeur (MyCoûts, ERP)
+// a annulé le clic, et ne change pas de page.
+document.addEventListener('click',function(e){if(e.defaultPrevented&&!(e.target.closest&&e.target.closest('.portal-app,.mobile-home-btn')))return;
+var n=e.target.closest&&e.target.closest('a[href],.mobile-home-btn,.portal-app[data-portal-id],.portal-vol-item,.portal-atraiter .msf-row,.portal-mach,[onclick*="location.href"]');
+if(!n||!quitte(n))return;if(n.closest('.portal-apps-block--glisse'))return;
+try{sessionStorage.setItem('msf_charge_nav',String(Date.now()));}catch(err){}
+fini=false;el=null;h.style.backgroundColor=c.bg;montrer();
+// La page n'a finalement pas changé : l'écran ne reste pas.
+setTimeout(masquer,8000);});
 })();"""
 
 
 # Écrans d'iPhone : (largeur, hauteur, densité). iOS ne prend l'image que si la taille
 # correspond exactement ; les images sont dans static/demarrage/, en clair et en sombre.
-# iOS ne connaît pas la palette à ce stade : elles sont aux couleurs par défaut.
+# iOS ne connaît pas la palette à ce stade : elles sont neutres (logo d'une seule teinte,
+# sans dégradé), pour ne pas annoncer un thème qui n'est pas forcément celui de la personne.
 _IPHONES = (
     (320, 568, 2), (375, 667, 2), (414, 736, 3), (375, 812, 3), (414, 896, 2), (414, 896, 3),
     (360, 780, 3), (390, 844, 3), (393, 852, 3), (428, 926, 3), (430, 932, 3), (402, 874, 3),
@@ -146,7 +169,7 @@ def images_demarrage() -> bytes:
         for nom, mode in (("clair", "light"), ("sombre", "dark")):
             balises.append(
                 f'<link rel="apple-touch-startup-image" media="{ecran} and (prefers-color-scheme:{mode})" '
-                f'href="/static/demarrage/{w * r}x{h * r}_{nom}.png">'
+                f'href="/static/demarrage/{w * r}x{h * r}_{nom}.png?v=2">'
             )
     return "".join(balises).encode("utf-8")
 
