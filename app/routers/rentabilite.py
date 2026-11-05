@@ -43,6 +43,7 @@ from config import (
     DEVIS_EXTENSIONS_ACCEPTEES,
     DEVIS_MAX_FILE_MB,
     DEVIS_UPLOAD_DIR,
+    DEVIS_VITESSE_PART_CONDUCTEUR,
     ROLES_ADMIN,
 )
 
@@ -186,8 +187,12 @@ def _calage_theorique(devis_row) -> float:
             + _colonne(devis_row, "temps_calage_impression_mn"))
 
 
-def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> dict:
-    """Calcule la comparaison devis vs réel pour une liste de no_dossier (production_data)."""
+def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str],
+                                  part_vitesse: Optional[float] = None) -> dict:
+    """Calcule la comparaison devis vs réel pour une liste de no_dossier (production_data).
+
+    `part_vitesse` : part de la vitesse conducteur que vaut le devis sur la
+    machine du dossier (`part_vitesse_machine`) ; à défaut, celle de config."""
     d = devis_row
     no_dossiers = [str(x).strip() for x in (no_dossiers or []) if str(x or "").strip()]
     if not no_dossiers:
@@ -264,7 +269,7 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
         "qte_etiquettes":       d["qte_etiquettes"],
         # Vitesse conducteur, pas celle du classeur : le devis chiffre une
         # vitesse moyenne (voir `DEVIS_VITESSE_PART_CONDUCTEUR`).
-        "vitesse":              vitesse_conducteur(d["vitesse_theorique"]),
+        "vitesse":              vitesse_conducteur(d["vitesse_theorique"], part_vitesse),
         "vitesse_devis":        d["vitesse_theorique"],
         "vitesse_avec_calage":  round(vitesse_theo_avec_calage, 2),
     }
@@ -402,6 +407,8 @@ def list_planning_entries(request: Request):
               m.nom AS machine_nom,
               m.code AS machine_code,
               COALESCE(m.rent_suivi_devis, 1) AS machine_suivi_devis,
+              -- NULL = la machine suit la part par défaut de config.py.
+              m.rent_part_vitesse_devis AS machine_part_vitesse_devis,
               o.qte_etiquettes   AS of_qte_etiquettes,
               o.qte_bobines      AS of_qte_bobines,
               o.metrage          AS of_metrage,
@@ -435,7 +442,8 @@ def list_planning_entries(request: Request):
             ORDER BY m.nom ASC, e.position ASC
             """
         ).fetchall()
-    return [dict(r) for r in rows]
+    defaut = DEVIS_VITESSE_PART_CONDUCTEUR
+    return [{**dict(r), "part_vitesse_devis_defaut": defaut} for r in rows]
 
 
 @router.get("/api/rentabilite/links")
@@ -464,6 +472,13 @@ def list_links(request: Request):
             "SELECT planning_entry_id, no_dossier FROM rent_prod_links "
             "ORDER BY planning_entry_id, no_dossier"
         ).fetchall()
+        # Part de vitesse de la machine de chaque dossier : la vitesse
+        # théorique d'un même devis dépend de la machine qui le produit.
+        from app.services.calage_cloture import part_vitesse_machine, vitesse_conducteur
+        machine_entree = {int(r["id"]): r["machine_id"] for r in conn.execute(
+            "SELECT e.id, e.machine_id FROM planning_entries e "
+            "JOIN rent_links l ON l.planning_entry_id = e.id").fetchall()}
+        parts = {mid: part_vitesse_machine(conn, mid) for mid in set(machine_entree.values())}
 
     par_entree: dict[int, dict] = {}
     for r in liens:
@@ -484,7 +499,6 @@ def list_links(request: Request):
     for d in devis_lies:
         par_devis[int(d["id"])] = {
             "client": _texte(d, "client", ""),
-            "vitesse": vitesse_conducteur(_colonne(d, "vitesse_theorique")),
             "vitesse_devis": _colonne(d, "vitesse_theorique"),
             # Même règle que partout ailleurs dans cet écran : le calage
             # devisé additionne outil et impression, parce que le calage saisi
@@ -495,8 +509,11 @@ def list_links(request: Request):
         }
     for r in liens:
         e = par_entree.get(int(r["planning_entry_id"]))
-        if e and e["devis_id"]:
-            e["devis"] = par_devis.get(int(e["devis_id"]))
+        if e and e["devis_id"] and int(e["devis_id"]) in par_devis:
+            dv = dict(par_devis[int(e["devis_id"])])
+            part = parts.get(machine_entree.get(int(r["planning_entry_id"])))
+            dv["vitesse"] = vitesse_conducteur(dv["vitesse_devis"], part)
+            e["devis"] = dv
 
     for r in prods:
         eid = int(r["planning_entry_id"])
@@ -936,7 +953,9 @@ def _comparaison_planning(conn, planning_entry_id: int,
     ).fetchall()
     no_dossiers = [r["no_dossier"] for r in prod] or list(dossiers_si_aucun_lien or [])
     etat = _palier_du_lien(conn, planning_entry_id, d, _qte_of(conn, planning_entry_id))
-    res = _comparaison_from_no_dossiers(conn, etat["devis"], no_dossiers)
+    from app.services.calage_cloture import part_vitesse_entree
+    res = _comparaison_from_no_dossiers(conn, etat["devis"], no_dossiers,
+                                        part_vitesse_entree(conn, planning_entry_id))
     # Le devis d'origine reste exposé tel quel : l'écran doit pouvoir dire
     # « le classeur chiffrait 500 000, on compare sur 1 000 000 ».
     res["palier"] = etat["palier"]
@@ -1408,6 +1427,32 @@ async def basculer_suivi_devis(machine_id: int, request: Request):
     return {"success": True, "suivi": suivi}
 
 
+@router.put("/api/rentabilite/machines/{machine_id}/part-vitesse-devis")
+async def regler_part_vitesse_devis(machine_id: int, request: Request):
+    """Part de la vitesse conducteur que vaut la vitesse du devis sur cette
+    machine (0,8 = le devis vaut 80 %). `part` null remet la valeur par
+    défaut de config.py."""
+    require_rentabilite(request)
+    from app.services.calage_cloture import part_valide
+    body = await request.json()
+    brut = body.get("part")
+    part = None
+    if brut not in (None, ""):
+        part = part_valide(brut)
+        if part is None:
+            raise HTTPException(400, "Part invalide — valeur entre 30 et 100 %.")
+    with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
+        if "rent_part_vitesse_devis" not in cols:
+            raise HTTPException(409, "Migration machines_part_vitesse_devis non appliquée.")
+        cur = conn.execute("UPDATE machines SET rent_part_vitesse_devis=? WHERE id=?",
+                           (part, machine_id))
+        if not cur.rowcount:
+            raise HTTPException(404, "Machine introuvable.")
+        conn.commit()
+    return {"success": True, "part": part, "defaut": DEVIS_VITESSE_PART_CONDUCTEUR}
+
+
 @router.post("/api/rentabilite/devis/{devis_id}/valider")
 def valider_devis(devis_id: int, request: Request):
     """Quelqu'un a relu le devis tel qu'il est lu : le doute est levé.
@@ -1491,7 +1536,13 @@ def comparaison(devis_id: int, request: Request):
             return {"devis": dict(d), "reel": None,
                     "message": "Aucun dossier lié à ce devis"}
 
-        return _comparaison_from_no_dossiers(conn, d, no_dossiers)
+        # La machine du devis : celle du dossier au planning qui le porte.
+        from app.services.calage_cloture import part_vitesse_entree
+        lien = conn.execute(
+            "SELECT planning_entry_id FROM rent_links WHERE devis_id=? "
+            "ORDER BY planning_entry_id DESC LIMIT 1", (devis_id,)).fetchone()
+        part = part_vitesse_entree(conn, lien["planning_entry_id"] if lien else None)
+        return _comparaison_from_no_dossiers(conn, d, no_dossiers, part)
 
 
 # ══════════════════════════════════════════════════════════════════

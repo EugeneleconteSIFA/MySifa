@@ -572,16 +572,51 @@ def prevu_devis(conn, no_dossier: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def vitesse_conducteur(vitesse_devis) -> float:
+def part_valide(part) -> Optional[float]:
+    """Une part de vitesse acceptable (0,3 a 1), sinon None."""
+    try:
+        p = float(part)
+    except (TypeError, ValueError):
+        return None
+    return p if 0.3 <= p <= 1.0 else None
+
+
+def part_vitesse_machine(conn, machine_id) -> float:
+    """Part de la vitesse conducteur que represente le devis sur cette
+    machine (`machines.rent_part_vitesse_devis`), ou la valeur par defaut de
+    `config.py` quand la machine n'est pas reglee ou inconnue."""
+    defaut = part_valide(DEVIS_VITESSE_PART_CONDUCTEUR) or 1.0
+    if not machine_id:
+        return defaut
+    try:
+        row = conn.execute("SELECT rent_part_vitesse_devis AS p FROM machines WHERE id=?",
+                           (int(machine_id),)).fetchone()
+    except Exception:
+        return defaut
+    return (part_valide(row["p"]) if row and row["p"] is not None else None) or defaut
+
+
+def part_vitesse_entree(conn, planning_entry_id) -> float:
+    """La part de la machine d'un dossier au planning."""
+    mid = None
+    if planning_entry_id:
+        row = conn.execute("SELECT machine_id FROM planning_entries WHERE id=?",
+                           (planning_entry_id,)).fetchone()
+        mid = row["machine_id"] if row else None
+    return part_vitesse_machine(conn, mid)
+
+
+def vitesse_conducteur(vitesse_devis, part: Optional[float] = None) -> float:
     """Vitesse theorique a comparer au reel : celle du devis ramenee a la
-    vitesse que regle le conducteur (`DEVIS_VITESSE_PART_CONDUCTEUR`). 0 quand
-    le devis ne chiffre pas de vitesse."""
+    vitesse que regle le conducteur (`part`, celle de la machine ; a defaut
+    `DEVIS_VITESSE_PART_CONDUCTEUR`). 0 quand le devis ne chiffre pas de
+    vitesse."""
     try:
         v = float(vitesse_devis or 0)
     except (TypeError, ValueError):
         return 0.0
-    part = DEVIS_VITESSE_PART_CONDUCTEUR if DEVIS_VITESSE_PART_CONDUCTEUR > 0 else 1.0
-    return round(v / part, 1) if v > 0 else 0.0
+    p = part_valide(part) or part_valide(DEVIS_VITESSE_PART_CONDUCTEUR) or 1.0
+    return round(v / p, 1) if v > 0 else 0.0
 
 
 def _fr_metres(v) -> str:
@@ -651,13 +686,16 @@ def devis_saisie(conn, planning_entry_id, no_dossier: str = "") -> Optional[Dict
         d = conn.execute(
             """SELECT d.* FROM rent_links l JOIN devis d ON d.id = l.devis_id
                 WHERE l.planning_entry_id = ? LIMIT 1""", (planning_entry_id,)).fetchone()
+    entree = planning_entry_id
     if d is None and no_dossier and _table_existe(conn, "rent_prod_links"):
         d = conn.execute(
-            """SELECT d.* FROM rent_prod_links p
+            """SELECT d.*, p.planning_entry_id AS _entree FROM rent_prod_links p
                  JOIN rent_links l ON l.planning_entry_id = p.planning_entry_id
                  JOIN devis d ON d.id = l.devis_id
                 WHERE trim(p.no_dossier) = trim(?)
                 ORDER BY p.planning_entry_id DESC LIMIT 1""", (no_dossier,)).fetchone()
+        if d is not None:
+            entree = d["_entree"]
     if d is None:
         return None
     cols = set(d.keys())
@@ -668,7 +706,7 @@ def devis_saisie(conn, planning_entry_id, no_dossier: str = "") -> Optional[Dict
         except (TypeError, ValueError):
             return 0.0
 
-    vitesse = vitesse_conducteur(v("vitesse_theorique"))
+    vitesse = vitesse_conducteur(v("vitesse_theorique"), part_vitesse_entree(conn, entree))
     calage = v("temps_calage_mn") + v("temps_calage_impression_mn")
     if vitesse <= 0 and calage <= 0:
         return None
