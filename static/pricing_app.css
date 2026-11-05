@@ -1150,6 +1150,14 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
   color:var(--text);text-transform:none;letter-spacing:0}
 .set-marge span{flex:1}
 .set-marge input{width:84px}
+/* Téléphone : libellé au-dessus, deux colonnes égales. À côté, un libellé long comme
+   « Complexe » passait à la ligne et les champs ne s'alignaient plus. */
+@media (max-width:900px){
+  .set-marges{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .set-marge{flex-direction:column;align-items:stretch;gap:5px}
+  .set-marge span{flex:none}
+  .set-marge input{width:100%}
+}
 /* Le récapitulatif collant d'une fiche produit passait sous le bandeau
    d'enregistrement, fixé en haut : il se cale dessous. */
 .savebar-spacer ~ .form-grid .side-panel{top:96px}

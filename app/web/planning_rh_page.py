@@ -558,6 +558,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   .rh-section.print-target{display:block!important}
   .rh-section-hdr .rh-icon-btn{display:none!important}
   .print-header{display:block!important;margin-bottom:8px;font-size:12px;font-weight:800}
+  #rh-content.rh-impr-planning>*:not(.rh-print-pivot-wrap){display:none!important}
   .rh-print-pivot-wrap{display:block}
   .rh-print-header{font-size:14px;font-weight:800;margin-bottom:12px}
   .rh-pivot-table{border-collapse:collapse;width:100%;margin-bottom:16px}
@@ -567,6 +568,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   @page{margin:0.5cm;size:A4 landscape}
 }
 .print-header{display:none}
+@media screen{.rh-print-pivot-wrap{display:none}}
 .rh-cell-print-detail{display:none} /* visible uniquement en impression */
 
 /* ── Topbar mobile : titre + barre d'outils ───────────── */
@@ -670,6 +672,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/planning_rh_url.js?v=1"></script>
+<script src="/static/planning_rh_impression.js?v=1"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -2826,13 +2829,25 @@ window.addEventListener('resize',()=>{
 function printPlanning(){
   const c=document.getElementById('rh-content');
   if(!c)return;
-  const originalChildren=Array.from(c.childNodes);
-  originalChildren.forEach(n=>n.style&&(n.style.display='none'));
   const printLayout=buildPrintPivotLayout();
+  // L'application installée sur iPhone ignore window.print() : voir planning_rh_impression.js.
+  if(window.RhImpression&&RhImpression.estPwaIos()){
+    const weeks=getWeeksToShow();
+    const num=w=>w.split('W')[1];
+    const nom='Planning-RH-S'+num(weeks[0])+(weeks.length>1?'-S'+num(weeks[weeks.length-1]):'')+'.pdf';
+    RhImpression.versPdf(printLayout,nom,toast);
+    return;
+  }
+  // Sur téléphone window.print() rend la main avant que la fenêtre d'impression ne lise la
+  // page : le document reste en place jusqu'à afterprint, invisible à l'écran (@media screen).
+  c.querySelectorAll(':scope>.rh-print-pivot-wrap').forEach(n=>n.remove());
+  c.classList.add('rh-impr-planning');
   c.appendChild(printLayout);
+  window.addEventListener('afterprint',()=>{
+    printLayout.remove();
+    c.classList.remove('rh-impr-planning');
+  },{once:true});
   window.print();
-  printLayout.remove();
-  originalChildren.forEach(n=>n.style&&(n.style.display=''));
 }
 
 function fmtWeekLabelPrint(ws){
@@ -3227,6 +3242,12 @@ function userCongesThisWeekForUser(userId,ws){
 function printConges(){
   document.querySelectorAll('.rh-section').forEach(s=>s.classList.remove('print-target'));
   document.querySelectorAll('.rh-conges-wrap .rh-section').forEach(s=>s.classList.add('print-target'));
+  if(window.RhImpression&&RhImpression.estPwaIos()){
+    const copie=document.createElement('div');
+    document.querySelectorAll('.rh-conges-wrap .rh-section').forEach(s=>copie.appendChild(s.cloneNode(true)));
+    RhImpression.versPdf(copie,'Conges-'+S.annee+'.pdf',toast,true);
+    return;
+  }
   window.print();
 }
 

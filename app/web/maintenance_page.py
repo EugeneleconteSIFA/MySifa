@@ -227,6 +227,23 @@ body.sb-open .sidebar-overlay{display:block}
 
 /* Filtres en bandeau — style aligné sur MyProd / Production */
 .filters-panel{margin-bottom:18px}
+.filters-bascule{display:none}
+/* Téléphone : six champs empilés prenaient tout l'écran avant le premier résultat. Le
+   panneau se replie derrière un bouton, et ses champs vont par deux une fois ouvert. */
+@media(max-width:900px){
+  .filters-bascule{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:44px;padding:0 14px;
+    background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+  .filters-bascule-n{min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:var(--accent);color:var(--accent-fg,var(--bg));
+    font-size:12px;line-height:22px;text-align:center}
+  .filters-bascule-n:empty{display:none}
+  .filters-bascule-g{display:flex;align-items:center;gap:8px}
+  .filters-bascule svg{transition:transform .15s}
+  .filters-panel.ouvert .filters-bascule svg{transform:rotate(180deg)}
+  .filters-panel:not(.ouvert)>:not(.filters-bascule){display:none!important}
+  .filters-panel.ouvert>.filters{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .filters-panel.ouvert>.filters .filter-group{min-width:0;flex:none}
+  .filters-panel.ouvert>.filters .filters-apply-btn{grid-column:1 / -1}
+}
 .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
 .filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
@@ -14983,6 +15000,48 @@ function switchMaintView(view) {
   if (!isRec && typeof loadLibres === 'function') loadLibres();
 }
 
+
+// Filtres repliables sur téléphone : le bouton dit combien sont actifs.
+(function(){
+  function compter(panel){
+    let n=0,dates=false;
+    panel.querySelectorAll('select,input').forEach(c=>{
+      if(c.type==='checkbox'||c.type==='radio'){return;}
+      const v=(c.value||'').trim();
+      if(!v||v==='all')return;
+      if(c.type==='date'){if(!dates){dates=true;n++;}return;}
+      n++;
+    });
+    return n;
+  }
+  function brancher(panel){
+    if(panel.querySelector(':scope > .filters-bascule'))return;
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='filters-bascule';
+    b.setAttribute('aria-expanded','false');
+    b.innerHTML='<span class="filters-bascule-g">Filtres<span class="filters-bascule-n"></span></span>'+
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+    const n=b.querySelector('.filters-bascule-n');
+    const maj=()=>{const k=compter(panel);n.textContent=k?String(k):'';};
+    b.addEventListener('click',()=>{
+      const o=panel.classList.toggle('ouvert');
+      b.setAttribute('aria-expanded',o?'true':'false');
+    });
+    panel.addEventListener('change',maj);
+    panel.addEventListener('click',e=>{
+      // « Filtrer » a fait son travail : la liste redevient visible.
+      if(e.target.closest('.filters-apply-btn')){panel.classList.remove('ouvert');b.setAttribute('aria-expanded','false');}
+      setTimeout(maj,0);
+    });
+    panel.insertBefore(b,panel.firstChild);
+    maj();
+  }
+  function tout(){document.querySelectorAll('.filters-panel').forEach(brancher);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',tout);else tout();
+  // Les filtres relus depuis l'adresse sont posés après le démarrage de la page.
+  setTimeout(()=>document.querySelectorAll('.filters-panel').forEach(p=>p.dispatchEvent(new Event('change'))),1500);
+})();
 </script>
 
 </body>

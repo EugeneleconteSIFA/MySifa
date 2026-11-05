@@ -22,7 +22,9 @@
   window.__mysifaLargeurMobile = true;
 
   var ecran = window.matchMedia('(max-width: 900px)');
-  var ZONES = 'main,.main,.content,#content,.scroll-area,#root,.app,.rh-content,.prod-main-scroll';
+  // Une fenêtre de saisie est une zone comme une autre : elle ne doit pas glisser non plus.
+  var ZONES = 'main,.main,.content,#content,.scroll-area,#root,.app,.rh-content,.prod-main-scroll,' +
+    '[class*="modal"],[class*="overlay"],[class*="-ov"],[class*="-back"],[id$="-modal"]';
   // Éléments flottants et zones qui défilent déjà en largeur par construction.
   var IGNORES = '.msf-outils-feuille,.staging-bandeau,#mysifa-accueil';
 
@@ -30,6 +32,20 @@
   st.textContent =
     '@media (max-width: 900px){' +
     'html,body{overflow-x:clip}' +
+    // Sur iPhone, un champ de date impose sa largeur (le calendrier natif) et pousse tout
+    // son formulaire hors de l'écran. appearance:none et min-width:0 lèvent cette largeur.
+    'input,select,textarea{max-width:100%;box-sizing:border-box}' +
+    'input[type=date],input[type=time],input[type=datetime-local],input[type=month],input[type=week]' +
+    '{-webkit-appearance:none;appearance:none;min-width:0!important;max-width:100%;text-align:left}' +
+    'input::-webkit-date-and-time-value{text-align:left;min-height:1.2em}' +
+    ':has(>input[type=date]),:has(>input[type=time]),:has(>input[type=datetime-local]){min-width:0}' +
+    // Réunions : le width:100% des champs de la fenêtre touche aussi les cases à cocher,
+    // et les rôles ne s'alignaient plus. Deux colonnes égales, case à gauche du libellé.
+    '.reu-roles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}' +
+    '.reu-roles label{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;line-height:1.2}' +
+    '.reu-roles input[type=checkbox]{flex:0 0 20px;width:20px!important;height:20px;min-height:0;margin:0;padding:0}' +
+    // Une fenêtre ouverte passe devant la barre du haut, qui en masquait le titre.
+    'body.mysifa-dock-sous-fenetre .mobile-topbar{z-index:1!important}' +
     '.msf-defile-x{overflow-x:auto!important;max-width:100%;min-width:0;-webkit-overflow-scrolling:touch}' +
     '.msf-tableau-defile{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}' +
     '.msf-rangee-souple{flex-wrap:wrap!important;max-width:100%}' +
