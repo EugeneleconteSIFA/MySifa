@@ -40,8 +40,8 @@ html body .msb-nav .nav-btn.reu-ecouter-btn:hover{filter:brightness(1.08)}
 .mobile-topbar-title{font-size:14px;font-weight:700;color:var(--text)}
 .mobile-topbar-sub{font-size:11px;color:var(--muted)}
 
-.content{padding:28px 32px;max-width:1280px;width:100%}
-@media(max-width:768px){.content{padding:16px}}
+.content{padding:28px 32px 120px;max-width:1280px;width:100%}
+@media(max-width:768px){.content{padding:16px 16px 120px}}
 .reu-chargement{padding:40px 0;color:var(--muted);font-size:13px}
 
 /* ── Éléments communs ── */
@@ -59,11 +59,12 @@ html body .msb-nav .nav-btn.reu-ecouter-btn:hover{filter:brightness(1.08)}
 .reu-tete{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px}
 .reu-tete h1{font-size:22px;font-weight:800;letter-spacing:-.3px}
 .reu-tete p{font-size:13px;color:var(--muted);margin-top:4px}
-.reu-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:14px}
-.reu-carte h2{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.reu-label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:12px 0 6px}
+.reu-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+.reu-carte h2{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text)}
+.reu-label{display:block;font-size:13px;font-weight:600;color:var(--text2);margin:14px 0 6px}
 .reu-champ,.reu-carte input[type=text],.reu-carte input[type=date],.reu-carte select,.reu-carte textarea,.reu-modal input,.reu-modal select,.reu-modal textarea{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s}
-.reu-carte textarea,.reu-modal textarea{min-height:120px;resize:vertical;line-height:1.5}
+.reu-carte textarea,.reu-modal textarea{min-height:120px;resize:vertical;line-height:1.6}
+.reu-carte textarea.reu-auto{min-height:64px;resize:none;overflow:hidden;font-size:15px}
 .reu-champ:focus,.reu-carte input:focus,.reu-carte select:focus,.reu-carte textarea:focus,.reu-modal input:focus,.reu-modal select:focus,.reu-modal textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .reu-muet{color:var(--muted);font-size:13px}
 .reu-vide{padding:30px 16px;text-align:center;color:var(--muted);font-size:13px}
@@ -151,3 +152,44 @@ html body .msb-nav .nav-btn.reu-ecouter-btn:hover{filter:brightness(1.08)}
 @keyframes ec-clignote{50%{opacity:.25}}
 .perf-eco .ec-point,.reduce-anim .ec-point{animation:none}
 .perf-eco .ec-bouton{box-shadow:none}
+
+/* ── Avancement d'une écoute (attente → transcription → brief) ── */
+.reu-progres{width:100%;max-width:520px;margin:4px auto 0;text-align:left}
+.reu-etapes{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-bottom:8px}
+.reu-etapes .fait{color:var(--success)}
+.reu-etapes .en-cours{color:var(--accent);font-weight:700}
+.reu-progres-barre{height:10px;border-radius:999px;background:var(--border);overflow:hidden;position:relative}
+.reu-progres-barre>div{height:100%;width:0;border-radius:999px;background:var(--accent);transition:width .6s ease}
+.reu-progres-barre.indetermine>div{width:35%;animation:reu-glisse 1.4s ease-in-out infinite}
+@keyframes reu-glisse{0%{transform:translateX(-110%)}100%{transform:translateX(300%)}}
+.perf-eco .reu-progres-barre.indetermine>div,.reduce-anim .reu-progres-barre.indetermine>div{animation:none;width:100%;opacity:.45}
+.reu-progres-texte{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--text2);margin-top:8px}
+.reu-progres-texte strong{color:var(--text);font-variant-numeric:tabular-nums}
+
+/* ── Lisibilité (retour du 05/11/2026) ── */
+.reu-barre{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.reu-barre-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--text2)}
+.reu-barre .reu-enreg{margin-left:auto}
+.reu-titre{font-size:26px;font-weight:800;letter-spacing:-.4px;line-height:1.25;margin-bottom:18px;overflow-wrap:anywhere}
+.reu-carte input.reu-titre-champ,.reu-titre-champ{font-size:22px;font-weight:800;padding:10px 14px;margin-bottom:18px}
+.reu-doc{font-size:15px;line-height:1.65;color:var(--text)}
+.reu-doc p{margin:0 0 10px}
+.reu-doc p:last-child{margin-bottom:0}
+.reu-doc ul{margin:0 0 10px;padding-left:20px}
+.reu-doc li{margin-bottom:6px}
+.reu-doc li::marker{color:var(--accent)}
+.reu-action-texte{font-size:15px}
+.reu-action-meta{font-size:12px}
+
+.reu-tete-collee{position:sticky;top:0;z-index:20;background:var(--bg);display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 0 14px;margin-bottom:6px;border-bottom:1px solid var(--border)}
+.reu-tete-collee .reu-titre-champ{flex:1;min-width:240px;margin-bottom:0}
+@media(max-width:768px){.reu-tete-collee{top:68px}}
+.reu-reglages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px}
+@media(max-width:700px){.reu-reglages{grid-template-columns:1fr}}
+.reu-champ-bloc{display:block;min-width:0}
+.reu-champ-label{display:block;font-size:13px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.reu-transcription-carte{position:sticky;top:84px}
+@media(max-width:1000px){.reu-transcription-carte{position:static}}
+.reu-transcription{max-height:calc(100vh - 200px);font-size:14px;line-height:1.65;white-space:normal}
+.reu-t-ligne{display:flex;gap:10px;margin-bottom:6px}
+.reu-t-ligne .reu-t-temps{flex-shrink:0;min-width:38px;padding-top:2px;margin:0}

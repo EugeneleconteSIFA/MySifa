@@ -23,6 +23,7 @@
     reunionId: null,
     ecouteId: null,
     nouvelle: false,
+    edition: false,          // compte-rendu en modification (sinon lecture)
     ctx: null,
     reunions: null,
     ecoutes: null,
@@ -88,6 +89,7 @@
   function heureFr(s) { return s && String(s).length >= 16 ? String(s).slice(11, 16) : ''; }
   function duree(sec) {
     sec = Math.round(Number(sec) || 0);
+    if (sec < 60) return sec + ' s';
     var hh = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60);
     return hh ? hh + ' h ' + String(mm).padStart(2, '0') : mm + ' min';
   }
@@ -99,6 +101,36 @@
   function lignes(t) {
     return String(t || '').split('\n').map(function (l) { return l.replace(/^\s*[-•·*]\s*/, '').trim(); })
       .filter(function (l) { return l; });
+  }
+  // Un champ de texte prend la hauteur de son contenu : on lit le compte-rendu
+  // d'un coup d'œil, sans ascenseur dans l'ascenseur.
+  function autoTaille(ta) {
+    var regler = function () { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; };
+    ta.addEventListener('input', regler);
+    requestAnimationFrame(regler);
+    return ta;
+  }
+  function zoneTexte(valeur, aide, label, surSaisie) {
+    return autoTaille(h('textarea', {className: 'reu-auto', value: valeur || '', placeholder: aide, 'aria-label': label,
+      rows: '2', onInput: function (ev) { surSaisie(ev.target.value); }}));
+  }
+  // Texte libre affiché en lecture : les lignes « - » deviennent une liste.
+  // textContent partout : c'est une saisie utilisateur.
+  function rendreTexte(t, vide) {
+    var bloc = h('div', {className: 'reu-doc'});
+    var liste = null;
+    String(t || '').split('\n').forEach(function (l) {
+      var m = /^\s*[-•·*]\s+(.*)$/.exec(l);
+      if (m) {
+        if (!liste) { liste = h('ul'); bloc.appendChild(liste); }
+        liste.appendChild(h('li', {text: m[1]}));
+      } else {
+        liste = null;
+        if (l.trim()) bloc.appendChild(h('p', {text: l.trim()}));
+      }
+    });
+    if (!bloc.firstChild) bloc.appendChild(h('p', {className: 'reu-muet', text: vide || '—'}));
+    return bloc;
   }
   var TONS = {enregistrement: 'danger', a_transcrire: 'neutre', transcription: '', a_structurer: '',
               proposition: 'warn', validee: 'ok', erreur: 'danger', abandonnee: 'neutre'};
@@ -124,7 +156,7 @@
   function ecrireAdresse() {
     if (!window.MySifaUrl) return;
     var p = {}, nav = 'liste';
-    if (S.vue === 'reunion' && S.reunionId) { p.reunion = S.reunionId; nav = 'reunion'; }
+    if (S.vue === 'reunion' && S.reunionId) { p.reunion = S.reunionId; nav = 'reunion'; if (S.edition) { p.edition = '1'; nav += '/edition'; } }
     else if (S.vue === 'ecoute' && S.ecouteId) { p.ecoute = S.ecouteId; nav = 'ecoute'; }
     else if (S.type) { p.type = S.type; }
     if (S.nouvelle) { p.nouvelle = '1'; nav += '/nouvelle'; }
@@ -139,6 +171,7 @@
     S.type = t && /^\d+$/.test(t) ? t : '';
     S.vue = S.ecouteId ? 'ecoute' : (S.reunionId ? 'reunion' : 'liste');
     S.nouvelle = g('nouvelle') === '1';
+    S.edition = S.vue === 'reunion' && g('edition') === '1';
   }
 
   /* ── Chargements ────────────────────────────────────────────── */
@@ -202,12 +235,12 @@
 
   function fermerSidebar() { document.body.classList.remove('sb-open'); }
   function allerListe(type) {
-    S.vue = 'liste'; S.type = type || ''; S.reunionId = null; S.ecouteId = null; S.nouvelle = false;
+    S.vue = 'liste'; S.type = type || ''; S.reunionId = null; S.ecouteId = null; S.nouvelle = false; S.edition = false;
     fermerSidebar(); arreterSuivi();
     S.reunions = null; render(); charger();
   }
   function ouvrirReunion(id) {
-    S.vue = 'reunion'; S.reunionId = id; S.ecouteId = null; S.nouvelle = false;
+    S.vue = 'reunion'; S.reunionId = id; S.ecouteId = null; S.nouvelle = false; S.edition = false;
     arreterSuivi(); S.reunion = null; render(); charger();
   }
   function ouvrirEcoute(id) {
@@ -293,6 +326,7 @@
     var meta = h('div', {className: 'reu-ligne-meta'}, pastilleStatut(e));
     if (e.type) meta.appendChild(h('span', {text: e.type.libelle}));
     if (e.duree_s) meta.appendChild(h('span', {text: duree(e.duree_s)}));
+    if (e.statut === 'transcription') meta.appendChild(h('span', {text: Math.round((Number(e.progression) || 0) * 100) + ' %'}));
     if (e.attente_min) meta.appendChild(h('span', {text: 'brief dans ~' + e.attente_min + ' min'}));
     if (e.statut === 'erreur' && e.erreur) meta.appendChild(h('span', {text: e.erreur}));
     return h('div', {className: 'reu-ligne', role: 'button', tabindex: '0',
@@ -323,39 +357,41 @@
 
   function vueReunion(r) {
     var peut = r.droits && r.droits.modifier, gere = r.droits && r.droits.gerer;
+    var edition = peut && S.edition;
     var racine = h('div');
-    racine.appendChild(h('div', {className: 'reu-rangee', style: 'margin-bottom:12px'},
+    var basculer = function (v) { S.edition = v; S.enreg = ''; render(); };
+    racine.appendChild(h('div', {className: 'reu-barre'},
       h('button', {type: 'button', className: 'btn btn-petit', text: '← Réunions', onClick: function () { allerListe(S.type); }}),
-      r.type ? h('span', {className: 'reu-pastille neutre', text: r.type.libelle}) : null,
-      h('span', {className: 'reu-muet', text: dateFr(r.date_debut) + (r.date_fin && r.date_fin !== r.date_debut ? ' → ' + dateFr(r.date_fin) : '')}),
-      h('span', {className: 'reu-muet', text: '· Visible : ' + libelleVisibilite(r)}),
-      h('span', {className: 'reu-enreg', id: 'reu-etat-enreg', text: S.enreg})));
+      h('div', {className: 'reu-barre-meta'},
+        r.type ? h('span', {className: 'reu-pastille neutre', text: r.type.libelle}) : null,
+        h('span', {text: dateFr(r.date_debut) + (r.date_fin && r.date_fin !== r.date_debut ? ' → ' + dateFr(r.date_fin) : '')}),
+        h('span', {text: 'Visible : ' + libelleVisibilite(r)})),
+      h('span', {className: 'reu-enreg', id: 'reu-etat-enreg', text: S.enreg}),
+      peut ? h('button', {type: 'button', className: 'btn btn-petit' + (edition ? ' btn-accent' : ''),
+        text: edition ? 'Terminer' : 'Modifier', onClick: function () { basculer(!edition); }}) : null));
 
-    if (peut) {
-      racine.appendChild(h('input', {type: 'text', className: 'reu-champ', style: 'font-size:20px;font-weight:800;margin-bottom:14px',
-        value: r.titre, 'aria-label': 'Titre', onInput: function (ev) { r.titre = ev.target.value; enregistrerPlus(champsTexte); }}));
+    if (edition) {
+      racine.appendChild(h('input', {type: 'text', className: 'reu-champ reu-titre-champ', value: r.titre, 'aria-label': 'Titre',
+        onInput: function (ev) { r.titre = ev.target.value; enregistrerPlus(champsTexte); }}));
     } else {
-      racine.appendChild(h('h1', {style: 'font-size:22px;font-weight:800;margin-bottom:14px', text: r.titre}));
+      racine.appendChild(h('h1', {className: 'reu-titre', text: r.titre}));
     }
 
-    var gauche = h('div');
-    var zone = function (titre, cle, aide) {
+    var section = function (titre, cle, aide, vide) {
       var carte = h('div', {className: 'reu-carte'}, h('h2', {text: titre}));
-      if (peut) {
-        carte.appendChild(h('textarea', {value: r[cle] || '', placeholder: aide, 'aria-label': titre,
-          onInput: function (ev) { r[cle] = ev.target.value; enregistrerPlus(champsTexte); }}));
-      } else {
-        carte.appendChild(h('div', {style: 'white-space:pre-wrap;font-size:13px;line-height:1.6', text: r[cle] || '—'}));
-      }
+      carte.appendChild(edition
+        ? zoneTexte(r[cle], aide, titre, function (v) { r[cle] = v; enregistrerPlus(champsTexte); })
+        : rendreTexte(r[cle], vide));
       return carte;
     };
-    gauche.appendChild(zone('Notes', 'notes', 'Les points abordés…'));
-    gauche.appendChild(zone('Décisions', 'decisions', 'Une décision par ligne'));
-    gauche.appendChild(carteActions(r, peut));
+    var gauche = h('div');
+    gauche.appendChild(section('Compte-rendu', 'notes', 'Les points abordés, un par ligne commençant par « - »', 'Pas de compte-rendu.'));
+    gauche.appendChild(section('Décisions', 'decisions', 'Une décision par ligne', 'Aucune décision.'));
+    gauche.appendChild(carteActions(r, edition));
 
     var droite = h('div');
-    droite.appendChild(carteParticipants(r, peut));
-    if (gere) droite.appendChild(carteVisibilite(r));
+    droite.appendChild(carteParticipants(r, edition));
+    if (gere && edition) droite.appendChild(carteVisibilite(r));
     if (r.ecoutes && r.ecoutes.length) {
       var ce = h('div', {className: 'reu-carte'}, h('h2', {text: 'Écoutes'}));
       r.ecoutes.forEach(function (e) {
@@ -364,7 +400,7 @@
       });
       droite.appendChild(ce);
     }
-    if (gere) {
+    if (gere && edition) {
       droite.appendChild(h('div', {className: 'reu-carte'},
         h('div', {className: 'reu-rangee'},
           h('button', {type: 'button', className: 'btn btn-petit', text: r.ouverte ? 'Clore la réunion' : 'Rouvrir', onClick: async function () {
@@ -388,7 +424,7 @@
           catch (e) { ev.target.checked = !ev.target.checked; toast(e.message, 'danger'); }
         }}),
         h('div', {className: 'reu-action-corps'}, h('div', {className: 'reu-action-texte', text: a.texte}), h('div', {className: 'reu-action-meta', text: meta})),
-        peut ? h('button', {type: 'button', className: 'reu-retirer', 'aria-label': 'Retirer', text: '×', onClick: async function () {
+        peut ? h('button', {type: 'button', className: 'reu-retirer', 'aria-label': 'Retirer l’action', text: '×', onClick: async function () {
           try { await api('/api/reunions/actions/' + a.id, {method: 'POST', body: {texte: ''}}); r.actions = r.actions.filter(function (x) { return x.id !== a.id; }); render(); toast('Action retirée.'); }
           catch (e) { toast(e.message, 'danger'); }
         }}) : null));
@@ -574,13 +610,37 @@
     };
   }
 
+  /* Avancement d'une écoute : trois étapes, une barre. La part transcrite
+     vient du worker (`progression`, 0 à 1) ; l'attente en file et la rédaction
+     du brief n'ont pas de pourcentage, la barre y défile. */
+  function rendreProgres(e) {
+    var etapes = [['a_transcrire', 'En file'], ['transcription', 'Transcription'], ['a_structurer', 'Brief']];
+    var ordre = {a_transcrire: 0, transcription: 1, a_structurer: 2, proposition: 3, validee: 3};
+    var rang = ordre[e.statut] === undefined ? 0 : ordre[e.statut];
+    var ligne = h('div', {className: 'reu-etapes'});
+    etapes.forEach(function (et, i) {
+      ligne.appendChild(h('span', {className: i < rang ? 'fait' : (i === rang ? 'en-cours' : ''), text: (i < rang ? '✓ ' : '') + et[1]}));
+    });
+    var pct = Math.round((Number(e.progression) || 0) * 100);
+    var barre = h('div', {className: 'reu-progres-barre' + (e.statut === 'transcription' ? '' : ' indetermine'), role: 'progressbar',
+      'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': e.statut === 'transcription' ? String(pct) : null});
+    var plein = h('div');
+    if (e.statut === 'transcription') plein.style.width = Math.max(2, pct) + '%';
+    barre.appendChild(plein);
+    var gauche = e.statut === 'transcription' ? 'Transcription : ' : (e.statut === 'a_structurer' ? 'Rédaction du brief…' : 'En attente d’un créneau de transcription');
+    var texte = h('div', {className: 'reu-progres-texte'},
+      h('span', null, gauche, e.statut === 'transcription' ? h('strong', {text: pct + ' %'}) : null),
+      e.attente_min ? h('span', {text: 'brief dans ~' + e.attente_min + ' min'}) : null);
+    return h('div', {className: 'reu-progres'}, ligne, barre, texte);
+  }
+
   function arreterSuivi() { clearTimeout(minuteurSuivi); minuteurSuivi = null; }
   function suivre() {
     arreterSuivi();
     minuteurSuivi = setTimeout(async function () {
       if (S.vue !== 'ecoute' || modalOuverte()) { suivre(); return; }
       try { await chargerEcoute(); render(); } catch (e) { /* nouvel essai au prochain tour */ }
-    }, 15000);
+    }, S.ecoute && S.ecoute.ecoute && S.ecoute.ecoute.statut !== 'enregistrement' ? 5000 : 15000);
   }
 
   function vueEcoute(d) {
@@ -601,9 +661,8 @@
       suivre();
     } else if (['a_transcrire', 'transcription', 'a_structurer'].indexOf(e.statut) >= 0) {
       carte.appendChild(h('h2', {text: e.statut_libelle}));
-      carte.appendChild(h('p', {className: 'reu-muet', text: e.attente_min
-        ? 'Brief prêt dans ~' + e.attente_min + ' min. Cette page se met à jour toute seule ; vous pouvez la quitter, une notification vous préviendra.'
-        : 'Cette page se met à jour toute seule.'}));
+      carte.appendChild(rendreProgres(e));
+      carte.appendChild(h('p', {className: 'reu-muet', style: 'margin-top:12px', text: 'Cette page se met à jour toute seule ; vous pouvez la quitter, une notification vous préviendra.'}));
       suivre();
     } else if (e.statut === 'erreur') {
       carte.appendChild(h('h2', {text: 'L’écoute n’a pas abouti'}));
@@ -648,90 +707,7 @@
   function vueValidation(d) {
     var e = d.ecoute, b = S.brief;
     var types = d.types || [];
-    var gauche = h('div', {className: 'reu-carte'}, h('h2', {text: 'Brief proposé'}));
-    if (e.morceaux_manquants && e.morceaux_manquants.length) {
-      gauche.appendChild(h('div', {className: 'reu-avert'}, h('strong', {text: 'Passages manquants. '}),
-        e.morceaux_manquants.length + ' passage(s) de 30 s ne sont pas arrivés au serveur : le brief ne les couvre pas.'));
-    }
-    if (!(e.type && e.type.structuration_ia === false) && !e.proposition) {
-      gauche.appendChild(h('div', {className: 'reu-avert', text: 'Aucune proposition : rédiger le brief à partir de la transcription.'}));
-    }
-    if (e.type && e.type.structuration_ia === false) {
-      gauche.appendChild(h('div', {className: 'reu-muet', style: 'margin-bottom:10px', text: 'Type de réunion sans proposition IA : la transcription n’a pas quitté le serveur. Rédiger le brief à partir d’elle.'}));
-    }
-    gauche.appendChild(h('div', {className: 'reu-muet', style: 'font-size:12px', text: 'Proposition à relire : la transcription ne sait pas qui parle, les responsables sont déduits des noms prononcés.'}));
-
-    gauche.appendChild(h('label', {className: 'reu-label', text: 'Titre'}));
-    gauche.appendChild(h('input', {type: 'text', value: b.titre, onInput: function (ev) { b.titre = ev.target.value; }}));
-
-    var rattache = h('select', {'aria-label': 'Réunion', onChange: function () { b.reunion_id = rattache.value; render(); }});
-    rattache.appendChild(h('option', {value: '', text: 'Nouvelle réunion'}));
-    (d.reunions || []).forEach(function (r) {
-      rattache.appendChild(h('option', {value: String(r.id), text: dateFr(r.date_debut) + ' · ' + r.titre}));
-    });
-    rattache.value = b.reunion_id || '';
-    gauche.appendChild(h('label', {className: 'reu-label', text: 'Enregistrer dans'}));
-    gauche.appendChild(rattache);
-
-    if (!b.reunion_id) {
-      var selType = h('select', {'aria-label': 'Type', onChange: function () { b.type_id = selType.value; b.visibilite = null; b.roles = null; render(); }});
-      types.forEach(function (t) { selType.appendChild(h('option', {value: String(t.id), text: t.libelle})); });
-      if (!b.type_id && types[0]) b.type_id = String(types[0].id);
-      selType.value = b.type_id;
-      var t = types.filter(function (x) { return String(x.id) === String(b.type_id); })[0];
-      if (b.visibilite === null) { b.visibilite = t ? t.visibilite_defaut : 'participants'; b.roles = t ? t.roles_defaut.slice() : []; }
-      gauche.appendChild(h('div', {className: 'reu-deux'},
-        h('div', null, h('label', {className: 'reu-label', text: 'Type'}), selType),
-        h('div', null, h('label', {className: 'reu-label', text: 'Date'}), h('input', {type: 'date', value: b.date, onInput: function (ev) { b.date = ev.target.value; }}))));
-      gauche.appendChild(h('label', {className: 'reu-label', text: 'Visible par'}));
-      gauche.appendChild(selectVisibilite(b.visibilite, b.roles, function (v, r) { b.visibilite = v; b.roles = r; }));
-    }
-
-    gauche.appendChild(h('label', {className: 'reu-label', text: 'Notes'}));
-    gauche.appendChild(h('textarea', {value: b.notes, style: 'min-height:200px', onInput: function (ev) { b.notes = ev.target.value; }}));
-    gauche.appendChild(h('label', {className: 'reu-label', text: 'Décisions — une par ligne'}));
-    gauche.appendChild(h('textarea', {value: b.decisions, onInput: function (ev) { b.decisions = ev.target.value; }}));
-
-    gauche.appendChild(h('label', {className: 'reu-label', text: 'Actions'}));
-    var hoteActions = h('div');
-    b.actions.forEach(function (a, i) {
-      hoteActions.appendChild(h('div', {className: 'reu-prop-action'},
-        h('input', {type: 'text', value: a.texte, placeholder: 'Action', 'aria-label': 'Action', onInput: function (ev) { a.texte = ev.target.value; }}),
-        h('input', {type: 'text', value: a.responsable, placeholder: 'Responsable', list: 'reu-personnes', 'aria-label': 'Responsable', onInput: function (ev) { a.responsable = ev.target.value; }}),
-        h('input', {type: 'date', value: a.echeance, 'aria-label': 'Échéance', onInput: function (ev) { a.echeance = ev.target.value; }}),
-        h('button', {type: 'button', className: 'reu-retirer', 'aria-label': 'Retirer', text: '×', onClick: function () { b.actions.splice(i, 1); render(); }})));
-    });
-    if (!b.actions.length) hoteActions.appendChild(h('div', {className: 'reu-muet', style: 'margin-bottom:6px', text: 'Aucune action proposée.'}));
-    gauche.appendChild(hoteActions);
-    gauche.appendChild(h('button', {type: 'button', className: 'btn btn-petit', text: '+ Ajouter une action', onClick: function () { b.actions.push({texte: '', responsable: '', echeance: ''}); render(); }}));
-
-    gauche.appendChild(h('label', {className: 'reu-label', text: 'Participants'}));
-    var puces = h('div', {className: 'reu-puces'});
-    b.participants.forEach(function (n, i) {
-      puces.appendChild(h('span', {className: 'reu-puce'}, n, h('button', {type: 'button', 'aria-label': 'Retirer ' + n, text: '×', onClick: function () { b.participants.splice(i, 1); render(); }})));
-    });
-    gauche.appendChild(puces);
-    var champP = h('input', {type: 'text', placeholder: 'Ajouter un participant', list: 'reu-personnes', style: 'margin-top:8px', 'aria-label': 'Ajouter un participant'});
-    champP.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter' && champP.value.trim()) { b.participants.push(champP.value.trim()); render(); }
-    });
-    gauche.appendChild(champP);
-    var dl = h('datalist', {id: 'reu-personnes'});
-    (d.personnes || []).forEach(function (p) { dl.appendChild(h('option', {value: p.nom})); });
-    gauche.appendChild(dl);
-
-    var droite = h('div', {className: 'reu-carte'}, h('h2', {text: 'Transcription'}));
-    var tr = h('div', {className: 'reu-transcription'});
-    String(e.transcription || '').split('\n').forEach(function (l) {
-      var m = /^(\[[\d:]+\])\s?(.*)$/.exec(l);
-      var div = h('div');
-      if (m) { div.appendChild(h('span', {className: 'reu-t-temps', text: m[1]})); div.appendChild(document.createTextNode(m[2])); }
-      else div.textContent = l;
-      tr.appendChild(div);
-    });
-    if (!e.transcription) tr.appendChild(h('div', {className: 'reu-muet', text: 'Transcription vide.'}));
-    droite.appendChild(tr);
-    if (e.purge_le) droite.appendChild(h('div', {className: 'reu-muet', style: 'margin-top:8px;font-size:12px', text: 'Effacée le ' + dateFr(e.purge_le) + '.'}));
+    var racine = h('div');
 
     var valider = async function (bouton) {
       if (!b.reunion_id && b.visibilite === 'roles' && !(b.roles || []).length) { toast('Choisir au moins un rôle.', 'danger'); return; }
@@ -747,10 +723,97 @@
         ouvrirReunion(res.reunion.id);
       } catch (x) { bouton.disabled = false; toast(x.message, 'danger'); }
     };
+    // Titre et boutons en tête, collés en haut au défilement : les boutons ne
+    // passent plus sous la barre d'outils flottante du bas.
     var btnValider = h('button', {type: 'button', className: 'btn btn-accent', text: 'Valider le brief', onClick: function () { valider(btnValider); }});
-    return h('div', null,
-      h('div', {className: 'reu-valid'}, gauche, droite),
-      h('div', {className: 'reu-pied-valid'}, boutonAbandon(e), btnValider));
+    racine.appendChild(h('div', {className: 'reu-tete-collee'},
+      h('input', {type: 'text', className: 'reu-champ reu-titre-champ', value: b.titre, placeholder: 'Titre de la réunion', 'aria-label': 'Titre',
+        onInput: function (ev) { b.titre = ev.target.value; }}),
+      h('div', {className: 'reu-rangee'}, boutonAbandon(e), btnValider)));
+
+    var avis = [];
+    if (e.morceaux_manquants && e.morceaux_manquants.length) {
+      avis.push(h('div', {className: 'reu-avert'}, h('strong', {text: 'Passages manquants. '}),
+        e.morceaux_manquants.length + ' passage(s) de 30 s ne sont pas arrivés au serveur : le brief ne les couvre pas.'));
+    }
+    if (e.type && e.type.structuration_ia === false) {
+      avis.push(h('div', {className: 'reu-muet', style: 'margin-bottom:10px', text: 'Type de réunion sans proposition IA : la transcription n’a pas quitté le serveur. Rédiger le brief à partir d’elle.'}));
+    }
+    avis.forEach(function (a) { racine.appendChild(a); });
+
+    var gauche = h('div');
+
+    // Où ranger le brief : quatre réglages sur une grille compacte.
+    var rattache = h('select', {'aria-label': 'Enregistrer dans', onChange: function () { b.reunion_id = rattache.value; render(); }});
+    rattache.appendChild(h('option', {value: '', text: 'Nouvelle réunion'}));
+    (d.reunions || []).forEach(function (r) {
+      rattache.appendChild(h('option', {value: String(r.id), text: dateFr(r.date_debut) + ' · ' + r.titre}));
+    });
+    rattache.value = b.reunion_id || '';
+    var champ = function (label, el) { return h('label', {className: 'reu-champ-bloc'}, h('span', {className: 'reu-champ-label', text: label}), el); };
+    var reglages = h('div', {className: 'reu-reglages'}, champ('Enregistrer dans', rattache));
+    if (!b.reunion_id) {
+      var selType = h('select', {'aria-label': 'Type', onChange: function () { b.type_id = selType.value; b.visibilite = null; b.roles = null; render(); }});
+      types.forEach(function (t) { selType.appendChild(h('option', {value: String(t.id), text: t.libelle})); });
+      if (!b.type_id && types[0]) b.type_id = String(types[0].id);
+      selType.value = b.type_id;
+      var t = types.filter(function (x) { return String(x.id) === String(b.type_id); })[0];
+      if (b.visibilite === null) { b.visibilite = t ? t.visibilite_defaut : 'participants'; b.roles = t ? t.roles_defaut.slice() : []; }
+      reglages.appendChild(champ('Type', selType));
+      reglages.appendChild(champ('Date', h('input', {type: 'date', value: b.date, onInput: function (ev) { b.date = ev.target.value; }})));
+      reglages.appendChild(champ('Visible par', selectVisibilite(b.visibilite, b.roles, function (v, r) { b.visibilite = v; b.roles = r; })));
+    }
+    gauche.appendChild(h('div', {className: 'reu-carte'}, reglages));
+
+    gauche.appendChild(h('div', {className: 'reu-carte'}, h('h2', {text: 'Compte-rendu'}),
+      zoneTexte(b.notes, 'Les points abordés, un par ligne commençant par « - »', 'Compte-rendu', function (v) { b.notes = v; })));
+    gauche.appendChild(h('div', {className: 'reu-carte'}, h('h2', {text: 'Décisions'}),
+      zoneTexte(b.decisions, 'Une décision par ligne', 'Décisions', function (v) { b.decisions = v; })));
+
+    var carteA = h('div', {className: 'reu-carte'}, h('h2', {text: 'Actions'}));
+    b.actions.forEach(function (a, i) {
+      carteA.appendChild(h('div', {className: 'reu-prop-action'},
+        h('input', {type: 'text', value: a.texte, placeholder: 'Ce qu’il faut faire', 'aria-label': 'Action', onInput: function (ev) { a.texte = ev.target.value; }}),
+        h('input', {type: 'text', value: a.responsable, placeholder: 'Responsable', list: 'reu-personnes', 'aria-label': 'Responsable', onInput: function (ev) { a.responsable = ev.target.value; }}),
+        h('input', {type: 'date', value: a.echeance, 'aria-label': 'Échéance', onInput: function (ev) { a.echeance = ev.target.value; }}),
+        h('button', {type: 'button', className: 'reu-retirer', 'aria-label': 'Retirer l’action', text: '×', onClick: function () { b.actions.splice(i, 1); render(); }})));
+    });
+    if (!b.actions.length) carteA.appendChild(h('p', {className: 'reu-muet', style: 'margin-bottom:10px', text: 'Aucune action proposée.'}));
+    carteA.appendChild(h('button', {type: 'button', className: 'btn btn-petit', text: '+ Ajouter une action', onClick: function () { b.actions.push({texte: '', responsable: '', echeance: ''}); render(); }}));
+    gauche.appendChild(carteA);
+
+    var carteP = h('div', {className: 'reu-carte'}, h('h2', {text: 'Participants'}));
+    var puces = h('div', {className: 'reu-puces'});
+    b.participants.forEach(function (n, i) {
+      puces.appendChild(h('span', {className: 'reu-puce'}, n, h('button', {type: 'button', 'aria-label': 'Retirer ' + n, text: '×', onClick: function () { b.participants.splice(i, 1); render(); }})));
+    });
+    if (!b.participants.length) puces.appendChild(h('span', {className: 'reu-muet', text: 'Aucun participant reconnu.'}));
+    carteP.appendChild(puces);
+    var champP = h('input', {type: 'text', placeholder: 'Ajouter un participant, puis Entrée', list: 'reu-personnes', style: 'margin-top:10px', 'aria-label': 'Ajouter un participant'});
+    champP.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' && champP.value.trim()) { b.participants.push(champP.value.trim()); render(); }
+    });
+    carteP.appendChild(champP);
+    var dl = h('datalist', {id: 'reu-personnes'});
+    (d.personnes || []).forEach(function (p) { dl.appendChild(h('option', {value: p.nom})); });
+    carteP.appendChild(dl);
+    gauche.appendChild(carteP);
+
+    var droite = h('div', {className: 'reu-carte reu-transcription-carte'}, h('h2', {text: 'Transcription'}));
+    var tr = h('div', {className: 'reu-transcription'});
+    String(e.transcription || '').split('\n').forEach(function (l) {
+      var m = /^(\[[\d:]+\])\s?(.*)$/.exec(l);
+      var div = h('div', {className: 'reu-t-ligne'});
+      if (m) { div.appendChild(h('span', {className: 'reu-t-temps', text: m[1].replace(/[\[\]]/g, '')})); div.appendChild(h('span', {text: m[2]})); }
+      else div.appendChild(h('span', {text: l}));
+      tr.appendChild(div);
+    });
+    if (!e.transcription) tr.appendChild(h('div', {className: 'reu-muet', text: 'Transcription vide.'}));
+    droite.appendChild(tr);
+    if (e.purge_le) droite.appendChild(h('div', {className: 'reu-muet', style: 'margin-top:10px;font-size:12px', text: 'Effacée le ' + dateFr(e.purge_le) + ' ; le compte-rendu validé reste.'}));
+
+    racine.appendChild(h('div', {className: 'reu-valid'}, gauche, droite));
+    return racine;
   }
 
   /* ── Démarrage ──────────────────────────────────────────────── */
@@ -763,12 +826,14 @@
   if (window.MySifaUrl) {
     window.MySifaUrl.surRetour(function () {
       var avant = S.vue + ':' + S.reunionId + ':' + S.ecouteId + ':' + S.type;
+      var avantEdition = S.edition;
       lireAdresse();
       if (!S.nouvelle && modalOuverte()) fermerModale(true);
       if (avant !== S.vue + ':' + S.reunionId + ':' + S.ecouteId + ':' + S.type) {
         arreterSuivi(); S.reunion = null; S.ecoute = null; S.reunions = null;
         render(); return charger();
       }
+      if (avantEdition !== S.edition) S.enreg = '';
       render();
     });
   }

@@ -61,8 +61,13 @@ def _attente_min(conn, e: Dict[str, Any]) -> Optional[int]:
             WHERE statut IN (?, ?) AND id < ?""",
         (ec.A_TRANSCRIRE, ec.TRANSCRIPTION, e["id"]),
     ).fetchone()[0] or 0
-    propre = 0 if e["statut"] == ec.A_STRUCTURER else float(e.get("duree_s") or (e.get("nb_morceaux") or 0) * 30)
-    return max(1, int(round((float(devant) + propre) * 1.05 / 60)) + 1)
+    propre = 0 if e["statut"] == ec.A_STRUCTURER else float(e.get("duree_s") or (e.get("nb_morceaux") or 0) * 30) * 1.05
+    p = float(e.get("progression") or 0)
+    if e["statut"] == ec.TRANSCRIPTION and p >= 0.03 and e.get("transcription_debut"):
+        # En cours : le rythme réellement observé remplace celui du bench.
+        ecoule = (datetime.now() - datetime.fromisoformat(e["transcription_debut"][:19])).total_seconds()
+        propre = max(0.0, ecoule * (1 - p) / p)
+    return max(1, int(round((float(devant) * 1.05 + propre) / 60)) + 1)
 
 
 @router.get("/api/reunions/ecoutes")

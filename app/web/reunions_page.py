@@ -95,7 +95,7 @@ _TETE = r"""<meta charset="UTF-8">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ia.css">
-<link rel="stylesheet" href="/static/mysifa_reunions_espace.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_reunions_espace.css?v=3">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -149,7 +149,7 @@ ESPACE_HTML = (r"""<!DOCTYPE html>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_reunions_espace.js?v=1"></script>
+<script src="/static/mysifa_reunions_espace.js?v=3"></script>
 </body>
 </html>
 """)
@@ -170,7 +170,7 @@ ECOUTE_HTML = (r"""<!DOCTYPE html>
 </div>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
-<script src="/static/mysifa_ecoute.js?v=1"></script>
+<script src="/static/mysifa_ecoute.js?v=2"></script>
 </body>
 </html>
 """)

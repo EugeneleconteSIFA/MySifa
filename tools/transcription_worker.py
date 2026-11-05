@@ -108,8 +108,17 @@ def _transcrire(conn, e: dict) -> bool:
         return False
     ec.debut_transcription(conn, e["id"], TRANSCRIPTION_MODELE)
     _log(f"n° {e['id']} : transcription ({TRANSCRIPTION_MODELE}, {TRANSCRIPTION_THREADS} thread(s))")
+    dernier = [0.0]
+
+    def progres(fraction: float) -> None:
+        # Une écriture toutes les 5 s au plus : la page interroge à ce rythme.
+        if time.monotonic() - dernier[0] >= 5:
+            dernier[0] = time.monotonic()
+            ec.poser_progression(conn, e["id"], fraction)
+
     try:
-        r = tr.transcrire(chemin, TRANSCRIPTION_MODELE, TRANSCRIPTION_THREADS, _vocabulaire(conn))
+        r = tr.transcrire(chemin, TRANSCRIPTION_MODELE, TRANSCRIPTION_THREADS, _vocabulaire(conn),
+                          sur_progres=progres)
     except Exception as exc:
         ec.echec(conn, e["id"], f"Transcription en échec : {type(exc).__name__}: {exc}")
         return False

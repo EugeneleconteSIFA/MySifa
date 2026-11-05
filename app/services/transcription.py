@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 
 def indisponible() -> Optional[str]:
@@ -38,11 +38,14 @@ def horodatage(secondes: float) -> str:
     return f"[{h}:{m:02d}:{s:02d}]" if h else f"[{m:02d}:{s:02d}]"
 
 
-def transcrire(chemin: str, modele: str, threads: int = 1, vocabulaire: str = "") -> Dict[str, Any]:
+def transcrire(chemin: str, modele: str, threads: int = 1, vocabulaire: str = "",
+               sur_progres: Optional[Callable[[float], None]] = None) -> Dict[str, Any]:
     """Rend {texte, duree_audio, duree_traitement, segments}.
 
     `vocabulaire` : termes métier lus en base (noms de machines…), passés en
     amorce au modèle pour qu'il les écrive correctement.
+    `sur_progres(fraction)` : appelé après chaque segment, avec la part de
+    l'audio déjà transcrite (fin du segment / durée totale).
     """
     from faster_whisper import WhisperModel
 
@@ -53,11 +56,17 @@ def transcrire(chemin: str, modele: str, threads: int = 1, vocabulaire: str = ""
         chemin, language="fr", beam_size=5, vad_filter=True,
         initial_prompt=vocabulaire or None,
     )
+    total = float(getattr(info, "duration", 0) or 0)
     lignes = []
     for s in segments:  # générateur paresseux : le calcul a lieu ici
         t = (s.text or "").strip()
         if t:
             lignes.append(f"{horodatage(s.start)} {t}")
+        if sur_progres and total > 0:
+            try:
+                sur_progres(min(1.0, float(s.end) / total))
+            except Exception:
+                pass  # l'avancement est un confort, jamais une cause d'échec
     return {
         "texte": "\n".join(lignes),
         "duree_audio": float(getattr(info, "duration", 0) or 0),

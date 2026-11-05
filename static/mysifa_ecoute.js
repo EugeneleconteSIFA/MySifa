@@ -325,6 +325,43 @@
 
   /* ── Rendu ──────────────────────────────────────────────────── */
 
+  /* Avancement d'une écoute : trois étapes, une barre. La part transcrite
+     vient du worker (`progression`, 0 à 1) ; l'attente en file et la rédaction
+     du brief n'ont pas de pourcentage, la barre y défile. */
+  function rendreProgres(e) {
+    var etapes = [['a_transcrire', 'En file'], ['transcription', 'Transcription'], ['a_structurer', 'Brief']];
+    var ordre = {a_transcrire: 0, transcription: 1, a_structurer: 2, proposition: 3, validee: 3};
+    var rang = ordre[e.statut] === undefined ? 0 : ordre[e.statut];
+    var ligne = h('div', {className: 'reu-etapes'});
+    etapes.forEach(function (et, i) {
+      ligne.appendChild(h('span', {className: i < rang ? 'fait' : (i === rang ? 'en-cours' : ''), text: (i < rang ? '✓ ' : '') + et[1]}));
+    });
+    var pct = Math.round((Number(e.progression) || 0) * 100);
+    var barre = h('div', {className: 'reu-progres-barre' + (e.statut === 'transcription' ? '' : ' indetermine'), role: 'progressbar',
+      'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': e.statut === 'transcription' ? String(pct) : null});
+    var plein = h('div');
+    if (e.statut === 'transcription') plein.style.width = Math.max(2, pct) + '%';
+    barre.appendChild(plein);
+    var gauche = e.statut === 'transcription' ? 'Transcription : ' : (e.statut === 'a_structurer' ? 'Rédaction du brief…' : 'En attente d’un créneau de transcription');
+    var texte = h('div', {className: 'reu-progres-texte'},
+      h('span', null, gauche, e.statut === 'transcription' ? h('strong', {text: pct + ' %'}) : null),
+      e.attente_min ? h('span', {text: 'brief dans ~' + e.attente_min + ' min'}) : null);
+    return h('div', {className: 'reu-progres'}, ligne, barre, texte);
+  }
+
+  var minuteurSuivi = null;
+  function suivre() {
+    clearTimeout(minuteurSuivi);
+    minuteurSuivi = setTimeout(async function () {
+      if (S.etat !== 'fini' || !S.ecoute) return;
+      try {
+        var d = await api('/api/reunions/ecoutes/' + S.ecoute.id);
+        S.fin = d.ecoute;
+        render();
+      } catch (e) { suivre(); }
+    }, 5000);
+  }
+
   function peindreEtat() {
     var el = document.getElementById('ec-envoi');
     if (!el) return;
@@ -416,12 +453,28 @@
     }
 
     if (S.etat === 'fini') {
-      var min = S.fin && S.fin.attente_min;
-      scene.appendChild(h('div', {className: 'ec-titre', text: 'Transcription en cours'}));
-      scene.appendChild(h('div', {className: 'ec-sous', text: (min ? 'Le brief sera prêt dans ~' + min + ' min. ' : '') + 'Une notification vous préviendra ; il apparaît aussi dans Réunions › Mes écoutes.'}));
+      var f = S.fin || {statut: 'a_transcrire'};
+      var nouvelle = h('button', {type: 'button', className: 'btn', text: 'Nouvelle écoute', onClick: function () { clearTimeout(minuteurSuivi); S.ecoute = null; S.fin = null; S.etat = 'pret'; render(); }});
+      if (f.statut === 'proposition' || f.statut === 'validee') {
+        scene.appendChild(h('div', {className: 'ec-titre', text: 'Brief prêt'}));
+        scene.appendChild(h('div', {className: 'ec-sous', text: 'Relisez la proposition, corrigez-la, puis validez : elle devient le compte-rendu de la réunion.'}));
+        scene.appendChild(h('div', {className: 'reu-rangee', style: 'justify-content:center'},
+          h('a', {className: 'btn btn-accent', href: '/reunions?ecoute=' + S.ecoute.id, text: 'Relire le brief'}), nouvelle));
+        return;
+      }
+      if (f.statut === 'erreur' || f.statut === 'abandonnee') {
+        scene.appendChild(h('div', {className: 'ec-titre', text: 'L’écoute n’a pas abouti'}));
+        scene.appendChild(h('div', {className: 'reu-avert', text: f.erreur || 'Erreur inconnue.'}));
+        scene.appendChild(h('div', {className: 'reu-rangee', style: 'justify-content:center'},
+          h('a', {className: 'btn btn-accent', href: '/reunions?ecoute=' + S.ecoute.id, text: 'Voir l’écoute'}), nouvelle));
+        return;
+      }
+      scene.appendChild(h('div', {className: 'ec-titre', text: f.statut === 'a_structurer' ? 'Rédaction du brief' : 'Transcription en cours'}));
+      scene.appendChild(rendreProgres(f));
+      scene.appendChild(h('div', {className: 'ec-sous', text: 'Vous pouvez quitter cette page : une notification vous préviendra, et le brief apparaît dans Réunions › Mes écoutes.'}));
       scene.appendChild(h('div', {className: 'reu-rangee', style: 'justify-content:center'},
-        h('a', {className: 'btn btn-accent', href: '/reunions?ecoute=' + S.ecoute.id, text: 'Suivre l’écoute'}),
-        h('button', {type: 'button', className: 'btn', text: 'Nouvelle écoute', onClick: function () { S.ecoute = null; S.fin = null; S.etat = 'pret'; render(); }})));
+        h('a', {className: 'btn btn-accent', href: '/reunions?ecoute=' + S.ecoute.id, text: 'Suivre l’écoute'}), nouvelle));
+      suivre();
     }
   }
 

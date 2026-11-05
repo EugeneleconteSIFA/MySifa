@@ -38,6 +38,7 @@ MIGRATIONS = (
     "2026_10_19_reunion_actions_sans_reunion.py",
     "2026_11_05_reunions_types_visibilite.py",
     "2026_11_05_reunion_ecoutes.py",
+    "2026_11_05_reunion_ecoutes_progression.py",
 )
 
 FAIL = []
@@ -176,11 +177,21 @@ def test_cycle_ecoute():
         verifier("worker appelé", ec.travail_en_attente(conn, 20), True)
 
         ec.debut_transcription(conn, e["id"], "large-v3-turbo")
+        ec.poser_progression(conn, e["id"], 0.42)
+        verifier("avancement noté", ec.ecoute(conn, e["id"])["progression"], 0.42)
+        ec.poser_progression(conn, e["id"], 7)
+        verifier("avancement borné à 1", ec.ecoute(conn, e["id"])["progression"], 1.0)
         verifier("interrompue reprise", ec.reprendre_interrompues(conn), 1)
+        ec.poser_progression(conn, e["id"], 0.5)
+        verifier("hors transcription : pas d'écriture", ec.ecoute(conn, e["id"])["progression"], 1.0)
+        ec.debut_transcription(conn, e["id"], "large-v3-turbo")
+        verifier("redémarrage remet à zéro", ec.ecoute(conn, e["id"])["progression"], 0.0)
+        ec.reprendre_interrompues(conn)
         verifier("de nouveau à transcrire", ec.ecoute(conn, e["id"])["statut"], ec.A_TRANSCRIRE)
 
         p = ec.poser_transcription(conn, dossier, e["id"], "[00:00] Bonjour.", 12.0, 150.0)
         verifier("type avec IA → à structurer", p["statut"], ec.A_STRUCTURER)
+        verifier("transcription complète", p["progression"], 1.0)
         verifier("audio effacé", os.path.isdir(ec.dossier(dossier, e["id"])), False)
 
         ec.poser_proposition(conn, e["id"], {"titre": "Point atelier", "resume": "", "notes": "- Rouleau",

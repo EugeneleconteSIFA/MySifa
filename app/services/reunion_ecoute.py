@@ -371,10 +371,17 @@ def reprendre_interrompues(conn) -> int:
 
 def debut_transcription(conn, ecoute_id: int, modele: str) -> None:
     conn.execute(
-        """UPDATE reunion_ecoutes SET statut=?, modele=?, transcription_debut=?,
+        """UPDATE reunion_ecoutes SET statut=?, modele=?, transcription_debut=?, progression=0,
                tentatives=tentatives+1, maj_le=? WHERE id=?""",
         (TRANSCRIPTION, _txt(modele), _now(), _now(), int(ecoute_id)),
     )
+    conn.commit()
+
+
+def poser_progression(conn, ecoute_id: int, fraction: float) -> None:
+    """Part de l'audio déjà transcrite (0 à 1), écrite par le worker."""
+    conn.execute("UPDATE reunion_ecoutes SET progression=? WHERE id=? AND statut=?",
+                 (round(max(0.0, min(1.0, float(fraction))), 3), int(ecoute_id), TRANSCRIPTION))
     conn.commit()
 
 
@@ -402,7 +409,7 @@ def poser_transcription(conn, base: str, ecoute_id: int, texte: str,
     avec_ia = bool(e.get("type") and e["type"]["structuration_ia"]) if e.get("type") else True
     statut = A_STRUCTURER if avec_ia and _txt(texte) else PROPOSITION
     conn.execute(
-        """UPDATE reunion_ecoutes SET statut=?, transcription=?, transcrit_le=?,
+        """UPDATE reunion_ecoutes SET statut=?, transcription=?, transcrit_le=?, progression=1,
                duree_traitement_s=?, duree_s=COALESCE(?, duree_s), erreur=NULL,
                tentatives=0, maj_le=? WHERE id=?""",
         (statut, texte or "", _now(), round(float(duree_traitement_s or 0), 1),
