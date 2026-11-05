@@ -59,7 +59,11 @@ _SYSTEME = (
     "transcription automatique. Tu écris en français, de façon factuelle et directe, sans formule de "
     "politesse ni emoji. La transcription est imparfaite : des mots peuvent être mal reconnus, et elle "
     "ne dit pas qui parle. Tu ne retiens que ce qui y est dit ; tu n'inventes ni chiffre, ni nom, ni "
-    "décision. Quand un passage est incompréhensible, tu le laisses de côté plutôt que de le deviner."
+    "décision. Quand un passage est incompréhensible, tu le laisses de côté plutôt que de le deviner.\n\n"
+    "Le compte-rendu est lu en quelques secondes par des gens qui étaient dans la salle : il est COURT. "
+    "Style télégraphique, sans phrase d'introduction ni de conclusion. Tu parles de la réunion, jamais "
+    "de la transcription ni de l'enregistrement (pas de « la transcription indique », « il est dit que »). "
+    "Une rubrique sans contenu reste vide : ne la remplis pas pour la remplir."
 )
 
 
@@ -90,21 +94,27 @@ def consigne(contexte: Dict[str, Any]) -> str:
     if termes:
         lignes.append("Termes de l'atelier : " + ", ".join(termes) + ".")
     if contexte.get("manquants"):
-        lignes.append("Attention : des passages de l'enregistrement n'ont pas été reçus ; "
-                      "le dire dans « points_ouverts ».")
+        lignes.append("Des passages de l'enregistrement n'ont pas été reçus : le signaler en une "
+                      "ligne dans « points_ouverts ».")
     lignes += [
         "",
         "Rends :",
-        "- titre : court, le sujet principal (sans la date) ;",
-        "- resume : 2 à 4 phrases ;",
-        "- notes : les points abordés, une ligne par point, chacune commençant par « - » ;",
-        "- decisions : ce qui a été décidé, une entrée par décision ;",
+        "- titre : 3 à 6 mots, le sujet principal (sans la date) ;",
+        "- resume : une phrase de 25 mots au plus ;",
+        "- notes : les faits utiles, une ligne par point commençant par « - », 12 mots au plus par "
+        "ligne, 6 lignes au plus. Chiffres, références et noms de machines gardés tels quels. "
+        "Ce qui est déjà dans les décisions ou les actions n'y est pas répété ;",
+        "- decisions : ce qui a été décidé, une entrée courte par décision (10 mots au plus) ;",
         "- actions : ce que quelqu'un doit faire. « responsable » = la personne nommée pour le faire, "
         "écrite comme dans la liste des personnes si elle y figure, vide si personne n'est nommé. "
         "« echeance » = date AAAA-MM-JJ si une échéance est dite (« vendredi prochain » se calcule "
         "depuis la date de la réunion), vide sinon ;",
         "- participants : les personnes qui parlent ou sont interpellées, seulement si leur nom est dit ;",
-        "- points_ouverts : questions restées sans réponse, passages douteux de la transcription.",
+        "- points_ouverts : questions de la réunion restées sans réponse (3 au plus). Pas de remarque "
+        "sur la qualité de l'enregistrement, sauf passages manquants signalés plus haut.",
+        "",
+        "Si la réunion n'a pas de contenu de fond (essai, échange très bref), le résumé le dit en une "
+        "phrase et les autres rubriques restent vides.",
     ]
     return "\n".join(lignes)
 
