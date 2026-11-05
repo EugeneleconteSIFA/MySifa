@@ -10019,9 +10019,27 @@ def get_valorisation_cloture(request: Request, date: str | None = None):
     if not snapshot_date:
         raise HTTPException(400, "Date de clôture obligatoire (AAAA-MM-JJ, passée).")
     with get_db() as conn:
+        mouvements = _valo_cloture.candidats(conn, snapshot_date)
+        # Stock reconstitué au soir de la clôture, SANS les rattachements : une
+        # correction dont l'écart le dépasse porte sur du stock entré après la
+        # date, et l'écran le signale avant qu'on la rattache.
+        stock_pf = _pf_stock_snapshot_at_date(conn, snapshot_date)
+        stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
+        for m in mouvements:
+            parts = (m.get("cle_stock") or "").split(":")
+            try:
+                if parts[0] == "pf":
+                    q = stock_pf.get(int(parts[1]), 0.0)
+                elif parts[0] == "mp" and parts[2]:
+                    q = stock_l.get((int(parts[1]), int(parts[2])), 0.0)
+                else:
+                    q = stock_nl.get(int(parts[1]), 0.0)
+            except (IndexError, ValueError):
+                q = None
+            m["stock_soir"] = round(float(q), 4) if q is not None else None
         return {
             "cloture": _valo_cloture.lire(conn, snapshot_date),
-            "mouvements": _valo_cloture.candidats(conn, snapshot_date),
+            "mouvements": mouvements,
         }
 
 
@@ -10691,6 +10709,39 @@ def _pf_is_unite_par_mille(unite: str) -> bool:
     return u in _PF_UNITE_PER_MILLE
 
 
+def _pf_dernieres_conversions(conn: sqlite3.Connection) -> dict[int, str]:
+    """{produit_id: date de la dernière conversion d'unité}.
+
+    Une conversion (« étiquette → cartons ») multiplie le stock par son facteur
+    mais ne touche pas au prix : celui-ci reste exprimé dans l'ancienne unité.
+    938/0038 passé de bobine à carton (×1/12) gardait 1,33 €/bobine, appliqué
+    à des cartons que RVGI facture 15,36 € — la ligne valait douze fois moins.
+    Un prix posé avant la dernière conversion est donc périmé."""
+    try:
+        rows = conn.execute(
+            "SELECT produit_id, MAX(created_at) AS d FROM mouvements_stock "
+            "WHERE note LIKE ? GROUP BY produit_id",
+            (_NOTE_CONVERSION_UNITE + "%",),
+        ).fetchall()
+    except Exception:
+        return {}
+    out: dict[int, str] = {}
+    for r in rows:
+        try:
+            out[int(r["produit_id"])] = str(r["d"] or "")
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _pf_prix_avant_conversion(date_prix, pid: int, conversions: dict[int, str]) -> bool:
+    """Vrai si le prix daté `date_prix` précède une conversion d'unité du produit."""
+    conv = conversions.get(pid)
+    if not conv:
+        return False
+    return str(date_prix or "")[:19] < conv[:19]
+
+
 def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
     """Liste de toutes les références (fabrique + négoce) avec leur prix HT courant + stock.
 
@@ -10715,6 +10766,7 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
     # Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
     # défaut dernière commande client (cf. app/services/pf_prix_achat.py).
     taux_usd = _get_taux_eur_usd(conn)
+    conversions = _pf_dernieres_conversions(conn)
     out: list[dict] = []
     for r in rows:
         ptype = r["type"]
@@ -10726,7 +10778,10 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
         divisor = 1000.0 if par_mille else 1.0
         source_prix = r["source_prix"]
         achat = None
-        if prix <= 0:
+        # Prix importé avant une conversion d'unité : il est dans l'ancienne
+        # unité. RVGI le donne dans la nouvelle ; à défaut on garde l'ancien.
+        perime = prix > 0 and _pf_prix_avant_conversion(r["updated_at"], pid, conversions)
+        if prix <= 0 or perime:
             achat = _pf_prix_achat.prix_rvgi(r["reference"], par_mille, taux_usd, unite, stock)
             if achat:
                 prix = achat["prix"]
@@ -10781,14 +10836,39 @@ def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) 
         stock_pf = dict(stock_pf)
         for k, d in ecart_pf.items():
             stock_pf[k] = stock_pf.get(k, 0.0) + d
-    prix_map = _pf_price_snapshot_at_date(conn, _valo_cloture.date_prix(conn, snapshot_date))
+    date_prix = _valo_cloture.date_prix(conn, snapshot_date)
+    prix_map = _pf_price_snapshot_at_date(conn, date_prix)
+    # Un prix historisé avant une conversion d'unité est dans l'ancienne unité
+    # alors que la quantité reconstituée est ramenée à la nouvelle : on lui
+    # préfère le prix courant, que _pf_valo_query a déjà remis dans la bonne.
+    conversions = _pf_dernieres_conversions(conn)
+    dates_prix: dict[int, str] = {}
+    if conversions:
+        ids = list(conversions)
+        rows_h = conn.execute(
+            "SELECT produit_id, MAX(created_at) AS d FROM pf_valorisation_historique "
+            "WHERE created_at <= ? AND produit_id IN (%s) GROUP BY produit_id"
+            % ",".join("?" * len(ids)),
+            (_date_iso_end_of_day(date_prix), *ids),
+        ).fetchall()
+        dates_prix = {int(r["produit_id"]): str(r["d"] or "") for r in rows_h}
     for it in items:
         try:
             pid = int(it["id"])
         except (TypeError, ValueError, KeyError):
             continue
         new_qte = float(stock_pf.get(pid, it.get("quantite") or 0))
-        new_prix = float(prix_map[pid]) if pid in prix_map else float(it.get("prix_unitaire_ht") or 0)
+        # Même plancher que les matières : une correction rattachée à la
+        # clôture qui dépasse le stock du soir (stock entré après la date)
+        # amène la ligne à zéro, elle ne retranche rien de la valeur.
+        new_qte = max(0.0, new_qte)
+        # Un prix historisé à 0 veut dire « pas renseigné » (un import a remis
+        # 1077/0035 à zéro le 19/06) : il ne masque pas le prix courant, qui
+        # vient alors de RVGI ou d'une saisie à la main.
+        hist = float(prix_map.get(pid) or 0)
+        if hist > 0 and _pf_prix_avant_conversion(dates_prix.get(pid), pid, conversions):
+            hist = 0.0
+        new_prix = hist if hist > 0 else float(it.get("prix_unitaire_ht") or 0)
         divisor = 1000.0 if it.get("par_mille") else 1.0
         transport = bool(it.get("transport_import")) and new_prix > 0
         prix_effectif = _pf_prix_avec_transport(new_prix, transport)
@@ -10924,10 +11004,11 @@ async def update_valorisation_pf(produit_id: int, request: Request):
         else:
             conn.execute(
                 """
-                INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, updated_at, updated_by, updated_by_name)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, source_prix, updated_at, updated_by, updated_by_name)
+                VALUES (?, ?, 'Saisi à la main', ?, ?, ?)
                 ON CONFLICT(produit_id) DO UPDATE SET
                     prix_unitaire_ht = excluded.prix_unitaire_ht,
+                    source_prix = excluded.source_prix,
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by,
                     updated_by_name = excluded.updated_by_name

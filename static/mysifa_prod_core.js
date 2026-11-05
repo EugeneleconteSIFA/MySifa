@@ -5827,7 +5827,8 @@ function rentTipContenu(head, lien, etat){
     ]),
     devis ? rentTipSection('Devis', [
       ['Fichier', devis.fichier || ''],
-      ['Vitesse devisée', (Number(devis.vitesse) > 0 ? devis.vitesse + ' m/min' : '')],
+      ['Vitesse théorique', (Number(devis.vitesse) > 0 ? devis.vitesse + ' m/min' : '')],
+      ['Vitesse devisée', (Number(devis.vitesse_devis) > 0 ? devis.vitesse_devis + ' m/min' : '')],
       ['Calage devisé', (Number(devis.calage_mn) > 0
         ? Math.round(devis.calage_mn) + ' mn (outil + impression)' : '')],
       ['Quantité devisée', rentQte(devis.qte)],
@@ -6315,7 +6316,8 @@ function renderRentPilotage(){
     const head = g.head;
     const m = head.machine_nom || head.machine_code || '—';
     const suivi = rentMachineSuivie(head);
-    parMachine[m] = parMachine[m] || {nom:m, id:head.machine_id, suivi, total:0, rouge:0, orange:0, vert:0};
+    parMachine[m] = parMachine[m] || {nom:m, id:head.machine_id, suivi, total:0, rouge:0, orange:0, vert:0,
+      part:head.machine_part_vitesse_devis, partDefaut:Number(head.part_vitesse_devis_defaut) || 0.8};
     parMachine[m].total++;
     const etat = rentEtatLien(charges ? (liens[Number(head.id)] || {devis_id:null}) : null);
     if(etat !== 'inconnu') parMachine[m][etat]++;
@@ -6380,6 +6382,47 @@ function renderRentPilotage(){
         }},
       h('span',{className:'saisies-bascule-piste'}, h('span',{className:'saisies-bascule-pastille'})),
       'Compter dans les devis à lier');
+  })() : null;
+
+  /* Part de la vitesse conducteur que vaut la vitesse du devis sur cette
+     machine : la vitesse théorique comparée au réel est devis / part. Vide =
+     la valeur par défaut. */
+  const champPart = (machineCourante && machineCourante.id != null) ? (() => {
+    const regle = machineCourante.part != null && machineCourante.part !== '';
+    const pct = p => Math.round(Number(p) * 100);
+    const enregistrer = async (input) => {
+      const brut = String(input.value || '').trim().replace(',', '.');
+      const part = brut === '' ? null : Number(brut) / 100;
+      if(part !== null && !(part >= 0.3 && part <= 1)){
+        toast('Part invalide — valeur entre 30 et 100 %.', 'error');
+        input.value = regle ? String(pct(machineCourante.part)) : '';
+        return;
+      }
+      try{
+        await api('/api/rentabilite/machines/' + machineCourante.id + '/part-vitesse-devis',
+          {method:'PUT', body:JSON.stringify({part})});
+        (S.rentList || []).forEach(e => {
+          if(Number(e.machine_id) === Number(machineCourante.id)) e.machine_part_vitesse_devis = part;
+        });
+        toast(part === null ? machineSel + ' : part par défaut (' + pct(machineCourante.partDefaut) + ' %).'
+                            : machineSel + ' : devis à ' + pct(part) + ' % de la vitesse conducteur.');
+        await loadRentLinks();
+        render();
+      }catch(e){ toast(e.message || 'Réglage non enregistré.', 'error'); }
+    };
+    return h('label',{className:'saisies-bascule' + (regle ? ' on' : ''),
+        title:'Le devis vaut ce pourcentage de la vitesse réglée par le conducteur. '
+             + 'Vitesse théorique = vitesse devis / part. Vide = ' + pct(machineCourante.partDefaut) + ' % par défaut.'},
+      'Part du devis',
+      h('input',{type:'number', min:'30', max:'100', step:'1', inputMode:'numeric',
+        value: regle ? String(pct(machineCourante.part)) : '',
+        placeholder: String(pct(machineCourante.partDefaut)),
+        style:{width:'52px', padding:'2px 4px', border:'1px solid var(--border)', borderRadius:'6px',
+               background:'var(--card)', color:'var(--text)', font:'inherit', textAlign:'right'},
+        onClick: e => e.stopPropagation(),
+        onKeyDown: e => { if(e.key === 'Enter') e.target.blur(); },
+        onChange: e => enregistrer(e.target)}),
+      '%');
   })() : null;
 
   const horizons = h('div',{className:'rent-filtres'},
@@ -6579,7 +6622,7 @@ function renderRentPilotage(){
   const timeline = h('div',{className:'card'},
     h('div',{className:'card-header rent-tl-barre'},
       h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
-        selMachine, basculeSuivi, horizons),
+        selMachine, basculeSuivi, champPart, horizons),
       h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
         nav, btnMoteur)
     ),

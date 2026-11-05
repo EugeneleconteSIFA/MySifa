@@ -2677,7 +2677,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_stock_modals.js?v=unite4"></script>
 <script src="/static/mysifa_scanner.js?v=1"></script>
 <script src="/static/mysifa_donnees_prod.js?v=18"></script>
-<script src="/static/mysifa_destockage.js?v=11"></script>
+<script src="/static/mysifa_destockage.js?v=12"></script>
 <script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -26297,15 +26297,13 @@ function buildValorisationPFTableRow(item) {
   // Quantité stock
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     valFormatQte(item.quantite),
-    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || ''),
+    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, valUniteLibelle(item.unite, item.quantite)),
   );
 
-  // Prix unitaire HT — lecture seule.
-  //
-  // Comme pour les matières premières, la valorisation ne saisit plus de prix :
-  // elle affiche ce que la source de vérité lui donne. Ici cette source est
-  // l'import de la feuille de facturation (bouton « Importer Excel » au-dessus
-  // du tableau), pas une saisie ligne à ligne.
+  // Prix unitaire HT. Il vient de l'import de la feuille de facturation, à
+  // défaut de RVGI (achat, commande, facture, tarif). Le crayon permet de le
+  // corriger à la main quand aucune source n'est juste ; la saisie est
+  // historisée comme un import.
   const uniteLow = (item.unite || '').toLowerCase()
     .replace(/é/g, 'e').replace(/è/g, 'e').replace(/ê/g, 'e');
   const parMille = item.par_mille || uniteLow === 'etiquette' || uniteLow === 'etiquettes';
@@ -26326,7 +26324,7 @@ function buildValorisationPFTableRow(item) {
     // Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
     // défaut dernière commande client, à défaut tarif article. Tiers et
     // conversion au survol.
-    const achat = ['achat_rvgi', 'commande_rvgi', 'tarif_rvgi'].includes(item.prix_origine);
+    const achat = ['achat_rvgi', 'commande_rvgi', 'facture_rvgi', 'tarif_rvgi'].includes(item.prix_origine);
     const titre = achat
       ? [item.achat_fournisseur, item.achat_detail].filter(Boolean).join(' · ')
       : null;
@@ -26379,13 +26377,72 @@ function buildValorisationPFTableRow(item) {
     transportActif ? 'var(--accent)' : 'var(--card)',
     () => valBasculerTransportPF(item));
   if (!item.has_price && !transportActif) { transportBtn.disabled = true; transportBtn.style.opacity = '.4'; transportBtn.style.cursor = 'default'; }
+  const editBtn = valBoutonIcone('edit', 'Saisir le prix à la main (€ HT/' + prixUniteLabel + ')',
+    'var(--text2)', 'var(--border)', 'var(--card)', () => valEditerPrixPF(item, prixUniteLabel));
   const tdHist = el('td', { style: 'padding:10px 12px;text-align:right;white-space:nowrap' },
-    el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, transportBtn, histBtn));
+    el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, editBtn, transportBtn, histBtn));
 
   tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal);
   if (tdCharges) tr.append(tdCharges);
   tr.append(tdHist);
   return tr;
+}
+
+function valEditerPrixPF(item, uniteLabel) {
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  const fermer = () => { root.innerHTML = ''; };
+  const overlay = el('div', {
+    'data-modal': 'pf-prix',
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) fermer(); } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:440px;padding:18px 20px' });
+  const actuel = Number(item.prix_unitaire_ht) || 0;
+  const inp = el('input', { type: 'number', min: '0', step: 'any', id: 'pf-prix-saisie',
+    style: 'width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  if (actuel > 0) inp.value = String(actuel);
+  const enregistrer = async () => {
+    const v = parseFloat(String(inp.value).replace(',', '.'));
+    if (!(v >= 0)) { showToast('Prix invalide — saisir un nombre positif.', 'danger'); return; }
+    saveBtn.disabled = true;
+    try {
+      await api('/api/stock/valorisation/pf/' + item.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prix_unitaire_ht: v }),
+      });
+      fermer();
+      showToast('Prix enregistré.', 'success');
+      await loadValorisationPF();
+    } catch (e) {
+      showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+      saveBtn.disabled = false;
+    }
+  };
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') enregistrer(); if (e.key === 'Escape') fermer(); });
+  const saveBtn = el('button', { type: 'button',
+    style: 'padding:10px 16px;border:none;border-radius:8px;background:var(--accent);color:white;cursor:pointer;font-size:13px;font-weight:700',
+    on: { click: enregistrer } }, 'Enregistrer');
+  box.append(
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Prix à la main'),
+    el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px' }, item.reference || ''),
+    el('div', { style: 'font-size:12px;color:var(--text2);margin-bottom:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: item.designation || '' }, item.designation || ''),
+    el('label', { for: 'pf-prix-saisie', style: 'display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, '€ HT/' + uniteLabel),
+    inp,
+    el('div', { style: 'font-size:12px;color:var(--muted);margin-top:8px' },
+      (item.source_prix ? 'Source actuelle : ' + item.source_prix + '. ' : '')
+      + 'La saisie remplace le prix importé et figure dans l\'historique. 0 rend la main à RVGI.'),
+    el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px' },
+      el('button', { type: 'button',
+        style: 'padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;font-size:13px;font-weight:600',
+        on: { click: fermer } }, 'Annuler'),
+      saveBtn),
+  );
+  overlay.appendChild(box);
+  root.innerHTML = '';
+  root.appendChild(overlay);
+  requestAnimationFrame(() => { inp.focus(); inp.select(); });
 }
 
 async function valBasculerTransportPF(item) {
@@ -27041,13 +27098,15 @@ async function openValorisationClotureModal() {
   const ouverts = new Set();
   let filtre = '';
 
-  // Groupes : source · jour de saisie · début de note (une reprise = un groupe)
+  // Groupes : source · jour de saisie · début de note (une reprise = un groupe).
+  // Une purge de Z1 a son propre groupe : elle partage la note « Sortie lot
+  // FIFO » avec les rangements du même jour, qui ne sont pas des corrections.
   const groupes = [];
   const parCle = {};
   for (const m of mvts) {
-    const cle = m.source + '|' + String(m.created_at || '').slice(0, 10) + '|' + String(m.note || m.type).slice(0, 40);
+    const cle = m.source + '|' + (m.purge_z1 ? 'z1' : '') + '|' + String(m.created_at || '').slice(0, 10) + '|' + String(m.note || m.type).slice(0, 40);
     if (!parCle[cle]) {
-      parCle[cle] = { cle, source: m.source, jour: String(m.created_at || '').slice(0, 10), note: String(m.note || m.type), lignes: [] };
+      parCle[cle] = { cle, source: m.source, purgeZ1: !!m.purge_z1, jour: String(m.created_at || '').slice(0, 10), note: String(m.note || m.type), lignes: [] };
       groupes.push(parCle[cle]);
     }
     parCle[cle].lignes.push(m);
@@ -27067,6 +27126,22 @@ async function openValorisationClotureModal() {
   body.appendChild(limiteRow);
   const compteur = el('div', { style: 'font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600' });
   body.appendChild(compteur);
+  // Corrections cochées dont la somme dépasse le stock reconstitué au soir de
+  // la clôture : elles portent sur du stock entré après la date. La
+  // valorisation ramène la ligne à zéro, mais l'écart rattaché est faux.
+  const alerte = el('div', { style: 'display:none;font-size:12px;color:var(--danger);background:var(--bg);border:1px solid var(--danger);border-radius:8px;padding:8px 12px;margin-bottom:8px' });
+  body.appendChild(alerte);
+  const depassements = () => {
+    const somme = {}, stock = {};
+    for (const m of mvts) {
+      if (!m.cle_stock || m.stock_soir == null || !coche.has(m.source + ':' + m.id)) continue;
+      somme[m.cle_stock] = (somme[m.cle_stock] || 0) + (Number(m.ecart) || 0);
+      stock[m.cle_stock] = Number(m.stock_soir) || 0;
+    }
+    const out = {};
+    for (const c in somme) { if (stock[c] + somme[c] < -0.0001) out[c] = { stock: stock[c], somme: somme[c] }; }
+    return out;
+  };
   const liste = el('div');
   body.appendChild(liste);
 
@@ -27088,6 +27163,12 @@ async function openValorisationClotureModal() {
       majCompteur();
       return;
     }
+    const dep = depassements();
+    const nbDep = Object.keys(dep).length;
+    alerte.style.display = nbDep ? 'block' : 'none';
+    alerte.textContent = nbDep
+      ? nbDep + ' stock(s) passent sous zéro au ' + frDate(date) + ' avec les corrections cochées. Elles portent sur du stock entré après la clôture : à décocher, ou la ligne sera ramenée à zéro.'
+      : '';
     for (const g of groupes) {
       const lignes = g.lignes.filter(correspond);
       if (!lignes.length) continue;
@@ -27109,6 +27190,10 @@ async function openValorisationClotureModal() {
         on: { click: () => { if (ouverts.has(g.cle)) ouverts.delete(g.cle); else ouverts.add(g.cle); renderListe(); } } });
       head.appendChild(cbG);
       head.appendChild(el('span', { style: 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--card);border:1px solid var(--border);color:var(--text2)' }, g.source === 'mp' ? 'MATIÈRES' : 'PRODUITS FINIS'));
+      if (g.purgeZ1) {
+        head.appendChild(el('span', { style: 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--card);border:1px solid var(--warn);color:var(--warn)',
+          title: 'Sortie de la zone de sortie de production. À cocher seulement si ce stock était déjà livré ou absent le ' + frDate(date) + ' au soir, jamais pour un rangement.' }, 'PURGE Z1'));
+      }
       head.appendChild(el('span', { style: 'font-size:13px;font-weight:600;color:var(--text)' }, frDate(g.jour)));
       head.appendChild(el('span', { style: 'flex:1;min-width:0;font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, g.note));
       head.appendChild(el('span', { style: 'font-size:12px;color:var(--muted);white-space:nowrap' }, nbCoches + ' / ' + lignes.length));
@@ -27122,12 +27207,15 @@ async function openValorisationClotureModal() {
           cb.disabled = !!m.rattache_ailleurs;
           cb.addEventListener('change', () => { if (cb.checked) coche.add(k); else coche.delete(k); renderListe(); });
           const ecartCol = m.ecart > 0 ? 'var(--success)' : (m.ecart < 0 ? 'var(--danger)' : 'var(--muted)');
-          const row = el('label', { style: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;cursor:pointer' });
+          const d = coche.has(k) ? dep[m.cle_stock] : null;
+          const row = el('label', { style: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;cursor:pointer' + (d ? ';box-shadow:inset 3px 0 0 var(--danger)' : '') });
           row.appendChild(cb);
           row.appendChild(el('div', { style: 'flex:1;min-width:0' },
             el('div', { style: 'font-weight:600;color:var(--text)' }, (m.reference || '—') + (m.detail ? ' · ' + m.detail : '')),
             el('div', { style: 'color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
-              m.designation + (m.par ? ' · ' + m.par : '') + (m.rattache_ailleurs ? ' · rattaché à la clôture du ' + frDate(m.rattache_ailleurs) : ''))));
+              m.designation + (m.par ? ' · ' + m.par : '') + (m.rattache_ailleurs ? ' · rattaché à la clôture du ' + frDate(m.rattache_ailleurs) : '')),
+            d ? el('div', { style: 'color:var(--danger);font-weight:600' },
+              'Dépasse le stock du ' + frDate(date) + ' : ' + fmtQ(d.stock) + ' en stock, ' + fmtQ(d.somme) + ' rattachés') : null));
           row.appendChild(el('div', { style: 'text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums' },
             el('div', { style: 'color:var(--text2)' }, fmtQ(m.avant) + ' → ' + fmtQ(m.apres) + (m.complement && m.source === 'pf' ? ' ' + m.complement : '')),
             el('div', { style: 'font-weight:700;color:' + ecartCol }, (m.ecart > 0 ? '+' : '') + fmtQ(m.ecart))));

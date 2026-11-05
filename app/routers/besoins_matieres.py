@@ -2967,8 +2967,17 @@ def _kind_de_categorie(categorie) -> Optional[str]:
 
 
 def _categories_remplacement(kind, categorie) -> tuple:
-    """Catégories dans lesquelles on peut choisir un remplaçant."""
+    """Catégories dans lesquelles on peut choisir un remplaçant.
+
+    Le support accepte toujours frontal ET complexe (04/11/2026) : une fiche
+    qui dit « frontal » alors que la bobine réellement passée était un
+    complexe (Thermique Eco adhésif permanent) ne doit pas empêcher de
+    choisir le complexe. La modale neutralise alors adhésif et glassine via
+    la case « Matière complexée ».
+    """
     cat = (categorie or "").strip().lower()
+    if kind == "support":
+        return tuple(dict.fromkeys(([cat] if cat else []) + ["frontal", "complexe"]))
     if cat:
         return (cat,)
     return _KIND_CATEGORIES.get(kind or "", ())
@@ -4162,8 +4171,14 @@ async def destockage_ajuster(planning_id: int, request: Request):
                 if q > 0:
                     mp_c = _matiere_conv(conn, mid) or {}
                     cats_cibles.add((mp_c.get("categorie") or "").strip().lower())
+            # Matière complexée : cochée dans la modale, ou un complexe choisi
+            # sur la ligne support. Adhésif et glassine sont dans la bobine,
+            # leur absence n'est pas un manque.
+            complexe = bool(body.get("complexe")) or "complexe" in cats_cibles
             for li in apercu["lignes"]:
                 if li.get("destockable") or li.get("facultative"):
+                    continue
+                if complexe and li.get("kind") in ("glassine", "adhesif"):
                     continue
                 cats = set(_categories_remplacement(li.get("kind"), li.get("matiere_categorie")))
                 if cats & cats_cibles:

@@ -43,7 +43,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.6.0"
+APP_VERSION = "3.6.1"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -380,6 +380,12 @@ PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
 # repères de cadence. Ramené de 400 à 200 le 15/10/2026 : les machines
 # tournent autour de 75-100 m/min.
 PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
+
+# Part de la vitesse conducteur que represente la vitesse du devis. Le devis
+# chiffre une vitesse moyenne, inferieure a celle que le conducteur regle :
+# la vitesse theorique comparee au reel est donc devis / part. Le chiffre
+# stocke dans `devis.vitesse_theorique` reste celui du classeur.
+DEVIS_VITESSE_PART_CONDUCTEUR = float(os.getenv("DEVIS_VITESSE_PART_CONDUCTEUR", "0.8"))
 
 # ─── Certification FSC ────────────────────────────────────────────
 # Volontairement mono-certification : FSC est le seul référentiel dont SIFA a
@@ -1383,6 +1389,30 @@ CONVERTIR_PAR_HEURE = int(os.getenv("CONVERTIR_PAR_HEURE", "60"))
 PDF_IA_MODELE = os.getenv("PDF_IA_MODELE", "claude-sonnet-5-5")
 PDF_IA_MAX_MO = int(os.getenv("PDF_IA_MAX_MO", "20"))
 PDF_IA_PAR_HEURE = int(os.getenv("PDF_IA_PAR_HEURE", "40"))
+
+# ─── Réunions — mode écoute ──────────────────────────────────────
+# L'audio d'une réunion enregistrée reste sur le serveur : il est transcrit
+# ici (faster-whisper, tools/requirements-transcription.txt), puis supprimé. Seul le
+# TEXTE de la transcription part chez Claude pour proposer le brief, comme les
+# documents de l'Éditeur PDF. Spec : docs/reunions-mode-ecoute.md.
+#
+# Modèle : bench du 2026-11-05 sur le VPS (2 cœurs, 1 thread) — large-v3-turbo
+# transcrit 1 h de réunion en ~1 h sans ralentir l'application.
+ECOUTE_DIR = os.getenv("ECOUTE_DIR", os.path.join(DATA_DIR, "ecoute"))
+TRANSCRIPTION_MODELE = os.getenv("TRANSCRIPTION_MODELE", "large-v3-turbo")
+TRANSCRIPTION_THREADS = int(os.getenv("TRANSCRIPTION_THREADS", "1"))
+# Un seul job de transcription à la fois sur la machine : prod et v1 partagent
+# le même CPU, donc le même verrou (fichier hors des dossiers des instances).
+TRANSCRIPTION_VERROU = os.getenv("TRANSCRIPTION_VERROU", "/tmp/mysifa-transcription.lock")
+ECOUTE_MORCEAU_MAX_MO = int(os.getenv("ECOUTE_MORCEAU_MAX_MO", "8"))
+ECOUTE_DUREE_MAX_H = int(os.getenv("ECOUTE_DUREE_MAX_H", "4"))
+# Une écoute sans nouveau morceau depuis ce délai est réputée arrêtée (onglet
+# fermé, téléphone éteint) : ce qui est arrivé part en transcription.
+ECOUTE_SILENCE_MIN = int(os.getenv("ECOUTE_SILENCE_MIN", "20"))
+# Transcription brute conservée N jours après validation, puis purgée : seul le
+# brief validé reste.
+ECOUTE_RETENTION_JOURS = int(os.getenv("ECOUTE_RETENTION_JOURS", "30"))
+REUNION_IA_MODELE = os.getenv("REUNION_IA_MODELE", PDF_IA_MODELE)
 # Preflight BAT de l'éditeur PDF : seuils d'alerte. Résolution minimale d'une
 # image à sa taille d'impression, épaisseur de trait minimale (un filet plus fin
 # disparaît à l'impression flexo), fond perdu attendu autour du format fini.
@@ -1592,7 +1622,7 @@ _TACHES_MODULES_DEFAUT = (
     "rh_coffre:Coffre RH",
     "paie:Paie",
     "erp:ERP RVGI",
-    "reunions:Points de production",
+    "reunions:Réunions",
     "taches:Gestionnaire de tâches",
     "messages:Messagerie",
     "calendrier:Calendrier",

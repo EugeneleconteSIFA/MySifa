@@ -85,7 +85,8 @@ MODULE_LABELS: dict[str, str] = {
     "rapports_prod": "Retour de prod",
     "reconciliation": "Rapprochement",
     "rentabilite": "Rentabilité",
-    "reunions": "Points de production",
+    "reunions": "Réunions",
+    "reunions_ecoute": "Réunions · écoute",
     "rh": "Planning RH",
     "rh_coffre": "Coffre RH",
     "rh_outil": "Outil RH",
@@ -255,6 +256,7 @@ PATH_MODULES: dict[str, str] = {
     "/api/rapports-prod": "rapports_prod",
     "/api/reconciliation": "reconciliation",
     "/api/rentabilite": "rentabilite",
+    "/api/reunions/ecoutes": "reunions_ecoute",
     "/api/reunions": "reunions",
     "/api/rh": "rh",
     "/api/rh-coffre": "rh_coffre",
@@ -409,7 +411,9 @@ SKIP_PREFIXES: tuple[str, ...] = (
 # la requête y transporte des messages personnels, des documents RH ou des
 # éléments de paie. Tracer qui a fait quoi, sans recopier quoi que ce soit.
 BODY_BLIND_MODULES: frozenset[str] = frozenset(
-    {"chat", "messages", "coffre", "rh_coffre", "rh_outil", "paie", "ai"}
+    {"chat", "messages", "coffre", "rh_coffre", "rh_outil", "paie", "ai",
+     # Le brief validé reprend ce qui s'est dit en réunion (direction, RH…).
+     "reunions_ecoute"}
 )
 
 # Clés dont la valeur ne doit jamais atterrir dans le journal.
@@ -442,6 +446,10 @@ SKIP_SUFFIXES: tuple[str, ...] = (
     # Rafraîchissement automatique de la timeline, appelé par la page Planning
     # à intervalle régulier : ~1 400 lignes par jour, aucun geste humain.
     "/live-refresh",
+    # Morceaux de 30 s d'une réunion enregistrée : 120 envois pour une heure,
+    # aucun geste humain. Démarrage, arrêt et validation sont journalisés
+    # explicitement (app/routers/reunions_ecoute.py).
+    "/morceau",
 )
 
 

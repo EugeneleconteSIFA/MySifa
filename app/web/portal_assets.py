@@ -1900,6 +1900,22 @@ function renderPortal(){
     )});
   }
 
+  // Réunions (05/11/2026) : espace commun à tous les services, chaque réunion
+  // filtrée côté serveur par sa visibilité (app/routers/reunions.py).
+  if(urole){
+    const id='reunions';
+    tileSpecs.push({id,el:h('div',{
+      className:'portal-app',
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/reunions';}
+    },
+      h('div',{className:'portal-app-icon'},iconEl('reunions',28)),
+      h('div',{className:'portal-app-name'},'Réunions'),
+      h('div',{className:'portal-app-desc'},'Comptes-rendus, décisions, actions')
+    )});
+  }
+
   // Messagerie: icône dans le coin (sous Paramètres) pour le super admin
 
   if(isCompta){

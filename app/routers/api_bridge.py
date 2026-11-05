@@ -712,8 +712,9 @@ def _enrichir_les_produits(journal) -> dict:
             res = rvgi_produits.synchroniser(conn, erp)
             conn.commit()
         journal.append(
-            "Produits : %d créé(s) depuis RVGI, %d lié(s), %d conflit(s) de type."
-            % (res["crees"], res["lies"], res["nb_conflits"]))
+            "Produits : %d créé(s) depuis RVGI, %d lié(s), %d désignation(s) "
+            "complétée(s), %d conflit(s) de type."
+            % (res["crees"], res["lies"], res.get("completes", 0), res["nb_conflits"]))
         return res
     except Exception as e:
         journal.append("Enrichissement des produits en échec : %s" % str(e)[:160])

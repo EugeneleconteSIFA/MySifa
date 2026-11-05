@@ -95,6 +95,15 @@ check("tarif : source sans numéro", t and t["source"], "Tarif RVGI · 30/07/202
 check("tarif : origine", t and t["origine"], "tarif_rvgi")
 check("refus : produit en bobine vendu au carton",
       pa.prix_achat(achat(pun=44.9, **carton), False, 0, "bobine", 10), None)
+f = pa.prix_achat(achat(pun=38.7, cua="1", ua_libelle="Carton", ua_nombre=1.0, nature="Facture",
+                        numero=26030036, date="2026-03-06", textes=["C2.000/Etiq. 210x75 mm, 2 couleurs:jaune/noir"]),
+                  False, 0, "carton", 44)
+check("facture 1077/0035 : 38,70 €/carton repris tel quel", f and f["prix"], 38.7)
+check("facture : la source cite la facture", f and f["source"], "Facture RVGI n°26030036 · 06/03/2026")
+check("facture : origine", f and f["origine"], "facture_rvgi")
+e = pa.prix_achat(achat(pun=440.0, nature="Tarif échu", numero=None, date="2023-01-01", echu_le="2023-12-31"), True, 0)
+check("tarif échu 601/0192 : 440 €/mille", e and e["prix"], 440.0)
+check("tarif échu : nommé comme tel", e and e["source"], "Tarif RVGI échu le 31/12/2023")
 check("produit à l'unité acheté à l'unité", pa.prix_achat(achat(pun=4.5, cua="U", ua_libelle="Unité", ua_nombre=1.0), False, 0)["prix"], 4.5)
 
 print()
