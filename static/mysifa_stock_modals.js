@@ -143,7 +143,8 @@
   function loadProduit(id)      { return _h().reload('produit', id); }
   function loadEmplacement(e)   { return _h().reload('emplacement', e); }
   function refreshSelMatiere()  { return _h().reload('sel-matiere'); }
-  function loadPageEmplCustom() { return _h().reload('empl-custom'); }
+  // Pas par reload() : il est asynchrone, et l'appelant déplie le résultat tout de suite.
+  function loadPageEmplCustom() { return _h().emplCustom(); }
 
   // --- Etat -------------------------------------------------------------
   // pfModal / mpModal / modalMvt appartiennent aux modales ; les autres champs
