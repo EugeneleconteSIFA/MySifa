@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "mysifa-erp",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "python3",
       "runtimeArgs": [
         "-X",
         "utf8",

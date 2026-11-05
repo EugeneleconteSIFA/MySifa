@@ -253,6 +253,7 @@ function startLoginTrainAnimation(){
     'wrench':        {name:'MyProd',         desc:'Suivi de production & Planning'},
     'package':       {name:'MyStock',        desc:'Gestion des stocks produits'},
     'mytools':       {name:'MyTools',        desc:'Étiquettes, formulaires, PDF, traduction'},
+    'reunions':      {name:'Réunions',       desc:'Comptes-rendus, décisions, actions'},
     'calculator':    {name:'MyCompta',       desc:'Comptabilité — accès réservé'},
     'truck':         {name:'MyExpé',         desc:'Expédition & Suivi'},
     'users':         {name:'Planning RH',    desc:'Planning personnel & Congés'},

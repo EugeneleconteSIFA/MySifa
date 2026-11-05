@@ -1,0 +1,8 @@
+# Mode écoute des réunions : transcription locale (app/services/transcription.py).
+# À part de requirements.txt : ~200 Mo installés, et l'application tourne sans.
+# Sans ce paquet, une écoute passe en erreur avec un message qui dit quoi installer.
+#
+# av est épinglé : av 19 casse faster-whisper 1.1.1 (TypeError sur
+# metadata_errors), constaté au bench du 2026-11-05.
+faster-whisper==1.1.1
+av==12.3.0

@@ -942,6 +942,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         Notifications
       </button>
+      <button type="button" class="nav-btn" data-req-section="communication" data-tab="reuniontypes">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 10.5a6.5 6.5 0 0 0 13 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8.5" y1="21" x2="15.5" y2="21"/></svg>
+        Types de réunion
+      </button>
       <div class="nav-group-label msb-section msb-toggle" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1169,6 +1173,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="notifications">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Notifications</span><span class="mi-desc">Qui voit quelle pastille, par service.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="reuniontypes">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 10.5a6.5 6.5 0 0 0 13 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8.5" y1="21" x2="15.5" y2="21"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Types de réunion</span><span class="mi-desc">Qui voit chaque réunion, et si le brief est proposé par l'IA.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2735,6 +2744,21 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       <div id="notifs-admin-root" style="max-width:1100px"></div>
     </section>
 
+    <!-- Types de réunion (espace Réunions) : static/settings_reunion_types.js -->
+    <section id="panel-reuniontypes" class="hidden" data-req-section="communication">
+      <div style="max-width:1100px">
+        <div style="margin-bottom:18px">
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Types de réunion</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.55">
+            Chaque réunion de l'espace Réunions a un type. Le type fixe qui la voit à sa création
+            (modifiable ensuite réunion par réunion) et si le compte-rendu d'une écoute est proposé par Claude.
+            Sans IA, seule la transcription faite sur le serveur est produite : rien ne quitte le serveur.
+          </div>
+        </div>
+        <div id="reuniontypes-root"></div>
+      </div>
+    </section>
+
     <!-- ── Diagnostic SQL ────────────────────────────────────────────────────
          Le panneau ne décide rien : tout l'encadrement est dans
          app/services/diagnostic_sql.py, appliqué par l'autoriseur SQLite.
@@ -3474,6 +3498,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/settings_ia_usage.js?v=2"></script>
 <script src="/static/mysifa_bulles.js?v=1"></script>
 <script src="/static/settings_coherence.js?v=1"></script>
+<script src="/static/settings_reunion_types.js?v=1"></script>
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -3578,6 +3603,7 @@ function syncSettingsPageHead(tabId) {
     mandrins:     { title: 'Mandrins',        sub: 'Perte de coupe sur les tubes' },
     importations: { title: 'Importations',    sub: 'Grilles tarifaires transporteurs' },
     updates:      { title: 'Mises à jour',    sub: 'Annonces de release' },
+    reuniontypes: { title: 'Types de réunion', sub: 'Visibilité et proposition IA du compte-rendu' },
     notifications: { title: 'Notifications',  sub: "Pastilles rouges par service, sur les applis de l'écran d'accueil" },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
     fsc:          { title: 'Registre FSC',    sub: '' },
@@ -3739,7 +3765,7 @@ document.addEventListener('keydown', function (ev) {
   }
 });
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','audit','fsc','blocs','api','iausage','coherence','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','reuniontypes','audit','fsc','blocs','api','iausage','coherence','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3762,7 +3788,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'audit', 'fsc', 'blocs', 'api', 'iausage', 'coherence', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'reuniontypes', 'audit', 'fsc', 'blocs', 'api', 'iausage', 'coherence', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3793,6 +3819,7 @@ function setTab(id, opts) {
   if (id === 'api') loadApiKeys();
   if (id === 'iausage' && window.initIaUsagePanel) window.initIaUsagePanel();
   if (id === 'coherence' && window.initCoherencePanel) window.initCoherencePanel();
+  if (id === 'reuniontypes' && window.initReunionTypesPanel) window.initReunionTypesPanel();
   if (id === 'promote') loadPromoteStatus();
   if (id === 'diagnostic') initDiagnosticPanel();
 }

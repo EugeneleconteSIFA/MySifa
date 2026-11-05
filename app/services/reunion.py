@@ -13,6 +13,13 @@ apparait ce jour-la — les notes et les decisions, elles, sont figees.
 Une seule reunion peut etre ouverte a la fois par personne : rouvrir la page
 reprend celle qui traine plutot que d'en empiler une seconde. Une reunion
 qu'on oublie de clore n'est pas une erreur, c'est une reunion qu'on reprend.
+L'espace Reunions (`/reunions`) cree, lui, chaque reunion explicitement
+(`reprendre=False`).
+
+Espace commun (novembre 2026) : une reunion a un type (`reunion_types`,
+referentiel de Parametres) et une visibilite. `peut_voir()` est le seul juge de
+qui voit quoi ; toutes les lectures de l'API passent par lui, liste, detail et
+suivi des actions compris. Jamais un filtre dans le JS seulement.
 """
 
 from __future__ import annotations
@@ -37,6 +44,13 @@ ACTION_TERMINE = "termine"
 
 def action_statuts() -> List[Dict[str, str]]:
     return [dict(s) for s in ACTION_STATUTS]
+
+VISIBILITES = ("participants", "roles", "tous")
+VISIBILITE_LIBELLES = {
+    "participants": "Participants",
+    "roles": "Rôles choisis",
+    "tous": "Tout le monde",
+}
 
 _JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 
@@ -68,6 +82,189 @@ def titre_par_defaut(quand: Optional[date] = None) -> str:
 def _jour(valeur: Any, defaut: str = "") -> str:
     s = _txt(valeur)[:10]
     return s if len(s) == 10 else defaut
+
+
+def _roles(v: Any) -> List[str]:
+    """« a, b » ou ["a", "b"] -> ["a", "b"], sans doublon ni vide."""
+    if isinstance(v, (list, tuple, set)):
+        brut = [str(x) for x in v]
+    else:
+        brut = _txt(v).split(",")
+    vus: List[str] = []
+    for r in brut:
+        r = r.strip().lower()
+        if r and r not in vus:
+            vus.append(r)
+    return vus
+
+
+# ─── Types de reunion (referentiel de Parametres) ────────────────────────────
+
+def _type(row) -> Dict[str, Any]:
+    d = dict(row)
+    for k in ("actif", "chiffres_prod", "structuration_ia"):
+        d[k] = bool(d.get(k))
+    d["roles_defaut"] = _roles(d.get("roles_defaut"))
+    return d
+
+
+def types(conn, actifs_seulement: bool = False) -> List[Dict[str, Any]]:
+    if not _table_existe(conn, "reunion_types"):
+        return []
+    sql = "SELECT * FROM reunion_types"
+    if actifs_seulement:
+        sql += " WHERE actif=1"
+    rows = conn.execute(sql + " ORDER BY ordre, libelle").fetchall()
+    return [_type(r) for r in rows]
+
+
+def type_reunion(conn, type_id: Any) -> Optional[Dict[str, Any]]:
+    if type_id in (None, "") or not _table_existe(conn, "reunion_types"):
+        return None
+    try:
+        tid = int(type_id)
+    except (TypeError, ValueError):
+        return None
+    row = conn.execute("SELECT * FROM reunion_types WHERE id=?", (tid,)).fetchone()
+    return _type(row) if row else None
+
+
+def type_chiffres_prod(conn) -> Optional[Dict[str, Any]]:
+    """Le type que prennent les reunions lancees depuis la production : le
+    premier, dans l'ordre du referentiel, qui regarde les chiffres."""
+    for t in types(conn):
+        if t["chiffres_prod"]:
+            return t
+    return None
+
+
+def enregistrer_type(conn, type_id: Optional[int], donnees: Dict[str, Any]) -> Dict[str, Any]:
+    """Cree (type_id None) ou modifie un type. Leve ValueError, message affichable."""
+    libelle = _txt(donnees.get("libelle"))
+    if type_id is None and not libelle:
+        raise ValueError("Libellé obligatoire.")
+    actuel = type_reunion(conn, type_id) if type_id is not None else None
+    if type_id is not None and not actuel:
+        raise ValueError("Type introuvable.")
+    vis = _txt(donnees.get("visibilite_defaut")) or (actuel or {}).get("visibilite_defaut") or "participants"
+    if vis not in VISIBILITES:
+        raise ValueError("Visibilité inconnue.")
+    roles = _roles(donnees["roles_defaut"]) if "roles_defaut" in donnees else (actuel or {}).get("roles_defaut", [])
+    if vis == "roles" and not roles:
+        raise ValueError("Choisir au moins un rôle pour une visibilité par rôles.")
+
+    def _b(cle: str, defaut: bool) -> int:
+        if cle in donnees:
+            return 1 if donnees.get(cle) in (True, 1, "1", "true", "on") else 0
+        return 1 if (actuel or {}).get(cle, defaut) else 0
+
+    valeurs = {
+        "libelle": libelle or actuel["libelle"],
+        "ordre": int(donnees.get("ordre") if donnees.get("ordre") not in (None, "") else (actuel or {}).get("ordre", 0) or 0),
+        "actif": _b("actif", True),
+        "chiffres_prod": _b("chiffres_prod", False),
+        "visibilite_defaut": vis,
+        "roles_defaut": ",".join(roles),
+        "structuration_ia": _b("structuration_ia", True),
+    }
+    doublon = conn.execute(
+        "SELECT id FROM reunion_types WHERE LOWER(libelle)=LOWER(?) AND id<>?",
+        (valeurs["libelle"], int(type_id or 0)),
+    ).fetchone()
+    if doublon:
+        raise ValueError(f"Un type « {valeurs['libelle']} » existe déjà.")
+    if type_id is None:
+        cur = conn.execute(
+            """INSERT INTO reunion_types (libelle, ordre, actif, chiffres_prod, visibilite_defaut,
+                   roles_defaut, structuration_ia, created_at)
+               VALUES (:libelle, :ordre, :actif, :chiffres_prod, :visibilite_defaut,
+                   :roles_defaut, :structuration_ia, :maintenant)""",
+            dict(valeurs, maintenant=_now()),
+        )
+        type_id = cur.lastrowid
+    else:
+        conn.execute(
+            """UPDATE reunion_types SET libelle=:libelle, ordre=:ordre, actif=:actif,
+                   chiffres_prod=:chiffres_prod, visibilite_defaut=:visibilite_defaut,
+                   roles_defaut=:roles_defaut, structuration_ia=:structuration_ia,
+                   updated_at=:maintenant WHERE id=:id""",
+            dict(valeurs, maintenant=_now(), id=int(type_id)),
+        )
+    conn.commit()
+    return type_reunion(conn, type_id)
+
+
+def supprimer_type(conn, type_id: int) -> str:
+    """Supprime un type inutilise, desactive un type qui porte des reunions.
+
+    Rend « supprime » ou « desactive ». Une reunion ne perd jamais son type :
+    le retirer la rendrait invisible a ceux qui la voyaient par lui.
+    """
+    if not type_reunion(conn, type_id):
+        raise ValueError("Type introuvable.")
+    utilise = conn.execute(
+        "SELECT COUNT(*) FROM reunions WHERE type_id=?", (int(type_id),)
+    ).fetchone()[0] if _table_existe(conn, "reunions") else 0
+    if utilise:
+        conn.execute("UPDATE reunion_types SET actif=0, updated_at=? WHERE id=?", (_now(), int(type_id)))
+        conn.commit()
+        return "desactive"
+    conn.execute("DELETE FROM reunion_types WHERE id=?", (int(type_id),))
+    conn.commit()
+    return "supprime"
+
+
+# ─── Visibilite ──────────────────────────────────────────────────────────────
+
+def lecteur(user: Dict[str, Any], role: str = "", superadmin: bool = False) -> Dict[str, Any]:
+    """Ce que `peut_voir` sait de la personne qui lit : id, nom, role."""
+    return {
+        "id": user.get("id"),
+        "nom": _txt(user.get("nom") or user.get("email")),
+        "role": _txt(role or user.get("role")).lower(),
+        "superadmin": bool(superadmin),
+    }
+
+
+def peut_voir(r: Dict[str, Any], qui: Optional[Dict[str, Any]]) -> bool:
+    """Le seul juge de la visibilite d'une reunion.
+
+    `r` porte `visibilite`, `roles_visibles`, `ouverte_par(_id)` et
+    `participants` (noms ou dicts). Le createur et les participants voient
+    toujours ; ensuite `tous` ou le role. `qui=None` = appel interne.
+    """
+    if qui is None or qui.get("superadmin"):
+        return True
+    nom = _txt(qui.get("nom")).lower()
+    if qui.get("id") is not None and r.get("ouverte_par_id") not in (None, "") \
+            and str(r.get("ouverte_par_id")) == str(qui.get("id")):
+        return True
+    if nom and _txt(r.get("ouverte_par")).lower() == nom:
+        return True
+    for p in r.get("participants") or []:
+        if isinstance(p, dict):
+            if qui.get("id") is not None and p.get("user_id") not in (None, "") \
+                    and str(p.get("user_id")) == str(qui.get("id")):
+                return True
+            p = p.get("nom")
+        if nom and _txt(p).lower() == nom:
+            return True
+    vis = _txt(r.get("visibilite")) or "tous"
+    if vis == "tous":
+        return True
+    if vis == "roles":
+        return _txt(qui.get("role")).lower() in _roles(r.get("roles_visibles"))
+    return False
+
+
+def _avec_type(conn, d: Dict[str, Any]) -> Dict[str, Any]:
+    t = type_reunion(conn, d.get("type_id"))
+    d["type"] = {"id": t["id"], "libelle": t["libelle"], "chiffres_prod": t["chiffres_prod"],
+                 "structuration_ia": t["structuration_ia"]} if t else None
+    d["roles_visibles"] = _roles(d.get("roles_visibles"))
+    if not d.get("visibilite"):
+        d["visibilite"] = "tous"
+    return d
 
 
 # ─── Lecture ─────────────────────────────────────────────────────────────────
@@ -130,11 +327,13 @@ def actions(conn, reunion_id: int) -> List[Dict[str, Any]]:
     return [_action(r) for r in rows]
 
 
-def toutes_actions(conn) -> List[Dict[str, Any]]:
+def toutes_actions(conn, qui: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """Le suivi : toutes les actions, toutes reunions confondues.
 
     Chaque action porte la reunion qui l'a decidee — titre et date — pour
-    qu'on puisse y revenir depuis le tableau de suivi.
+    qu'on puisse y revenir depuis le tableau de suivi. Une action d'une reunion
+    que `qui` ne voit pas n'y figure pas : l'action d'une reunion de direction
+    ne doit pas apparaitre sur le tableau de l'atelier.
     """
     if not _table_existe(conn, "reunion_actions") or not _table_existe(conn, "reunions"):
         return []
@@ -145,7 +344,26 @@ def toutes_actions(conn) -> List[Dict[str, Any]]:
              LEFT JOIN reunions r ON r.id = a.reunion_id
             ORDER BY a.echeance IS NULL, a.echeance, a.id"""
     ).fetchall()
-    return [_action(r) for r in rows]
+    if qui is None or qui.get("superadmin"):
+        return [_action(r) for r in rows]
+    visibles: Dict[int, bool] = {}
+    out = []
+    for row in rows:
+        rid = row["reunion_id"]
+        if rid is not None and rid not in visibles:
+            visibles[rid] = reunion_visible(conn, rid, qui)
+        if rid is None or visibles[rid]:
+            out.append(_action(row))
+    return out
+
+
+def reunion_visible(conn, reunion_id: int, qui: Optional[Dict[str, Any]]) -> bool:
+    row = conn.execute("SELECT * FROM reunions WHERE id=?", (int(reunion_id),)).fetchone()
+    if not row:
+        return False
+    d = dict(row)
+    d["participants"] = participants(conn, reunion_id)
+    return peut_voir(d, qui)
 
 
 def reunion(conn, reunion_id: int) -> Optional[Dict[str, Any]]:
@@ -160,30 +378,46 @@ def reunion(conn, reunion_id: int) -> Optional[Dict[str, Any]]:
     d["participants"] = participants(conn, reunion_id)
     d["machines"] = machines(conn, reunion_id)
     d["actions_restantes"] = sum(1 for a in d["actions"] if not a["fait"])
-    return d
+    return _avec_type(conn, d)
 
 
-def liste(conn, limite: int = 100) -> List[Dict[str, Any]]:
+def liste(conn, limite: int = 100, qui: Optional[Dict[str, Any]] = None,
+          type_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Les reunions, la plus recente en tete.
 
     L'ordre suit la plage analysee et non la date de creation : c'est la
     journee dont on a parle qui situe une reunion, pas l'heure ou quelqu'un a
     clique.
+
+    `qui` filtre sur la visibilite (None = tout, appel interne) ; `type_id`
+    sur le type. La limite porte sur ce qui reste APRES le filtre.
     """
     if not _table_existe(conn, "reunions"):
         return []
+    limite = max(1, min(int(limite), 500))
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(reunions)").fetchall()}
+    extra = ", ".join(c for c in ("type_id", "visibilite", "roles_visibles", "ouverte_par_id")
+                      if c in cols)
+    filtre, params = "", []
+    if type_id is not None and "type_id" in cols:
+        filtre, params = "WHERE type_id=?", [int(type_id)]
     rows = conn.execute(
-        """SELECT id, titre, date_debut, date_fin, machine, statut,
+        f"""SELECT id, titre, date_debut, date_fin, machine, statut,
                   ouverte_le, ouverte_par, close_le, close_par,
                   LENGTH(TRIM(notes)) AS taille_notes
-             FROM reunions
-            ORDER BY date_debut DESC, id DESC
-            LIMIT ?""",
-        (max(1, min(int(limite), 500)),),
+                  {', ' + extra if extra else ''}
+             FROM reunions {filtre}
+            ORDER BY date_debut DESC, id DESC""",
+        params,
     ).fetchall()
     out = []
     for r in rows:
+        if len(out) >= limite:
+            break
         d = dict(r)
+        parts = participants(conn, d["id"])
+        if qui is not None and not peut_voir(dict(d, participants=parts), qui):
+            continue
         d["ouverte"] = d.get("statut") == STATUT_OUVERTE
         d["a_des_notes"] = bool(d.pop("taille_notes", 0))
         actes = actions(conn, d["id"])
@@ -193,9 +427,9 @@ def liste(conn, limite: int = 100) -> List[Dict[str, Any]]:
         # l'historique sert a retrouver ce qui a ete decide, et un compteur ne
         # le dit pas. Le detail reste leger — quelques lignes de texte.
         d["actions"] = actes
-        d["participants"] = [p["nom"] for p in participants(conn, d["id"])]
+        d["participants"] = [p["nom"] for p in parts]
         d["machines"] = machines(conn, d["id"])
-        out.append(d)
+        out.append(_avec_type(conn, d))
     return out
 
 
@@ -249,18 +483,32 @@ def ouverte_de(conn, auteur: str) -> Optional[Dict[str, Any]]:
 def lancer(conn, auteur: str, date_debut: str, date_fin: str = "",
            titre: str = "", machine: str = "",
            noms_participants: Optional[List[str]] = None,
-           noms_machines: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+           noms_machines: Optional[List[str]] = None,
+           type_id: Optional[int] = None, visibilite: Optional[str] = None,
+           roles_visibles: Optional[List[str]] = None,
+           auteur_id: Optional[int] = None, reprendre: bool = True,
+           notes: str = "", decisions: str = "",
+           statut: str = STATUT_OUVERTE) -> Optional[Dict[str, Any]]:
     """Ouvre une reunion sur une plage de dates.
 
     Si l'auteur en a deja une ouverte, on la lui rend plutot que d'en creer une
     seconde : deux reunions ouvertes en meme temps par la meme personne n'ont
-    pas de sens, et la seconde ferait perdre les notes de la premiere.
+    pas de sens, et la seconde ferait perdre les notes de la premiere. Avec
+    `reprendre=False` (espace Reunions, brief d'une ecoute), la reunion est
+    toujours creee.
+
+    Sans type, la reunion prend le type « chiffres de prod » du referentiel ;
+    sans visibilite, celle de son type.
     """
     if not _table_existe(conn, "reunions"):
         return None
-    deja = ouverte_de(conn, auteur)
-    if deja:
-        return deja
+    if reprendre:
+        deja = ouverte_de(conn, auteur)
+        if deja:
+            return deja
+    t = type_reunion(conn, type_id) if type_id not in (None, "") else type_chiffres_prod(conn)
+    vis = _txt(visibilite) if _txt(visibilite) in VISIBILITES else (t["visibilite_defaut"] if t else "tous")
+    roles = _roles(roles_visibles) if roles_visibles is not None else (t["roles_defaut"] if t else [])
 
     debut = _jour(date_debut, (date.today() - timedelta(days=1)).isoformat())
     fin = _jour(date_fin, debut) or debut
@@ -270,11 +518,23 @@ def lancer(conn, auteur: str, date_debut: str, date_fin: str = "",
     cur = conn.execute(
         """INSERT INTO reunions
            (titre, date_debut, date_fin, machine, notes, statut, ouverte_le, ouverte_par)
-           VALUES (?,?,?,?,'',?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?)""",
         (_txt(titre) or titre_par_defaut(), debut, fin, _txt(machine) or None,
-         STATUT_OUVERTE, _now(), _txt(auteur)),
+         str(notes or ""), statut if statut in (STATUT_OUVERTE, STATUT_CLOSE) else STATUT_OUVERTE,
+         _now(), _txt(auteur)),
     )
     rid = cur.lastrowid
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(reunions)").fetchall()}
+    if "type_id" in cols:
+        conn.execute(
+            """UPDATE reunions SET type_id=?, visibilite=?, roles_visibles=?, decisions=?,
+                   ouverte_par_id=? WHERE id=?""",
+            (t["id"] if t else None, vis, ",".join(roles), str(decisions or ""),
+             auteur_id, rid),
+        )
+    if statut == STATUT_CLOSE:
+        conn.execute("UPDATE reunions SET close_le=?, close_par=? WHERE id=?",
+                     (_now(), _txt(auteur), rid))
     # `machine` reste renseignee pour les lecteurs anciens ; le perimetre vit
     # desormais dans reunion_machines, qui en accepte plusieurs.
     _poser_machines(conn, rid, noms_machines
@@ -294,7 +554,10 @@ def enregistrer(conn, reunion_id: int, auteur: str, titre: Optional[str] = None,
                 notes: Optional[str] = None, date_debut: Optional[str] = None,
                 date_fin: Optional[str] = None, machine: Optional[str] = None,
                 noms_machines: Optional[List[str]] = None,
-                noms_participants: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+                noms_participants: Optional[List[str]] = None,
+                decisions: Optional[str] = None, type_id: Optional[int] = None,
+                visibilite: Optional[str] = None,
+                roles_visibles: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
     """Met a jour ce qui est fourni, et rien d'autre.
 
     Une reunion close reste modifiable : on corrige un compte-rendu, on ajoute
@@ -315,6 +578,14 @@ def enregistrer(conn, reunion_id: int, auteur: str, titre: Optional[str] = None,
         champs.append("date_fin=?"); valeurs.append(_jour(date_fin))
     if machine is not None:
         champs.append("machine=?"); valeurs.append(_txt(machine) or None)
+    if decisions is not None:
+        champs.append("decisions=?"); valeurs.append(str(decisions))
+    if type_id is not None and type_reunion(conn, type_id):
+        champs.append("type_id=?"); valeurs.append(int(type_id))
+    if visibilite is not None and _txt(visibilite) in VISIBILITES:
+        champs.append("visibilite=?"); valeurs.append(_txt(visibilite))
+    if roles_visibles is not None:
+        champs.append("roles_visibles=?"); valeurs.append(",".join(_roles(roles_visibles)))
     if noms_machines is None and machine is not None:
         # Un appelant ancien qui ne connait qu'une machine reste coherent.
         noms_machines = [_txt(machine)] if _txt(machine) else []
