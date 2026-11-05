@@ -711,6 +711,14 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-manage-actions button.danger:hover{border-color:var(--danger);color:var(--danger)}
 .tmpl-manage-actions button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 .tmpl-manage-actions button.primary:hover{filter:brightness(1.08);color:var(--bg)}
+/* Téléphone : une seule ligne ne tient pas. Interrupteur et texte d'abord, boutons dessous
+   sur toute la largeur : serrés sur la ligne, ils recouvraient les étiquettes. */
+@media(max-width:900px){
+  .tmpl-manage-panel .tmpl-manage-item{flex-wrap:wrap;align-items:flex-start;gap:10px 12px}
+  .tmpl-manage-info{flex:1 1 calc(100% - 50px)}
+  .tmpl-manage-actions{flex:1 1 100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .tmpl-manage-actions button{min-height:40px;padding:6px 4px;text-align:center}
+}
 /* v2.5.31 — Section pliable « Occurrences supprimées » dans la modale modèle */
 .tmpl-del-block{margin-top:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden}
 .tmpl-del-head{display:flex;align-items:center;gap:9px;width:100%;padding:11px 14px;border:none;background:var(--bg);color:var(--text);font-family:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left;cursor:pointer;transition:background .12s}
