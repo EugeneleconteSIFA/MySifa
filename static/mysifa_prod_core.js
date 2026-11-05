@@ -1258,7 +1258,7 @@ function renderDossiersSansOfTab(){
   const busy=!!S.relinkRunning;
   const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
     h('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'},
-      h('div',{style:'min-width:0;flex:1'}, ...introTxt),
+      h('div',{style:'min-width:0;flex:1 1 240px'}, ...introTxt),
       h('button',{
         style:'padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;'
              +'cursor:'+(busy?'wait':'pointer')+';opacity:'+(busy?'0.55':'1'),
@@ -2706,7 +2706,7 @@ function renderOfTab(){
     h('div',{style:{overflowX:'auto'}},
       // v1.7.3 — classe 'table-actions-wide' active le table-layout:fixed
       // + width 260px sur la colonne Actions (cf. CSS th.th-actions).
-      h('table',{className:'table-std table-actions-wide'},
+      h('table',{className:'table-std table-actions-wide prod-liste-of'},
         h('thead',null,h('tr',null,
           h('th',{style:{width:'36px'}},
             h('input',{type:'checkbox',style:'cursor:pointer',
@@ -2866,7 +2866,7 @@ function renderFichesTab(){
     h('div',{style:{overflowX:'auto'}},
       // v1.7.3 — classe 'table-actions-wide' active le table-layout:fixed
       // + width 260px sur la colonne Actions (cf. CSS th.th-actions).
-      h('table',{className:'table-std table-actions-wide'},
+      h('table',{className:'table-std table-actions-wide prod-liste-fiche'},
         h('thead',null,h('tr',null,
           h('th',{style:{width:'36px'}},
             h('input',{type:'checkbox',style:'cursor:pointer',
@@ -2965,7 +2965,7 @@ function renderFichesOrphelinesTab(){
       'Une fiche « référence illisible » ne pourra jamais être rapprochée : son libellé ne porte pas de référence XXX/NNNN. '
       + 'Une fiche « jamais produite » est lisible mais n\'a rencontré ni OF ni production — ce n\'est pas forcément une anomalie.'),
     h('div',{style:{overflowX:'auto'}},
-      h('table',{className:'table-std table-actions-wide'},
+      h('table',{className:'table-std table-actions-wide prod-liste-orph'},
         h('thead',null,h('tr',null,
           h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Motif'),
           h('th',null,'Machine'),h('th',null,'Format'),h('th',null,'Source'),
