@@ -52,6 +52,8 @@
     // Formulaire plus haut que l'écran : centré, son début et ses boutons étaient hors
     // d'atteinte. La fenêtre défile, et le formulaire repart du haut.
     '.msf-fenetre-defile{overflow-y:auto!important;align-items:flex-start!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}' +
+    // Les boutons de validation restent à l'écran pendant qu'on remplit un long formulaire.
+    '.msf-fenetre-defile .form-actions{position:sticky;bottom:0;z-index:2;margin-top:12px;padding:10px 0 max(10px,env(safe-area-inset-bottom,0px));background:var(--card);border-top:1px solid var(--border)}' +
     '.msf-defile-x{overflow-x:auto!important;max-width:100%;min-width:0;-webkit-overflow-scrolling:touch}' +
     '.msf-tableau-defile{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}' +
     '.msf-rangee-souple{flex-wrap:wrap!important;max-width:100%}' +
