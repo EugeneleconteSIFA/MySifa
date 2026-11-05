@@ -100,7 +100,7 @@ __ARRIVEE_PLANNING__
      (prefixe .msf-) fournit les briques ; la feuille qui suit ne porte que
      ce qui appartient a MyProd (.mpm-) et quelques reprises du bureau. -->
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_prod_mobile.css?v=__V_LABEL__-mpm4">
+<link rel="stylesheet" href="/static/mysifa_prod_mobile.css?v=__V_LABEL__-mpm5">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu14">
 <link rel="stylesheet" href="/static/mysifa_pesees.css?v=6">
 <link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu19">

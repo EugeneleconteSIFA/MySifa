@@ -422,6 +422,9 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
 
 /* ── Téléphone : listes et fenêtres de MyProd ── */
 @media (max-width:900px){
+  /* Filtres en pastilles (Rentabilité) : à la ligne quand ils ne tiennent pas, au lieu de déborder du cadre. */
+  .rent-filtres{display:flex;flex-wrap:wrap}
+  .rent-filtre{flex:1 1 auto;justify-content:center;text-align:center;white-space:normal;min-height:38px}
   /* Tous les tableaux de MyProd : pas de ligne colorée par un simple toucher. */
   table tbody tr:hover td,table.table-std tr:hover td{background:transparent}
   .pmem-tbl tbody tr:not(.is-sel):hover td{background:transparent!important}
