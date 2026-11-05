@@ -129,6 +129,7 @@ from app.routers.notifications import router as notifications_router
 from app.web.maintenance_page import router as maintenance_page_router
 from app.routers.maintenance_events import router as maintenance_events_router
 from app.routers.rapports_prod import router as rapports_prod_api_router
+from app.routers.reunions_ecoute import router as reunions_ecoute_router
 from app.routers.reunions import router as reunions_api_router
 from app.web.reunions_page import router as reunions_page_router
 from app.routers.coffre import router as coffre_api_router
@@ -180,11 +181,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[MySifa] Monitoring non initialise ({e}) — sans effet sur le reste.")
 
+    # Mode écoute des réunions : sur les DEUX instances. Une réunion enregistrée
+    # depuis v1 doit y être transcrite ; le verrou commun empêche deux
+    # transcriptions de se disputer le CPU.
+    _ecoutes_task = asyncio.create_task(_boucle_ecoutes())
     # v1 (staging) partage la DB avec la prod : aucune écriture au boot.
     # Les seeds (emplacements_plan, chat channels) sont la responsabilité exclusive de v2.
     if IS_STAGING:
         print("[MySifa] Staging v1 : seeds de boot ignorés (DB partagée avec prod).")
-        yield
+        try:
+            yield
+        finally:
+            _ecoutes_task.cancel()
         return
     try:
         from app.core.database import get_db, sync_emplacements_plan_from_csv
@@ -225,6 +233,40 @@ async def lifespan(app: FastAPI):
         _cloture_task.cancel()
         _coherence_task.cancel()
         _parapheur_task.cancel()
+        _ecoutes_task.cancel()
+
+
+async def _boucle_ecoutes():
+    """Chaque minute, s'il y a une écoute à traiter, lance
+    tools/transcription_worker.py dans un processus à part, en nice 19 : la
+    transcription prend un cœur pendant la durée de la réunion et ne doit
+    jamais tourner dans ce processus. Le worker sort aussitôt (code 75) si une
+    autre instance transcrit déjà."""
+    import sys
+    from app.core.database import get_db as _get_db
+    from app.services import reunion_ecoute as _ec
+    from config import ECOUTE_SILENCE_MIN
+
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "transcription_worker.py")
+    await asyncio.sleep(90)
+    dernier_passage = 0.0
+    while True:
+        try:
+            def _attente() -> bool:
+                with _get_db() as conn:
+                    return _ec.travail_en_attente(conn, ECOUTE_SILENCE_MIN)
+            # Un passage par heure même sans travail : c'est lui qui purge.
+            if await asyncio.to_thread(_attente) or time.monotonic() - dernier_passage > 3600:
+                dernier_passage = time.monotonic()
+                proc = await asyncio.create_subprocess_exec(
+                    "nice", "-n", "19", sys.executable, script,
+                    cwd=os.path.dirname(os.path.dirname(script)))
+                await proc.wait()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] écoute : boucle en échec ({e})")
+        await asyncio.sleep(60)
 
 
 async def _boucle_releves_accueil():
@@ -699,6 +741,8 @@ _BOUTONS_JS = (
     (b"/static/chat_widget_v2.js", "messagerie"),
     # Conversation ouverte dans l'adresse (?chat=) : aucune page ne l'inclut.
     (b"/static/chat_url.js", "messagerie"),
+    # « Écouter une réunion » : ouvre /reunions/ecoute.
+    (b"/static/mysifa_ecoute_fab.js", "ecoute"),
 )
 
 
@@ -708,6 +752,7 @@ _VERSION_ASSET = {
     b"/static/mysifa_ai_chat.css": b"?v=4",
     b"/static/mysifa_ai_chat.js": b"?v=4",
     b"/static/chat_url.js": b"?v=1",
+    b"/static/mysifa_ecoute_fab.js": b"?v=1",
     b"/static/mysifa_dock.js": b"?v=4",
     b"/static/mysifa_dock_fenetres.js": b"?v=1",
     b"/static/mysifa_outils_mobile.js": b"?v=3",
@@ -946,6 +991,8 @@ app.include_router(notifications_router)
 app.include_router(maintenance_page_router)
 app.include_router(maintenance_events_router)
 app.include_router(rapports_prod_api_router)
+# Avant reunions_api_router : /api/reunions/ecoutes serait lu comme /api/reunions/{id}.
+app.include_router(reunions_ecoute_router)
 app.include_router(reunions_api_router)
 app.include_router(reunions_page_router)
 app.include_router(coffre_api_router)

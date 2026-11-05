@@ -40,6 +40,7 @@ FONCTIONS = {
     "formulaires": "Création de formulaires",
     "alertes": "Alertes maintenance",
     "pdf": "Éditeur PDF",
+    "reunion": "Brief de réunion",
 }
 
 _suivi_courant: ContextVar[Optional["Suivi"]] = ContextVar("ia_suivi_courant", default=None)
