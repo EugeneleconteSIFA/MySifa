@@ -708,7 +708,7 @@ _TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=5" defer></scr
 _BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></script>'.encode()
 # Téléphone : aucune page ne déborde en largeur. Toutes les pages, y compris celles
 # qui n'ont pas les boutons flottants (MyRH).
-_LARGEUR_TAG = b'<script src="/static/mysifa_largeur_mobile.js?v=5"></script>'
+_LARGEUR_TAG = b'<script src="/static/mysifa_largeur_mobile.js?v=6"></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 _HEAD_OPEN_RE = re.compile(rb"<head(?:\s[^>]*)?>", re.IGNORECASE)
 
@@ -754,7 +754,7 @@ _VERSION_ASSET = {
     b"/static/chat_url.js": b"?v=1",
     b"/static/mysifa_ecoute_fab.js": b"?v=1",
     b"/static/mysifa_dock.js": b"?v=4",
-    b"/static/mysifa_dock_fenetres.js": b"?v=1",
+    b"/static/mysifa_dock_fenetres.js": b"?v=2",
     b"/static/mysifa_outils_mobile.js": b"?v=4",
 }
 

@@ -44,8 +44,14 @@
     '.reu-roles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}' +
     '.reu-roles label{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;line-height:1.2}' +
     '.reu-roles input[type=checkbox]{flex:0 0 20px;width:20px!important;height:20px;min-height:0;margin:0;padding:0}' +
-    // Une fenêtre ouverte passe devant la barre du haut, qui en masquait le titre.
+    // Une fenêtre ouverte passe devant les barres et le bandeau. Dans la page, elle reste
+    // sous eux quel que soit son z-index : la barre du bas masquait ses boutons.
     'body.mysifa-dock-sous-fenetre .mobile-topbar{z-index:1!important}' +
+    'body.mysifa-dock-sous-fenetre #mobile-navbar-root{display:none}' +
+    'body.mysifa-dock-sous-fenetre .staging-bandeau{z-index:0!important}' +
+    // Formulaire plus haut que l'écran : centré, son début et ses boutons étaient hors
+    // d'atteinte. La fenêtre défile, et le formulaire repart du haut.
+    '.msf-fenetre-defile{overflow-y:auto!important;align-items:flex-start!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}' +
     '.msf-defile-x{overflow-x:auto!important;max-width:100%;min-width:0;-webkit-overflow-scrolling:touch}' +
     '.msf-tableau-defile{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}' +
     '.msf-rangee-souple{flex-wrap:wrap!important;max-width:100%}' +
@@ -108,11 +114,19 @@
 
   var examines = new WeakMap();
 
+  function fenetreTropHaute(z) {
+    if (z.clientHeight === 0 || z.scrollHeight <= z.clientHeight + 2) return;
+    if (z.classList.contains('msf-fenetre-defile')) return;
+    var cs = getComputedStyle(z);
+    if (cs.position === 'fixed' && cs.overflowY === 'visible') z.classList.add('msf-fenetre-defile');
+  }
+
   function controler() {
     if (!ecran.matches || window.__MYSIFA_IMPRESSION__) return;
     var zones = document.querySelectorAll(ZONES);
     for (var i = 0; i < zones.length; i++) {
       var z = zones[i];
+      fenetreTropHaute(z);
       var large = z.scrollWidth;
       if (large <= z.clientWidth + 2 || z.clientWidth === 0) continue;
       // Reste déjà examiné (un texte sans espace…) : pas de nouveau parcours de la

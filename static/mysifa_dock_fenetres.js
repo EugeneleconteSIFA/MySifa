@@ -55,6 +55,9 @@
     // Les fenêtres sont ajoutées au <body> ou dans un conteneur dédié (#mroot,
     // #modal-root) : on regarde ces deux niveaux, pas toute la page.
     var candidats = Array.prototype.slice.call(document.body.children);
+    // Certaines fenêtres vivent dans la page (.add-row-modal de MyExpé, de MyProd…).
+    candidats = candidats.concat(Array.prototype.slice.call(
+      document.querySelectorAll('[class*="modal"],[class*="-ov"],[class*="overlay"],[class*="-back"]')));
     ['mroot', 'modal-root'].forEach(function (id) {
       var r = document.getElementById(id);
       if (r) candidats = candidats.concat(Array.prototype.slice.call(r.children));
