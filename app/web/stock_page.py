@@ -27068,13 +27068,15 @@ async function openValorisationClotureModal() {
   const ouverts = new Set();
   let filtre = '';
 
-  // Groupes : source · jour de saisie · début de note (une reprise = un groupe)
+  // Groupes : source · jour de saisie · début de note (une reprise = un groupe).
+  // Une purge de Z1 a son propre groupe : elle partage la note « Sortie lot
+  // FIFO » avec les rangements du même jour, qui ne sont pas des corrections.
   const groupes = [];
   const parCle = {};
   for (const m of mvts) {
-    const cle = m.source + '|' + String(m.created_at || '').slice(0, 10) + '|' + String(m.note || m.type).slice(0, 40);
+    const cle = m.source + '|' + (m.purge_z1 ? 'z1' : '') + '|' + String(m.created_at || '').slice(0, 10) + '|' + String(m.note || m.type).slice(0, 40);
     if (!parCle[cle]) {
-      parCle[cle] = { cle, source: m.source, jour: String(m.created_at || '').slice(0, 10), note: String(m.note || m.type), lignes: [] };
+      parCle[cle] = { cle, source: m.source, purgeZ1: !!m.purge_z1, jour: String(m.created_at || '').slice(0, 10), note: String(m.note || m.type), lignes: [] };
       groupes.push(parCle[cle]);
     }
     parCle[cle].lignes.push(m);
@@ -27158,6 +27160,10 @@ async function openValorisationClotureModal() {
         on: { click: () => { if (ouverts.has(g.cle)) ouverts.delete(g.cle); else ouverts.add(g.cle); renderListe(); } } });
       head.appendChild(cbG);
       head.appendChild(el('span', { style: 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--card);border:1px solid var(--border);color:var(--text2)' }, g.source === 'mp' ? 'MATIÈRES' : 'PRODUITS FINIS'));
+      if (g.purgeZ1) {
+        head.appendChild(el('span', { style: 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--card);border:1px solid var(--warn);color:var(--warn)',
+          title: 'Sortie de la zone de sortie de production. À cocher seulement si ce stock était déjà livré ou absent le ' + frDate(date) + ' au soir, jamais pour un rangement.' }, 'PURGE Z1'));
+      }
       head.appendChild(el('span', { style: 'font-size:13px;font-weight:600;color:var(--text)' }, frDate(g.jour)));
       head.appendChild(el('span', { style: 'flex:1;min-width:0;font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, g.note));
       head.appendChild(el('span', { style: 'font-size:12px;color:var(--muted);white-space:nowrap' }, nbCoches + ' / ' + lignes.length));
