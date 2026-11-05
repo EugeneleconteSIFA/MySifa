@@ -381,6 +381,12 @@ PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
 # tournent autour de 75-100 m/min.
 PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
 
+# Part de la vitesse conducteur que represente la vitesse du devis. Le devis
+# chiffre une vitesse moyenne, inferieure a celle que le conducteur regle :
+# la vitesse theorique comparee au reel est donc devis / part. Le chiffre
+# stocke dans `devis.vitesse_theorique` reste celui du classeur.
+DEVIS_VITESSE_PART_CONDUCTEUR = float(os.getenv("DEVIS_VITESSE_PART_CONDUCTEUR", "0.8"))
+
 # ─── Certification FSC ────────────────────────────────────────────
 # Volontairement mono-certification : FSC est le seul référentiel dont SIFA a
 # besoin aujourd'hui, et généraliser en « certifications » (PEFC, ISCC…) ferait
