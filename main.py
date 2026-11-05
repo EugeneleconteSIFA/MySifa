@@ -710,7 +710,7 @@ _VERSION_ASSET = {
     b"/static/chat_url.js": b"?v=1",
     b"/static/mysifa_dock.js": b"?v=4",
     b"/static/mysifa_dock_fenetres.js": b"?v=1",
-    b"/static/mysifa_outils_mobile.js": b"?v=3",
+    b"/static/mysifa_outils_mobile.js": b"?v=4",
 }
 
 
