@@ -2151,6 +2151,8 @@ function closeFicheEditModal(){
   set({ficheEditModal:null});
   render();
 }
+// La croix l'appelle par un onclick en ligne : sans cette ligne, elle ne faisait rien.
+window.closeFicheEditModal = closeFicheEditModal;
 async function saveFicheEdit(){
   const m=S.ficheEditModal;
   if(!m) return;

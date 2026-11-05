@@ -31,7 +31,9 @@
   var st = document.createElement('style');
   st.textContent =
     '@media (max-width: 900px){' +
-    'html,body{overflow-x:clip}' +
+    // !important : une page qui pose body{overflow-x:hidden} en ferait un bloc défilant (y passe à
+    // auto), sans plus rien à défiler : la barre du haut ne collait plus, et le bandeau comptait double.
+    'html,body{overflow-x:clip!important}' +
     // Sur iPhone, un champ de date impose sa largeur (le calendrier natif) et pousse tout
     // son formulaire hors de l'écran. appearance:none et min-width:0 lèvent cette largeur.
     'input,select,textarea{max-width:100%;box-sizing:border-box}' +
@@ -54,6 +56,8 @@
     '.msf-fenetre-defile{overflow-y:auto!important;align-items:flex-start!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}' +
     // Les boutons de validation restent à l'écran pendant qu'on remplit un long formulaire.
     '.msf-fenetre-defile .form-actions{position:sticky;bottom:0;z-index:2;margin-top:12px;padding:10px 0 max(10px,env(safe-area-inset-bottom,0px));background:var(--card);border-top:1px solid var(--border)}' +
+    // Menu fermé : son ombre, large de 48 px, dépassait sur le bord gauche de la page.
+    'body:not(.sb-open) .sidebar{box-shadow:none!important}' +
     '.msf-defile-x{overflow-x:auto!important;max-width:100%;min-width:0;-webkit-overflow-scrolling:touch}' +
     '.msf-tableau-defile{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}' +
     '.msf-rangee-souple{flex-wrap:wrap!important;max-width:100%}' +

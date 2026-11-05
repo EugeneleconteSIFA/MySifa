@@ -329,8 +329,10 @@
       // Tableau sobre : le survol et la ligne selectionnee restent des gris,
       // la couleur reste disponible pour ce qui alerte (« non lu »).
       '.pmem-tbl-sobre tbody tr:hover td{background:var(--bg);color:var(--text)}',
-      '.pmem-tbl-sobre tbody tr.is-sel td{background:var(--bg);color:var(--text);',
-      'box-shadow:inset 2px 0 0 var(--accent)}',
+      '.pmem-tbl-sobre tbody tr.is-sel td{background:var(--bg);color:var(--text)}',
+      // Un seul filet, à gauche de la ligne : posé sur chaque cellule, il en dessinait
+      // un second au milieu.
+      '.pmem-tbl-sobre tbody tr.is-sel td:first-child{box-shadow:inset 2px 0 0 var(--accent)}',
       '.pmem-file-n{font-weight:800;color:var(--text);font-size:13px;word-break:break-word}',
       '.pmem-file-m{font-size:11px;color:var(--muted);margin-top:3px}',
       // Suggestions de dossier : la liste se pose SOUS le champ sans pousser
@@ -1836,6 +1838,14 @@
         if (state.sel === doc.id) return;
         state.sel = doc.id;
         renderScans();
+        // Sur téléphone, le formulaire est sous la liste : sans ce défilement, toucher une
+        // ligne semblait ne rien faire.
+        if (window.innerWidth <= 900) {
+          setTimeout(function () {
+            var d = document.querySelector('.pmem-split > :last-child');
+            if (d) d.scrollIntoView({ block: 'start' });
+          }, 60);
+        }
       });
       return tr;
     });
