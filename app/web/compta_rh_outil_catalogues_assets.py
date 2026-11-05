@@ -1,10 +1,48 @@
 """MyCompta — Outil RH : catalogues (formations, documents administratifs).
 
 « Exigé pour » (tous / services / contrats), catégories et justificatifs des
-formations, fenêtres de catalogue. Concaténé après RH_OUTIL_JS dans
+formations, onglet Catalogues de MyRH. Concaténé après RH_OUTIL_JS dans
 COMPTA_MAIN_JS (app/web/compta_assets.py) ; utilise ses fonctions communes
 (rhOutilFenetre, rhOutilDialogue, rhOutilConfirmer, rhOutilCase…).
 API : app/routers/rh_outil.py, app/routers/rh_outil_formations.py.
+"""
+
+RH_OUTIL_CATALOGUES_CSS = r"""
+/* MyRH — onglet Catalogues */
+.rho-cv-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.rho-cv-tab{display:inline-flex;align-items:center;gap:7px;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;background:var(--card);color:var(--text2);border:1px solid var(--border);transition:background .15s,border-color .15s,color .15s}
+.rho-cv-tab:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.rho-cv-tab.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.rho-cv-body{padding:16px 20px 20px}
+.rho-cv .rho-cat-add{margin:0 0 10px}
+.rho-cv .rho-cat-legend{margin:0 0 16px}
+.rho-cv .rho-input,.rho-cv .rho-select{background:var(--card)}
+.rho-cv .rho-cat-add .rho-select{max-width:240px}
+/* Le catalogue est un tableau : un cadre, un en-tête, une ligne par élément */
+.rho-cv .rho-list{max-height:none;overflow:visible;gap:0}
+.rho-cv-table{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.rho-cv .rho-cat-row{gap:12px;padding:6px 12px;border-bottom:1px solid var(--border);transition:background .15s}
+.rho-cv .rho-list .rho-list>.rho-cat-row:last-child{border-bottom:0}
+.rho-cv .rho-sect:last-child .rho-cat-row:last-child,.rho-cv-table>.rho-cat-row:last-child{border-bottom:0}
+.rho-cv .rho-cat-row:not(.rho-cat-head):hover{background:color-mix(in srgb,var(--accent) 5%,var(--card));box-shadow:inset 3px 0 0 var(--accent)}
+.rho-cv .rho-cat-head{padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
+.rho-cv .rho-sect{margin:0}
+.rho-cv .rho-sect-t{margin:0;padding:12px 12px 6px;color:var(--accent);border-bottom:1px solid var(--border)}
+.rho-cv .rho-sect+.rho-sect .rho-sect-t{border-top:1px solid var(--border)}
+/* Intitulé : du texte qu'on édite sur place, encadré seulement au survol et à la saisie */
+.rho-cv .rho-cat-row .rho-input{border-color:transparent;background:transparent;padding:7px 8px;margin-left:-8px;width:calc(100% + 8px);font-size:13px;font-weight:600;color:var(--text)}
+.rho-cv .rho-cat-row .rho-input:hover{border-color:var(--border);background:var(--card)}
+.rho-cv .rho-cat-row .rho-input:focus{border-color:var(--accent);background:var(--card)}
+.rho-cv .rho-cat-row .rho-select{background:var(--card)}
+.rho-cv .rho-cat-row .rho-mini{background:var(--bg);padding:6px 9px}
+.rho-cv .rho-cat-row .rho-mini:hover{background:var(--card)}
+.rho-cv .rho-cat-row .rho-mini.on{background:var(--accent-bg)}
+@media (min-width:821px){
+  .rho-cv .rho-cat-row.form{grid-template-columns:minmax(220px,2.2fr) minmax(140px,1fr) minmax(140px,1fr) minmax(130px,1fr) 84px 34px}
+  .rho-cv .rho-cat-row.doc{grid-template-columns:minmax(220px,2.2fr) minmax(150px,1fr) minmax(150px,1fr) 84px 34px}
+}
+/* MyRH : pages plus larges que le gabarit commun (tableaux à nombreuses colonnes) */
+.container.rho-large{max-width:1480px}
 """
 
 RH_OUTIL_CATALOGUES_JS = r"""
@@ -13,9 +51,12 @@ RH_OUTIL_CATALOGUES_JS = r"""
 // certains services (celui du compte de l'employé, Paramètres › Comptes).
 function rhOutilLibelleExige(x){
   if(x.obligatoire)return 'Tous les employés';
-  const n=(x.cibles||[]).length;
-  // Formations : par service ; documents administratifs : par contrat.
-  return n?n+(x.__cible==='contrat'?' contrat':' service')+(n>1?'s':''):'Personne';
+  const n=(x.cibles||[]).length,np=(x.postes||[]).length;
+  // Formations : par service et par poste ; documents administratifs : par contrat.
+  const parts=[];
+  if(n)parts.push(n+(x.__cible==='contrat'?' contrat':' service')+(n>1?'s':''));
+  if(np)parts.push(np+' poste'+(np>1?'s':''));
+  return parts.length?parts.join(' · '):'Personne';
 }
 // Cibles possibles d'une liste : services (formations) ou contrats (documents).
 // Renvoie [{code, label, membre:m=>bool}].
@@ -30,33 +71,68 @@ function rhOutilExigePour(L,x,apres){
   const avant=new Set(x.cibles||[]);
   const tousBox=rhOutilCase(!!x.obligatoire,'Tous les employés');
   const cases=new Map();
-  const liste=h('div',{className:'rho-list'},...services.map(sv=>{
+  // Formations : sous chaque service, ses postes (exigence plus précise).
+  const parPoste=L.cible==='service';
+  const postesAvant=new Set(x.postes||[]);
+  const casesPostes=new Map();   // poste_id → {box, service, ligne}
+  const nbPoste=pid=>membres.filter(m=>(m.postes||[]).some(p=>p.id===pid)).length;
+  const liste=h('div',{className:'rho-list'},...services.flatMap(sv=>{
     const box=rhOutilCase(!x.obligatoire&&avant.has(sv.code),sv.label);
     cases.set(sv.code,box);
     const nb=membres.filter(sv.membre).length;
-    return h('label',{className:'rho-check-row'},box,h('span',{style:{flex:1}},sv.label),
+    const ligneSvc=h('label',{className:'rho-check-row'},box,h('span',{style:{flex:1}},sv.label),
       h('span',{className:'rho-sub'},nb?nb+' employé'+(nb>1?'s':'')+' suivi'+(nb>1?'s':''):''));
+    const postesSvc=parPoste?rhOutilPostesDe(sv.code):[];
+    if(!postesSvc.length)return [ligneSvc];
+    // Service et postes dans un même bloc : les postes, rattachés par un
+    // trait, se lisent comme des subdivisions du service.
+    return [h('div',{className:'rho-svc-bloc'},ligneSvc,
+      h('div',{className:'rho-svc-postes'},
+        h('div',{className:'rho-svc-postes-t'},'Postes'),
+        ...postesSvc.map(p=>{
+          const b=rhOutilCase(!x.obligatoire&&postesAvant.has(p.id),p.libelle);
+          const n=nbPoste(p.id);
+          const ligne=h('label',{className:'rho-check-row sous'},b,h('span',{style:{flex:1}},p.libelle),
+            h('span',{className:'rho-inclus'},'compris dans le service'),
+            h('span',{className:'rho-sub'},n?n+' employé'+(n>1?'s':''):''));
+          casesPostes.set(p.id,{box:b,service:sv.code,ligne});
+          return ligne;
+        })))];
   }));
   // « Tous les employés » coché : les cibles sont grisées et ne comptent pas.
+  // Un service coché couvre déjà ses postes : ils sont grisés.
   const peindre=()=>{
     liste.classList.toggle('off',tousBox.checked);
     cases.forEach(b=>{b.disabled=tousBox.checked;});
+    // Service coché : tous ses postes s'affichent cochés (ils sont couverts),
+    // leur choix individuel est mis de côté et rendu si on décoche le service.
+    casesPostes.forEach(c=>{
+      const couvert=cases.get(c.service).checked;
+      if(couvert&&c.choix===undefined){c.choix=c.box.checked;c.box.checked=true;}
+      else if(!couvert&&c.choix!==undefined){c.box.checked=c.choix;delete c.choix;}
+      c.box.disabled=tousBox.checked||couvert;
+      c.ligne.classList.toggle('couvert',couvert);
+    });
   };
   tousBox.addEventListener('change',peindre);
+  cases.forEach(b=>b.addEventListener('change',peindre));
   peindre();
   const enregistrer=async()=>{
     const tous=tousBox.checked;
     const voulus=tous?[]:[...cases].filter(([,b])=>b.checked).map(([c])=>c);
+    const postes=tous?[]:[...casesPostes].filter(([,c])=>c.box.checked&&!voulus.includes(c.service)).map(([pid])=>pid);
     const nouveaux=new Set(voulus.filter(c=>!avant.has(c)));
+    const nouveauxPostes=new Set(postes.filter(pid=>!postesAvant.has(pid)));
     // Combien d'employés vont le recevoir maintenant.
     const aDeja=m=>(m[L.cle]||[]).some(e=>e.element_id===x.id);
-    const dansNouvelles=m=>services.some(sv=>nouveaux.has(sv.code)&&sv.membre(m));
+    const dansNouvelles=m=>services.some(sv=>nouveaux.has(sv.code)&&sv.membre(m))
+      ||(m.postes||[]).some(p=>nouveauxPostes.has(p.id));
     const manquants=membres.filter(m=>!aDeja(m)&&(tous?!x.obligatoire:dansNouvelles(m))).length;
     const envoyer=async()=>{
       let r;
-      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/exige',rhOutilJson('PUT',{tous,cibles:voulus}));}
+      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/exige',rhOutilJson('PUT',{tous,cibles:voulus,postes}));}
       catch(e){toast(e.message,'error');throw e;}
-      x.obligatoire=tous;x.cibles=voulus;
+      x.obligatoire=tous;x.cibles=voulus;x.postes=postes;
       const n=(r&&r.attribues)||0;
       toast('Enregistré'+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':''):'')+'.');
       fermer();
@@ -65,9 +141,9 @@ function rhOutilExigePour(L,x,apres){
     };
     if(!manquants){try{await envoyer();}catch(_){}return;}
     rhOutilConfirmer({
-      ton:'info',titre:tous?'Exiger pour tous les employés ?':(L.cible==='contrat'?'Exiger pour ces contrats ?':'Exiger pour ces services ?'),nom:x.libelle,label:'Enregistrer',
+      ton:'info',titre:tous?'Exiger pour tous les employés ?':(L.cible==='contrat'?'Exiger pour ces contrats ?':'Exiger pour ces services et postes ?'),nom:x.libelle,label:'Enregistrer',
       sous:manquants+' employé'+(manquants>1?'s':'')+' concerné'+(manquants>1?'s ne l’ont':' ne l’a')+' pas encore',
-      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé '+(tous?'':(L.cible==='contrat'?'sous l’un de ces contrats ':'de ces services '))+'ajouté ensuite. Le retirer de « Exigé pour » plus tard ne retirera rien.',
+      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé '+(tous?'':(L.cible==='contrat'?'sous l’un de ces contrats ':'de ces services ou postes '))+'ajouté ensuite. Le retirer de « Exigé pour » plus tard ne retirera rien.',
       onConfirm:envoyer,
     });
   };
@@ -75,7 +151,7 @@ function rhOutilExigePour(L,x,apres){
     h('div',{className:'rho-cat-legend'},x.libelle),
     h('label',{className:'rho-check-row tous'},tousBox,h('span',{style:{flex:1}},'Tous les employés'),
       h('span',{className:'rho-sub'},membres.length+' employé'+(membres.length>1?'s':'')+' suivi'+(membres.length>1?'s':''))),
-    h('div',{className:'rho-sep'},L.cible==='contrat'?'Ou seulement certains contrats':'Ou seulement certains services'),
+    h('div',{className:'rho-sep'},L.cible==='contrat'?'Ou seulement certains contrats':'Ou seulement certains services ou postes'),
     h('div',{className:'rho-scroll'},liste),
     h('div',{className:'rho-dlg-foot'},
       h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),
@@ -236,18 +312,34 @@ function rhOutilJustificatifs(x,apres){
   requestAnimationFrame(()=>nouv.focus());
 }
 
-// ── Catalogues ────────────────────────────────────────────────────
-function rhOutilCatalogue(L){
-  const {ov,fermer}=rhOutilFenetre();
+// ── Catalogues (onglet « Catalogues » de MyRH) ────────────────────
+// Une vue par liste, construite une fois puis gardée : render() reconstruit
+// toute la page à chaque set() (toast compris), la vue gardée est replacée
+// telle quelle, saisie en cours comprise. Le focus est rendu par
+// __restoreModalState (html.py), qui suit aussi .rho-cv.
+const _rhoCatVues={};
+function rhOutilCatalogueVue(L){
+  if(_rhoCatVues[L.cle])return _rhoCatVues[L.cle];
   const base='/api/rh-outil/'+L.cle+'/catalogue';
-  const listEl=h('div',{className:'rho-list'},h('div',{className:'rho-empty'},'Chargement…'));
-  // Après chaque changement : le catalogue se redessine seul, le tableau
-  // dessous est rechargé (intitulés et éléments supprimés).
+  const listEl=h('div',{className:'rho-list rho-cv-table'},h('div',{className:'rho-empty'},'Chargement…'));
+  const titre=h('h3',null,L.catalogue);
+  const nouvCat=L.categories?h('select',{className:'rho-select','aria-label':'Catégorie de la nouvelle formation'}):null;
+  // Catégories : elles changent dans leur fenêtre, la liste d'ajout suit.
+  const peindreNouvCat=()=>{
+    if(!nouvCat)return;
+    const v=nouvCat.value;
+    nouvCat.replaceChildren(...(S.rhOutilCategories||[]).map(c=>h('option',{value:String(c.id)},c.libelle)),h('option',{value:''},'Sans catégorie'));
+    if(v&&[...nouvCat.options].some(o=>o.value===v))nouvCat.value=v;
+  };
+  // Après chaque changement : le catalogue se redessine seul, la liste des
+  // employés est rechargée (intitulés et éléments supprimés).
   const rafraichir=async()=>{
     let d;
     try{d=await api(base);}catch(e){toast(e.message,'error');return;}
     if(!d)return;
     const cat=d.elements||[];
+    titre.textContent=L.catalogue+' ('+cat.length+')';
+    peindreNouvCat();
     const ligne=x=>{
       const inp=h('input',{type:'text',className:'rho-input',value:x.libelle,maxlength:'120','aria-label':'Intitulé','data-rho-esc':'',...RHO_NO_AUTOFILL});
       const enregistrer=async()=>{
@@ -264,10 +356,12 @@ function rhOutilCatalogue(L){
         if(e.key==='Enter'){e.preventDefault();inp.blur();}
         else if(e.key==='Escape'){e.preventDefault();inp.value=x.libelle;inp.blur();}
       });
-      inp.addEventListener('blur',enregistrer);
+      // Un rendu de la page détache la vue un instant (perte de focus, puis
+      // focus rendu) : ce n'est pas une fin de saisie.
+      inp.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==inp)enregistrer();},0));
       const nb=x.nb_employes;
       x.__cible=L.cible;
-      const exige=h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.cibles||[]).length?' on':''),
+      const exige=h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.cibles||[]).length||(x.postes||[]).length?' on':''),
           title:'Exigé pour : '+rhOutilLibelleExige(x)+' — cliquer pour modifier',
           onClick:()=>rhOutilExigePour(L,x,rafraichir)},iconEl('users',11),rhOutilLibelleExige(x));
       const suppr=
@@ -315,8 +409,6 @@ function rhOutilCatalogue(L){
       h('div',{className:'rho-list'},...g.items.map(ligne)))));
   };
   const nouv=h('input',{type:'text',className:'rho-input',placeholder:L.nouveau,maxlength:'120',...RHO_NO_AUTOFILL});
-  const nouvCat=L.categories?h('select',{className:'rho-select','aria-label':'Catégorie de la nouvelle formation'},
-    ...(S.rhOutilCategories||[]).map(c=>h('option',{value:String(c.id)},c.libelle)),h('option',{value:''},'Sans catégorie')):null;
   const ajouter=async()=>{
     const v=nouv.value.trim();
     if(!v)return;
@@ -324,21 +416,48 @@ function rhOutilCatalogue(L){
       await api(base,rhOutilJson('POST',{libelle:v,categorie_id:nouvCat&&nouvCat.value?Number(nouvCat.value):null}));
       nouv.value='';
       await rafraichir();
+      rhOutilLoad();
       nouv.focus();
     }catch(e){toast(e.message,'error');}
   };
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
-  const dlg=rhOutilDialogueLarge(L.catalogue,fermer,
-    L.categories?h('div',{className:'rho-dlg-tools'},h('button',{type:'button',className:'rho-mini',onClick:()=>rhOutilGererCategories(rafraichir)},iconEl('sliders',11),'Gérer les catégories')):null,
-    h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir.'+(L.categories?' Les justificatifs (attestations…) se déclarent dans chaque formation.':' « Pièce exigée » : le document ne compte qu’avec un fichier joint.')+' Retirable ensuite employé par employé.'),
-    h('div',{className:'rho-scroll'},listEl),
-    h('div',{className:'rho-cat-add'},nouv,nouvCat,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
+  peindreNouvCat();
+  const el=h('div',{className:'card rho-cv'},
+    h('div',{className:'card-header'},titre,
+      L.categories?h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilGererCategories(rafraichir)},iconEl('sliders',13),'Gérer les catégories'):null),
+    h('div',{className:'rho-cv-body'},
+      h('div',{className:'rho-cat-add'},nouv,nouvCat,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter')),
+      h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir.'+(L.categories?' Les justificatifs (attestations…) se déclarent dans chaque formation.':' « Pièce exigée » : le document ne compte qu’avec un fichier joint.')+' Retirable ensuite employé par employé.'),
+      listEl
+    )
   );
-  dlg.classList.add(L.categories?'xl':'doc');
-  ov.appendChild(dlg);
-  document.body.appendChild(ov);
+  const vue={el,rafraichir,nouv};
+  _rhoCatVues[L.cle]=vue;
   rafraichir();
-  requestAnimationFrame(()=>nouv.focus());
+  return vue;
+}
+// Recharge les catalogues déjà affichés une fois (arrivée sur l'onglet,
+// changement fait depuis une fenêtre rouverte par l'adresse).
+function rhOutilCataloguesRafraichir(){Object.values(_rhoCatVues).forEach(v=>v.rafraichir());}
+// Ancien point d'entrée (fenêtre du catalogue) : mène à l'onglet.
+function rhOutilCatalogue(L){set({rhOnglet:'catalogues',rhCatalogue:L.cle});}
+
+// Ordre des sous-onglets de Catalogues, de gauche à droite ; le premier est
+// celui par défaut (absent de l'adresse). Lu aussi par static/myrh_url.js.
+const RHO_CATALOGUES_ORDRE=['documents','formations','postes'];
+function renderRhOutilCatalogues(){
+  // Arrivée directe sur l'onglet : catégories, services et employés d'abord.
+  if(!S.rhOutilLoaded&&!S._rhOutilAutoLoad){S._rhOutilAutoLoad=true;rhOutilLoad();}
+  // Sous-onglets : les deux catalogues et les postes (compta_rh_outil_postes_assets.py).
+  const tous=RH_OUTIL_LISTES.map(x=>({cle:x.cle,titre:x.titre,icone:x.categories?'layers':'file-text',L:x}))
+    .concat([{cle:'postes',titre:'Postes',icone:'tag',L:null}]);
+  const choix=RHO_CATALOGUES_ORDRE.map(c=>tous.find(x=>x.cle===c)).filter(Boolean);
+  const actif=choix.find(x=>x.cle===S.rhCatalogue)||choix[0];
+  const onglets=h('div',{className:'rho-cv-tabs',role:'tablist'},...choix.map(x=>
+    h('button',{type:'button',role:'tab','aria-selected':String(x===actif),className:'rho-cv-tab'+(x===actif?' on':''),
+      onClick:()=>{if(x!==actif)set({rhCatalogue:x.cle});}},iconEl(x.icone,13),x.titre)));
+  if(!S.rhOutilLoaded)return h('div',null,onglets,h('div',{className:'card-empty'},'Chargement…'));
+  return h('div',null,onglets,(actif.L?rhOutilCatalogueVue(actif.L):rhOutilPostesVue()).el);
 }
 
 """

@@ -368,7 +368,7 @@ BLOCS: dict[str, Bloc] = {
     ),
     # ── Coffre RH (app/web/rh_coffre_page.py) ──
     "rh-coffre.ndf": Bloc(
-        appli="rh_coffre", libelle="Notes de frais à valider", url="/rh/coffre#ndf",
+        appli="rh_coffre", libelle="Notes de frais à valider", url="/rh/coffre?onglet=ndf",
         type="chiffre",
         historique=(("a-valider", "-"), ("montant", "-")),
         valeurs=(("a-valider", "Notes à valider"), ("montant", "Montant à valider (€)")),
@@ -397,6 +397,15 @@ BLOCS: dict[str, Bloc] = {
         historique=(("en-retard", "-"), ("bientot", "="), ("jamais", "-"), ("a-jour", "+")),
         valeurs=(("en-retard", "Opérations en retard"), ("bientot", "Dues bientôt"),
                  ("jamais", "Jamais saisies"), ("a-jour", "À jour")),
+    ),
+    # Bandeau d'une alerte dans l'affichage Analyse de l'historique des
+    # saisies (static/maintenance_analyse.js). Objet = id de l'alerte.
+    "maintenance.alertes.synthese": Bloc(
+        appli="maintenance", libelle="Analyse d'une alerte",
+        url="/maintenance?vue=controles",
+        type="objet", objet="alerte",
+        valeurs=(("validations", "Validations"), ("taux-nc", "Non-conformité (%)"),
+                 ("remplissage", "Remplissage (%)")),
     ),
     # ── MyAO (app/web/ao_page.py) ──
     "ao.appels": Bloc(

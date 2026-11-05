@@ -32,6 +32,7 @@ retrouve au même endroit : son Espace SIFA**, `/portail/{jeton}`.
 | Module | Dans l'Espace | État |
 |---|---|---|
 | Formulaires (MyQualité) | natif : rempli dans l'Espace | fait (20/10/2026) |
+| Documents à signer (MyTools › Parapheur) | natif : signé dans l'Espace (`?signature=<id>`, jeton de signature dans `#signer=`, en-tête `X-Parapheur-Jeton`) | fait (22/10/2026) |
 | Appels d'offres MyAO | carte → `/portail/ao/{token}` | à intégrer |
 | Devis transport + taxe carburant | carte → `/portail/expe/{token}` | à intégrer |
 | Questionnaire EUDR | carte → `/portail/eudr/{token}` | à intégrer |

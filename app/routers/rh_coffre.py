@@ -25,7 +25,7 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from config import BASE_DIR, ROLE_COMPTABILITE, ROLE_SUPERADMIN
+from config import BASE_DIR, NDF_TAUX_TVA, ROLE_COMPTABILITE, ROLE_SUPERADMIN
 from database import get_db
 from services.auth_service import get_current_user
 from app.routers.coffre import (
@@ -34,6 +34,8 @@ from app.routers.coffre import (
     ALLOWED_NDF_STATUTS,
     _log_doc_access,
     _sanitize_filename,
+    ndf_categories,
+    ndf_joindre_lignes,
 )
 
 router = APIRouter(tags=["rh_coffre"])
@@ -414,8 +416,16 @@ def delete_document(doc_id: int, request: Request):
 
 # ── Notes de frais côté compta ─────────────────────────────────────────
 
+def _filtre_mois(where: list, params: list, mois: str) -> None:
+    """Filtre « Mois » de la liste et de l'export : 1 à 12, ignoré sinon."""
+    m = (mois or "").strip()
+    if m.isdigit() and 1 <= int(m) <= 12:
+        where.append("strftime('%m', n.date_frais)=?")
+        params.append(f"{int(m):02d}")
+
+
 @router.get("/api/rh-coffre/ndf")
-def list_all_ndf(request: Request, statut: str = "", annee: str = ""):
+def list_all_ndf(request: Request, statut: str = "", annee: str = "", mois: str = ""):
     _require_rh(request)
     where = ["n.deleted_at IS NULL"]
     params: list = []
@@ -425,6 +435,7 @@ def list_all_ndf(request: Request, statut: str = "", annee: str = ""):
     if annee.strip():
         where.append("strftime('%Y', n.date_frais)=?")
         params.append(annee.strip())
+    _filtre_mois(where, params, mois)
     with get_db() as conn:
         rows = conn.execute(
             f"""SELECT n.*, u.nom AS employe_nom, u.email AS employe_email
@@ -442,7 +453,8 @@ def list_all_ndf(request: Request, statut: str = "", annee: str = ""):
                   n.date_frais DESC, n.id DESC""",
             params,
         ).fetchall()
-    return {"notes": [dict(r) for r in rows]}
+        notes = ndf_joindre_lignes(conn, [dict(r) for r in rows])
+    return {"notes": notes}
 
 
 @router.post("/api/rh-coffre/ndf/{ndf_id}/valider")
@@ -522,9 +534,124 @@ def marquer_payee(ndf_id: int, request: Request):
     return {"success": True}
 
 
+# ── Catégories de notes de frais (référentiel de la compta) ────────────
+# Réglages > Catégories enregistre la liste entière d'un coup (PUT). Une
+# catégorie retirée de la liste est désactivée, pas effacée : les notes qui la
+# portent gardent leur libellé et leurs montants, et l'export reste juste.
+
+def _categorie_valide(item: dict, saisie: str) -> dict:
+    """Champs d'une catégorie de la liste, validés. `saisie` est figée pour
+    une catégorie existante : on ne transforme pas des notes en euros en km."""
+    libelle = str(item.get("libelle") or "").strip()[:60]
+    if not libelle:
+        raise HTTPException(400, "Libellé requis pour chaque catégorie.")
+    if saisie not in {"montant", "km"}:
+        raise HTTPException(400, f"{libelle} : saisie invalide — montant ou km.")
+    if saisie == "km":
+        v = item.get("taux_km")
+        try:
+            taux_km = float(str(v).replace(",", "."))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"{libelle} : taux kilométrique requis.")
+        if taux_km <= 0 or taux_km > 5:
+            raise HTTPException(400, f"{libelle} : taux kilométrique entre 0 et 5 € par km.")
+        return {"libelle": libelle, "saisie": "km", "taux_tva": 0.0, "taux_km": taux_km}
+    try:
+        taux = float(item.get("taux_tva"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"{libelle} : taux de TVA invalide.")
+    if taux not in NDF_TAUX_TVA:
+        raise HTTPException(400, f"{libelle} : taux de TVA invalide.")
+    return {"libelle": libelle, "saisie": "montant", "taux_tva": taux, "taux_km": None}
+
+
+@router.get("/api/rh-coffre/ndf-categories")
+def list_ndf_categories_rh(request: Request):
+    _require_rh(request)
+    with get_db() as conn:
+        cats = ndf_categories(conn)
+        usages = dict(conn.execute(
+            """SELECT categorie_id, COUNT(*) FROM notes_de_frais
+               WHERE categorie_id IS NOT NULL AND deleted_at IS NULL
+               GROUP BY categorie_id"""
+        ).fetchall())
+    for c in cats:
+        c["nb_notes"] = usages.get(c["id"], 0)
+    return {"categories": cats, "taux_tva": list(NDF_TAUX_TVA)}
+
+
+@router.put("/api/rh-coffre/ndf-categories")
+async def save_ndf_categories(request: Request):
+    """Enregistre la liste complète, dans l'ordre affiché. Tout est validé
+    avant la première écriture : une erreur ne laisse rien à moitié fait."""
+    _require_rh(request)
+    body = await request.json()
+    items = body.get("categories")
+    if not isinstance(items, list) or not items:
+        raise HTTPException(400, "Au moins une catégorie est requise.")
+    with get_db() as conn:
+        existantes = {r["id"]: dict(r) for r in conn.execute(
+            "SELECT id,saisie FROM ndf_categories WHERE actif=1"
+        ).fetchall()}
+        lignes, vus = [], set()
+        for item in items:
+            cid = item.get("id")
+            if cid is not None:
+                if cid not in existantes:
+                    raise HTTPException(400, "Catégorie inconnue — rechargez les réglages.")
+                champs = _categorie_valide(item, existantes[cid]["saisie"])
+            else:
+                champs = _categorie_valide(item, item.get("saisie") or "montant")
+            cle = champs["libelle"].casefold()
+            if cle in vus:
+                raise HTTPException(400, f"Deux catégories s'appellent « {champs['libelle']} ».")
+            vus.add(cle)
+            lignes.append((cid, champs))
+
+        gardees = {cid for cid, _ in lignes if cid is not None}
+        for cid in existantes:
+            if cid not in gardees:
+                conn.execute("UPDATE ndf_categories SET actif=0 WHERE id=?", (cid,))
+        for i, (cid, champs) in enumerate(lignes):
+            ordre = (i + 1) * 10
+            if cid is not None:
+                conn.execute(
+                    """UPDATE ndf_categories SET libelle=?, taux_tva=?, taux_km=?, ordre=?
+                       WHERE id=?""",
+                    (champs["libelle"], champs["taux_tva"], champs["taux_km"], ordre, cid),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO ndf_categories (code,libelle,saisie,taux_tva,taux_km,ordre)
+                       VALUES (?,?,?,?,?,?)""",
+                    ("cat_" + uuid.uuid4().hex[:8], champs["libelle"], champs["saisie"],
+                     champs["taux_tva"], champs["taux_km"], ordre),
+                )
+        conn.commit()
+    return {"success": True}
+
+
+def _rubrique_feuille(categorie: str, taux, km: bool) -> str:
+    """Colonne de la feuille de frais Excel : « Repas à 10% », « KM »…"""
+    if km:
+        return "KM"
+    libelle = categorie or ""
+    if taux is None:
+        return libelle
+    if not taux:
+        return f"{libelle} sans TVA"
+    return f"{libelle} à {taux:g}%".replace(".", ",")
+
+
 @router.get("/api/rh-coffre/ndf/export")
-def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
-    """Export CSV des notes de frais (filtrable). Pour intégration compta."""
+def export_ndf_csv(request: Request, annee: str = "", statut: str = "", mois: str = ""):
+    """Export CSV des notes de frais (filtrable). Pour intégration compta.
+
+    Une ligne par taux de TVA : un ticket de restaurant à 10 % et 20 % donne
+    deux lignes, chacune avec ses propres HT, TVA et TTC, et le même id de
+    note. `ligne` les numérote (« 1/2 ») et `montant_ttc_note` rappelle le
+    total du ticket. Une indemnité kilométrique tient sur une ligne.
+    """
     _require_rh(request)
     where = ["n.deleted_at IS NULL"]
     params: list = []
@@ -534,28 +661,48 @@ def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
     if annee.strip():
         where.append("strftime('%Y', n.date_frais)=?")
         params.append(annee.strip())
+    _filtre_mois(where, params, mois)
     with get_db() as conn:
         rows = conn.execute(
             f"""SELECT n.id,u.nom AS employe,u.matricule,n.date_frais,n.categorie,
-                       n.montant_ttc,n.montant_tva,n.description,n.statut,
+                       n.ville,n.distance_km,n.taux_km,n.taux_tva,
+                       n.montant_ht,n.montant_tva,n.montant_ttc,n.description,n.statut,
                        n.soumise_at,n.validee_at,n.validee_by_nom,
                        n.payee_at,n.payee_by_nom,n.motif_refus
                 FROM notes_de_frais n
                 JOIN users u ON u.id = n.employe_user_id
                 WHERE {' AND '.join(where)}
-                ORDER BY n.date_frais DESC""",
+                ORDER BY n.date_frais DESC, n.id DESC""",
             params,
         ).fetchall()
+        notes = ndf_joindre_lignes(conn, [dict(r) for r in rows])
+
+    def txt(v):
+        return "" if v is None else str(v)
+
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
     w.writerow([
-        "id", "salarie", "matricule", "date_frais", "categorie",
-        "montant_ttc", "montant_tva", "description", "statut",
-        "soumise_at", "validee_at", "validee_par",
-        "payee_at", "payee_par", "motif_refus",
+        "id", "ligne", "salarie", "matricule", "date_frais", "categorie", "rubrique_feuille",
+        "ville", "distance_km", "taux_km", "taux_tva",
+        "montant_ht", "montant_tva", "montant_ttc", "montant_ttc_note", "description", "statut",
+        "soumise_at", "validee_at", "validee_par", "payee_at", "payee_par", "motif_refus",
     ])
-    for r in rows:
-        w.writerow([str(r[k] if r[k] is not None else "") for k in r.keys()])
+    for n in notes:
+        km = n["distance_km"] is not None
+        lignes = n["tva_lignes"] or [{
+            "taux_tva": n["taux_tva"], "montant_ht": n["montant_ht"],
+            "montant_tva": n["montant_tva"], "montant_ttc": n["montant_ttc"],
+        }]
+        for i, l in enumerate(lignes, start=1):
+            w.writerow([txt(v) for v in (
+                n["id"], f"{i}/{len(lignes)}", n["employe"], n["matricule"], n["date_frais"],
+                n["categorie"], _rubrique_feuille(n["categorie"], l["taux_tva"], km),
+                n["ville"], n["distance_km"], n["taux_km"], l["taux_tva"],
+                l["montant_ht"], l["montant_tva"], l["montant_ttc"], n["montant_ttc"],
+                n["description"], n["statut"], n["soumise_at"], n["validee_at"],
+                n["validee_by_nom"], n["payee_at"], n["payee_by_nom"], n["motif_refus"],
+            )])
     buf.seek(0)
     filename = f"notes_de_frais_{annee or 'toutes'}.csv"
     return StreamingResponse(

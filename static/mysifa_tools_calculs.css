@@ -1,0 +1,99 @@
+/* MyTools › Calculs bobine — mise en page à deux colonnes, Réglages fins,
+ * couches de matière et schémas (static/mysifa_tools_calculs.js,
+ * static/mysifa_tools_calculs_schemas.js). Les styles de base des champs,
+ * onglets et résultats restent dans mysifa_tools.css.
+ * Couleurs : variables du thème uniquement ; texte blanc sur fond coloré. */
+
+.tcal{max-width:1480px;container-type:inline-size;container-name:tcal}
+.tcal-panneau{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,460px);gap:18px;align-items:start}
+.tcal-gauche{display:flex;flex-direction:column;gap:18px;min-width:0}
+@container tcal (max-width:1000px){.tcal-panneau{grid-template-columns:minmax(0,1fr)}.tcal-schema{position:static}}
+@media(max-width:1100px){.tcal-panneau{grid-template-columns:minmax(0,1fr)}.tcal-schema{position:static}}
+.tcal-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ── Réglages fins : carte à part ─────────────────────────────────── */
+.tcal-fins-carte{padding:0;gap:0;border-left:4px solid var(--accent)}
+.tcal-fins-carte .tcal-fins{border-top:none;padding-top:0}
+.tcal-fins-carte .tcal-fins summary{list-style:none;display:flex;align-items:center;gap:14px;padding:18px 22px;margin:0;cursor:pointer;color:var(--text);border-radius:14px}
+.tcal-fins-carte .tcal-fins summary::-webkit-details-marker{display:none}
+.tcal-fins-carte .tcal-fins summary:hover{background:var(--accent-bg)}
+.tcal-fins-carte .tcal-fins summary:hover .tcal-fins-t{color:var(--accent)}
+.tcal-fins-carte .tcal-fins[open] summary{margin-bottom:0;border-bottom:1px solid var(--border);border-radius:14px 14px 0 0}
+.tcal-fins-ic{width:36px;height:36px;border-radius:10px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tcal-fins-tx{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.tcal-fins-t{font-size:16px;font-weight:800;color:var(--text)}
+.tcal-fins-aide{font-size:13px;color:var(--text2);line-height:1.4}
+.tcal-fins-resume{display:none;font-size:13px;font-weight:700;color:var(--accent);line-height:1.4;overflow-wrap:anywhere}
+.tcal-fins:not([open]) .tcal-fins-resume{display:block}
+.tcal-fins:not([open]) .tcal-fins-aide{display:none}
+.tcal-fins-chev{color:var(--muted);flex-shrink:0;transition:transform .15s}
+.tcal-fins:not([open]) .tcal-fins-chev{transform:rotate(-90deg)}
+.tcal-fins-corps{padding:18px 22px 22px;display:flex;flex-direction:column;gap:18px}
+.tcal-fins-bloc{display:flex;flex-direction:column;gap:10px}
+@media(max-width:600px){.tcal-fins-carte .tcal-fins summary{padding:14px 16px}.tcal-fins-corps{padding:14px 16px 18px}}
+
+/* ── Couches : frontal + adhésif + glassine ───────────────────────── */
+.tcal-couches{display:flex;flex-direction:column;gap:10px}
+.tcal-couche{display:grid;grid-template-columns:92px minmax(0,1fr) 128px;grid-template-areas:"nom sel um" ". src src";column-gap:12px;row-gap:4px;align-items:center}
+.tcal-couche-nom{grid-area:nom;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.tcal-couche select{grid-area:sel;min-width:0}
+.tcal-couche-um{grid-area:um;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)}
+.tcal-couche-um .tcal-in{padding:11px 10px;font-size:15px}
+.tcal-couche-um .tcal-in:disabled{opacity:.5}
+.tcal-couche-src{grid-area:src;font-size:12px;color:var(--muted)}
+.tcal-couche-src:empty{display:none}
+.tcal-couche-src--manque{color:var(--warn);font-weight:600}
+@media(max-width:560px){.tcal-couche{grid-template-columns:minmax(0,1fr) 110px;grid-template-areas:"nom nom" "sel um" "src src"}}
+.tcal-couches-total{font-size:14px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:10px;padding:10px 14px;line-height:1.45}
+.tcal-couches-total:empty{display:none}
+.tcal-couches-total--manque{color:var(--warn);background:var(--bg)}
+
+/* ── Schéma ───────────────────────────────────────────────────────── */
+.tcal-schema{position:sticky;top:16px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.tcal-schema-tete{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tcal-schema-t{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px}
+.tcal-schema-ex{font-size:11px;font-weight:700;color:white;background:var(--muted);border-radius:999px;padding:3px 9px}
+.tcal-schema-dessin{background:var(--bg);border-radius:12px;padding:10px;min-height:120px;display:flex;align-items:center;justify-content:center}
+.tcal-schema-dessin:empty{display:none}
+.tcal-schema--exemple .tsch-svg{opacity:.45}
+.tcal-schema-leg{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:13px;color:var(--text2)}
+.tsch-svg{width:100%;max-width:480px;height:auto;display:block;margin:0 auto;max-height:560px;overflow:visible}
+.tsch-leg{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--text2)}
+.tsch-leg i{width:14px;height:14px;border-radius:4px;display:inline-block;border:1px solid var(--border)}
+.tsch-chiffres{flex-basis:100%;display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--text2);line-height:1.45;border-top:1px solid var(--border);padding-top:8px}
+.tsch-chiffres b{color:var(--text);font-variant-numeric:tabular-nums}
+.tsch-vide{font-size:13px;color:var(--muted)}
+
+/* Formes */
+.tsch-matiere{fill:var(--accent)}
+.tsch-spire{fill:none;stroke:white;stroke-opacity:.28;stroke-width:1}
+.tsch-mandrin{fill:var(--c3);stroke:var(--card);stroke-width:1.5}
+.tsch-trou{fill:var(--card)}
+.tsch-rayon{stroke:white;stroke-width:1.5;stroke-dasharray:4 3}
+.tsch-support{fill:var(--card);stroke:var(--border);stroke-width:1.2}
+.tsch-etiq{fill:var(--accent);stroke:var(--card);stroke-width:.8}
+.tsch-chute{fill:var(--danger);fill-opacity:.32}
+.tsch-rive{stroke:var(--danger);stroke-width:1.4;stroke-dasharray:3 3}
+.tsch-fleche{fill:none;stroke:var(--text2);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.tsch-carton{fill:none;stroke:var(--text);stroke-width:2}
+.tsch-vide-carton{fill:var(--warn);fill-opacity:.22}
+.tsch-bobine{fill:var(--accent);stroke:var(--card);stroke-width:1}
+.tsch-badge{fill:var(--c2)}
+.tsch-cote line{stroke:var(--text2);stroke-width:1}
+
+/* Textes */
+.tsch-t{font:600 12px 'Segoe UI',system-ui,sans-serif;fill:var(--text)}
+.tsch-t--cote{fill:var(--text2);font-weight:600;font-variant-numeric:tabular-nums}
+.tsch-t--titre{fill:var(--text2);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}
+.tsch-t--petit{font-size:10.5px;fill:var(--text2)}
+.tsch-t--sur{fill:white;font-weight:700}
+.tsch-t--sur.tsch-t--petit{fill:white;font-weight:600}
+.tsch-t--blanc{fill:white;font-weight:700}
+.tsch-t--danger{fill:var(--danger);font-weight:700}
+
+/* Pastilles de légende */
+.tsch-p-matiere,.tsch-p-etiq,.tsch-p-bobine{background:var(--accent)}
+.tsch-p-mandrin{background:var(--c3)}
+.tsch-p-chute{background:var(--danger);opacity:.45}
+.tsch-p-rive{background:transparent;border:2px dashed var(--danger)!important}
+.tsch-p-vide{background:var(--warn);opacity:.45}

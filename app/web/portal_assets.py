@@ -97,7 +97,8 @@ body.light .rvgi-mark .rvgi-clair{display:block}
   opacity:0;pointer-events:none;
 }
 .portal-apps{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:stretch}
-.portal-apps--reorderable .portal-app:not(.portal-app--busy){cursor:grab;touch-action:none}
+.portal-apps--reorderable .portal-app:not(.portal-app--busy){cursor:grab;touch-action:manipulation;
+  -webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .portal-apps--reorderable .portal-app--dragging{cursor:grabbing;opacity:.92;z-index:5;
   box-shadow:0 12px 36px rgba(0,0,0,.35);transform:scale(1.02)}
 .portal-apps--reorderable .portal-app--placeholder{
@@ -252,7 +253,8 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
 .portal-vol-pied:hover{background:var(--accent);color:var(--bg)}
 .portal-vol-vide{padding:12px 10px;font-size:11.5px;color:var(--muted)}
 /* Le volet est une commodité souris et clavier : sur un écran tactile étroit,
-   un appui long n'existe pas et la tuile doit rester un simple bouton. */
+   les mêmes raccourcis s'ouvrent par un appui maintenu sur la tuile
+   (portalTuileFeuille). */
 @media (max-width:900px){.portal-vol-pop{display:none!important}}
 
 /* ── Tuiles : volet, épinglage, sections ──────────────────────────────── */
@@ -284,6 +286,16 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
    basculait la classe sans que rien ne disparaisse. */
 .portal-apps--repliees{display:none!important}
 .portal-apps--favoris{margin-bottom:22px}
+.portal-apps-section{width:100%}
+/* Rangée vide et titre sans objet : seulement pendant un glissement, comme cible. */
+.portal-apps-section--vide,.portal-apps-sec--glisse{display:none}
+.portal-apps-block--glisse .portal-apps-section--vide{display:block}
+.portal-apps-block--glisse .portal-apps-sec--glisse{display:flex}
+.portal-apps-block--glisse .portal-apps--repliees{display:flex!important}
+.portal-apps-block--glisse .portal-apps-section--vide .portal-apps{min-height:96px;align-content:center;
+  border:2px dashed color-mix(in srgb,var(--accent,#22d3ee) 55%,transparent);border-radius:14px}
+.portal-apps-block--glisse .portal-apps-section--vide .portal-apps:empty::before{content:attr(data-vide);
+  grid-column:1 / -1;align-self:center;width:100%;padding:0 12px;text-align:center;font-size:13px;font-weight:600;color:var(--muted)}
 
 /* ── ⌘K badge in the Google search input ── */
 .portal-search button.portal-search-cmdk-badge,
@@ -340,7 +352,7 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
     grid-template-columns:repeat(3, minmax(0, 1fr));
     gap:8px;
     width:100%;
-    max-width:min(100%, 320px);
+    max-width:100%;
     margin:0 auto;
     justify-items:stretch;
   }
@@ -376,7 +388,7 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
 @media (min-width:520px) and (max-width:900px){
   .portal-apps{
     grid-template-columns:repeat(4, minmax(0, 1fr));
-    max-width:min(100%, 400px);
+    max-width:min(100%, 560px);
     gap:10px;
   }
   .portal-app{max-height:88px}
@@ -831,12 +843,17 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 
   /* A traiter : les compteurs deja servis un par un, rendus tapables. */
   .portal-atraiter{width:100%}
-  .portal-atraiter-empty{
-    display:flex;align-items:center;gap:9px;padding:13px 14px;
-    border:1px solid var(--border);border-radius:12px;background:var(--card);
-    font-size:12.5px;color:var(--muted);
-  }
-  .portal-atraiter-empty svg{color:var(--success);flex:0 0 auto}
+  .portal-apps-block--glisse .portal-apps--repliees{display:grid!important}
+  /* Feuille d'une tuile (appui maintenu) : titre, epingle, raccourcis du module. */
+  .portal-feuille-titre{padding:2px 22px 10px;font-size:15px;font-weight:800;color:var(--text);
+    border-bottom:1px solid var(--border);margin-bottom:6px}
+  .portal-feuille-corps{padding:4px 2px 0;border-top:1px solid var(--border);margin-top:6px}
+  .portal-feuille-corps .portal-vol-item{min-height:48px}
+  /* Rien à traiter : le bloc s'efface, les tuiles remontent. */
+  .portal-bloc--ancien .msf-sect b::after{content:' · actualisation…';font-weight:500;
+    text-transform:none;letter-spacing:0}
+  .portal-bloc--ancien .portal-atraiter-body,.portal-bloc--ancien .portal-atelier-body{opacity:.72}
+  .portal-atraiter--vide{display:none}
 
   /* Atelier maintenant : etat instantane des machines. */
   .portal-atelier{display:block;order:6;width:100%}
@@ -870,13 +887,19 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   /* Un bloc sans donnee ne laisse pas un titre orphelin. */
   .portal-atelier--vide{display:none!important}
 
-  /* Pas de survol au doigt : le chevron des volets doit etre visible en
-     permanence, sinon les sous-menus du module — exactement ce qu'on vient
-     chercher au telephone — sont inatteignables. */
-  .portal-app .portal-app-chev{display:flex;width:26px;height:26px;top:4px;right:4px}
-  /* L'etoile reste au bureau : epingler est un geste de configuration, et a
-     22 px sur une tuile de 96 on la touche en voulant ouvrir l'application. */
-  .portal-app .portal-app-star{display:none!important}
+  /* Chevron et etoile restent au bureau : a 22 px sur une tuile de 96, on les
+     touche en voulant ouvrir l'application. Au doigt, les raccourcis du module
+     et l'epinglage passent par l'appui maintenu (portalTuileFeuille). */
+  .portal-app .portal-app-chev,.portal-app .portal-app-star{display:none!important}
+  /* Au doigt, :hover s'allume des qu'on pose le doigt, y compris pour faire
+     defiler, et reste allume ensuite. La couleur ne vient plus que de la classe
+     posee par attachPortalReorder quand l'appui est franc. */
+  .portal-app{-webkit-tap-highlight-color:transparent}
+  .portal-app:hover{border-color:var(--border)}
+  .portal-app:hover .portal-app-icon{background:var(--accent-bg);color:var(--accent)}
+  .portal-app.portal-app--appui{border-color:var(--accent)}
+  .portal-app.portal-app--appui .portal-app-icon{background:var(--accent);color:#fff}
+  .portal-app--disabled.portal-app--appui{border-color:var(--border)}
   .portal-apps-sec-btn{min-height:34px}
 
   /* Ligne machine : c'est un bouton, on annule le style natif. */
@@ -885,17 +908,22 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
     color:inherit;font:inherit;text-align:left;cursor:pointer;
   }
   .portal-mach:last-child{border-bottom:0}
-  .portal-mach:hover{background:var(--bg)}
+  .portal-mach:active{background:var(--bg)}
 
   /* Les blocs mobiles s'alignent sur la largeur de la grille de tuiles,
      sinon le portail donne l'impression de deux mises en page superposees. */
   .portal-mcol,.portal-atelier{
-    max-width:min(100%,320px);margin-left:auto;margin-right:auto;
+    max-width:100%;margin-left:auto;margin-right:auto;
   }
 }
 
 @media (min-width:520px) and (max-width:900px){
-  .portal-mcol,.portal-atelier{max-width:min(100%,400px)}
+  .portal-mcol,.portal-atelier{max-width:min(100%,560px)}
+}
+/* Telephone : les tableaux de bord sont un ecran a part, pas un bloc pose
+   au-dessus des applications (bouton en haut a gauche, mysifa_accueil.js). */
+@media (max-width:899px){
+  body.mysifa-accueil-on:not(.mysifa-accueil-repliee) #root:has(.portal-page){display:none}
 }
 
 /* Portrait : l'ordre de lecture est bonjour → chercher → ce qui m'attend →
@@ -911,7 +939,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 @media (max-width:900px) and (orientation:landscape){
   .portal-page{
     display:grid;
-    grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-columns:auto minmax(0,1fr);
     grid-template-rows:auto minmax(0,1fr);
     gap:8px 14px;
     align-content:stretch;
@@ -938,15 +966,9 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   }
   .portal-msearch{height:38px;font-size:12.5px;border-radius:10px;padding:0 8px 0 11px}
   .portal-msearch-google{height:26px;font-size:10.5px;padding:0 8px}
-  .portal-corner-stack{
-    grid-column:3;grid-row:1;
-    position:static;flex-direction:row;flex-wrap:nowrap;justify-content:flex-end;
-    align-items:center;gap:6px;width:auto;margin:0;padding:0;
-    background:none;border:0;border-radius:0;box-shadow:none;
-  }
-  .portal-corner-stack .portal-settings-corner{width:34px;height:34px;border-radius:10px;
-    background:var(--card);border:1px solid var(--border)}
-  .portal-corner-stack .portal-settings-corner:hover{background:var(--bg);border-color:var(--accent)}
+  /* Les memes acces sont dans la feuille de l'avatar, comme en portrait : a huit
+     icones, cette barre debordait sur les tuiles. */
+  .portal-corner-stack{display:none!important}
   /* Le bloc paysage historique laissait ce conteneur en display:flex centre.
      Les deux en-tetes de section et les deux grilles de tuiles devenaient des
      items d'une meme ligne : ecrases, superposes, illisibles. Ici il empile. */
@@ -1339,21 +1361,134 @@ function portalGetDragInsertBefore(container,x,y){
 }
 async function savePortalAppsOrder(ids){
   try{
-    const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
+    // Pas de message : la tuile à sa nouvelle place suffit, et un message redessine
+    // le portail à son apparition et à sa disparition, sous un doigt qui glisse déjà
+    // la tuile suivante.
     await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({portal_apps_order:ids})});
     S.user={...S.user,portal_apps_order:ids};
-    const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
-    if(!same)toast('Ordre du portail enregistré');
   }catch(e){toast(e.message||'Enregistrement impossible','danger');}
+}
+// Appui maintenu puis lâché sur une tuile, au doigt : ce que la souris trouve au
+// survol (étoile, raccourcis du module). Même feuille que le menu de l'avatar.
+function portalTuileFeuille(tile){
+  const sheet=document.getElementById('msf-sheet-root');
+  const bd=document.getElementById('msf-sheet-backdrop');
+  const id=tile.getAttribute('data-portal-id');
+  if(!sheet||!bd||!id)return;
+  const nomEl=tile.querySelector('.portal-app-name');
+  const fav=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
+  const estFav=fav.indexOf(id)!==-1;
+  const icoEtoile=document.createElement('span');
+  icoEtoile.style.display='inline-flex';
+  icoEtoile.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="'+(estFav?'currentColor':'none')+
+    '" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">'+
+    '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/></svg>';
+  const btnFav=h('button',{
+    type:'button',
+    className:'msf-sheet-item',
+    onClick:()=>{
+      closeProfileSheet();
+      savePortalAppsFavoris(estFav?fav.filter(x=>x!==id):fav.concat([id]));
+    }
+  },
+    h('span',{className:'msf-sheet-item-ico'},icoEtoile),
+    h('span',{className:'msf-sheet-item-label'},estFav?'Retirer des favoris':'Ajouter aux favoris')
+  );
+  sheet.innerHTML='';
+  sheet.appendChild(h('div',{className:'msf-sheet-handle'}));
+  sheet.appendChild(h('div',{className:'portal-feuille-titre'},nomEl?nomEl.textContent:''));
+  sheet.appendChild(h('div',{className:'msf-sheet-list'},btnFav));
+  portalChargerVolets().then(volets=>{
+    const volet=(volets.tuiles||{})[id];
+    if(!volet||!(volet.groupes||[]).length||!sheet.classList.contains('open'))return;
+    const corps=h('div',{className:'portal-feuille-corps'});
+    portalVoletRemplirCorps(corps,volet);
+    sheet.appendChild(corps);
+  });
+  bd.classList.add('open');
+  bd.setAttribute('aria-hidden','false');
+  sheet.classList.add('open');
+  // Le navigateur peut émettre un clic tardif au lâcher, sur le voile qui vient
+  // d'apparaître : seul un appui commencé sur le voile referme.
+  let appuiVoile=false;
+  bd.onpointerdown=()=>{appuiVoile=true;};
+  bd.onclick=()=>{if(appuiVoile)closeProfileSheet();};
+}
+// Glissement qui change les favoris : ordre et favoris partent ensemble, et
+// l'écran suit sans attendre la réponse.
+function savePortalDisposition(ids,favs){
+  S.user={...S.user,portal_apps_order:ids,portal_apps_favoris:favs};
+  render();
+  ++_portalFavDernier;
+  const envoi=_portalFavFile.then(()=>api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({portal_apps_order:ids,portal_apps_favoris:favs})}));
+  _portalFavFile=envoi.catch(()=>{});
+  envoi.catch(e=>{toast(e.message||'Enregistrement impossible','danger');});
+}
+/* « À traiter » et « Atelier maintenant » : le portail se dessine plusieurs fois,
+   et sur un téléphone ces deux blocs sont ce qu'on vient lire. Chaque dessin les
+   remplit aussitôt avec les derniers chiffres connus, marqués comme anciens tant
+   que la réponse n'est pas là, puis une seule requête les actualise. La première
+   est lancée dès le <head> de la page (window.__portailAvance, html.py). */
+const PORTAL_BLOC_FRAIS_MS=30000;
+const PORTAL_BLOC_GARDE_MS=24*3600*1000;
+const PORTAL_BLOC_URLS={'a-traiter':'/api/portail/a-traiter','atelier':'/api/portail/atelier'};
+const _portalBlocs={};
+function _portalBlocCle(cle){
+  // Le rôle simulé par un superadmin ne voit pas les mêmes chiffres que le sien.
+  return 'mysifa_portail_bloc_'+cle+'_'+(S.user&&S.user.id)+'_'+((S.user&&S.user.effective_role)||'');
+}
+function portalBlocsOublier(){
+  Object.keys(_portalBlocs).forEach(k=>delete _portalBlocs[k]);
+  try{
+    Object.keys(localStorage).forEach(k=>{if(k.indexOf('mysifa_portail_bloc_')===0)localStorage.removeItem(k);});
+  }catch(e){}
+}
+function portalBlocCharger(cle,dessiner){
+  const stock=_portalBlocCle(cle);
+  let b=_portalBlocs[stock];
+  if(!b){
+    b=_portalBlocs[stock]={d:null,frais:0,prom:null};
+    try{
+      const lu=JSON.parse(localStorage.getItem(stock)||'null');
+      if(lu&&Date.now()-lu.t<PORTAL_BLOC_GARDE_MS)b.d=lu.d;
+    }catch(e){}
+  }
+  const aJour=Date.now()-b.frais<PORTAL_BLOC_FRAIS_MS;
+  if(b.d)dessiner(b.d,aJour);
+  if(aJour)return;
+  if(!b.prom){
+    const avance=window.__portailAvance&&window.__portailAvance[cle];
+    if(avance)window.__portailAvance[cle]=null;
+    b.prom=(avance||fetch(PORTAL_BLOC_URLS[cle],{credentials:'include'}).then(r=>r.ok?r.json():null).catch(()=>null))
+      .then(d=>{
+        b.prom=null;
+        if(d){
+          b.d=d;b.frais=Date.now();
+          try{localStorage.setItem(stock,JSON.stringify({t:b.frais,d}));}catch(e){}
+        }
+        return d;
+      });
+  }
+  // Un dessin plus récent a pu remplacer celui-ci : il s'est abonné de son côté.
+  b.prom.then(d=>{if(d)dessiner(d,true);});
 }
 function attachPortalReorder(appsWrap){
   if(appsWrap._portalDndBound)return;
   appsWrap._portalDndBound=true;
   const DRAG_THRESHOLD=6;
+  // Au doigt, un appui qui glisse est un défilement : le déplacement ne s'arme
+  // qu'après un appui maintenu sans bouger, comme sur l'écran d'accueil d'un
+  // téléphone. Le navigateur garde la main sur le défilement jusque-là.
+  const TOUCH_HOLD_MS=500;
+  const TOUCH_SLOP=10;
+  // Délai avant de colorer la tuile : un doigt qui part faire défiler a déjà
+  // bougé, seul un appui franc l'atteint. Un appui bref colore au lâcher.
+  const TOUCH_APPUI_MS=130;
   let dragState=null;
 
   function ensurePlaceholder(){
-    let ph=appsWrap.querySelector('.portal-app--placeholder');
+    let ph=document.querySelector('.portal-apps .portal-app--placeholder');
     if(ph)return ph;
     ph=document.createElement('div');
     ph.className='portal-app portal-app--placeholder';
@@ -1366,6 +1501,33 @@ function attachPortalReorder(appsWrap){
     document.removeEventListener('pointermove',onPointerMove,true);
     document.removeEventListener('pointerup',onPointerUp,true);
     document.removeEventListener('pointercancel',onPointerUp,true);
+    document.removeEventListener('touchend',onTouchFin,true);
+    document.removeEventListener('touchcancel',onTouchFin,true);
+  }
+
+  function armTouchHold(tile){
+    const top0=tile.getBoundingClientRect().top;
+    dragState.appuiTimer=setTimeout(()=>{tile.classList.add('portal-app--appui');},TOUCH_APPUI_MS);
+    dragState.holdTimer=setTimeout(()=>{
+      if(!dragState||dragState.tile!==tile||dragState.active)return;
+      // Portail reconstruit pendant l'appui, ou page qui a défilé sous le doigt
+      // sans que le navigateur l'ait signalé : ce n'est plus cette tuile qu'on tient.
+      if(!tile.isConnected||Math.abs(tile.getBoundingClientRect().top-top0)>TOUCH_SLOP){abandonDrag();return;}
+      activateDrag(tile,{clientX:dragState.startX,clientY:dragState.startY});
+      if(navigator.vibrate){try{navigator.vibrate(12);}catch(err){}}
+    },TOUCH_HOLD_MS);
+  }
+
+  function clearTouchPress(st){
+    clearTimeout(st.holdTimer);
+    clearTimeout(st.appuiTimer);
+    st.tile.classList.remove('portal-app--appui');
+  }
+
+  function abandonDrag(){
+    if(dragState)clearTouchPress(dragState);
+    dragState=null;
+    clearDocumentListeners();
   }
 
   function activateDrag(tile,e){
@@ -1373,6 +1535,8 @@ function attachPortalReorder(appsWrap){
     dragState.offX=e.clientX-rect.left;
     dragState.offY=e.clientY-rect.top;
     dragState.active=true;
+    document.addEventListener('touchend',onTouchFin,true);
+    document.addEventListener('touchcancel',onTouchFin,true);
 
     const ghost=tile.cloneNode(true);
     ghost.classList.add('portal-app--ghost');
@@ -1393,46 +1557,112 @@ function attachPortalReorder(appsWrap){
     ].join(';');
     document.body.appendChild(ghost);
     dragState.ghost=ghost;
+    dragState.rect=rect;
+    // Au doigt, la tuile ne quitte sa place qu'au premier déplacement : un appui
+    // maintenu puis lâché ne fait qu'ouvrir sa feuille, et Safari ne perd pas le
+    // doigt posé sur un élément devenu invisible.
+    if(!dragState.touch)libererPlace(tile,rect);
+  }
 
+  function libererPlace(tile,rect){
     const ph=ensurePlaceholder();
     ph.style.width=rect.width+'px';
     ph.style.minHeight=rect.height+'px';
     appsWrap.insertBefore(ph,tile);
     tile.style.display='none';
     dragState.placeholder=ph;
+    const bloc=appsWrap.closest('.portal-apps-block');
+    if(bloc)bloc.classList.add('portal-apps-block--glisse');
+    lancerDefilement();
   }
 
   function movePlaceholder(clientX,clientY){
     const ph=dragState&&dragState.placeholder;
     if(!ph)return;
-    const after=portalGetDragInsertBefore(appsWrap,clientX,clientY);
-    if(after==null||after===ph)appsWrap.appendChild(ph);
-    else appsWrap.insertBefore(ph,after);
+    // La rangée visée est la plus proche du doigt, verticalement.
+    const bloc=appsWrap.closest('.portal-apps-block');
+    let cible=appsWrap, ecart=Infinity;
+    (bloc?bloc.querySelectorAll('.portal-apps--reorderable'):[appsWrap]).forEach(z=>{
+      const r=z.getBoundingClientRect();
+      if(!r.width||!r.height)return;
+      const d=clientY<r.top?r.top-clientY:(clientY>r.bottom?clientY-r.bottom:0);
+      if(d<ecart){ecart=d;cible=z;}
+    });
+    const after=portalGetDragInsertBefore(cible,clientX,clientY);
+    if(after==null||after===ph)cible.appendChild(ph);
+    else cible.insertBefore(ph,after);
   }
 
-  function finishDrag(){
+  // Le doigt près d'un bord fait défiler : l'autre rangée peut être hors de l'écran.
+  function lancerDefilement(){
+    const st=dragState;
+    const bloc=appsWrap.closest('.portal-apps-block');
+    const interne=bloc&&getComputedStyle(bloc).overflowY==='auto'&&bloc.scrollHeight>bloc.clientHeight;
+    const pas=()=>{
+      if(dragState!==st)return;
+      const y=st.dernierY;
+      if(y!=null){
+        const haut=interne?bloc.getBoundingClientRect().top+40:96;
+        const bas=interne?bloc.getBoundingClientRect().bottom-40:innerHeight-120;
+        const v=y<haut?-Math.min(14,(haut-y)/4+3):(y>bas?Math.min(14,(y-bas)/4+3):0);
+        if(v){
+          if(interne)bloc.scrollTop+=v;else window.scrollBy(0,v);
+          movePlaceholder(st.dernierX,y);
+        }
+      }
+      requestAnimationFrame(pas);
+    };
+    requestAnimationFrame(pas);
+  }
+
+  function finishDrag(ev){
     if(!dragState)return;
-    const {tile,active,ghost,placeholder:ph}=dragState;
+    const {tile,active,ghost,placeholder:ph,touch,moved}=dragState;
+    clearTouchPress(dragState);
     dragState=null;
     clearDocumentListeners();
-    if(!active)return;
+    const blocGlisse=appsWrap.closest('.portal-apps-block');
+    if(blocGlisse)blocGlisse.classList.remove('portal-apps-block--glisse');
+    if(!active){
+      // Appui bref : la tuile s'allume le temps que l'application s'ouvre.
+      if(touch&&ev&&ev.type==='pointerup'){
+        tile.classList.add('portal-app--appui');
+        setTimeout(()=>{tile.classList.remove('portal-app--appui');},600);
+      }
+      return;
+    }
 
     tile.style.display='';
     if(ph&&ph.parentNode){
-      appsWrap.insertBefore(tile,ph);
+      ph.parentNode.insertBefore(tile,ph);
       ph.parentNode.removeChild(ph);
     }
     if(ghost&&ghost.parentNode)ghost.parentNode.removeChild(ghost);
+    // Doigt levé sans avoir bougé : le navigateur peut émettre un clic tardif.
+    if(touch){
+      _portalDragSuppressClick=true;
+      setTimeout(()=>{_portalDragSuppressClick=false;},450);
+      if(!moved){
+        // Après le clic tardif, sinon il tomberait sur la feuille, sous le doigt.
+        if(ev&&ev.type==='pointerup')setTimeout(()=>{portalTuileFeuille(tile);},80);
+        return;
+      }
+    }
 
     // L'ordre enregistré est celui des DEUX rangées (favoris puis le reste) :
     // ne remonter que le conteneur qu'on vient de manipuler effacerait l'autre.
     const ids=portalOrdreComplet();
     const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
     const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
-    if(!same){
+    const favAvant=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
+    const favs=[];
+    document.querySelectorAll('.portal-apps--favoris .portal-app[data-portal-id]').forEach(n=>favs.push(n.getAttribute('data-portal-id')));
+    const favChange=favs.length!==favAvant.length||favs.some(v=>favAvant.indexOf(v)===-1);
+    if(favChange||!same){
       _portalDragSuppressClick=true;
       setTimeout(()=>{_portalDragSuppressClick=false;},450);
-      savePortalAppsOrder(ids);
+      if(favChange)savePortalDisposition(ids,favs);
+      else savePortalAppsOrder(ids);
     }
   }
 
@@ -1441,22 +1671,59 @@ function attachPortalReorder(appsWrap){
     const dx=e.clientX-dragState.startX;
     const dy=e.clientY-dragState.startY;
     if(!dragState.active){
+      if(dragState.touch){
+        if(Math.abs(dx)>TOUCH_SLOP||Math.abs(dy)>TOUCH_SLOP)abandonDrag();
+        return;
+      }
       if(Math.abs(dx)<DRAG_THRESHOLD&&Math.abs(dy)<DRAG_THRESHOLD)return;
       activateDrag(dragState.tile,e);
     }
     e.preventDefault();
+    // Tuile attrapée au doigt : c'est touchmove qui la déplace.
+    if(dragState.touch)return;
+    deplacerFantome(e.clientX,e.clientY);
+  }
+
+  function deplacerFantome(x,y){
+    dragState.dernierX=x;
+    dragState.dernierY=y;
     const {ghost,offX,offY}=dragState;
-    ghost.style.left=(e.clientX-offX)+'px';
-    ghost.style.top=(e.clientY-offY)+'px';
-    movePlaceholder(e.clientX,e.clientY);
+    ghost.style.left=(x-offX)+'px';
+    ghost.style.top=(y-offY)+'px';
+    movePlaceholder(x,y);
+  }
+
+  // Safari peut annuler les événements pointeur sur un appui long (pointercancel)
+  // alors que le doigt est toujours posé : une fois la tuile attrapée, seuls les
+  // événements touch décident de la suite.
+  function onTouchFin(){
+    if(dragState&&dragState.active&&dragState.touch)finishDrag({type:'pointerup'});
   }
 
   function onPointerUp(e){
     if(!dragState||e.pointerId!==dragState.pointerId)return;
-    finishDrag();
+    if(dragState.active&&dragState.touch)return;
+    finishDrag(e);
   }
 
   appsWrap.addEventListener('dragstart',e=>e.preventDefault());
+  // Une fois la tuile attrapée, le doigt la déplace : la page ne défile plus.
+  // À poser avant le début du geste, Safari ignore un écouteur ajouté en cours.
+  appsWrap.addEventListener('touchmove',e=>{
+    if(!dragState||!dragState.active||!dragState.touch)return;
+    if(e.cancelable)e.preventDefault();
+    const t=e.touches[0];
+    if(!t)return;
+    if(!dragState.moved){
+      if(Math.abs(t.clientX-dragState.startX)<=TOUCH_SLOP&&Math.abs(t.clientY-dragState.startY)<=TOUCH_SLOP)return;
+      dragState.moved=true;
+      libererPlace(dragState.tile,dragState.rect);
+    }
+    deplacerFantome(t.clientX,t.clientY);
+  },{passive:false});
+  appsWrap.addEventListener('contextmenu',e=>{
+    if(dragState&&dragState.touch)e.preventDefault();
+  });
 
   appsWrap.addEventListener('pointerdown',e=>{
     if(e.button!==0)return;
@@ -1471,10 +1738,12 @@ function attachPortalReorder(appsWrap){
       startY:e.clientY,
       active:false,
       pointerId:e.pointerId,
+      touch:e.pointerType!=='mouse',
     };
     document.addEventListener('pointermove',onPointerMove,true);
     document.addEventListener('pointerup',onPointerUp,true);
     document.addEventListener('pointercancel',onPointerUp,true);
+    if(dragState.touch)armTouchHold(tile);
   });
 }
 
@@ -1542,11 +1811,11 @@ function renderPortal(){
   const isMyRH = aa ? !!aa.myrh : isSuper;
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','expedition','logistique','commercial'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)));
-  // MyPrint : les étiquettes de traçabilité. La direction en était exclue par
-  // omission — elle a MyStock en entier, dont l'écran traça, mais pas la tuile
-  // qui y mène. L'administration suit la même logique que sur les autres
-  // modules d'atelier.
-  const isPrint = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','logistique','expedition'].includes(urole));
+  // MyTools (ex-MyPrint, 21/10/2026) : étiquettes, formulaires, éditeur PDF,
+  // traducteur. Ouverte à tout utilisateur connecté — l'éditeur PDF et le
+  // traducteur sont pour tous ; chaque outil applique ses propres droits
+  // dans /tools (app/web/tools_page.py, droits_outils).
+  const isPrint = !!urole;
   const isCom = urole==='commercial';
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
@@ -1623,11 +1892,11 @@ function renderPortal(){
       className:'portal-app',
       'data-portal-id':id,
       draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/stock?tab=traca';}
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/tools';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('printer',28)),
-      h('div',{className:'portal-app-name'},'MyPrint'),
-      h('div',{className:'portal-app-desc'},'Étiquettes de traçabilité')
+      h('div',{className:'portal-app-icon'},iconEl('mytools',28)),
+      h('div',{className:'portal-app-name'},'MyTools'),
+      h('div',{className:'portal-app-desc'},'Étiquettes, formulaires, PDF, traduction')
     )});
   }
 
@@ -1837,8 +2106,8 @@ function renderPortal(){
   const favIds=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
   const favTiles=orderedTiles.filter(t=>favIds.indexOf(t.id)!==-1);
   const restTiles=orderedTiles.filter(t=>favIds.indexOf(t.id)===-1);
-  const favWrap=h('div',{className:'portal-apps portal-apps--reorderable portal-apps--favoris'},...favTiles.map(t=>t.el));
-  const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...restTiles.map(t=>t.el));
+  const favWrap=h('div',{className:'portal-apps portal-apps--reorderable portal-apps--favoris','data-vide':'Déposer ici pour ajouter aux favoris'},...favTiles.map(t=>t.el));
+  const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable','data-vide':'Déposer ici pour retirer des favoris'},...restTiles.map(t=>t.el));
   const secTitre=(titre,fin)=>h('div',{className:'portal-apps-sec'},
     h('h3',null,titre),
     h('span',{className:'portal-apps-sec-trait'}),
@@ -1866,22 +2135,33 @@ function renderPortal(){
     const replie=!appsWrap.classList.contains('portal-apps--repliees');
     ecrireRepli(replie);majRepli(replie);
   });
+  const _surTelephone=window.matchMedia('(max-width:900px)').matches;
+  // Les deux rangées existent toujours : une tuile glissée doit pouvoir rejoindre
+  // celle qui est vide. Une rangée vide ne s'affiche que pendant le glissement.
   const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
-    favTiles.length?secTitre('Favoris'):null,
-    favTiles.length?favWrap:null,
-    (favTiles.length&&restTiles.length)?secTitre('Toutes les applications',btnRepli):null,
-    appsWrap,
+    h('div',{className:'portal-apps-section'+(favTiles.length?'':' portal-apps-section--vide')},
+      secTitre('Favoris'),
+      favWrap
+    ),
+    h('div',{className:'portal-apps-section'+(restTiles.length?'':' portal-apps-section--vide')},
+      (()=>{
+        const t=secTitre('Toutes les applications',(favTiles.length&&restTiles.length)?btnRepli:null);
+        if(!(favTiles.length&&restTiles.length))t.classList.add('portal-apps-sec--glisse');
+        return t;
+      })(),
+      appsWrap
+    ),
     apps.length?h('div',{className:'portal-apps-hint'},
-      favTiles.length
-        ?'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile épingle une application en favori (ordre et favoris enregistrés pour votre compte).'
-        :'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile, au survol, épingle une application en favori.'):null
+      _surTelephone
+        ?'Maintenir une tuile puis la glisser : pour la déplacer, l\'ajouter aux favoris ou l\'en retirer. La lâcher sans bouger ouvre ses raccourcis.'
+        :'Glisser une tuile pour réorganiser les accès, l\'ajouter aux favoris ou l\'en retirer. L\'étoile, au survol, fait de même (ordre et favoris enregistrés pour votre compte).'):null
   );
   // Le repli n'a de sens qu'avec des favoris : sans eux, tout masquer laisserait
   // un portail vide.
   if(favTiles.length&&restTiles.length)majRepli(lireRepli());
   setTimeout(()=>{
-    if(restTiles.length)attachPortalReorder(appsWrap);
-    if(favTiles.length)attachPortalReorder(favWrap);
+    attachPortalReorder(appsWrap);
+    attachPortalReorder(favWrap);
     portalAttacherVolets();
   },0);
 
@@ -2052,7 +2332,7 @@ function renderPortal(){
   );
 
   const _atraiterBody=h('div',{className:'portal-atraiter-body'});
-  const _atraiterBlock=h('div',{className:'portal-atraiter'},
+  const _atraiterBlock=h('div',{className:'portal-atraiter portal-atraiter--vide'},
     h('div',{className:'msf-sect'},h('b',null,'À traiter')),
     _atraiterBody
   );
@@ -2071,11 +2351,7 @@ function renderPortal(){
     );
   }
 
-  setTimeout(()=>{
-    fetch('/api/portail/a-traiter',{credentials:'include'})
-      .then(r=>r.ok?r.json():null)
-      .then(d=>{
-        if(!d)return;
+  portalBlocCharger('a-traiter',(d,frais)=>{
         const e=d.expe||{}, q=d.qualite||{}, rh=d.rh_coffre||{}, tk=d.taches||{};
 
         // La pastille de la tuile MyExpé suit les notifications par service
@@ -2135,19 +2411,11 @@ function renderPortal(){
         }
 
         while(_atraiterBody.firstChild)_atraiterBody.removeChild(_atraiterBody.firstChild);
-        if(rows.length){
-          _atraiterBody.className='portal-atraiter-body msf-rows';
-          rows.forEach(r=>_atraiterBody.appendChild(r));
-        }else{
-          _atraiterBody.className='portal-atraiter-body';
-          _atraiterBody.appendChild(h('div',{className:'portal-atraiter-empty'},
-            iconEl('check-circle',18),
-            document.createTextNode('Rien à traiter — tout est à jour.')
-          ));
-        }
-      })
-      .catch(()=>{});
-  },0);
+        _atraiterBody.className='portal-atraiter-body'+(rows.length?' msf-rows':'');
+        rows.forEach(r=>_atraiterBody.appendChild(r));
+        _atraiterBlock.classList.toggle('portal-atraiter--vide',!rows.length);
+        _atraiterBlock.classList.toggle('portal-bloc--ancien',!frais);
+  });
 
   // ── Atelier maintenant ────────────────────────────────────────────────
   const _atelierBody=h('div',{className:'portal-atelier-body'});
@@ -2158,12 +2426,11 @@ function renderPortal(){
     ),
     _atelierBody
   );
-  setTimeout(()=>{
-    fetch('/api/portail/atelier',{credentials:'include'})
-      .then(r=>r.ok?r.json():null)
-      .then(d=>{
-        const ms=(d&&Array.isArray(d.machines))?d.machines:[];
-        if(!ms.length)return;
+  portalBlocCharger('atelier',(d,frais)=>{
+        const ms=Array.isArray(d.machines)?d.machines:[];
+        while(_atelierBody.firstChild)_atelierBody.removeChild(_atelierBody.firstChild);
+        _atelierBlock.classList.toggle('portal-atelier--vide',!ms.length);
+        _atelierBlock.classList.toggle('portal-bloc--ancien',!frais);
         ms.forEach(m=>{
           const quiEl=h('span',{className:'portal-mach-qui'});
           if(m.etat==='libre'){
@@ -2200,10 +2467,7 @@ function renderPortal(){
             h('span',{className:'portal-mach-pct'},(m.avancement_pct!==null&&m.avancement_pct!==undefined)?(m.avancement_pct+' %'):'—')
           ));
         });
-        _atelierBlock.classList.remove('portal-atelier--vide');
-      })
-      .catch(()=>{});
-  },0);
+  });
 
   const portalEl=h('div',{className:'portal-page'},
     _mobileHeader,
@@ -2591,7 +2855,15 @@ function portalVoletPlacer(dec,pop){
     const dessus=d.top-ECART-M;
     if(p.height<=dessous)t=d.bottom+ECART;
     else if(p.height<=dessus)t=d.top-ECART-p.height;
-    else t=M;
+    else{
+      // Ni dessous ni dessus : à côté de la tuile plutôt que par-dessus —
+      // un volet qui recouvre sa tuile empêche de cliquer dessus (retour du
+      // 23/10 sur MyTools). En dernier recours seulement, au plus haut.
+      t=d.top+d.height/2-p.height/2;
+      if(vw-d.right-ECART-M>=p.width)l=d.right+ECART;
+      else if(d.left-ECART-M>=p.width)l=d.left-ECART-p.width;
+      else t=M;
+    }
   }
   pop.style.left=Math.round(Math.max(M,Math.min(l,vw-p.width-M)))+'px';
   pop.style.top=Math.round(Math.max(M,Math.min(t,vh-p.height-M)))+'px';
@@ -2680,10 +2952,17 @@ function portalVoletChevron(tile){
   });
   return b;
 }
+let _portalFavFile=Promise.resolve(), _portalFavDernier=0;
 async function savePortalAppsFavoris(ids){
+  // Deux touchers rapprochés : enregistrés dans l'ordre, et seule la réponse du
+  // dernier redessine, sinon la précédente rétablirait un état déjà dépassé.
+  const n=++_portalFavDernier;
+  const envoi=_portalFavFile.then(()=>api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({portal_apps_favoris:ids})}));
+  _portalFavFile=envoi.catch(()=>{});
   try{
-    await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({portal_apps_favoris:ids})});
+    await envoi;
+    if(n!==_portalFavDernier)return;
     S.user={...S.user,portal_apps_favoris:ids};
     render();
   }catch(e){toast(e.message||'Enregistrement impossible','danger');}

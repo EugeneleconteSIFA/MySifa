@@ -149,7 +149,16 @@
     + 'border:1px solid color-mix(in srgb,var(--success) 45%,transparent);background:color-mix(in srgb,var(--success) 12%,var(--card))}'
     + '.dp-al-c b{color:inherit}'
     + '.dp-al-c.nc{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent);'
-    + 'background:color-mix(in srgb,var(--danger) 12%,var(--card))}';
+    + 'background:color-mix(in srgb,var(--danger) 12%,var(--card))}'
+    // Section Qualité de la fiche dossier : une ligne par contrôle.
+    + '.dp-q{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}'
+    + '.dp-q-l{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card)}'
+    + '.dp-q-nom{font-size:13px;font-weight:700;color:var(--text)}'
+    + '.dp-q-sous{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}'
+    + '.dp-q-choix{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}'
+    // Format / laize remontés dans l'en-tête de la fiche (MyProd) : en ligne.
+    + '.dp-ident.dp-ident-tete{display:inline-flex;margin:0;gap:6px;vertical-align:middle}'
+    + '.dp-ident.dp-ident-tete span{padding:2px 8px;font-size:12px}';
 
   // ── Alertes validées pendant le dossier ─────────────────────────────────
   // Une valeur relevée = une courbe dans le temps (une seule série : le titre
@@ -254,6 +263,55 @@
     return h + '</div>';
   }
 
+  // ── Section Qualité de la fiche dossier ─────────────────────────────────
+  // Une ligne par contrôle validé : son nom, le nombre de validations, et le
+  // résultat des questions à choix en pastilles (« ✓ 7 conformes »,
+  // « 1 NC sur 7 »). Les mesures (pesée par front, grammage, release…) vont
+  // dans `.dp-q-pesees`, que la page remplit avec la vue des pesées du
+  // dossier (MySifaPesees.dossier) : boutons de champs, courbe, tableau.
+  function qualiteHtml(alertes, no) {
+    if (!Array.isArray(alertes)) return '';
+    let h = '<div class="dp-titre">Qualité <span class="dp-n">' + alertes.length + '</span></div>';
+    if (!alertes.length) return h + '<div class="dp-vide" style="font-size:13px;margin-bottom:14px">Aucun contrôle validé sur ce dossier.</div>';
+    const parAlerte = {}, ordre = [];
+    alertes.forEach(a => {
+      const k = a.alert_id || a.nom;
+      if (!parAlerte[k]) { parAlerte[k] = []; ordre.push(k); }
+      parAlerte[k].push(a);
+    });
+    let mesures = false;
+    h += '<div class="dp-q">';
+    ordre.forEach(k => {
+      const acks = parAlerte[k], items = acks[acks.length - 1].items || [];
+      let choix = '';
+      items.forEach((it, idx) => {
+        if (it.type === 'value') { mesures = true; return; }
+        const cle = String(idx);
+        const nc = new Set(it.nc_responses || []);
+        let rep = 0, ko = 0;
+        acks.forEach(a => {
+          const r = (a.reponses || {})[cle];
+          const vs = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
+          if (!vs.length) return;
+          rep++;
+          if (vs.some(v => nc.has(v))) ko++;
+        });
+        if (!rep) return;
+        choix += '<span class="dp-al-c' + (ko ? ' nc' : '') + '">' + esc(it.label || 'Contrôle') + ' · '
+          + (ko ? ko + ' NC sur ' + rep : '✓ ' + (rep > 1 ? rep + ' conformes' : 'conforme')) + '</span>';
+      });
+      const coms = acks.filter(a => (a.commentaire || '').trim()).length;
+      h += '<div class="dp-q-l"><span class="dp-q-nom">' + esc(acks[0].nom) + '</span>'
+        + '<span class="dp-q-sous">' + acks.length + ' validation' + (acks.length > 1 ? 's' : '') + ' · '
+        + esc(dateCourte(acks[0].ack_at)) + (acks.length > 1 ? ' → ' + esc(dateCourte(acks[acks.length - 1].ack_at)) : '')
+        + (coms ? ' · ' + coms + ' commentaire' + (coms > 1 ? 's' : '') : '') + '</span>'
+        + (choix ? '<span class="dp-q-choix">' + choix + '</span>' : '') + '</div>';
+    });
+    h += '</div>';
+    if (mesures && no) h += '<div class="dp-q-pesees" data-q-dossier="' + esc(no) + '"></div>';
+    return h;
+  }
+
   // ── Théorique (devis) contre réel ───────────────────────────────────────
   // Même calcul que la Rentabilité (`comparaison_pour_dossier`), lu tel quel :
   // l'écart vient du serveur, l'écran ne fait que dire s'il est bon ou non.
@@ -270,11 +328,6 @@
     const dv = c.devis || {};
     return 'Devis' + (dv.client ? ' ' + esc(dv.client) : '') + (dv.date_devis ? ' du ' + esc(String(dv.date_devis).slice(0, 10).split('-').reverse().join('/')) : '')
       + (c.palier && Number(c.palier.qte_retenue) > 0 ? ' · recalé sur ' + nombre(c.palier.qte_retenue) + ' étiquettes' : '');
-  }
-  function devisConclusion(c) {
-    const concl = c.conclusion || {};
-    const coul = {success: 'var(--success)', warn: 'var(--warn)', danger: 'var(--danger)'}[concl.color] || 'var(--muted)';
-    return concl.label ? '<span class="dp-cmp-concl" style="--c:' + coul + '">' + esc(concl.label) + '</span>' : '';
   }
 
   function comparaisonHtml(c) {
@@ -429,7 +482,8 @@
     const vit = (v) => nombre(Math.round(Number(v) * 10) / 10) + ' m/min';
     const devis = (v, fmt, cle, plusEstMieux) => (c && Number(v || 0))
       ? 'Devis ' + fmt(v) + ' · ' + ecartHtml(ec, cle, plusEstMieux) : '';
-    return (c ? '<div class="dp-devis">' + devisSource(c) + devisConclusion(c) + '</div>' : '')
+    // Pas de conclusion en badge (« Mitigé ») : les écarts des cartes la disent.
+    return (c ? '<div class="dp-devis">' + devisSource(c) + '</div>' : '')
       + '<div class="dp-cartes dp-3">'
       + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
       + carte('Métrage', q.metrage_m ? nombre(Math.round(q.metrage_m)) + ' m' : '—', d.alerte ? 'var(--danger)' : 'var(--accent)',
@@ -445,16 +499,18 @@
   }
 
   // Format, laize et matière du dossier : ce qui décrit le produit fabriqué.
-  function identiteHtml(id) {
+  // `tete` : MyProd la déplace à côté de la machine, dans l'en-tête de la fiche.
+  function identiteHtml(id, tete) {
     if (!id) return '';
     const puce = (lib, v) => v ? '<span><em>' + lib + '</em>' + esc(v) + '</span>' : '';
     const h = puce('Format', String(id.format || '').replace(/(\d+)\.0\b/g, '$1')) + puce('Laize', id.laize_mm ? nombre(id.laize_mm) + ' mm' : '')
       + puce('Matière', id.matiere);
-    return h ? '<div class="dp-ident">' + h + '</div>' : '';
+    return h ? '<div class="dp-ident' + (tete ? ' dp-ident-tete' : '') + '">' + h + '</div>' : '';
   }
 
   // `opts.fiche` : fiche dossier de MyProd — cartes resserrées, devis dans
-  // les cartes, déroulé des saisies.
+  // les cartes, section Qualité, déroulé des saisies. `opts.no` : référence
+  // du dossier (vue des inspections des produits finis).
   function prodHtml(d, opts) {
     const fiche = !!(opts && opts.fiche);
     const st = d.stats || {};
@@ -466,7 +522,7 @@
     const dur = (m) => Number(m || 0) ? duree(m) : vide;
     let h = '<style>' + DP_CSS + '</style><div class="dp">';
     if (d.alerte) h += '<div class="dp-alerte">' + esc(d.alerte.charAt(0).toUpperCase() + d.alerte.slice(1)) + '.</div>';
-    if (fiche) h += identiteHtml(d.identite) + cartesFicheHtml(d) + friseHtml(d.saisies, d.alertes);
+    if (fiche) h += identiteHtml(d.identite, true) + cartesFicheHtml(d) + qualiteHtml(d.alertes, opts.no) + friseHtml(d.saisies, d.alertes);
     else h += '<div class="dp-cartes">'
       + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
       + carte('Calage', duree(tt.calage_min), DP_CATS.calage[1])

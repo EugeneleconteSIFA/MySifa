@@ -1,5 +1,5 @@
 /* MyPrint — étiquettes spécifiques : bibliothèque, impression en série,
- * historique, demandes de nouveau format.
+ * historique, demandes de nouveau format, création depuis une photo.
  *
  * Monté dans MyStock › Traçabilité (poste « specifiques ») par
  * `EtiqSpec.mount(conteneur)`. L'état vit dans `ES` et le DOM dans
@@ -22,8 +22,9 @@
 
   const ES = {
     host: null, view: 'liste', boot: null, dossierId: null, q: '',
-    demandes: null, demandeSel: null, imprimantes: null,
+    demandes: null, demandeSel: null, imprimantes: null, usage: null, client: null,
   };
+  const ext = (n) => (window.EtiqSpec && window.EtiqSpec[n]) || null;
 
   // ── Outils ──────────────────────────────────────────────────────────
   function h(tag, attrs, ...enfants) {
@@ -58,6 +59,20 @@
     'check': '<polyline points="20 6 9 17 4 12"/>',
     'save': '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
     'eye': '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    'eye-off': '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.78 19.78 0 0 1 5.06-5.94"/><path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.74 19.74 0 0 1-3.17 4.19"/><path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/><line x1="1" y1="1" x2="23" y2="23"/>',
+    'camera': '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+    'image': '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+    'circle': '<circle cx="12" cy="12" r="9"/>',
+    'shield': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    'lock': '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    'globe': '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+    'truck': '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+    'hash': '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
+    'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    'send': '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+    'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+    'refresh-cw': '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
   };
   function ic(nom, taille) {
     taille = taille || 15;
@@ -110,6 +125,12 @@
       h('span', { cls: 'es-champ-label', text: label }), input,
       aide ? h('span', { cls: 'es-champ-aide', text: aide }) : null);
   }
+  function selectUsage(valeur) {
+    const s = h('select', { cls: 'es-input' }, h('option', { value: '', text: '— Aucun —' }),
+      ...(ES.boot.referentiel.usages || []).map(u => h('option', { value: u.id, text: u.libelle })));
+    s.value = valeur || '';
+    return s;
+  }
   function selectDossiers(valeur, avecVide) {
     const s = h('select', { cls: 'es-input' });
     if (avecVide) s.appendChild(h('option', { value: '', text: '— Aucun —' }));
@@ -122,7 +143,7 @@
   function selectModeleIa() {
     const ref = ES.boot.referentiel;
     const liste = ref.modeles_ia || [];
-    const s = h('select', { cls: 'es-input', title: 'Modèle utilisé par l\'assistant' },
+    const s = h('select', { cls: 'es-input', 'data-bulle': 'Modèle IA', 'aria-label': 'Modèle utilisé par l\'assistant' },
       ...liste.map(m => h('option', { value: m.id, text: m.libelle })));
     let mem = null;
     try { mem = localStorage.getItem(LS_MODELE_IA); } catch (e) {}
@@ -134,14 +155,17 @@
     return { select: s, bloc: h('label', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Modèle' }), s, aide) };
   }
 
+  // Variante « ia » : bouton qui fait travailler l'IA, en violet (static/mysifa_ia.css).
   function bouton(label, onclick, variante, icone) {
-    return h('button', { cls: 'es-btn' + (variante ? ' es-btn-' + variante : ''), type: 'button', onclick },
+    const cls = variante === 'ia' ? ' ia-btn' : (variante ? ' es-btn-' + variante : '');
+    return h('button', { cls: 'es-btn' + cls, type: 'button', onclick, 'data-bulle': variante === 'ia' ? 'Utilise l\'IA' : null },
       icone ? ic(icone, 15) : null, label);
   }
   function occupe(btn, oui, texte) {
     if (!btn) return;
     if (oui) { btn.dataset.lbl = btn.textContent; btn.disabled = true; if (texte) btn.textContent = texte; }
     else { btn.disabled = false; if (btn.dataset.lbl) btn.textContent = btn.dataset.lbl; }
+    btn.classList.toggle('ia-travail', !!oui && btn.classList.contains('ia-btn'));
   }
 
   // ── Modale ──────────────────────────────────────────────────────────
@@ -158,7 +182,7 @@
     const boite = h('div', { cls: 'es-modale' + (large ? ' es-modale-large' : ''), role: 'dialog' },
       h('div', { cls: 'es-modale-tete' },
         h('div', { cls: 'es-modale-titre', text: titre }),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Fermer', onclick: fermerModale }, '×')),
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Fermer', 'aria-label': 'Fermer', onclick: fermerModale }, '×')),
       h('div', { cls: 'es-modale-corps' }, corps),
       actions && actions.length ? h('div', { cls: 'es-modale-pied' }, actions) : null);
     fond.appendChild(boite);
@@ -220,18 +244,20 @@
         bouton(b.is_super ? `Demandes${b.demandes_ouvertes ? ' (' + b.demandes_ouvertes + ')' : ''}` : 'Mes demandes',
           () => { ES.view = 'demandes'; ES.demandeSel = null; chargerDemandes(); }, b.demandes_ouvertes ? 'actif' : '', 'inbox'),
         bouton('Demander un nouveau format', modaleDemande, '', 'message-square'),
+        bouton('Depuis une photo ou un PDF', () => modaleDepuisPhoto(), 'ia', 'camera'),
+        ext('gs1') ? bouton('Palette GS1', () => ext('gs1').modaleLogistique(null), '', 'truck') : null,
         bouton('Nouvelle étiquette', () => modaleNouvelle(), 'accent', 'plus')));
 
     const listeDossiers = h('div', { cls: 'es-dossiers' },
       h('div', { cls: 'es-dossiers-titre' }, 'Dossiers',
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Nouveau dossier', onclick: () => modaleDossier() }, ic('plus', 14))),
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Nouveau dossier', 'aria-label': 'Nouveau dossier', onclick: () => modaleDossier() }, ic('plus', 14))),
       ligneDossier(null, 'Toutes les étiquettes', b.modeles.length),
       ...b.dossiers.map(d => ligneDossier(d, d.nom, d.nb)),
       b.dossiers.length ? null : h('div', { cls: 'es-aide', text: 'Créer un premier dossier (un par client, par exemple) pour y ranger les étiquettes.' }));
 
     const cartes = h('div', { cls: 'es-cartes', id: 'es-cartes' });
     const corps = h('div', { cls: 'es-corps' }, listeDossiers,
-      h('div', { cls: 'es-principal' }, h('div', { cls: 'es-barre-recherche' }, recherche), cartes));
+      h('div', { cls: 'es-principal' }, h('div', { cls: 'es-barre-recherche' }, recherche, ext('biblio') ? ext('biblio').barreFiltres() : null), cartes));
     return h('div', { cls: 'es-liste' }, tete, corps);
   }
 
@@ -243,9 +269,9 @@
       h('span', { cls: 'es-dossier-nom', text: nom }),
       h('span', { cls: 'es-badge', text: String(nb) }),
       d ? h('span', { cls: 'es-dossier-outils' },
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Renommer',
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Renommer', 'aria-label': 'Renommer',
           onclick: (e) => { e.stopPropagation(); modaleDossier(d); } }, ic('edit', 13)),
-        d.nb ? null : h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Archiver le dossier',
+        d.nb ? null : h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Archiver', 'aria-label': 'Archiver le dossier',
           onclick: (e) => { e.stopPropagation(); confirmer(`Archiver le dossier « ${d.nom} » ?`, 'Archiver', async () => {
             await api('/dossiers/' + d.id, { method: 'DELETE' }); toast('Dossier archivé.'); await charger(); rendre(); }); } }, ic('trash-2', 13))) : null);
   }
@@ -255,7 +281,8 @@
     if (!zone) return;
     const q = ES.q.trim().toLowerCase();
     let liste = ES.boot.modeles.filter(m => ES.dossierId === null || m.dossier_id === ES.dossierId);
-    if (q) liste = liste.filter(m => [m.nom, m.description, fmtFormat(m), dossierNom(m.dossier_id)]
+    if (ext('biblio')) liste = ext('biblio').filtrer(liste);
+    if (q) liste = liste.filter(m => [m.nom, m.description, fmtFormat(m), dossierNom(m.dossier_id), m.client]
       .some(x => String(x || '').toLowerCase().includes(q)));
     zone.replaceChildren();
     if (!liste.length) {
@@ -270,18 +297,20 @@
   function carte(m) {
     const ratio = Math.max(0.35, Math.min(2.2, m.hauteur_mm / m.largeur_mm));
     return h('div', { cls: 'es-carte' },
-      h('div', { cls: 'es-carte-haut', onclick: () => ouvrirEditeur(m.id), title: 'Ouvrir dans l\'éditeur' },
+      h('div', { cls: 'es-carte-haut', onclick: () => ouvrirEditeur(m.id), 'data-bulle': 'Ouvrir' },
         h('div', { cls: 'es-vignette', style: { width: (34 / Math.max(1, ratio)) + 'px', height: Math.min(44, 34 * ratio) + 'px' } }),
         h('div', { cls: 'es-carte-info' },
           h('div', { cls: 'es-carte-nom', text: m.nom }),
           h('div', { cls: 'es-carte-format', text: fmtFormat(m) + (ES.dossierId === null ? ' · ' + dossierNom(m.dossier_id) : '') }))),
+      ext('biblio') ? ext('biblio').infosCarte(m) : null,
       m.description ? h('div', { cls: 'es-carte-desc', text: m.description }) : null,
       h('div', { cls: 'es-carte-pied' },
         bouton('Imprimer', () => modaleImpression(m), 'accent', 'printer'),
         bouton('Modifier', () => ouvrirEditeur(m.id), '', 'edit'),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Dupliquer', onclick: () => modaleDupliquer(m) }, ic('copy', 15)),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Historique des impressions', onclick: () => modaleHistorique(m) }, ic('clock', 15)),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Archiver', onclick: () => confirmer(
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Dupliquer', 'aria-label': 'Dupliquer', onclick: () => modaleDupliquer(m) }, ic('copy', 15)),
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Historique', 'aria-label': 'Historique des impressions', onclick: () => modaleHistorique(m) }, ic('clock', 15)),
+        ext('donnees') ? h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Série', 'aria-label': 'Impression en série', onclick: () => ext('donnees').modaleSerie(m) }, ic('layers', 15)) : null,
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Archiver', 'aria-label': 'Archiver', onclick: () => confirmer(
           `Archiver l'étiquette « ${m.nom} » ? Son historique d'impression est conservé.`, 'Archiver', async () => {
             await api('/modeles/' + m.id, { method: 'DELETE' }); toast('Étiquette archivée.'); await charger(); rendre(); }) }, ic('trash-2', 15))));
   }
@@ -312,20 +341,23 @@
     const larg = h('input', { cls: 'es-input', type: 'number', step: '0.5', min: 10, value: 100 });
     const haut = h('input', { cls: 'es-input', type: 'number', step: '0.5', min: 5, value: 150 });
     const dpi = h('select', { cls: 'es-input' }, ...ES.boot.referentiel.dpi.map(x => h('option', { value: x, text: x + ' dpi' })));
+    const usage = selectUsage(ES.usage);
+    const client = h('input', { cls: 'es-input', maxlength: 120, value: ES.client || '', placeholder: 'Client de l\'étiquette' });
     const formats = h('div', { cls: 'es-puces' }, ...FORMATS.map(([l, ht]) =>
       h('button', { cls: 'es-puce', type: 'button', onclick: () => { larg.value = l; haut.value = ht; }, text: `${l}×${ht}` })));
     const ok = bouton('Créer et ouvrir', async () => {
       occupe(ok, true);
       try {
         const r = await api('/modeles', { method: 'POST', body: {
-          dossier_id: parseInt(dossier.value, 10), nom: nom.value, description: desc.value,
+          dossier_id: parseInt(dossier.value, 10), nom: nom.value, description: desc.value, usage: usage.value, client: client.value,
           largeur_mm: parseFloat(larg.value), hauteur_mm: parseFloat(haut.value), dpi: parseInt(dpi.value, 10) } });
         fermerModale(); toast('Étiquette créée.'); await charger(); ouvrirEditeur(r.id);
       } catch (e) { toast(e.message, 'danger'); occupe(ok, false); }
     }, 'accent');
     ES.adresseModale = { cle: 'nouvelle_etiquette', id: 'oui' };
     modale('Nouvelle étiquette', h('div', { cls: 'es-form' },
-      champ('Nom', nom), champ('Dossier', dossier), champ('Description', desc, 'Ce qui distingue cette étiquette des autres du dossier.'),
+      champ('Nom', nom), champ('Dossier', dossier), h('div', { cls: 'es-ligne2' }, champ('Usage', usage), champ('Client', client)),
+      champ('Description', desc, 'Ce qui distingue cette étiquette des autres du dossier.'),
       h('div', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Format' }), formats,
         h('div', { cls: 'es-ligne3' }, champ('Largeur (mm)', larg), champ('Hauteur (mm)', haut), champ('Résolution', dpi)))),
       [bouton('Annuler', fermerModale), ok]);
@@ -353,15 +385,183 @@
       window.EtiqSpec.editeur.ouvrir(m);
       ES.view = 'editeur';
       rendre();
-    } catch (e) { toast(e.message, 'danger'); }
+      return m;
+    } catch (e) { toast(e.message, 'danger'); return null; }
+  }
+
+  // ── Création depuis une photo ───────────────────────────────────────
+  // Photo(s) ou PDF d'une étiquette existante + explication → Claude rend la
+  // mise en page, le serveur crée l'étiquette et garde les fichiers comme
+  // source. L'API de Claude refuse une image de plus de 5 Mo et ne lit pas le
+  // HEIC : le navigateur réduit et convertit en JPEG avant l'envoi.
+  const PHOTO_MAX = 4;
+  const PHOTO_TYPES_LUS = ['image/jpeg', 'image/png', 'image/webp'];
+  const PHOTO_OCTETS_SANS_REDUCTION = 3.5 * 1024 * 1024;
+  const PHOTO_COTE_MAX = 2400;
+
+  function chargerImage(fichier) {
+    return new Promise((ok, ko) => {
+      const url = URL.createObjectURL(fichier);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); ok(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); ko(new Error(`« ${fichier.name} » : image illisible par ce navigateur — la reprendre en JPEG.`)); };
+      img.src = url;
+    });
+  }
+  async function preparerPhoto(fichier) {
+    const type = (fichier.type || '').toLowerCase();
+    if (type === 'application/pdf') return fichier;
+    if (!type.startsWith('image/') && !/\.(heic|heif)$/i.test(fichier.name)) {
+      throw new Error(`« ${fichier.name} » : format non accepté — photo ou PDF.`);
+    }
+    if (PHOTO_TYPES_LUS.includes(type) && fichier.size <= PHOTO_OCTETS_SANS_REDUCTION) return fichier;
+    const img = await chargerImage(fichier);
+    let blob = null;
+    for (const [cote, qualite] of [[PHOTO_COTE_MAX, 0.9], [2000, 0.85], [1600, 0.8]]) {
+      const k = Math.min(1, cote / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', qualite));
+      if (blob && blob.size <= 4.5 * 1024 * 1024) break;
+    }
+    if (!blob) throw new Error(`« ${fichier.name} » : conversion impossible — la reprendre en JPEG.`);
+    const nom = fichier.name.replace(/\.[^.]+$/, '') + '.jpg';
+    return new File([blob], nom, { type: 'image/jpeg' });
+  }
+
+  function modaleDepuisPhoto() {
+    if (!ES.boot.dossiers.length) { toast('Créer d\'abord un dossier.', 'info'); modaleDossier(); return; }
+    const photos = [];   // [{fichier, url}]
+    const vignettes = h('div', { cls: 'es-photo-vignettes' });
+    const rendreVignettes = () => {
+      vignettes.replaceChildren(...photos.map((p, i) => h('div', { cls: 'es-photo-vignette' },
+        p.url ? h('img', { src: p.url, alt: p.fichier.name })
+          : h('div', { cls: 'es-photo-pdf' }, ic('file-text', 22), h('span', { text: p.fichier.name })),
+        h('button', { cls: 'es-photo-retirer', type: 'button', 'data-bulle': 'Retirer', 'aria-label': 'Retirer ' + p.fichier.name,
+          onclick: () => { if (p.url) URL.revokeObjectURL(p.url); photos.splice(i, 1); rendreVignettes(); } }, '×'))));
+      zone.classList.toggle('es-photo-zone-remplie', photos.length > 0);
+      compte.textContent = photos.length ? `${photos.length} / ${PHOTO_MAX}` : '';
+    };
+    const ajouter = async (liste) => {
+      for (const f of Array.from(liste || [])) {
+        if (photos.length >= PHOTO_MAX) { toast(`${PHOTO_MAX} fichiers au plus.`, 'danger'); break; }
+        try {
+          const pret = await preparerPhoto(f);
+          photos.push({ fichier: pret, url: pret.type.startsWith('image/') ? URL.createObjectURL(pret) : null });
+        } catch (e) { toast(e.message, 'danger'); }
+      }
+      rendreVignettes();
+    };
+    const choix = h('input', { type: 'file', multiple: true, accept: 'image/*,application/pdf', hidden: true,
+      onchange: (e) => { ajouter(e.target.files); e.target.value = ''; } });
+    const prise = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true,
+      onchange: (e) => { ajouter(e.target.files); e.target.value = ''; } });
+    const compte = h('span', { cls: 'es-aide' });
+    const zone = h('div', { cls: 'es-photo-zone',
+      ondragover: (e) => { e.preventDefault(); zone.classList.add('es-photo-zone-survol'); },
+      ondragleave: () => zone.classList.remove('es-photo-zone-survol'),
+      ondrop: (e) => { e.preventDefault(); zone.classList.remove('es-photo-zone-survol'); ajouter(e.dataTransfer.files); } },
+      h('div', { cls: 'es-photo-invite' }, ic('image', 22),
+        h('span', { text: 'Déposer ici la photo ou le PDF de l\'étiquette à reproduire' })),
+      h('div', { cls: 'es-ligne-actions es-photo-boutons' },
+        bouton('Prendre une photo', () => prise.click(), '', 'camera'),
+        bouton('Choisir des fichiers', () => choix.click(), '', 'paperclip'), compte),
+      vignettes, choix, prise);
+
+    const explication = h('textarea', { cls: 'es-input', rows: 5, maxlength: 4000,
+      placeholder: 'Étiquette carton 100×150 pour le client X : la référence et le lot changent à chaque impression, le SSCC est en GS1-128 en bas…' });
+    const nom = h('input', { cls: 'es-input', maxlength: 120, placeholder: 'Ex. Carton client X 100×150' });
+    const dossier = selectDossiers(ES.dossierId || ES.boot.dossiers[0].id);
+    const larg = h('input', { cls: 'es-input', type: 'number', step: '0.5', min: 10, placeholder: 'Déduite' });
+    const haut = h('input', { cls: 'es-input', type: 'number', step: '0.5', min: 5, placeholder: 'Déduite' });
+    const dpi = h('select', { cls: 'es-input' }, ...ES.boot.referentiel.dpi.map(x => h('option', { value: x, text: x + ' dpi' })));
+    dpi.value = '203';
+    const formats = h('div', { cls: 'es-puces' },
+      h('button', { cls: 'es-puce', type: 'button', onclick: () => { larg.value = ''; haut.value = ''; }, text: 'Déduire de la photo' }),
+      ...FORMATS.map(([l, ht]) =>
+        h('button', { cls: 'es-puce', type: 'button', onclick: () => { larg.value = l; haut.value = ht; }, text: `${l}×${ht}` })));
+    const modeleIa = selectModeleIa();
+    const usage = selectUsage(ES.usage);
+    const client = h('input', { cls: 'es-input', maxlength: 120, value: ES.client || '', placeholder: 'Client' });
+    const attente = h('div', { cls: 'es-photo-attente', hidden: true },
+      h('span', { cls: 'es-photo-spinner' }),
+      h('span', { text: 'Lecture de la photo et mise en page… Compter 30 à 60 secondes.' }));
+
+    const ok = bouton('Générer l\'étiquette', async () => {
+      if (!photos.length) { toast('Joindre au moins une photo ou un PDF de l\'étiquette.', 'danger'); return; }
+      if (!explication.value.trim()) { toast('Expliquer l\'étiquette : ce qui change d\'une impression à l\'autre, les codes attendus.', 'danger'); explication.focus(); return; }
+      if (!nom.value.trim()) { toast('Nom de l\'étiquette obligatoire.', 'danger'); nom.focus(); return; }
+      if (!!larg.value !== !!haut.value) { toast('Format incomplet — donner largeur et hauteur, ou aucune des deux.', 'danger'); return; }
+      const fd = new FormData();
+      fd.append('consigne', explication.value); fd.append('nom', nom.value);
+      fd.append('dossier_id', dossier.value); fd.append('dpi', dpi.value);
+      fd.append('modele', modeleIa.select.value);
+      fd.append('usage', usage.value); fd.append('client', client.value);
+      if (larg.value && haut.value) { fd.append('largeur_mm', larg.value); fd.append('hauteur_mm', haut.value); }
+      for (const p of photos) fd.append('fichiers', p.fichier, p.fichier.name);
+      occupe(ok, true, 'Lecture de la photo et mise en page…');
+      attente.hidden = false;
+      try {
+        const r = await api('/ia/depuis-photo', { method: 'POST', form: fd });
+        photos.forEach(p => p.url && URL.revokeObjectURL(p.url));
+        fermerModale();
+        toast(`Étiquette créée par ${r.modele_libelle} — à relire.`);
+        await charger();
+        const m = await ouvrirEditeur(r.modele_id);
+        bilanPhoto(r, m);
+      } catch (e) { toast(e.message, 'danger'); occupe(ok, false); attente.hidden = true; }
+    }, 'ia', 'zap');
+
+    ES.adresseModale = { cle: 'depuis_photo', id: 'nouvelle' };
+    const boite = modale('Créer une étiquette depuis une photo', h('div', { cls: 'es-form' },
+      h('p', { cls: 'ia-texte', text: 'Fait appel à l\'IA (Claude) : l\'étiquette proposée est à relire avant d\'imprimer.' }),
+      zone,
+      champ('Explication', explication, 'Ce qui change d\'une étiquette à l\'autre, les codes-barres attendus, ce qu\'il faut ignorer sur la photo.'),
+      h('div', { cls: 'es-ligne2' }, champ('Nom', nom), champ('Dossier', dossier)),
+      h('div', { cls: 'es-ligne2' }, champ('Usage', usage), champ('Client', client)),
+      h('div', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Format (facultatif)' }), formats,
+        h('div', { cls: 'es-ligne3' }, champ('Largeur (mm)', larg), champ('Hauteur (mm)', haut), champ('Résolution', dpi)),
+        h('span', { cls: 'es-champ-aide', text: 'Laissé vide, le format est déduit de la photo et ramené au format standard le plus proche.' })),
+      modeleIa.bloc, attente),
+    [bouton('Annuler', fermerModale), ok], true);
+    if (boite && boite.classList) boite.classList.add('ia-zone');
+    requestAnimationFrame(() => explication.focus());
+    return boite;
+  }
+
+  // Ce que Claude a fait et ce qu'il faut vérifier, par-dessus l'éditeur.
+  // Simple compte rendu : il n'entre pas dans l'adresse.
+  function bilanPhoto(r, m) {
+    const remarques = r.remarques || [];
+    const sources = (m && m.sources) || [];
+    modale('Étiquette créée — à vérifier', h('div', { cls: 'es-form' },
+      r.resume ? h('p', { cls: 'es-texte', text: r.resume }) : null,
+      h('p', { cls: 'es-aide', text: `Format retenu : ${fmtNum(r.largeur_mm)} × ${fmtNum(r.hauteur_mm)} mm · ${r.modele_libelle}` }),
+      (r.champs_detectes || []).length ? h('div', { cls: 'es-encart ia-zone' },
+        h('div', { cls: 'es-encart-titre', text: 'Champs variables détectés' }),
+        h('table', { cls: 'es-table' }, h('tbody', {}, ...r.champs_detectes.map(c => h('tr', {},
+          h('td', {}, h('code', { text: '{{' + c.variable + '}}' })),
+          h('td', { text: (ES.boot.referentiel.types_variable[c.type] || c.type) + (c.champ ? ' · ' + c.champ : '') }),
+          h('td', { text: c.lu ? 'lu : ' + c.lu : '' })))))) : null,
+      remarques.length ? h('div', { cls: 'es-encart' },
+        h('div', { cls: 'es-encart-titre', text: 'À vérifier' }),
+        h('ul', { cls: 'es-photo-remarques' }, ...remarques.map(x => h('li', { text: x })))) : null,
+      sources.length ? h('div', { cls: 'es-pieces' }, ...sources.map((s, i) =>
+        h('a', { cls: 'es-piece', href: s.url, target: '_blank', rel: 'noopener' }, ic('paperclip', 14),
+          sources.length > 1 ? `Original ${i + 1}` : 'Original'))) : null,
+      h('p', { cls: 'es-aide', text: 'Le résumé et les points à vérifier restent dans la description de l\'étiquette.' })),
+    [bouton('Fermer', fermerModale, 'accent')]);
   }
 
   // ── Impression en série ─────────────────────────────────────────────
-  async function modaleImpression(m) {
+  async function modaleImpression(m, opts) {
+    opts = opts || {};
     let modele, imps;
-    try { [modele, imps] = await Promise.all([api('/modeles/' + m.id), imprimantes()]); }
+    try { [modele, imps] = await Promise.all([api('/modeles/' + m.id + '/production'), imprimantes()]); }
     catch (e) { toast(e.message, 'danger'); return; }
     const vars = modele.layout.variables;
+    const valeursSaisies = Object.assign({}, opts.saisies || {});
     // Toutes les imprimantes actives : ZPL pour les Zebra, PDF (planche A4,
     // étiquettes à taille réelle) pour les imprimantes de bureau.
     const estZpl = i => (i.langage || 'zpl') === 'zpl';
@@ -381,12 +581,21 @@
     majAideImp();
     const qte = h('input', { cls: 'es-input', type: 'number', min: 1, max: ES.boot.referentiel.quantite_max, value: 1 });
     const ex = h('input', { cls: 'es-input', type: 'number', min: 1, max: 99, value: 1 });
-    const saisies = {}, departs = {};
+    const departs = {};
     const blocs = [];
-    for (const v of vars.filter(x => x.type === 'saisie')) {
-      saisies[v.nom] = h('input', { cls: 'es-input', value: v.valeur || '', maxlength: 500 });
-      blocs.push(champ(v.libelle + (v.obligatoire ? ' *' : ''), saisies[v.nom]));
+    const dn = ext('donnees');
+    let form = null;
+    if (dn) {
+      const zoneForm = h('div', {});
+      const refaire = () => { form = dn.formulaire(modele.layout, valeursSaisies); zoneForm.replaceChildren(form.el); };
+      if (vars.some(v => v.type === 'source')) blocs.push(h('div', { cls: 'es-encart' }, h('div', { cls: 'es-encart-titre', text: 'Remplir depuis MySifa' }),
+        dn.selecteurSource(modele.layout, (type, it, champs) => { dn.appliquerChamps(modele.layout, champs, valeursSaisies); refaire(); toast('Rempli depuis ' + it.libelle + '.'); })));
+      refaire();
+      blocs.push(zoneForm);
     }
+    const langues = modele.layout.langues || [];
+    const selLangue = langues.length > 1 ? h('select', { cls: 'es-input' }, ...langues.map(l => h('option', { value: l, text: l.toUpperCase() }))) : null;
+    if (selLangue) { selLangue.value = valeursSaisies._langue || modele.layout.langue_defaut || langues[0]; blocs.push(champ('Langue', selLangue)); }
     for (const v of vars.filter(x => x.type === 'compteur' || x.type === 'sscc')) {
       departs[v.nom] = h('input', { cls: 'es-input', type: 'number', min: 0, placeholder: 'Suite automatique' });
       blocs.push(champ(`Départ — ${v.libelle}`, departs[v.nom],
@@ -395,7 +604,7 @@
     const plage = h('div', { cls: 'es-plage' });
     const lire = () => ({
       quantite: parseInt(qte.value, 10) || 1,
-      saisies: Object.fromEntries(Object.entries(saisies).map(([k, i]) => [k, i.value])),
+      saisies: Object.assign(Object.fromEntries(Object.entries(valeursSaisies).filter(([k]) => !k.startsWith('_'))), selLangue ? { _langue: selLangue.value } : {}),
       departs: Object.fromEntries(Object.entries(departs).filter(([, i]) => i.value !== '').map(([k, i]) => [k, i.value])),
     });
     let minuterie = null;
@@ -420,6 +629,13 @@
     majPlage();
 
     const ok = bouton('Imprimer', async () => {
+      if (form && !form.valide()) { toast(form.erreurs()[0], 'danger'); return; }
+      const impExt = window.MySifaEtiqImpression;
+      if (impExt && typeof impExt.imprimer === 'function') {
+        try { await impExt.imprimer({ modele, enregistrements: Array.from({ length: 1 }, () => lire().saisies), quantite: parseInt(qte.value, 10) || 1 }); fermerModale(); }
+        catch (e) { toast(e.message, 'danger'); }
+        return;
+      }
       if (!selImp.value) { toast('Choisir une imprimante.', 'danger'); return; }
       occupe(ok, true, 'Envoi…');
       try {
@@ -432,7 +648,7 @@
     }, 'accent', 'printer');
 
     ES.adresseModale = { cle: 'imprimer', id: m.id };
-    modale('Imprimer « ' + m.nom + ' »', h('div', { cls: 'es-form' },
+    modale('Imprimer « ' + m.nom + ' » — version ' + modele.version, h('div', { cls: 'es-form' },
       h('label', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Imprimante' }), selImp, aideImp),
       h('div', { cls: 'es-ligne2' },
         champ('Quantité (série)', qte, 'Nombre d\'étiquettes différentes.'),
@@ -555,7 +771,7 @@
           await charger(); ES.demandes = await api('/demandes');
           ouvrirEditeur(r.modele_id);
         } catch (e) { toast(e.message, 'danger'); occupe(gen, false); }
-      }, 'accent', 'zap');
+      }, 'ia', 'zap');
       const statut = h('select', { cls: 'es-input' }, ...Object.entries(ES.boot.referentiel.statuts_demande).map(([k, l]) => h('option', { value: k, text: l })));
       statut.value = d.statut;
       const reponse = h('textarea', { cls: 'es-input', rows: 3, maxlength: 3000, value: d.reponse || '', placeholder: 'Réponse visible par le demandeur' });
@@ -588,7 +804,45 @@
       demande: ES.view === 'demandes' ? ES.demandeSel : null,
       modele: (ES.view === 'editeur' && ed && ed.m && ed.m.id) ? ed.m.id : null,
       modale: document.getElementById('es-modale') ? ES.modaleUrl : null,
+      extra: etatExtra(ed),
     };
+  }
+  // Clés propres aux étiquettes, au-delà des fenêtres : filtres de la
+  // bibliothèque, mode et onglet de l'éditeur, langue d'aperçu, enregistrement
+  // MySifa qui remplit l'étiquette. Une valeur égale au défaut n'est pas écrite.
+  const CLES_EXTRA = ['usage', 'client', 'edition', 'panneau', 'langue', 'source'];
+  function etatExtra(ed) {
+    const x = {};
+    if (ES.view === 'liste') { if (ES.usage) x.usage = ES.usage; if (ES.client) x.client = ES.client; }
+    if (ES.view === 'editeur' && ed && ed.m) {
+      if (ed.mode === 'operateur') x.edition = 'operateur';   // « mode » appartient au kiosque
+      if (ed.mode !== 'operateur' && ed.panneau && ed.panneau !== 'variables') x.panneau = ed.panneau;
+      if (ed.langue && ed.langue !== (ed.m.layout.langue_defaut || (ed.m.layout.langues || [])[0])) x.langue = ed.langue;
+      if (ed.source) x.source = ed.source.type + ':' + ed.source.id;
+    }
+    return x;
+  }
+  async function allerExtra(x) {
+    const ed = window.EtiqSpec.editeur && window.EtiqSpec.editeur._ED;
+    const usages = (ES.boot.referentiel.usages || []).map(u => u.id);
+    ES.usage = usages.includes(x.usage) ? x.usage : null;
+    ES.client = x.client ? String(x.client).slice(0, 120) : null;
+    if (!(ES.view === 'editeur' && ed && ed.m)) { if (ES.view === 'liste') rendre(); return; }
+    ed.mode = x.edition === 'operateur' ? 'operateur' : 'conception';
+    ed.panneau = (window.EtiqSpec.editeur.PANNEAUX || []).includes(x.panneau) ? x.panneau : 'variables';
+    ed.langue = (ed.m.layout.langues || []).includes(x.langue) ? x.langue : (ed.m.layout.langue_defaut || '');
+    const m = /^([a-z_]+):(.{1,60})$/.exec(String(x.source || ''));
+    const dn = window.EtiqSpec.donnees;
+    if (m && dn && (ES.boot.referentiel.sources || {})[m[1]]) {
+      if (!ed.source || ed.source.type !== m[1] || String(ed.source.id) !== m[2]) {
+        try {
+          const champs = await dn.lireSource(m[1], m[2]);
+          ed.source = { type: m[1], id: m[2], libelle: champs[m[1] + '.reference'] || champs[m[1] + '.code_barre'] || champs[m[1] + '.raison_sociale'] || m[2] };
+          dn.appliquerChamps(ed.m.layout, champs, ed.saisies);
+        } catch (e) { ed.source = null; }
+      }
+    } else if (!m) ed.source = null;
+    rendre();
   }
   const num = (v) => (v === null || v === undefined || v === '') ? null : (isNaN(Number(v)) ? v : Number(v));
   async function adresseAller(a) {
@@ -604,6 +858,7 @@
     } else {
       ES.view = 'liste'; rendre();
     }
+    await allerExtra(a.extra || {});
     const mo = a.modale, ouverte = document.getElementById('es-modale');
     if (!mo) { if (ouverte) fermerModale(); return; }
     if (ouverte && ES.modaleUrl && ES.modaleUrl.cle === mo.cle && String(ES.modaleUrl.id) === String(mo.id)) return;
@@ -615,8 +870,18 @@
     else if (mo.cle === 'dossier_etiq') modaleDossier(mo.id === 'nouveau' ? undefined : d);
     else if (mo.cle === 'nouvelle_etiquette') modaleNouvelle();
     else if (mo.cle === 'demande_format') modaleDemande();
+    else if (mo.cle === 'depuis_photo') modaleDepuisPhoto();
+    else if (mo.cle === 'serie' && m && ext('donnees')) await ext('donnees').modaleSerie(m);
+    else if (mo.cle === 'balances' && ext('donnees')) await ext('donnees').modaleBalances();
+    else if (mo.cle === 'versions_etiq' && m && ext('biblio')) await ext('biblio').modaleVersions(m);
+    else if (mo.cle === 'approbation' && m && ext('biblio')) await ext('biblio').modaleApprobation(m);
+    else if (mo.cle === 'compteurs' && m && ext('biblio')) await ext('biblio').modaleCompteurs(m);
+    else if (mo.cle === 'gs1_palette' && ext('gs1')) ext('gs1').modaleLogistique(m || null);
+    else if (mo.cle === 'pictos' && ES.view === 'editeur' && ext('gs1')) ext('gs1').modalePictos();
+    else if (mo.cle === 'controle' && ES.view === 'editeur' && ext('controle')) ext('controle').modaleControle();
   }
-  const CLES_MODALES = ['imprimer', 'historique_etiq', 'dupliquer', 'dossier_etiq', 'nouvelle_etiquette', 'demande_format'];
+  const CLES_MODALES = ['imprimer', 'historique_etiq', 'dupliquer', 'dossier_etiq', 'nouvelle_etiquette', 'demande_format', 'depuis_photo',
+    'serie', 'balances', 'versions_etiq', 'approbation', 'compteurs', 'gs1_palette', 'pictos', 'controle'];
 
   // ── Montage ─────────────────────────────────────────────────────────
   async function mount(conteneur) {
@@ -635,8 +900,9 @@
 
   window.EtiqSpec = Object.assign(window.EtiqSpec || {}, {
     mount,
-    adresse: { etat: adresseEtat, aller: adresseAller, cles: CLES_MODALES },
+    adresse: { etat: adresseEtat, aller: adresseAller, cles: CLES_MODALES, clesExtra: CLES_EXTRA },
     _: { ES, h, ic, api, toast, champ, bouton, occupe, modale, fermerModale, confirmer,
-      selectDossiers, selectModeleIa, fmtNum, fmtFormat, rendre, charger, modaleImpression, modaleHistorique, API },
+      selectDossiers, selectModeleIa, selectUsage, fmtNum, fmtFormat, fmtDate, rendre, charger, modaleImpression, modaleHistorique,
+      ouvrirEditeur, imprimantes, API },
   });
 })();

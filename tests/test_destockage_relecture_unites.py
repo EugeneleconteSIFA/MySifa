@@ -176,6 +176,20 @@ check("et la ligne dit ce qu'elle remplace", lignes[0]["remplace"]["matiere_ref"
 check("une palette ne remplace pas un carton", lignes[1]["matiere_id"], 3)
 check("la palette reste une ligne à part", [a["matiere_id"] for a in restes], [5])
 
+# Fiche qui annonce un frontal, bobine réellement passée en complexe
+# (04/11/2026) : le complexe doit pouvoir remplacer le frontal.
+check("un support accepte frontal et complexe",
+      ns["_categories_remplacement"]("support", "frontal"), ("frontal", "complexe"))
+check("un adhésif reste dans sa catégorie",
+      ns["_categories_remplacement"]("adhesif", "adhesif"), ("adhesif",))
+lignes = [{"kind": "support", "matiere_id": 1, "matiere_ref": "TH70",
+           "matiere_categorie": "frontal", "laize_id": 7, "sorti": 0.0}]
+ajouts = [{"matiere_id": 9, "matiere_ref": "TH70-ADH", "matiere_categorie": "complexe",
+           "laize_id": 7, "sorti": 1.0, "laizes": []}]
+restes = ns["_apparier_remplacements"](lignes, ajouts)
+check("le complexe choisi remplace le frontal de la fiche", lignes[0]["matiere_id"], 9)
+check("et ne reste pas en ligne à part", restes, [])
+
 print("5. Net sorti")
 conn.executescript("""
     INSERT INTO mp_mouvements VALUES (1, 1, 7, 'sortie', 2.4826, 10);

@@ -50,18 +50,16 @@
   var ecoutes = false;       // resize / visibilitychange posés une seule fois
   var demarrage = false;     // demarrer() en cours
 
-  /* Repli sur téléphone : propre à l'appareil et replié par défaut, pour que
-     les applis restent en haut de l'écran. Il ne touche pas la préférence de
-     la colonne sur ordinateur (un seul réglage serveur les liait). */
+  /* Sur téléphone, les tableaux de bord sont un écran à part : le bouton en haut
+     à gauche bascule entre lui et les applications (le portail le masque,
+     PORTAL_MAIN_CSS). L'accueil s'ouvre sur les applications, sauf si l'adresse
+     demande cet écran (?tableaux=1, portail_url.js). Rien à voir avec la
+     préférence de la colonne sur ordinateur. */
   var TELEPHONE = window.matchMedia("(max-width:899px)");
-  var CLE_REPLI_TEL = "mysifa_accueil_repli_tel";
-
-  function replieeTelephone() {
-    try { return localStorage.getItem(CLE_REPLI_TEL) !== "0"; } catch (e) { return true; }
-  }
 
   function etatRepli() {
-    return TELEPHONE.matches ? replieeTelephone() : W.replieeBureau;
+    if (!TELEPHONE.matches) return W.replieeBureau;
+    return new URLSearchParams(location.search).get("tableaux") !== "1";
   }
 
   function esc(s) {
@@ -946,7 +944,7 @@
      l'adresse capturée de l'indicateur (PATCH url_capture), comme depuis le
      questionnaire de Personnaliser, qui garde tous les filtres (dates
      choisies comprises). Décision du 14/10/2026. */
-  var PERIODE_COURT = { today: "Auj.", yesterday: "Dernier jour", last7: "7 j", last30: "30 j",
+  var PERIODE_COURT = { today: "Auj.", yesterday: "Dernier jour", deux_jours: "Veille + auj.", last7: "7 j", last30: "30 j",
                         thisMonth: "Mois", prevMonth: "Mois dernier" };
 
   function barreFiltres(c) {
@@ -1650,7 +1648,7 @@
       '<p class="mac-vide-p">Stocks à réapprovisionner, machines en marche, départs du jour… ils s\'affichent ici et se mettent à jour chaque minute.</p>' +
       '<ol class="mac-etapes">' +
       '<li><span class="mac-num">1</span><span>Ouvrez une appli.</span></li>' +
-      '<li><span class="mac-num">2</span><span>Cliquez sur <span class="mac-capico" title="Bouton de capture">' + ICONE_CAPTURE + '</span> en bas à droite<span class="mac-clavier">, ou faites <kbd>Alt</kbd>+<kbd>C</kbd></span>.</span></li>' +
+      '<li><span class="mac-num">2</span><span>' + (TELEPHONE.matches ? 'Ouvrez les outils au bord droit de l\'écran, puis « Ajouter à l\'accueil ».' : 'Cliquez sur <span class="mac-capico" title="Bouton de capture">' + ICONE_CAPTURE + '</span> en bas à droite<span class="mac-clavier">, ou faites <kbd>Alt</kbd>+<kbd>C</kbd></span>.') + '</span></li>' +
       '<li><span class="mac-num">3</span><span>Cliquez sur un bloc entouré, cochez les valeurs à afficher.</span></li>' +
       '</ol>' +
       '<div class="mac-essai"></div>' +
@@ -1785,8 +1783,8 @@
     // Icône de tableau de bord (demande du 06/10/2026) : la flèche ne disait
     // pas à quoi sert la colonne. L'état se lit au fond actif et à l'infobulle.
     b.innerHTML = icone("tableau");
-    b.classList.toggle("on", W.repliee);
-    b.title = W.repliee ? "Afficher mes tableaux de bord" : "Replier mes tableaux de bord";
+    b.classList.toggle("on", !W.repliee);
+    b.title = W.repliee ? "Afficher mes tableaux de bord" : "Revenir aux applications";
     b.setAttribute("aria-label", b.title);
     b.setAttribute("aria-expanded", W.repliee ? "false" : "true");
     var l = racine.querySelector(".mac-languette");
@@ -1796,7 +1794,7 @@
     l.setAttribute("aria-expanded", b.getAttribute("aria-expanded"));
     if (!sauver) return;
     if (TELEPHONE.matches) {
-      try { localStorage.setItem(CLE_REPLI_TEL, W.repliee ? "1" : "0"); } catch (e) { /* stockage bloqué : repli non retenu */ }
+      window.scrollTo(0, 0);
       return;
     }
     W.replieeBureau = W.repliee;
@@ -2146,7 +2144,9 @@
       MySifaGuides.boot().then(function () {
         var slot = racine && racine.querySelector(".mac-guide");
         if (slot && typeof MySifaGuides.bookBtn === "function") slot.innerHTML = MySifaGuides.bookBtn("accueil-widgets");
-        MySifaGuides.autoOpen("accueil-widgets");
+        // Le guide parle de colonne et d'Alt+C : il reste à portée sur le livre,
+        // mais ne s'impose pas à l'ouverture sur un téléphone.
+        if (!TELEPHONE.matches) MySifaGuides.autoOpen("accueil-widgets");
       });
     } catch (e) { /* guide indisponible : la colonne fonctionne sans */ }
   }

@@ -2076,6 +2076,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <select id="op-severity"><option value="info">info</option><option value="attention">attention</option><option value="critique">critique</option></select>
             <select id="op-category"></select>
             <select id="op-outil-type" title="Ce code fait-il changer un outil ?"><option value="">Aucun outil</option></select>
+            <select id="op-formulaire" title="Formulaire ouvert au poste avant la saisie"><option value="">Aucun formulaire</option></select>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="op-required"> Obligatoire</label>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -2502,8 +2503,9 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <div style="margin-bottom:20px">
           <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Usage IA</div>
           <div style="font-size:13px;color:var(--muted)">
-            Chaque action qui appelle Claude : assistant IA, lecture de devis, de certificats FSC,
-            de grilles transporteur, requêtes du DB Viewer.
+            Chaque action qui appelle Claude, avec l'application et l'écran d'où elle part, le modèle,
+            la durée et le coût. Filtrer par utilisateur, application, fonction, modèle ou statut ;
+            cliquer une ligne de synthèse pour filtrer, un appel pour son détail.
           </div>
         </div>
         <div id="ia-usage-root"></div>
@@ -2925,7 +2927,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <label class="pr-lbl">Langage</label>
               <select id="pr-f-langage" class="pr-inp">
                 <option value="zpl">ZPL — Zebra</option>
-                <option value="epl">EPL — vieilles Zebra</option>
+                <option value="epl">EPL — vieilles Zebra</option><option value="tspl">TSPL — TSC, Godex</option>
                 <option value="escpos">ESC/POS — Brother, tickets</option>
               </select>
             </div>
@@ -3236,7 +3238,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                   <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Langage *</label>
                   <select id="pr-wiz-imp-langage" class="pr-inp" style="width:100%">
                     <option value="zpl">ZPL — Zebra</option>
-                    <option value="epl">EPL — vieilles Zebra</option>
+                    <option value="epl">EPL — vieilles Zebra</option><option value="tspl">TSPL — TSC, Godex</option>
                     <option value="escpos">ESC/POS — Brother, tickets</option>
                   </select>
                 </div>
@@ -3462,14 +3464,15 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <!-- Clients et fournisseurs alignés sur RVGI : bandeau de synchro,
      pastille d'origine, bloc « fiche RVGI ». Tout est dans ce fichier,
      la page n'y accroche que trois appels. -->
 <script src="/static/mysifa_rvgi_tiers.js?v=__V_LABEL__"></script>
-<script src="/static/settings_ia_usage.js?v=1"></script>
+<script src="/static/settings_ia_usage.js?v=2"></script>
+<script src="/static/mysifa_bulles.js?v=1"></script>
 <script src="/static/settings_coherence.js?v=1"></script>
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
@@ -7167,6 +7170,7 @@ async function submitEditUpdate() {
 
 let _opItems = [];
 let _opCategories = [];
+let _opFormulaires = [];  // [{code, label}] : formulaire ouvert au poste (config.OPERATION_FORMULAIRES)
 let _opEditCode = null;
 
 /* ─── Seuils d'arrêt ────────────────────────────────────────────────────────
@@ -7312,6 +7316,12 @@ async function loadOperationCodes() {
     const d = await api('/api/settings/operation-codes');
     _opItems = (d && d.items) ? d.items : [];
     _opCategories = (d && d.categories) ? d.categories : [];
+    _opFormulaires = (d && d.formulaires) ? d.formulaires : [];
+    const selF = document.getElementById('op-formulaire');
+    if (selF) {
+      selF.innerHTML = '<option value="">Aucun formulaire</option>'
+        + _opFormulaires.map(f => '<option value="' + esc(f.code) + '">' + esc(f.label) + '</option>').join('');
+    }
     const sel = document.getElementById('op-category');
     if (sel) {
       sel.innerHTML = _opCategories.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -7348,7 +7358,7 @@ function renderOpList() {
   }
   let body = '';
   cats.forEach(cat => {
-    body += '<tr class="op-cat-row"><td colspan="7">' + esc(cat) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="8">' + esc(cat) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(o.code);
       const sev = esc(o.severity || 'info');
@@ -7360,6 +7370,7 @@ function renderOpList() {
         + '<td><span class="op-pill ' + esc(cat) + '">' + esc(cat) + '</span></td>'
         + '<td><span class="' + reqCls + '">' + (o.required ? 'Oui' : '—') + '</span></td>'
         + '<td>' + (o.outil_type ? '<span class="op-pill calage">' + esc(outilTypeLabel(o.outil_type)) + '</span>' : '<span class="op-req">—</span>') + '</td>'
+        + '<td>' + (o.formulaire ? '<span class="op-pill technique">' + esc((_opFormulaires.find(f => f.code === o.formulaire) || {}).label || o.formulaire) + '</span>' : '<span class="op-req">—</span>') + '</td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-op-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-op-del="' + c + '">Supprimer</button>'
@@ -7367,7 +7378,7 @@ function renderOpList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Sévérité</th><th>Catégorie</th><th>Obligatoire</th><th>Outil changé</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Sévérité</th><th>Catégorie</th><th>Obligatoire</th><th>Outil changé</th><th>Formulaire</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-op-edit]').forEach(btn => {
     btn.addEventListener('click', () => openOpForm(btn.getAttribute('data-op-edit')));
@@ -7395,6 +7406,8 @@ function openOpForm(code) {
     document.getElementById('op-category').value = o.category || 'autre';
     const selOt = document.getElementById('op-outil-type');
     if (selOt) selOt.value = o.outil_type || '';
+    const selF = document.getElementById('op-formulaire');
+    if (selF) selF.value = o.formulaire || '';
     document.getElementById('op-required').checked = !!o.required;
   } else {
     title.textContent = 'Nouveau code';
@@ -7405,6 +7418,8 @@ function openOpForm(code) {
     document.getElementById('op-category').value = _opCategories[0] || 'autre';
     const selOtNew = document.getElementById('op-outil-type');
     if (selOtNew) selOtNew.value = '';
+    const selFNew = document.getElementById('op-formulaire');
+    if (selFNew) selFNew.value = '';
     document.getElementById('op-required').checked = false;
   }
 }
@@ -7422,6 +7437,7 @@ async function saveOpForm() {
     severity: document.getElementById('op-severity').value,
     category: document.getElementById('op-category').value,
     outil_type: document.getElementById('op-outil-type')?.value || '',
+    formulaire: document.getElementById('op-formulaire')?.value || '',
     required: document.getElementById('op-required').checked,
   };
   try {
@@ -8853,10 +8869,11 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_postes_deroulement.js?v=2"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.21"></script>
-<script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.22"></script>
+<script src="/static/mysifa_confirm.js?v=1"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.5-confirm"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.21"></script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
 <script src="/static/mysifa_promote.js?v=5"></script>

@@ -751,7 +751,10 @@ def _valider_changement_outil(
             status_code=400,
             detail=f"Indiquez la {nature} démontée et la {nature} montée.",
         )
-    if o_avant == o_apres:
+    # Même référence : refusée, sauf pour une nature qui l'admet
+    # (`outil_types.meme_reference` — un cliché porte plusieurs tapis).
+    meme = o_avant == o_apres
+    if meme and not (ref_outils.get_type(conn, outil_type) or {}).get("meme_reference"):
         raise HTTPException(
             status_code=400,
             detail=f"La {nature} montée est la même que la {nature} démontée.",
@@ -777,8 +780,9 @@ def _valider_changement_outil(
     compteur_txt = f"{int(m_ctr):,}".replace(",", " ")
     trace = (
         f"{ref_outils.label_type(conn, outil_type)} "
-        f"{outils_saisis['démontée']['numero']} → {outils_saisis['montée']['numero']}"
-        f" · compteur {compteur_txt} m"
+        + (f"{outils_saisis['montée']['numero']} remonté" if meme else
+           f"{outils_saisis['démontée']['numero']} → {outils_saisis['montée']['numero']}")
+        + f" · compteur {compteur_txt} m"
     )
     reste = (commentaire or "").strip()
     return f"{trace} — {reste}" if reste else trace
@@ -798,6 +802,9 @@ def _contexte_changement_outil(conn, outil_type, machine_obj):
     return {
         "outil_type": outil_type,
         "type_label": ref_outils.label_type(conn, outil_type),
+        # La même référence peut-elle être remontée ? (le poste propose alors
+        # « Même … » côté montée).
+        "meme_reference": bool((ref_outils.get_type(conn, outil_type) or {}).get("meme_reference")),
         "machine": machine_obj.get("nom"),
         "dernier_metrage": (
             float(machine_obj["dernier_metrage"])
@@ -832,6 +839,27 @@ def list_machines(request: Request):
         ).fetchall()
     return {"machines": [dict(r) for r in rows],
             "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN}
+
+
+@router.get("/api/fabrication/dernier-releve")
+def get_dernier_releve(request: Request, machine_id: int = None):
+    """Dernier relevé du compteur de la machine du poste, avec son heure :
+    l'écran en tire le plafond (`_plafond_au`) au moment où il valide, sans
+    le figer au chargement."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    with get_db() as conn:
+        body = {"machine_id": machine_id} if machine_id else {}
+        try:
+            machine = _resolve_machine(user, body, conn)
+        except HTTPException:
+            return {"precedent": None}
+        maintenant = datetime.now(_PARIS).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+        prec = _releve_precedent(conn, machine["nom"], maintenant)
+    if not prec:
+        return {"precedent": None, "machine": machine["nom"]}
+    return {"precedent": float(prec["ctr"]), "date_operation": prec["date_operation"],
+            "machine": machine["nom"], "vitesse_max": PROD_VITESSE_MAX_M_MIN}
 
 
 @router.get("/api/fabrication/machines-du-jour")
@@ -1704,6 +1732,13 @@ async def create_saisie(request: Request):
                 if heure:
                     date_op = heure
 
+        # Compteur hors de portée de la machine depuis le relevé précédent :
+        # même refus qu'au changement d'outil et en correction.
+        if cl["code"] == "01":
+            _refuser_au_dela(_plafond_au(conn, machine_name, date_op), m_debut)
+        elif cl["code"] == "89":
+            _refuser_au_dela(_plafond_au(conn, machine_name, date_op), m_fin)
+
         # ── Changement d'outil ────────────────────────────────────────────────
         # Le code porte-t-il une nature d'outil ? La réponse vit dans le
         # référentiel (Paramètres › Opérations), jamais dans une liste de codes
@@ -1788,6 +1823,32 @@ async def create_saisie(request: Request):
             conn.commit()
         except Exception:
             logger.exception("[fabrication] rattachement planning non posé")
+
+        # ── Début de production : l'outil confirmé (plaque…) ─────────────────
+        # Seul l'écran « Démarrer un dossier » envoie `outils_demarrage`. Jamais
+        # bloquant : le dossier démarre même si l'outil ne s'enregistre pas.
+        outils_confirmes = []
+        if cl["code"] == "01" and body.get("outils_demarrage"):
+            try:
+                from app.services import outils_demarrage
+                outils_confirmes = outils_demarrage.enregistrer(
+                    conn, saisie_id=new_id, choix=body.get("outils_demarrage"),
+                    machine=machine_name, no_dossier=no_dossier,
+                    date_operation=date_op, cree_par=operateur,
+                    machine_id=machine_id_resolved,
+                )
+                if outils_confirmes:
+                    phrase = outils_demarrage.trace(conn, outils_confirmes)
+                    commentaire = f"{phrase} — {commentaire}" if commentaire else phrase
+                    conn.execute(
+                        "UPDATE production_data SET commentaire=? WHERE id=?",
+                        (commentaire, new_id),
+                    )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                outils_confirmes = []
+                logger.exception("[fabrication] outil confirmé au démarrage non enregistré")
 
         # ── Aucun code matière scanné : la raison, attachée à la saisie ───────
         # Écrite après l'INSERT plutôt que dedans : la colonne n'est renseignée
@@ -2055,6 +2116,18 @@ async def create_saisie(request: Request):
             except Exception:
                 pass  # Ne jamais bloquer la saisie opérateur
 
+        # ── Étiquettes : impression automatique (MyTools, règles par machine) ─
+        # Fil séparé : la saisie ne l'attend pas et n'échoue jamais à cause de
+        # lui. Un échec est consigné au journal d'impression (app/services/etiq_auto.py).
+        try:
+            from app.services.etiq_auto import apres_saisie
+            apres_saisie(machine_id=machine_id_resolved, machine_nom=machine_name, code=cl["code"],
+                         fin_dossier=fin_dossier_flag, no_dossier=no_dossier, operateur=operateur,
+                         email=user.get("email"), saisie_id=new_id, quantite=m_etiq, metrage=m_fin,
+                         client=client or "", designation=designation or "")
+        except Exception:
+            pass  # Ne jamais bloquer la saisie opérateur
+
         # ── Mémoire produit : figer la série à la clôture réelle ─────────────
         # Une production terminée devient une ligne d'historique rattachée à la
         # référence produit, consultable la prochaine fois qu'elle repasse.
@@ -2216,6 +2289,7 @@ async def create_saisie(request: Request):
                     conn, outil_type, machine_obj
                 )
                 contexte_outil["saisie_id"] = new_id
+                contexte_outil["plafond"] = _plafond_releve(conn, new_id)
             except Exception:
                 logger.exception("[fabrication] contexte de changement d'outil indisponible")
 
@@ -2234,6 +2308,8 @@ async def create_saisie(request: Request):
         reponse["bobines_heritees"] = bobines_heritees
     if contexte_outil:
         reponse["outil_requis"] = contexte_outil
+    if outils_confirmes:
+        reponse["outils_demarrage"] = outils_confirmes
     if compteur_calage:
         reponse["compteur_fin_calage"] = compteur_calage
     if calage_resultat:
@@ -4169,50 +4245,13 @@ async def releve_compteur_fin_calage(saisie_id: int, request: Request):
                 detail=(f"Compteur invalide : le dernier relevé était à {int(dernier):,} m "
                         f"— la valeur saisie ({int(m):,} m) ne peut pas être inférieure.").replace(",", " "),
             )
+        _controler_plafond(conn, saisie_id, m)
         conn.execute("UPDATE production_data SET metrage_compteur=? WHERE id=?", (m, saisie_id))
-        # Le relevé se lit aussi en commentaire, avec le métrage passé au
-        # calage quand le compteur d'avant est connu — sur la LIGNE DE CALAGE
-        # que ce « Production » ferme (la saisie juste avant sur la machine),
-        # pas sur la reprise. Ce que le conducteur avait écrit reste derrière ;
-        # un nouveau relevé remplace l'ancienne mention au lieu de l'empiler.
+        # Le relevé se lit aussi en commentaire, sur la ligne de calage que ce
+        # « Production » ferme (calage_cloture.ecrire_mention_fin_calage).
         try:
-            from app.services.calage_cloture import gache_calage
-            metres = None
-            if row["no_dossier"]:
-                for pl in gache_calage(conn, row["no_dossier"])["plages"]:
-                    if pl["fin"] == row["date_operation"]:
-                        metres = pl["metres"]
-            fr = lambda v: f"{int(round(v)):,}".replace(",", " ")
-            mention = f"Fin de calage · compteur {fr(m)} m" + (f" · calage {fr(metres)} m" if metres is not None else "")
-
-            def _sans_mention(txt):
-                txt = (txt or "").strip()
-                if txt.startswith("Fin de calage ·"):
-                    txt = txt.split(" — ", 1)[1].strip() if " — " in txt else ""
-                return txt
-
-            prec = conn.execute(
-                """SELECT id, commentaire, operation_category FROM production_data
-                    WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
-                      AND COALESCE(operation_category,'') NOT IN ('alert_ack','stock_pf','stock_mp')
-                      AND (date_operation < ? OR (date_operation = ? AND id < ?))
-                    ORDER BY date_operation DESC, id DESC LIMIT 1""",
-                (saisie_id, row["machine"] or "", row["date_operation"], row["date_operation"], saisie_id),
-            ).fetchone()
-            if prec and (prec["operation_category"] or "") == "calage":
-                ancien = _sans_mention(prec["commentaire"])
-                conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
-                             (mention + (" — " + ancien if ancien else ""), prec["id"]))
-                # Une mention posée sur la reprise par une version précédente
-                # n'a plus lieu d'être.
-                reste = _sans_mention(row["commentaire"])
-                if reste != (row["commentaire"] or "").strip():
-                    conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
-                                 (reste or None, saisie_id))
-            else:
-                ancien = _sans_mention(row["commentaire"])
-                conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
-                             (mention + (" — " + ancien if ancien else ""), saisie_id))
+            from app.services.calage_cloture import ecrire_mention_fin_calage
+            ecrire_mention_fin_calage(conn, saisie_id)
         except Exception:
             logger.exception("[fabrication] commentaire de fin de calage non écrit")
         machine = conn.execute(
@@ -4290,6 +4329,7 @@ def get_changement_outil(saisie_id: int, request: Request):
         ctx = _contexte_changement_outil(conn, outil_type, machine)
         ctx["saisie_id"] = saisie_id
         ctx["deja_complete"] = row["outil_apres_id"] is not None
+        ctx["plafond"] = _plafond_releve(conn, saisie_id)
         return ctx
 
 
@@ -4336,6 +4376,8 @@ async def completer_changement_outil(saisie_id: int, request: Request):
         # relevé ANTÉRIEUR à cette saisie, sinon corriger un changement de la
         # veille deviendrait impossible.
         dernier = _dernier_releve_avant(conn, saisie_id, row["date_operation"], row["machine"])
+        if m_ctr is not None:
+            _controler_plafond(conn, saisie_id, m_ctr)
 
         commentaire = _valider_changement_outil(
             conn, outil_type=outil_type, m_ctr=m_ctr,
@@ -4451,6 +4493,219 @@ async def update_commentaire(saisie_id: int, request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
+
+def _releve_precedent(conn, machine, date_operation, saisie_id=None):
+    """Dernier relevé du compteur sur la machine avant `date_operation` :
+    {ctr, date_operation}. `saisie_id` exclut la saisie elle-même et départage
+    deux saisies à la même seconde ; sans lui (saisie pas encore insérée),
+    toute saisie de cette seconde compte comme antérieure."""
+    borne = saisie_id if saisie_id is not None else 2 ** 62
+    return conn.execute(
+        """SELECT ctr, date_operation FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
+                 FROM production_data
+                WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                  AND (date_operation < ? OR (date_operation = ? AND id < ?))
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (saisie_id if saisie_id is not None else -1, machine or "",
+         date_operation, date_operation, borne),
+    ).fetchone()
+
+
+def _plafond_au(conn, machine, date_operation, saisie_id=None):
+    """Le plus grand compteur qu'un relevé fait à `date_operation` peut
+    porter : le relevé précédent sur la machine, plus ce que la machine a pu
+    produire depuis, à `PROD_VITESSE_MAX_M_MIN`. Une demi-heure au moins,
+    comme le contrôle du besoin matière (`_alerte_metrage`) : une pause courte
+    entre deux relevés ne doit pas faire refuser un compteur juste.
+
+    Un chiffre de trop au clavier (7 234 444 444 au lieu de 723 444 444) fait
+    avancer le compteur de milliards de mètres : refusé ici, il ne part ni
+    dans le compteur machine, ni dans le métrage des dossiers suivants.
+    Rend None sans relevé antérieur — rien à quoi comparer."""
+    prec = _releve_precedent(conn, machine, date_operation, saisie_id)
+    if not prec:
+        return None
+    d0, d1 = parse_datetime(prec["date_operation"]), parse_datetime(date_operation)
+    if not d0 or not d1:
+        return None
+    minutes = max((d1 - d0).total_seconds() / 60.0, 30.0)
+    return {
+        "plafond": float(prec["ctr"]) + PROD_VITESSE_MAX_M_MIN * minutes,
+        "precedent": float(prec["ctr"]),
+        "minutes": minutes,
+        "vitesse_max": PROD_VITESSE_MAX_M_MIN,
+    }
+
+
+def _plafond_releve(conn, saisie_id):
+    """`_plafond_au` pour une saisie déjà enregistrée."""
+    row = conn.execute(
+        "SELECT date_operation, machine FROM production_data WHERE id=?", (saisie_id,)
+    ).fetchone()
+    if not row:
+        return None
+    return _plafond_au(conn, row["machine"], row["date_operation"], saisie_id)
+
+
+def _refuser_au_dela(pl, m):
+    """Refuse un compteur que la machine n'a pas pu atteindre."""
+    if pl is None or m is None or m <= pl["plafond"]:
+        return
+    fr = lambda v: f"{int(round(v)):,}".replace(",", " ")
+    h = pl["minutes"] / 60.0
+    duree = f"{int(round(pl['minutes']))} min" if h < 1 else f"{h:.1f} h".replace(".", ",")
+    raise HTTPException(
+        status_code=400,
+        detail=(f"Compteur invraisemblable : {fr(m - pl['precedent'])} m depuis le relevé "
+                f"précédent ({fr(pl['precedent'])} m) en {duree}, au-delà de "
+                f"{fr(pl['vitesse_max'])} m/min. Vérifiez le nombre de chiffres — "
+                f"au plus {fr(pl['plafond'])} m."),
+    )
+
+
+def _controler_plafond(conn, saisie_id, m):
+    _refuser_au_dela(_plafond_releve(conn, saisie_id), m)
+
+
+def _prochain_releve_apres(conn, saisie_id, date_operation, machine):
+    """Premier relevé du compteur machine POSTÉRIEUR à une saisie — le
+    pendant de `_dernier_releve_avant`, pour qu'une correction ne fasse pas
+    passer le compteur au-dessus d'un relevé déjà saisi après elle."""
+    row = conn.execute(
+        """SELECT ctr FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
+                 FROM production_data
+                WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                  AND (date_operation > ? OR (date_operation = ? AND id > ?))
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation ASC, id ASC LIMIT 1""",
+        (saisie_id, machine, date_operation, date_operation, saisie_id),
+    ).fetchone()
+    return row[0] if row else None
+
+
+# Le relevé que porte chaque saisie, selon son code : la colonne écrite, et
+# celle qui la remplace quand elle est vide (anciennes saisies).
+_CHAMPS_METRAGE = {
+    "debut": ("metrage_total_debut", "metrage_prevu"),
+    "fin": ("metrage_total_fin", "metrage_reel"),
+    "compteur": ("metrage_compteur", None),
+}
+
+
+def _champs_metrage_permis(code: str) -> tuple:
+    code = str(code or "").strip()
+    if code == "01":
+        return ("debut",)
+    if code == "89":
+        return ("fin",)
+    if code == "90":
+        return ("debut", "fin")
+    return ("compteur",)
+
+
+@router.put("/api/fabrication/saisie/{saisie_id}/metrage")
+async def corriger_metrage_saisie(saisie_id: int, request: Request):
+    """Le conducteur corrige le compteur relevé sur une de ses saisies.
+
+    Seul le relevé bouge — ni l'heure, ni l'opération, ni le dossier : le reste
+    se corrige dans MyProd › Saisies. La valeur doit rester entre le relevé
+    précédent et le suivant sur la machine, sinon la production calculée entre
+    deux saisies deviendrait négative. La correction est marquée (modifie_*)
+    comme toute correction de donnée de production."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+    champ = str(body.get("champ") or "").strip()
+    try:
+        m = float(str(body.get("valeur")).replace(" ", "").replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Métrage invalide — un nombre de mètres.")
+    if m < 0:
+        raise HTTPException(status_code=400, detail="Métrage invalide — un nombre de mètres.")
+
+    fr = lambda v: f"{int(round(float(v))):,}".replace(",", " ")
+    with get_db() as conn:
+        ex = conn.execute("SELECT * FROM production_data WHERE id=?", (saisie_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Saisie non trouvée")
+        user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+        if not is_admin(user) and ex["operateur"] != user_operateur:
+            raise HTTPException(status_code=403, detail="Non autorisé")
+        if int(ex["est_annule"] or 0):
+            raise HTTPException(status_code=409, detail="Saisie annulée avec le dossier — modification impossible.")
+        if str(ex["operation_code"] or "").strip() == "03":
+            # La fin de calage réécrit aussi la mention de la ligne de calage.
+            raise HTTPException(status_code=409, detail="Fin de calage : passer par le relevé de fin de calage.")
+        permis = _champs_metrage_permis(ex["operation_code"])
+        if champ not in permis:
+            raise HTTPException(status_code=400, detail="Ce relevé ne se corrige pas sur cette saisie.")
+        col, repli = _CHAMPS_METRAGE[champ]
+        avant = ex[col] if ex[col] is not None else (ex[repli] if repli else None)
+
+        prec = _dernier_releve_avant(conn, saisie_id, ex["date_operation"], ex["machine"])
+        suiv = _prochain_releve_apres(conn, saisie_id, ex["date_operation"], ex["machine"])
+        # Annulation : début et fin sur la même ligne, le début doit rester dessous.
+        if champ == "fin":
+            deb = ex["metrage_total_debut"] if ex["metrage_total_debut"] is not None else ex["metrage_prevu"]
+            if deb is not None and str(ex["operation_code"] or "").strip() == "90":
+                prec = max(float(prec), float(deb)) if prec is not None else float(deb)
+        if champ == "debut" and str(ex["operation_code"] or "").strip() == "90":
+            fin = ex["metrage_total_fin"] if ex["metrage_total_fin"] is not None else ex["metrage_reel"]
+            if fin is not None:
+                suiv = min(float(suiv), float(fin)) if suiv is not None else float(fin)
+        if prec is not None and m < float(prec):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Métrage trop petit : le relevé précédent sur la machine est à {fr(prec)} m.",
+            )
+        if suiv is not None and m > float(suiv):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Métrage trop grand : le relevé suivant sur la machine est à {fr(suiv)} m.",
+            )
+        _controler_plafond(conn, saisie_id, m)
+
+        # Changement d'outil : la trace du commentaire cite le compteur.
+        commentaire = ex["commentaire"]
+        if champ == "compteur" and commentaire and avant is not None:
+            commentaire = commentaire.replace(f"compteur {fr(avant)} m", f"compteur {fr(m)} m", 1)
+
+        note = f"Métrage corrigé au poste : {fr(avant) if avant is not None else '—'} → {fr(m)} m"
+        conn.execute(
+            f"""UPDATE production_data SET {col}=?, commentaire=?,
+                       modifie_par=?, modifie_le=?, modifie_note=?
+                 WHERE id=?""",
+            (m, commentaire, user.get("email"), datetime.now().isoformat(), note, saisie_id),
+        )
+        try:
+            from app.routers.saisies import _recaler_compteur_machine
+            _recaler_compteur_machine(conn, ex["machine"])
+        except Exception:
+            logger.exception("[fabrication] recalage du compteur machine après correction")
+        conn.commit()
+
+    log_action(
+        user=user, action="UPDATE", module="fabrication",
+        objet=f"Métrage saisie #{saisie_id} · {ex['machine']}",
+        detail={"no_dossier": ex["no_dossier"], "operation_code": ex["operation_code"],
+                "champ": col, "avant": avant, "apres": m},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "champ": champ, "valeur": m}
+
 
 # ─── Endpoints repiquage (code 03 sur machine Repiquage) ──────────────────────
 

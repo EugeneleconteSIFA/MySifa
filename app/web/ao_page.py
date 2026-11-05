@@ -451,7 +451,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=7">
 <script>window.__MYSIFA_APP__='ao';</script>
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
@@ -4607,6 +4607,6 @@ function render() {
   try { if (typeof aoDemarrerUrl === 'function') await aoDemarrerUrl(); } catch (e) {}
 })();
 </script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 </body>
 </html>"""

@@ -43,7 +43,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.5.0"
+APP_VERSION = "3.6.0"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -81,6 +81,9 @@ APP_NAME_SUFFIX = APP_NAME[APP_SPLIT:]
 # Nom de l'organisation propriétaire de l'instance (utilisé dans le footer,
 # les emails, la meta description).
 APP_ORG_NAME = os.getenv("APP_ORG_NAME", "SIFA")
+# Adresse postale de l'organisation (en-tête des documents créés dans l'Éditeur
+# PDF), une ligne par « \n » dans le .env. Vide : l'en-tête ne montre que le nom et le logo.
+APP_ORG_ADRESSE = os.getenv("APP_ORG_ADRESSE", "").replace("\\n", "\n")
 
 # Sous-titre du login et du portail.
 APP_TAGLINE = os.getenv(
@@ -119,14 +122,22 @@ APP_STATUS_TEXT = os.getenv("APP_STATUS_TEXT", "Service opérationnel")
 APP_TITLE = os.getenv("APP_TITLE", APP_NAME)
 
 # Onglet navigateur & SEO.
+# Titre et description de la page d'accueil publique (« / ») : ce que Google affiche.
+# Le titre commence par le nom de l'appli, 70 caractères au plus ; la description fait
+# 140 à 160 caractères. Seul « / » est indexable (voir SEO_INDEXABLE).
 APP_PAGE_TITLE = os.getenv(
     "APP_PAGE_TITLE",
-    f"{APP_NAME} — Portail interne {APP_ORG_NAME}",
+    f"{APP_NAME} · Gestion de production de {APP_ORG_NAME}, fabricant d'étiquettes",
 )
 APP_META_DESCRIPTION = os.getenv(
     "APP_META_DESCRIPTION",
-    f"Portail interne {APP_ORG_NAME} : production, stocks, planning et outils métier.",
+    f"{APP_NAME}, le portail de gestion de production de {APP_ORG_NAME}, fabricant d'étiquettes : "
+    "saisies opérateurs, planning machine, stocks, qualité et expéditions dans un seul outil.",
 )
+# Image d'aperçu des partages (Open Graph, 1200×630) et auteur cité dans les données structurées.
+APP_OG_IMAGE = os.getenv("APP_OG_IMAGE", "/static/og-mysifa.png")
+APP_AUTHOR_NAME = os.getenv("APP_AUTHOR_NAME", "Eugène Leconte")
+APP_AUTHOR_URL = os.getenv("APP_AUTHOR_URL", "https://www.kernse.fr/")
 
 # Thème visuel : dark cyan MySifa (défaut) ou clair navy/orange Kernse.
 # Active via KERNSE_THEME=1 dans le .env de l'instance client.
@@ -163,6 +174,10 @@ ENV_NAME = os.getenv("ENV_NAME", "v2").strip().lower()
 # ne tente meme pas l'import de sentry_sdk. Voir app/core/monitoring.py.
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 IS_STAGING = (ENV_NAME == "v1")
+# Référencement : seule la page d'accueil de l'instance de prod, sur son domaine public
+# (public_base_url()), est ouverte aux moteurs. Staging, ERP et toutes les autres pages
+# (modules, portail Espace, API) répondent « noindex » (app/core/noindex.py).
+SEO_INDEXABLE = os.getenv("SEO_INDEXABLE", "0" if IS_STAGING else "1").strip().lower() in {"1", "true", "yes"}
 
 # MIGRATIONS_DISABLED : désactive les migrations de schéma au boot.
 #
@@ -194,6 +209,11 @@ PROD_ARRIVEE_PLANNING_ROLES = ("superadmin", "direction", "administration")
 # vue « Mes tâches » sur v1 avant la promotion en prod. Les endpoints API
 # vérifient ce flag côté serveur — inutile de patcher la sidebar seule.
 MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "0") in {"1", "true", "True", "yes", "YES"}
+
+# Type de contrôle ouvert d'office par l'Analyse de l'historique des alertes
+# (Maintenance › Alertes). Nom tel qu'affiché dans le filtre « Type de
+# contrôle » ; absent de la liste, l'Analyse prend le type le plus validé.
+MAINTENANCE_ANALYSE_TYPE_DEFAUT = os.getenv("MAINTENANCE_ANALYSE_TYPE_DEFAUT", "Inspection des produits finis")
 
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d'envoyer un message au support via un endpoint FastAPI.
@@ -331,6 +351,27 @@ STOCK_UNITES_COMPTAGE = {
 def unites_comptage(categorie):
     """Unités de comptage proposées pour une catégorie, ou ()."""
     return STOCK_UNITES_COMPTAGE.get((categorie or "").strip().lower(), ())
+
+
+# Consommables dont le prix unitaire se saisit directement dans MyStock (fiche
+# matière et valorisation), par l'administration. Les matières de production
+# (frontal, glassine, complexe, adhésif, encre) gardent leur prix dans Coûts
+# matières, où vivent devise, transport et taxes.
+STOCK_CATEGORIES_PRIX_DIRECT = ("carton", "mandrin", "palette", "autre")
+
+
+def categorie_prix_direct(categorie):
+    """Le prix unitaire de cette catégorie se saisit-il dans MyStock ?"""
+    return (categorie or "").strip().lower() in STOCK_CATEGORIES_PRIX_DIRECT
+
+
+# Transport d'un produit fini importé, ajouté à son prix de valorisation sur
+# demande (bouton de la ligne) : transport = prix HT / diviseur. 9 → 1/9e.
+PF_TRANSPORT_IMPORT_DIVISEUR = float(os.getenv("PF_TRANSPORT_IMPORT_DIVISEUR", "9"))
+
+# Unités de contenant tenues pour identiques quand on reprend un prix RVGI sur
+# un produit fini (un produit « carton » vendu à la « boite »).
+PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
 
 # Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
 # métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
@@ -1304,8 +1345,95 @@ ETIQ_IA_MODELES = (
 )
 
 
+# ─── MyTools — carton optimal (Calculs bobine) ───────────────────
+# Catégorie MyStock des cartons, et mots qui écartent une référence de la
+# recherche (pièces sans volume utile : couvercle seul, intercalaire).
+CARTONS_CATEGORIE = os.getenv("CARTONS_CATEGORIE", "carton")
+CARTONS_EXCLUS = tuple(m.strip().lower() for m in os.getenv("CARTONS_EXCLUS", "couvercle,intercalaire").split(",") if m.strip())
+
+# Couches d'une matière enduite, de haut en bas : (catégorie MyStock, libellé).
+# Calculs bobine › Métrage additionne leurs épaisseurs (GET /api/tools/couches).
+COUCHES_MATIERE = (("frontal", "Frontal"), ("adhesif", "Adhésif"), ("glassine", "Glassine"))
+
+# Familles du référentiel « épaisseurs matière » (mp_metrage_epaisseurs) :
+# Métrage bobine lit les épaisseurs, Poids de colle les grammages.
+# `anilox` : dépôt d'encre (g/m²) d'un aplat à 100 %.
+MATIERE_FAMILLES = (("frontal", "Frontal"), ("glassine", "Glassine"),
+                    ("complexe", "Matière enduite"), ("anilox", "Anilox (encre)"))
+
+# Pesées par front (alertes_pesees.py) : une mesure est signalée « à vérifier »
+# quand elle s'écarte de la médiane de son dossier (au moins 4 mesures) ou,
+# pour une pesée par front, de la médiane des autres fronts de la même
+# validation (au moins 3 fronts). Écarts relatifs : 0.3 = 30 %.
+PESEES_ECART_DOSSIER = float(os.getenv("PESEES_ECART_DOSSIER", "0.3"))
+PESEES_ECART_FRONTS = float(os.getenv("PESEES_ECART_FRONTS", "0.15"))
+
+# Formulaire qu'un code opération ouvre au poste avant que la saisie ne parte
+# (operation_codes.formulaire, Paramètres › Opérations). « maintenance » :
+# intervention, machine, date, commentaire, enregistrés dans MyMaintenance
+# (static/mysifa_maint_saisie.js).
+OPERATION_FORMULAIRES = (("maintenance", "Opération de maintenance (MyMaintenance)"),)
+
+# ─── MyTools — convertisseur (repris de Prismix) ──────────────────
+# Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et
+# ffmpeg sont gourmands), quota par utilisateur et par heure.
+CONVERTIR_MAX_MO = int(os.getenv("CONVERTIR_MAX_MO", "300"))
+CONVERTIR_PARALLELE = int(os.getenv("CONVERTIR_PARALLELE", "2"))
+CONVERTIR_PAR_HEURE = int(os.getenv("CONVERTIR_PAR_HEURE", "60"))
+
+# ─── MyTools — Éditeur PDF, fonctions IA ─────────────────────────
+# Résumer, poser une question, extraire des données, détecter les champs d'un
+# PDF à plat. Le PDF produit dans le navigateur est envoyé tel quel à Claude
+# (seules ces fonctions font sortir un document du poste). Taille d'envoi
+# bornée : l'API refuse au-delà de 32 Mo (base64 compris).
+PDF_IA_MODELE = os.getenv("PDF_IA_MODELE", "claude-sonnet-5-5")
+PDF_IA_MAX_MO = int(os.getenv("PDF_IA_MAX_MO", "20"))
+PDF_IA_PAR_HEURE = int(os.getenv("PDF_IA_PAR_HEURE", "40"))
+# Preflight BAT de l'éditeur PDF : seuils d'alerte. Résolution minimale d'une
+# image à sa taille d'impression, épaisseur de trait minimale (un filet plus fin
+# disparaît à l'impression flexo), fond perdu attendu autour du format fini.
+PREFLIGHT_DPI_MIN = int(os.getenv("PREFLIGHT_DPI_MIN", "300"))
+PREFLIGHT_TRAIT_MIN_PT = float(os.getenv("PREFLIGHT_TRAIT_MIN_PT", "0.25"))
+PREFLIGHT_FOND_PERDU_MM = float(os.getenv("PREFLIGHT_FOND_PERDU_MM", "3"))
+# Actions enregistrées (suites d'étapes rejouées par lot) : nombre par
+# utilisateur et taille du JSON d'une action.
+PDF_ACTIONS_MAX = int(os.getenv("PDF_ACTIONS_MAX", "50"))
+PDF_ACTIONS_MAX_OCTETS = 20000
+
+
 def etiq_ia_modeles() -> list[dict]:
     return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in ETIQ_IA_MODELES]
+
+
+# Création d'une étiquette depuis une photo (MyPrint, accès direct) : formats
+# de rouleau courants, proposés à l'assistant quand l'utilisateur ne donne pas
+# le format (largeur × hauteur en mm). L'API Anthropic refuse une image de
+# plus de 5 Mo : le navigateur réduit la photo avant l'envoi, le serveur
+# refuse le reste avec un message clair.
+ETIQ_FORMATS_STANDARD = (
+    (100, 150), (100, 100), (100, 50), (105, 50), (120, 105), (148, 105),
+    (148, 210), (60, 40), (50, 25), (70, 50), (80, 60),
+)
+ETIQ_PHOTO_IMAGE_MAX_OCTETS = int(os.getenv("ETIQ_PHOTO_IMAGE_MAX_OCTETS", str(5 * 1024 * 1024)))
+ETIQ_PHOTO_MAX_FICHIERS = 4
+
+# Étiquettes spécifiques — niveau BarTender (22/10/2026).
+# Préfixe entreprise GS1 propre (7 à 10 chiffres). Vide par défaut : SIFA n'en
+# a pas, les SSCC sont ceux des clients (fournis, ou calculés sur la plage
+# qu'un client confie avec son préfixe, réglée dans l'étiquette).
+ETIQ_GS1_PREFIXE = re.sub(r"\D", "", os.getenv("ETIQ_GS1_PREFIXE", ""))[:10]
+# Usages de la bibliothèque (catégorie d'une étiquette, en plus du client).
+ETIQ_USAGES = (
+    ("bobine", "Bobine"), ("palette", "Palette"), ("carton", "Carton"),
+    ("echantillon", "Échantillon"), ("expedition", "Expédition"),
+)
+# Qui peut modifier un objet verrouillé (logo, mentions) ou un calque figé.
+# Les autres rôles MyPrint gardent l'édition du reste (arbitrage du 14/10/2026).
+ETIQ_ROLES_CONCEPTION = {ROLE_SUPERADMIN, ROLE_DIRECTION} | ROLES_ADMINISTRATION_ALL
+
+
+def etiq_usages() -> list[dict]:
+    return [{"id": i, "libelle": l} for i, l in ETIQ_USAGES]
 
 
 # MyQualité › Formulaires : l'assistant construit un formulaire depuis une
@@ -1463,7 +1591,7 @@ _TACHES_MODULES_DEFAUT = (
     "maintenance:Maintenance",
     "ao:MyAO",
     "bat:MyBAT",
-    "print:MyPrint",
+    "print:MyTools",
     "planning_rh:Planning RH",
     "pricing:Coûts matières",
     "coffre:Coffres",
@@ -1729,6 +1857,17 @@ def regime_tva_label(code: str) -> str:
 # arrêt y aurait passé pour une information (arbitrage du 11/10/2026).
 TONS_ETAT = ("ok", "warn", "danger", "neutre")
 
+# Taux de TVA proposés sur une note de frais (Mon coffre). Taux légaux
+# français : changent par la loi, pas par un réglage de la compta. 2,1 % :
+# médicaments remboursables et presse (ticket de pharmacie). Les taux propres
+# aux DOM et à la Corse n'y sont pas : à ajouter si des salariés s'y déplacent.
+NDF_TAUX_TVA = (20.0, 10.0, 5.5, 2.1, 0.0)
+# Scan des justificatifs de note de frais : Claude lit le ticket et pré-remplit
+# le formulaire, que le salarié vérifie avant d'envoyer. Coupure sans
+# redéploiement : NDF_SCAN_IA_ACTIVE=0 (la saisie à la main reste).
+NDF_SCAN_IA_ACTIVE = os.getenv("NDF_SCAN_IA_ACTIVE", "1") not in ("0", "false", "False")
+NDF_SCAN_IA_MODELE = os.getenv("NDF_SCAN_IA_MODELE", "claude-opus-5-5")
+
 TONS_STATUT_MACHINE = {
     "production": "ok",
     "calage": "warn",
@@ -1862,3 +2001,69 @@ MONITORING_RAPPROCHEMENT_JOURS = int(os.getenv("MONITORING_RAPPROCHEMENT_JOURS",
 # Expédition : une sortie de stock est rapprochée du BL RVGI de même référence
 # le plus proche dans le temps, à N jours près, période affichée ou non.
 MONITORING_EXPE_FENETRE_JOURS = int(os.getenv("MONITORING_EXPE_FENETRE_JOURS", "7"))
+
+# ─── MyTools — Image et BAT : projets enregistrés ─────────────────
+# Image d'origine et vignette de chaque projet : hors de UPLOADS_ROOT (servi
+# publiquement sous /uploads/*), lues par l'API seulement, auteur revérifié.
+# Surcharge TOOLS_IMAGE_DIR pour que v1 et v2 partagent le même dossier.
+TOOLS_IMAGE_DIR = os.getenv("TOOLS_IMAGE_DIR", os.path.join(DATA_DIR, "tools_image"))
+TOOLS_IMAGE_TAILLE_MAX_MO = int(os.getenv("TOOLS_IMAGE_TAILLE_MAX_MO", "40"))
+TOOLS_IMAGE_VIGNETTE_MAX_KO = int(os.getenv("TOOLS_IMAGE_VIGNETTE_MAX_KO", "400"))
+TOOLS_IMAGE_PROJETS_MAX = int(os.getenv("TOOLS_IMAGE_PROJETS_MAX", "300"))
+
+# ─── MyTools — Parapheur (envoi de PDF à signer) ──────────────────
+# Documents d'origine et documents scellés : hors de UPLOADS_ROOT, qui est
+# servi publiquement sous /uploads/*. Un contrat signé ne se lit que par l'API,
+# droits revérifiés. Surcharge PARAPHEUR_DIR pour que v1 et v2 partagent le
+# même dossier, comme la base.
+PARAPHEUR_DIR = os.getenv("PARAPHEUR_DIR", os.path.join(DATA_DIR, "parapheur"))
+PARAPHEUR_TAILLE_MAX_MO = int(os.getenv("PARAPHEUR_TAILLE_MAX_MO", "25"))
+PARAPHEUR_SIGNATAIRES_MAX = int(os.getenv("PARAPHEUR_SIGNATAIRES_MAX", "20"))
+PARAPHEUR_ECHEANCE_JOURS = int(os.getenv("PARAPHEUR_ECHEANCE_JOURS", "30"))
+PARAPHEUR_RELANCE_JOURS = int(os.getenv("PARAPHEUR_RELANCE_JOURS", "3"))
+PARAPHEUR_RELANCES_MAX = int(os.getenv("PARAPHEUR_RELANCES_MAX", "5"))
+# Lien de signature d'un externe : durée de vie (bornée par l'échéance) et
+# nombre de consultations. Une signature ou un refus le révoque.
+PARAPHEUR_JETON_JOURS = int(os.getenv("PARAPHEUR_JETON_JOURS", "14"))
+PARAPHEUR_JETON_USAGES = int(os.getenv("PARAPHEUR_JETON_USAGES", "30"))
+# Nouveaux liens qu'un externe peut se faire renvoyer depuis son Espace, par jour.
+PARAPHEUR_LIENS_PAR_JOUR = int(os.getenv("PARAPHEUR_LIENS_PAR_JOUR", "3"))
+# Niveau de signature : « simple » (signature électronique simple, seul niveau
+# implémenté). Point d'extension eIDAS avancée / qualifiée : NIVEAUX de
+# app/services/parapheur_pdf.py.
+PARAPHEUR_NIVEAU = os.getenv("PARAPHEUR_NIVEAU", "simple").strip().lower() or "simple"
+# Qui peut créer une demande (tous les rôles par défaut ; tout utilisateur peut
+# signer ce qu'on lui adresse). Surcharge : PARAPHEUR_ROLES_CREATION="direction,commercial".
+_PARAPHEUR_CREATION_ENV = [r.strip() for r in os.getenv("PARAPHEUR_ROLES_CREATION", "").split(",") if r.strip()]
+ROLES_PARAPHEUR_CREATION = frozenset(_PARAPHEUR_CREATION_ENV) if _PARAPHEUR_CREATION_ENV else (
+    ASSIGNABLE_ROLES | {ROLE_SUPERADMIN, ROLE_ADMINISTRATION})
+# Qui voit toutes les demandes, pas seulement les siennes.
+ROLES_PARAPHEUR_SUPERVISION = frozenset({ROLE_SUPERADMIN, ROLE_DIRECTION})
+
+# ─── MyTools › Étiquettes — chaîne d'impression ─────────────────────
+# Ports qu'un profil d'imprimante peut viser en impression réseau directe
+# depuis le serveur (socket brute, comme l'agent local). Liste fermée : le
+# serveur ne doit pas servir à joindre n'importe quel service d'un réseau.
+ETIQ_PORTS_RESEAU = tuple(
+    int(p) for p in os.getenv("ETIQ_PORTS_RESEAU", "9100").split(",") if p.strip().isdigit()
+)
+# Délai de connexion et d'envoi à l'imprimante, en secondes.
+ETIQ_TIMEOUT_RESEAU_S = float(os.getenv("ETIQ_TIMEOUT_RESEAU_S", "4"))
+# Taille maximale d'un rendu (PDF ou image) envoyé par un poste traça, en octets.
+ETIQ_RENDU_MAX_OCTETS = int(os.getenv("ETIQ_RENDU_MAX_OCTETS", str(8 * 1024 * 1024)))
+# Modes d'envoi proposés à l'opérateur (clé → libellé).
+ETIQ_MODES_ENVOI = {
+    "auto": "Automatique",
+    "reseau": "Réseau direct (port 9100)",
+    "agent": "Agent local",
+    "navigateur": "Zebra Browser Print",
+    "fichier": "Fichier à télécharger",
+    "pdf": "PDF",
+}
+
+# ─── Outils de découpe — formes de fiche technique ────────────────
+# Formes de la fiche technique (outil1/2/3_forme, saisies dans Access) qui
+# désignent un outil de découpe montable : c'est cet outil que le conducteur
+# confirme au démarrage du dossier. Comparaison sans accent ni casse, sur le
+# début du mot. « Sheeter » en est volontairement absent : c'est un autre poste.
+FORMES_OUTIL_DECOUPE = ("plaque", "special")

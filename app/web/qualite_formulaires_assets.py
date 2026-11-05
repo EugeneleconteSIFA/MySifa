@@ -97,9 +97,9 @@ const FORMU_FILTRES = [
 .formu-apercu-carte .formu-apercu-desc{font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.5;margin:0 0 14px}
 .formu-apercu-note{font-size:11px;color:var(--muted);margin-top:8px}
 .formu-lecture{max-width:720px}
-.formu-ia-note{background:var(--accent-bg);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.formu-ia-note{background:var(--iav-bg,var(--accent-bg));border:1px solid var(--iav-bord,var(--accent));border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
 .formu-ia-note-txt{flex:1;min-width:240px;font-size:13px;color:var(--text);line-height:1.5}
-.formu-ia-note-txt b{color:var(--accent)}
+.formu-ia-note-txt b{color:var(--iav-1,var(--accent))}
 .formu-ia-note ul{margin:6px 0 0;padding-left:18px;color:var(--text2);font-size:12px}
 .formu-ia-note .fsc-btn{background:var(--card)}
 .formu-ia-ex{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
@@ -224,7 +224,7 @@ function formuRenderListe(){
         </div>
         <p>Questionnaires à faire remplir aux fournisseurs, au personnel ou aux clients : enquêtes, autoévaluations, contrôles. Chaque publication fige une version ; c'est elle qui sera envoyée.</p>
       </div>
-      ${admin ? `<div class="fsc-hero-actions"><button type="button" class="fsc-btn" onclick="formuIaOuvrir('nouveau')">Créer avec l'IA</button><button type="button" class="fsc-btn primary" onclick="formuNouveau()">+ Nouveau formulaire</button></div>` : ''}
+      ${admin ? `<div class="fsc-hero-actions"><button type="button" class="fsc-btn ia-btn" data-bulle="Utilise l'IA" onclick="formuIaOuvrir('nouveau')">Créer avec l'IA</button><button type="button" class="fsc-btn primary" onclick="formuNouveau()">+ Nouveau formulaire</button></div>` : ''}
     </div>
     <div class="formu-filtres">${pills}
       <input type="search" id="formu-q" class="formu-search" placeholder="Rechercher (titre, description)" value="${escAttr(S.formu.q)}" oninput="formuSetQ(this.value)" onkeydown="if(event.key==='Escape'){this.value='';formuSetQ('');}">
@@ -363,7 +363,7 @@ function formuRenderEdition(){
       boutons += f.version_courante
         ? `<button type="button" class="fsc-btn sm" onclick="formuArchiver(${f.id})">Archiver</button>`
         : `<button type="button" class="fsc-btn sm" onclick="formuSupprimer(${f.id})">Supprimer</button>`;
-      boutons += `<button type="button" class="fsc-btn sm" onclick="formuIaOuvrir('modifier')">Modifier avec l'IA</button>`;
+      boutons += `<button type="button" class="fsc-btn sm ia-btn" data-bulle="Utilise l'IA" onclick="formuIaOuvrir('modifier')">Modifier avec l'IA</button>`;
       boutons += `<button type="button" class="fsc-btn sm" id="formu-publier" onclick="formuPublier()">Publier</button>`;
       boutons += `<button type="button" class="fsc-btn sm primary" onclick="formuEnvoiOuvrir(${f.id})"${f.version_courante ? '' : ' disabled title="Publier le formulaire avant de l\'envoyer"'}>Envoyer</button>`;
     }
@@ -571,10 +571,11 @@ async function formuIaOuvrir(mode){
     : "Décrivez la modification. Les questions que la consigne ne vise pas restent telles quelles ; la modification s'annule en un clic.";
   formuMroot().innerHTML = `
   <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
-    <div class="modal lg" onclick="event.stopPropagation()">
+    <div class="modal lg ia-zone" onclick="event.stopPropagation()">
       <button type="button" class="modal-close" onclick="closeMroot()">×</button>
-      <div class="modal-hd"><h3>${escHtml(titre)}</h3></div>
+      <div class="modal-hd"><h3>${escHtml(titre)} <span class="ia-badge">IA</span></h3></div>
       <div class="modal-bd">
+        <p class="ia-texte" style="margin:0 0 6px">Fait appel à l'IA (Claude) : le résultat est à relire avant publication.</p>
         <p style="margin:0 0 4px">${escHtml(intro)}</p>
         <div class="formu-ia-ex">${ex}</div>
         <label class="formu-ia-f"><span>Consigne</span>
@@ -588,7 +589,7 @@ async function formuIaOuvrir(mode){
       </div>
       <div class="modal-ft">
         <button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
-        <button type="button" class="btn btn-accent" id="formu-ia-go" onclick="formuIaGenerer('${mode}')">Générer</button>
+        <button type="button" class="btn ia-btn" id="formu-ia-go" onclick="formuIaGenerer('${mode}')">Générer</button>
       </div>
     </div>
   </div>`;
@@ -632,14 +633,14 @@ async function formuIaGenerer(mode){
     }));
   }
   const go = document.getElementById('formu-ia-go');
-  if(go){ go.disabled = true; go.textContent = "Claude prépare le formulaire…"; }
+  if(go){ go.disabled = true; go.textContent = "Claude prépare le formulaire…"; go.classList.add('ia-travail'); }
   let p = null;
   try{
     const r = await api('/api/qualite/formulaires/ia/proposer', {method:'POST', body: fd});
     if(!r.ok){ showToast(await formuErreur(r, 'Génération impossible.'),'danger'); }
     else p = await r.json();
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
-  if(!p){ if(go){ go.disabled = false; go.textContent = 'Générer'; } return; }
+  if(!p){ if(go){ go.disabled = false; go.textContent = 'Générer'; go.classList.remove('ia-travail'); } return; }
   closeMroot();
   const note = {resume: p.resume, remarques: p.remarques, modele: p.modele_libelle || p.modele};
   if(mode === 'nouveau'){

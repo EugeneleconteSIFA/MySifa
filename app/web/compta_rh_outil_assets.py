@@ -153,6 +153,19 @@ RH_OUTIL_CSS = r"""
 .rho-pwd button:hover{color:var(--accent)}
 .rho-note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:14px;padding:10px 12px;border-radius:9px;background:var(--bg);border:1px solid var(--border)}
 .rho-err{font-size:12px;color:var(--danger);margin-top:10px;min-height:16px}
+/* Ajouter un employé : compte existant ou nouveau compte */
+.rho-mode{display:flex;gap:4px;padding:3px;margin:0 0 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px}
+.rho-mode-btn{flex:1;border:1px solid transparent;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;background:var(--bg);color:var(--text2);transition:background .15s,border-color .15s,color .15s}
+.rho-mode-btn:hover{color:var(--accent)}
+.rho-mode-btn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.rho-opt.on{border-color:var(--accent);background:var(--accent-bg)}
+.rho-opt.kb{border-color:var(--accent)}
+.rho-opt .rho-avatar{flex:none}
+.rho-suivre{margin-top:14px}
+.rho-suivre.cache{display:none}
+.rho-doublon{display:none}
+.rho-doublon.on{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;border:1px solid var(--warn);background:var(--bg);color:var(--warn)}
+.rho-doublon .t{font-size:13px;font-weight:600;color:var(--text)}
 @media (max-width:560px){.rho-form-grid{grid-template-columns:1fr}}
 .rho-arrivee{display:inline-flex;align-items:center;gap:4px;margin-top:3px;border:none;background:transparent;padding:0;font-family:inherit;font-size:11px;color:var(--muted);cursor:pointer}
 .rho-arrivee:hover{color:var(--accent)}
@@ -203,16 +216,16 @@ RH_OUTIL_JS = r"""
 
 // Listes par employé, dans l'ordre des colonnes. `cle` = LISTES côté API.
 const RH_OUTIL_LISTES=[
-  {cle:'formations',categories:true,cible:'service',titre:'Formations',bouton:'Formation',gerer:'Gérer les formations',catalogue:'Catalogue des formations',
+  {cle:'formations',categories:true,cible:'service',titre:'Formations',bouton:'Formation',catalogue:'Catalogue des formations',
    aucun:'Aucune formation',rechercher:'Rechercher une formation…',nouveau:'Nouvelle formation…',pour:'Formation pour ',
-   deja:'Déjà attribuée',vide:'Catalogue vide — ajoutez des formations avec « Gérer les formations ».',catVide:'Aucune formation au catalogue.',
+   deja:'Déjà attribuée',vide:'Catalogue vide — ajoutez des formations dans l’onglet Catalogues.',catVide:'Aucune formation au catalogue.',
    retirerTitre:'Retirer cette formation ?',retirerTxt:'Le suivi de cette formation (case et justificatifs) sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer cette formation ?',supprTxtN:'Elle disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi, ses justificatifs et leurs pièces jointes.',supprTxt0:'Elle disparaît du catalogue.',
    renomme:'Formation renommée.',supprime:'Formation supprimée.',etat:'faite',
    il:'Elle',ajoute:'ajoutée'},
-  {cle:'documents',cible:'contrat',titre:'Documents administratifs',bouton:'Document',gerer:'Gérer les documents administratifs',catalogue:'Documents administratifs',
+  {cle:'documents',cible:'contrat',titre:'Documents administratifs',bouton:'Document',catalogue:'Documents administratifs',
    aucun:'Aucun document',rechercher:'Rechercher un document…',nouveau:'Nouveau document…',pour:'Document pour ',
-   deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents avec « Gérer les documents administratifs ».',catVide:'Aucun document administratif au catalogue.',
+   deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents dans l’onglet Catalogues.',catVide:'Aucun document administratif au catalogue.',
    retirerTitre:'Retirer ce document ?',retirerTxt:'Le document est coché comme vérifié : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer ce document ?',supprTxtN:'Il disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi et ses pièces jointes.',supprTxt0:'Il disparaît du catalogue.',
    renomme:'Document renommé.',supprime:'Document supprimé.',etat:'vérifié',
@@ -270,7 +283,7 @@ async function rhOutilLoad(){
   try{
     const [d,sv,ca]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/services'),api('/api/rh-outil/formations/categories')]);
     if(!d||!sv||!ca)return;
-    set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],
+    set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],rhOutilPostes:sv.postes||[],
          rhOutilCategories:ca.categories||[],rhOutilContrats:sv.contrats||[],rhOutilContratsSansFin:sv.contrats_sans_fin||[],
          rhOutilAlerteJours:Number(sv.alerte_fin_contrat_jours)||15,rhOutilPeutCreer:!!sv.peut_creer,rhOutilServicesCreables:sv.services_creables||[],rhOutilLoaded:true});
   }catch(e){toast(e.message,'error');}
@@ -371,58 +384,204 @@ function rhOutilAujourdhui(){
   const d=new Date(),z=n=>String(n).padStart(2,'0');
   return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
 }
-function rhOutilNouvelEmploye(){
-  const services=S.rhOutilServicesCreables||[];
-  if(!services.length){toast('Aucun service disponible pour créer un compte.','error');return;}
+// Ajout d'un employé au suivi, deux cas : suivre un compte MySifa qui existe
+// déjà (aucun compte créé), ou créer le compte. La création signale un compte
+// existant au même email ou au même nom, pour ne pas faire de doublon.
+// mode : 'existant' (défaut) ou 'nouveau' (droit de gérer les comptes).
+function rhOutilNorm(t){return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+function rhOutilNouvelEmploye(mode){
+  const peutCreer=!!S.rhOutilPeutCreer&&(S.rhOutilServicesCreables||[]).length>0;
+  mode=mode==='nouveau'&&peutCreer?'nouveau':'existant';
   const {ov,fermer}=rhOutilFenetre();
+  let comptes=null;          // GET /employes, chargé à l'ouverture
+  let choisi=null;           // compte existant sélectionné
+  let recherche='';          // texte de la recherche, gardé si la liste se redessine
+  const corps=h('div');
+  const pied=h('div',{className:'rho-dlg-foot'});
+  const onglets=h('div',{className:'rho-mode',role:'tablist'});
   const champ=(label,input,plein)=>h('div',{className:'rho-field'+(plein?' plein':'')},h('label',null,label),input);
-  const prenom=h('input',{type:'text',className:'rho-input',maxlength:'60',...RHO_NO_AUTOFILL});
-  const nom=h('input',{type:'text',className:'rho-input',maxlength:'60',...RHO_NO_AUTOFILL});
-  const email=h('input',{type:'email',className:'rho-input',maxlength:'120',placeholder:'prenom.nom@…',...RHO_NO_AUTOFILL});
-  const service=h('select',{className:'rho-select'},
-    h('option',{value:''},'Choisir…'),...services.map(sv=>h('option',{value:sv.code},sv.label)));
-  const arrivee=h('input',{type:'date',className:'rho-input',value:rhOutilAujourdhui()});
-  const contrat=rhOutilChampsContrat('','','');
-  const mdp=h('input',{type:'password',className:'rho-input',minlength:'8',autocomplete:'new-password','aria-label':'Mot de passe'});
-  const oeil=h('button',{type:'button',title:'Afficher le mot de passe','aria-label':'Afficher le mot de passe',onClick:()=>{
-    const vis=mdp.type==='password';mdp.type=vis?'text':'password';
-    oeil.replaceChildren(iconEl(vis?'eye-off':'eye',15));
-  }},iconEl('eye',15));
-  const err=h('div',{className:'rho-err',role:'alert'});
-  const creer=h('button',{type:'button',className:'rho-btn accent'},iconEl('plus',13),'Créer le compte');
-  const valider=async()=>{
-    const v={prenom:prenom.value.trim(),nom:nom.value.trim(),email:email.value.trim(),service:service.value,
-             password:mdp.value,date_arrivee:arrivee.value,contrat_type:contrat.type.value,contrat_fin:contrat.finValeur()};
-    const manque=!v.prenom?'Prénom':!v.nom?'Nom':!v.email?'Email':!v.service?'Service':!v.date_arrivee?'Date d’arrivée':!v.contrat_type?'Type de contrat':!v.password?'Mot de passe':'';
-    if(manque){err.textContent=manque+' obligatoire.';return;}
-    if(v.contrat_fin&&v.contrat_fin<v.date_arrivee){err.textContent='La fin de contrat précède la date d’arrivée.';return;}
-    if(v.password.length<8){err.textContent='Mot de passe trop court — 8 caractères minimum.';mdp.focus();return;}
-    err.textContent='';creer.disabled=true;
-    let r;
-    try{r=await api('/api/rh-outil/employes',rhOutilJson('POST',v));}
-    catch(e){err.textContent=e.message;creer.disabled=false;return;}
-    mdp.value='';
-    fermer();
-    await rhOutilLoad();
-    const n=(r&&r.attribues)||0;
-    toast('Compte créé'+(r&&r.identifiant?' — identifiant : '+r.identifiant:'')+(n?' · '+n+' élément'+(n>1?'s':'')+' attribué'+(n>1?'s':''):'')+'.');
+  const aller=(m,compte)=>{
+    mode=m;choisi=compte||null;
+    if(typeof myrhFenetreChange==='function')myrhFenetreChange('nouvel_employe',m);
+    dessiner();
   };
-  creer.addEventListener('click',valider);
-  [prenom,nom,email,mdp].forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();valider();}}));
-  ov.appendChild(rhOutilDialogue('Nouvel employé',fermer,
-    h('div',{className:'rho-form-grid'},
-      champ('Prénom',prenom),champ('Nom',nom),
-      champ('Email',email,true),
-      champ('Service',service),champ('Date d’arrivée',arrivee),
-      champ('Type de contrat',contrat.type),contrat.champFin,
-      champ('Mot de passe (8 caractères minimum)',h('div',{className:'rho-pwd'},mdp,oeil),true)
-    ),
-    h('div',{className:'rho-note'},'Le compte MySifa est créé comme dans Paramètres › Comptes, avec le service choisi ; le contrat est enregistré dans sa fiche Paie (début = date d’arrivée), que la comptabilité complète. Remettez le mot de passe à l’employé en main propre. Téléphone, matricule et machine se règlent ensuite dans Paramètres.'),
-    err,
-    h('div',{className:'rho-dlg-foot'},h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),creer)
-  ));
+  const dessiner=()=>{
+    onglets.replaceChildren(...[['existant','Compte existant'],['nouveau','Nouveau compte']].filter(([m])=>m==='existant'||peutCreer)
+      .map(([m,l])=>h('button',{type:'button',role:'tab','aria-selected':String(m===mode),className:'rho-mode-btn'+(m===mode?' on':''),
+        onClick:()=>{if(m!==mode)aller(m);}},l)));
+    if(mode==='existant')dessinerExistant();else dessinerNouveau();
+  };
+
+  // ── Compte existant ──
+  const dessinerExistant=()=>{
+    const search=h('input',{type:'search',name:'rho-recherche',className:'rho-search',placeholder:'Rechercher (nom, email, service)…','data-rho-esc':'',...RHO_NO_AUTOFILL});
+    search.value=recherche;
+    const listEl=h('div',{className:'rho-list'});
+    const err=h('div',{className:'rho-err',role:'alert'});
+    const arrivee=h('input',{type:'date',className:'rho-input',value:rhOutilAujourdhui()});
+    const contrat=rhOutilChampsContrat(choisi&&choisi.contrat_type||'','',choisi&&choisi.contrat_fin||'');
+    // Postes : ceux du service du compte choisi.
+    const postesChoisis=new Set();
+    const postesBox=h('div');
+    const peindrePostes=()=>postesBox.replaceChildren(choisi?rhOutilChoixPostes([choisi.role],postesChoisis).el:'');
+    const form=h('div',{className:'rho-form-grid rho-suivre'},
+      champ('Date d’arrivée',arrivee),champ('Type de contrat',contrat.type),contrat.champFin,
+      champ('Postes (facultatif)',postesBox,true));
+    peindrePostes();
+    const ok=h('button',{type:'button',className:'rho-btn accent'},iconEl('plus',13),'Suivre cet employé');
+    let vis=[],actif=-1;
+    const choisir=c=>{
+      if(!c||c.deja_ajoute)return;
+      choisi=c;
+      contrat.type.value=c.contrat_type||'';contrat.type.dispatchEvent(new Event('change'));
+      contrat.fin.value=c.contrat_fin||'';
+      postesChoisis.clear();peindrePostes();
+      remplir();
+    };
+    const remplir=()=>{
+      ok.disabled=!choisi;
+      form.classList.toggle('cache',!choisi);
+      if(!comptes){listEl.replaceChildren(h('div',{className:'rho-empty'},'Chargement…'));return;}
+      const q=rhOutilNorm(search.value);
+      vis=comptes.filter(c=>!q||rhOutilNorm(c.nom+' '+c.email+' '+c.service_label).includes(q));
+      if(actif>=vis.length)actif=vis.length-1;
+      listEl.replaceChildren(...(vis.length?vis.map((c,k)=>h('button',{type:'button',
+          className:'rho-opt'+(choisi&&choisi.user_id===c.user_id?' on':'')+(k===actif?' kb':''),
+          disabled:!!c.deja_ajoute,onClick:()=>choisir(c)},
+        h('div',{className:'rho-avatar','aria-hidden':'true'},rhOutilInitiales(c.nom)),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',null,c.nom||'—',c.deja_ajoute?h('span',{className:'rho-tag'},'Déjà suivi'):null,c.actif?null:h('span',{className:'rho-tag'},'Désactivé')),
+          h('div',{className:'rho-sub'},[c.email,c.service_label].filter(Boolean).join(' · '))
+        ))):[h('div',{className:'rho-empty'},comptes.length?'Aucun résultat pour « '+search.value.trim()+' ».':'Aucun compte MySifa.')]));
+      const kb=listEl.querySelector('.kb');if(kb)kb.scrollIntoView({block:'nearest'});
+    };
+    search.addEventListener('input',()=>{recherche=search.value;actif=-1;remplir();});
+    search.addEventListener('keydown',e=>{
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+        e.preventDefault();if(!vis.length)return;
+        actif=e.key==='ArrowDown'?Math.min(vis.length-1,actif+1):Math.max(0,actif-1);remplir();
+      }else if(e.key==='Enter'){
+        e.preventDefault();
+        if(actif>=0&&vis[actif])choisir(vis[actif]);else if(vis.length===1)choisir(vis[0]);
+      }else if(e.key==='Escape'){
+        e.preventDefault();
+        if(search.value){search.value=recherche='';actif=-1;remplir();}else fermer();
+      }
+    });
+    ok.addEventListener('click',async()=>{
+      if(!choisi)return;
+      const f=contrat.finValeur();
+      if(f&&arrivee.value&&f<arrivee.value){err.textContent='La fin de contrat précède la date d’arrivée.';return;}
+      err.textContent='';ok.disabled=true;
+      let r;
+      try{r=await api('/api/rh-outil/membres',rhOutilJson('POST',{user_id:choisi.user_id,date_arrivee:arrivee.value||null,
+        contrat_type:contrat.type.value||null,contrat_fin:f,postes:[...postesChoisis]}));}
+      catch(e){err.textContent=e.message;ok.disabled=false;return;}
+      fermer();
+      await rhOutilLoad();
+      const n=(r&&r.attribues)||0;
+      toast((choisi.nom||'Employé')+' ajouté au suivi'+(n?' · '+n+' élément'+(n>1?'s':'')+' attribué'+(n>1?'s':''):'')+'.');
+    });
+    corps.replaceChildren(search,listEl,form,
+      h('div',{className:'rho-note'},'Aucun compte n’est créé : l’employé garde son compte, son service et son mot de passe. Le contrat est lu et enregistré dans sa fiche Paie ; vide, il reste « à renseigner ».'),
+      err);
+    pied.replaceChildren(h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),ok);
+    remplir();
+    requestAnimationFrame(()=>search.focus());
+  };
+
+  // ── Nouveau compte ──
+  const dessinerNouveau=()=>{
+    const services=S.rhOutilServicesCreables||[];
+    const prenom=h('input',{type:'text',className:'rho-input',maxlength:'60',...RHO_NO_AUTOFILL});
+    const nom=h('input',{type:'text',className:'rho-input',maxlength:'60',...RHO_NO_AUTOFILL});
+    const email=h('input',{type:'email',className:'rho-input',maxlength:'120',placeholder:'prenom.nom@…',...RHO_NO_AUTOFILL});
+    const service=h('select',{className:'rho-select'},
+      h('option',{value:''},'Choisir…'),...services.map(sv=>h('option',{value:sv.code},sv.label)));
+    const arrivee=h('input',{type:'date',className:'rho-input',value:rhOutilAujourdhui()});
+    const contrat=rhOutilChampsContrat('','','');
+    const postesChoisis=new Set();
+    const postesBox=h('div');
+    const peindrePostes=()=>postesBox.replaceChildren(service.value
+      ?rhOutilChoixPostes([service.value],postesChoisis).el
+      :h('div',{className:'rho-chips-vide'},'Choisissez d’abord le service.'));
+    service.addEventListener('change',()=>{postesChoisis.clear();peindrePostes();});
+    peindrePostes();
+    const mdp=h('input',{type:'password',className:'rho-input',minlength:'8',autocomplete:'new-password','aria-label':'Mot de passe'});
+    const oeil=h('button',{type:'button',title:'Afficher le mot de passe','aria-label':'Afficher le mot de passe',onClick:()=>{
+      const vis=mdp.type==='password';mdp.type=vis?'text':'password';
+      oeil.replaceChildren(iconEl(vis?'eye-off':'eye',15));
+    }},iconEl('eye',15));
+    const err=h('div',{className:'rho-err',role:'alert'});
+    // Compte déjà là (même email, ou même prénom + nom) : on propose de le suivre.
+    const doublonEl=h('div',{className:'rho-doublon',role:'status'});
+    const doublon=()=>{
+      const em=rhOutilNorm(email.value),nm=rhOutilNorm(prenom.value+' '+nom.value);
+      return (comptes||[]).find(c=>(em&&rhOutilNorm(c.email)===em)||(prenom.value.trim()&&nom.value.trim()&&rhOutilNorm(c.nom)===nm))||null;
+    };
+    const peindreDoublon=()=>{
+      const c=doublon();
+      doublonEl.classList.toggle('on',!!c);
+      if(!c){doublonEl.replaceChildren();return;}
+      doublonEl.replaceChildren(iconEl('alert-triangle',15),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('div',{className:'t'},'Ce compte existe déjà : '+(c.nom||'—')),
+          h('div',{className:'rho-sub'},[c.email,c.service_label].filter(Boolean).join(' · ')+(c.deja_ajoute?' · déjà suivi':''))),
+        c.deja_ajoute?null:h('button',{type:'button',className:'rho-btn',onClick:()=>aller('existant',c)},'Suivre ce compte'));
+    };
+    [prenom,nom,email].forEach(x=>x.addEventListener('input',peindreDoublon));
+    const creer=h('button',{type:'button',className:'rho-btn accent'},iconEl('plus',13),'Créer le compte');
+    const valider=async()=>{
+      const v={prenom:prenom.value.trim(),nom:nom.value.trim(),email:email.value.trim(),service:service.value,
+               password:mdp.value,date_arrivee:arrivee.value,contrat_type:contrat.type.value,contrat_fin:contrat.finValeur(),
+               postes:[...postesChoisis]};
+      const manque=!v.prenom?'Prénom':!v.nom?'Nom':!v.email?'Email':!v.service?'Service':!v.date_arrivee?'Date d’arrivée':!v.contrat_type?'Type de contrat':!v.password?'Mot de passe':'';
+      if(manque){err.textContent=manque+' obligatoire.';return;}
+      if(v.contrat_fin&&v.contrat_fin<v.date_arrivee){err.textContent='La fin de contrat précède la date d’arrivée.';return;}
+      if(v.password.length<8){err.textContent='Mot de passe trop court — 8 caractères minimum.';mdp.focus();return;}
+      const d=doublon();
+      if(d&&rhOutilNorm(d.email)===rhOutilNorm(v.email)){err.textContent='Un compte existe déjà avec cet email — utilisez « Suivre ce compte ».';return;}
+      err.textContent='';creer.disabled=true;
+      let r;
+      try{r=await api('/api/rh-outil/employes',rhOutilJson('POST',v));}
+      catch(e){err.textContent=e.message;creer.disabled=false;return;}
+      mdp.value='';
+      fermer();
+      await rhOutilLoad();
+      const n=(r&&r.attribues)||0;
+      toast('Compte créé'+(r&&r.identifiant?' — identifiant : '+r.identifiant:'')+(n?' · '+n+' élément'+(n>1?'s':'')+' attribué'+(n>1?'s':''):'')+'.');
+    };
+    creer.addEventListener('click',valider);
+    [prenom,nom,email,mdp].forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();valider();}}));
+    corps.replaceChildren(
+      h('div',{className:'rho-form-grid'},
+        champ('Prénom',prenom),champ('Nom',nom),
+        champ('Email',email,true),
+        h('div',{className:'rho-field plein'},doublonEl),
+        champ('Service',service),champ('Date d’arrivée',arrivee),
+        champ('Type de contrat',contrat.type),contrat.champFin,
+        champ('Postes (facultatif)',postesBox,true),
+        champ('Mot de passe (8 caractères minimum)',h('div',{className:'rho-pwd'},mdp,oeil),true)
+      ),
+      h('div',{className:'rho-note'},'Le compte MySifa est créé comme dans Paramètres › Comptes, avec le service choisi ; le contrat est enregistré dans sa fiche Paie (début = date d’arrivée), que la comptabilité complète. Remettez le mot de passe à l’employé en main propre. Téléphone, matricule et machine se règlent ensuite dans Paramètres.'),
+      err);
+    pied.replaceChildren(h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),creer);
+    peindreDoublon();
+    requestAnimationFrame(()=>prenom.focus());
+    corps.__doublon=peindreDoublon;
+  };
+
+  const dlg=rhOutilDialogue('Ajouter un employé',fermer,onglets,corps,pied);
+  dlg.classList.add('large');
+  ov.appendChild(dlg);
   document.body.appendChild(ov);
-  requestAnimationFrame(()=>prenom.focus());
+  dessiner();
+  api('/api/rh-outil/employes').then(d=>{
+    comptes=(d&&d.employes)||[];
+    // Un compte choisi avant le chargement (lien « Suivre ce compte ») garde sa sélection.
+    if(choisi)choisi=comptes.find(c=>c.user_id===choisi.user_id)||null;
+    if(mode==='existant')dessinerExistant();else if(corps.__doublon)corps.__doublon();
+  }).catch(e=>{comptes=[];toast(e.message,'error');if(mode==='existant')dessinerExistant();});
 }
 // ── Contrat (stocké dans la fiche Paie, lu et écrit aussi par la Paie) ──
 function rhOutilSansFin(type){return (S.rhOutilContratsSansFin||[]).includes(type);}
@@ -676,11 +835,16 @@ function rhOutilPieces(L,m,x,baseCible){
 
 // ── Application MyRH ──────────────────────────────────────────────
 // Même coquille que les autres applis : barre latérale, barre mobile, pied
-// commun. Un seul écran pour l'instant ; d'autres outils RH viendront se
-// ranger dans la barre latérale.
+// commun. Deux onglets : Employés (suivi) et Catalogues (formations,
+// documents administratifs), dans S.rhOnglet.
 function renderMyRH(){
-  // Premier rendu : l'adresse (filtres, fenêtre) est lue par static/myrh_url.js.
+  // Premier rendu : l'adresse (onglet, filtres, fenêtre) est lue par static/myrh_url.js.
   if(typeof myrhDemarrerUrl==='function') myrhDemarrerUrl();
+  const cats=S.rhOnglet==='catalogues';
+  const aller=onglet=>{
+    set({rhOnglet:onglet,sidebarOpen:false});
+    if(onglet==='catalogues')rhOutilCataloguesRafraichir();else rhOutilLoad();
+  };
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-row'},h('div',{className:'logo-brand'},'My',h('span',null,'RH'))),
@@ -688,7 +852,9 @@ function renderMyRH(){
     ),
     h('div',{className:'nav-scroll tabs msb-nav',style:{width:'100%',margin:0}},
       h('div',{className:'nav-group-label msb-section'},h('span',null,'Suivi')),
-      h('button',{className:'nav-btn active',onClick:()=>{rhOutilLoad();}},iconEl('users',15),'  Outil RH')
+      h('button',{className:'nav-btn'+(cats?'':' active'),onClick:()=>aller('employes')},iconEl('users',15),'  Employés'),
+      h('div',{className:'nav-group-label msb-section'},h('span',null,'Paramétrage')),
+      h('button',{className:'nav-btn'+(cats?' active':''),onClick:()=>aller('catalogues')},iconEl('sliders',15),'  Catalogues')
     ),
     window.MySifaSidebar
       ? MySifaSidebar.footer({
@@ -703,7 +869,7 @@ function renderMyRH(){
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyRH'),
-      h('div',{className:'mobile-topbar-sub'},'Suivi des nouveaux employés')
+      h('div',{className:'mobile-topbar-sub'},cats?'Catalogues':'Suivi des nouveaux employés')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
@@ -712,11 +878,17 @@ function renderMyRH(){
     h('div',{className:'app'},
       sidebar,
       h('main',{className:'main'},
-        h('div',{className:'container'},
+        h('div',{className:'container rho-large'},
           topbar,
-          h('h1',null,'Outil RH'),
-          h('div',{className:'subtitle'},'Suivi des nouveaux employés · formations, documents administratifs, contrats'),
-          renderRhOutilTab()
+          ...(cats?[
+            h('h1',null,'Catalogues'),
+            h('div',{className:'subtitle'},'Formations et documents administratifs attendus des employés · catégories, justificatifs, « exigé pour »'),
+            renderRhOutilCatalogues()
+          ]:[
+            h('h1',null,'Outil RH'),
+            h('div',{className:'subtitle'},'Suivi des nouveaux employés · formations, documents administratifs, contrats'),
+            renderRhOutilTab()
+          ])
         )
       )
     )
@@ -798,13 +970,12 @@ function renderRhOutilTab(){
     list.length?selFiltre:null,
     list.length?selContrat:null,
     h('div',{className:'rho-bar-spacer'}),
-    ...RH_OUTIL_LISTES.map(L=>h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilCatalogue(L)},iconEl('sliders',13),L.gerer)),
-    S.rhOutilPeutCreer?h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilNouvelEmploye},iconEl('plus',13),'Nouvel employé'):null
+    h('button',{type:'button',className:'rho-btn accent',onClick:()=>rhOutilNouvelEmploye()},iconEl('plus',13),'Ajouter un employé')
   );
   // Première ouverture de MyRH (/rh) : les données se chargent une fois ici.
   if(!S.rhOutilLoaded&&!S._rhOutilAutoLoad){S._rhOutilAutoLoad=true;rhOutilLoad();}
   if(!S.rhOutilLoaded)return h('div',null,bar,h('div',{className:'card-empty'},'Chargement…'));
-  if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},S.rhOutilPeutCreer?'Aucun employé — utilisez « Nouvel employé ».':'Aucun employé suivi.'));
+  if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},'Aucun employé suivi — utilisez « Ajouter un employé ».'));
   const iF=Math.max(0,RHO_FILTRES.findIndex(f=>f.cle===(S.rhOutilFiltre||'tous')));
   const filtre=RHO_FILTRES[iF],suivant=RHO_FILTRES[(iF+1)%RHO_FILTRES.length];
   const fsVal=selFiltre.value,fcVal=selContrat.value;
@@ -830,7 +1001,7 @@ function renderRhOutilTab(){
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std rho-table'},
       h('thead',null,h('tr',null,
         h('th',null,'Employé'),
-        h('th',null,'Service et contrat'),
+        h('th',null,'Service, postes et contrat'),
         ...RH_OUTIL_LISTES.map(L=>h('th',null,L.titre)),
         thDossier,
         h('th',{className:'rho-c'},'')
@@ -847,6 +1018,7 @@ function renderRhOutilTab(){
         )),
         h('td',null,h('div',{className:'rho-svc-cell'},
           h('span',{className:'rho-svc'+(m.service_label?'':' vide')},m.service_label||'Non renseigné'),
+          rhOutilCellulePostes(m),
           rhOutilPastilleContrat(m))),
         ...RH_OUTIL_LISTES.map(L=>h('td',null,rhOutilCelluleListe(L,m))),
         h('td',{className:'rho-c','data-rho-statut':String(m.id)},rhOutilBadge(m)),

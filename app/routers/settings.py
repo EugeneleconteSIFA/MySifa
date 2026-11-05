@@ -2904,6 +2904,17 @@ def _valider_outil_type(conn, outil_type):
     return outil_type
 
 
+def _ecrire_formulaire(conn, table, code, formulaire):
+    """Formulaire ouvert au poste (operation_codes.formulaire) : colonne
+    posée par la migration `operation_codes_formulaire`, ignorée avant."""
+    try:
+        cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+    except Exception:
+        return
+    if "formulaire" in cols:
+        conn.execute(f"UPDATE {table} SET formulaire=? WHERE code=?", (formulaire, code))
+
+
 def _colonne_outil_type(conn, table) -> bool:
     try:
         return "outil_type" in {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
@@ -2918,9 +2929,12 @@ def list_operation_codes(request: Request):
     from database import get_db
     from app.services.operations_config import categories_for_ui, list_operation_codes as _list
 
+    from config import OPERATION_FORMULAIRES
+
     with get_db() as conn:
         items = _list(conn)
-    return {"items": items, "categories": categories_for_ui()}
+    return {"items": items, "categories": categories_for_ui(),
+            "formulaires": [{"code": c, "label": l} for c, l in OPERATION_FORMULAIRES]}
 
 
 @router.post("/api/settings/operation-codes")
@@ -2971,6 +2985,7 @@ async def create_operation_code(request: Request):
                     now,
                 ),
             )
+        _ecrire_formulaire(conn, TABLE, payload["code"], payload.get("formulaire"))
         conn.commit()
     refresh_operations_cache()
     return {"success": True, "code": payload["code"]}
@@ -3033,6 +3048,7 @@ async def update_operation_code(code: str, request: Request):
                     code_key,
                 ),
             )
+        _ecrire_formulaire(conn, TABLE, code_key, payload.get("formulaire"))
 
         # Le referentiel fait foi, y compris sur l'historique.
         #
@@ -3238,13 +3254,35 @@ def list_api_keys(request: Request):
 
 
 @router.get("/api/settings/ia-usage")
-def ia_usage_synthese(request: Request, jours: int = 30):
-    """Consommation de l'IA sur la période : coût, utilisateurs, fonctions."""
+def ia_usage_synthese(request: Request, jours: int = 30, utilisateur: str = "", fonction: str = "",
+                      application: Optional[str] = None, modele: str = "", statut: str = ""):
+    """Consommation de l'IA sur la période : coût, applications et écrans,
+    utilisateurs, fonctions, modèles. Filtres facultatifs ; `application=`
+    vide (présent mais vide) désigne les appels sans application connue."""
     require_settings_audit(request)
     from database import get_db
     from app.services.ia_usage import synthese
+    filtres = {"utilisateur": utilisateur, "fonction": fonction, "modele": modele, "statut": statut}
+    if application is not None and "application" in request.query_params:
+        filtres["application"] = application
     with get_db() as conn:
-        return synthese(conn, jours)
+        res = synthese(conn, jours, filtres)
+    # Présence de la clé (même vide) : le front doit pouvoir resélectionner « Non renseignée ».
+    res["filtres"]["application_pose"] = "application" in request.query_params
+    return res
+
+
+@router.get("/api/settings/ia-usage/appels/{appel_id}")
+def ia_usage_appel(appel_id: int, request: Request):
+    """Fiche d'un appel : origine, modèles, tokens, coût décomposé, erreur."""
+    require_settings_audit(request)
+    from database import get_db
+    from app.services.ia_usage import detail
+    with get_db() as conn:
+        d = detail(conn, appel_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Appel introuvable.")
+    return d
 
 
 @router.post("/api/settings/api-keys")
@@ -4647,7 +4685,7 @@ def operator_should_see_alert(
     return user_machine in machines
 
 
-def _validate_alert_params(params: dict) -> dict:
+def _validate_alert_params(params: dict, anciens_items: list = None) -> dict:
     """Valide et normalise les paramètres d'une alerte (déclencheur, cible,
     validation). Retourne un dict propre prêt à être stocké en JSON. Accepte
     un dict vide (valeurs par défaut)."""
@@ -4925,6 +4963,8 @@ def _validate_alert_params(params: dict) -> dict:
                 item_out["placeholder"] = placeholder.strip()[:60]
             if help_txt:
                 item_out["help"] = help_txt
+            if it.get("id"):
+                item_out["id"] = str(it["id"])
             clean_items.append(item_out)
             continue
         # type "choice" (cases à cocher)
@@ -5008,9 +5048,16 @@ def _validate_alert_params(params: dict) -> dict:
             _choice_item["required"] = True
         if help_txt:
             _choice_item["help"] = help_txt
+        if it.get("id"):
+            _choice_item["id"] = str(it["id"])
         clean_items.append(_choice_item)
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
+    # Identifiant stable par question : c'est lui, pas la position, qui relie
+    # une réponse passée à sa question quand le questionnaire change
+    # (app/services/alertes_questionnaire.py).
+    from app.services.alertes_questionnaire import attribuer_ids
+    attribuer_ids(clean_items, anciens_items or [])
     if cl_enabled and not clean_items:
         cl_enabled = False
     # all_required retiré (UX) : le mode opérateur affiche une confirmation
@@ -6531,7 +6578,11 @@ async def maintenance_alerts_update(alert_id: int, request: Request):
         action_detail_parts.append(f"nom={nom!r}")
     if "params" in body:
         params_raw = body.get("params") or {}
-        params_validated = _validate_alert_params(params_raw)
+        from app.services.alertes_questionnaire import items_de_params
+        with get_db() as _cn_av:
+            _av = _cn_av.execute("SELECT params FROM maintenance_alerts WHERE id=?", (alert_id,)).fetchone()
+        params_validated = _validate_alert_params(
+            params_raw, items_de_params(_av["params"]) if _av else [])
         try:
             params_json = _json_alerts.dumps(params_validated, ensure_ascii=False)
         except (TypeError, ValueError):
@@ -7432,7 +7483,8 @@ def maintenance_alert_acks_list(request: Request):
             f"""SELECT a.id, a.alert_id, al.nom AS alert_nom,
                        al.linked_maint_code, a.user_id, a.user_nom,
                        a.machine, a.no_dossier, a.ack_at,
-                       a.responses, a.comment, a.dismissed
+                       a.responses, a.comment, a.dismissed,
+                       a.questionnaire, al.params AS alert_params
                 FROM maintenance_alert_acks a
                 LEFT JOIN maintenance_alerts al ON al.id = a.alert_id
                 {where_sql}
@@ -7442,11 +7494,19 @@ def maintenance_alert_acks_list(request: Request):
         ).fetchall()
     items = []
     alert_ids_seen = set()
+    # Les réponses partent rangées sous les questions ACTUELLES de leur alerte
+    # (identifiant de question, pas position) ; celles dont la question
+    # n'existe plus sortent dans hors_formulaire.
+    from app.services.alertes_questionnaire import items_de_params, lire_saisie
+    questions_par_alerte: dict = {}
     for r in rows:
         try:
             responses = _json_alerts.loads(r["responses"] or "{}")
         except (ValueError, TypeError):
             responses = {}
+        if r["alert_id"] not in questions_par_alerte:
+            questions_par_alerte[r["alert_id"]] = items_de_params(r["alert_params"])
+        lu = lire_saisie(responses, r["questionnaire"], questions_par_alerte[r["alert_id"]])
         aid = int(r["alert_id"]) if r["alert_id"] is not None else None
         if aid is not None:
             alert_ids_seen.add(aid)
@@ -7459,7 +7519,9 @@ def maintenance_alert_acks_list(request: Request):
             "machine": r["machine"] or "",
             "no_dossier": r["no_dossier"] or "",
             "ack_at": r["ack_at"],
-            "responses": responses,
+            "responses": lu["responses"],
+            "hors_formulaire": lu["hors_formulaire"],
+            "ancien": lu["ancien"],
             "comment": r["comment"] or "",
             # v2.4.11 : remonté au front pour que ctrlIsAutoClose détecte
             # aussi les anciennes esquives (dismissed=1 mais comment vide,
@@ -7570,6 +7632,7 @@ def maintenance_alert_acks_list(request: Request):
                         })
                     elif isinstance(it, dict):
                         entry = {
+                            "id": it.get("id") or "",
                             "label": (it.get("label") or "").strip(),
                             "type": (it.get("type") or "choice"),
                         }
@@ -7828,10 +7891,26 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
     with get_db() as conn:
         # Vérifier que l'alerte existe et est active
         row = conn.execute(
-            "SELECT id, active FROM maintenance_alerts WHERE id=?", (alert_id,)
+            "SELECT id, active, params FROM maintenance_alerts WHERE id=?", (alert_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Alerte introuvable.")
+        # Photo des questions auxquelles l'opérateur vient de répondre : ses
+        # réponses restent lisibles quand le questionnaire changera.
+        from app.services.alertes_questionnaire import attribuer_ids, items_de_params, photo
+        _items = items_de_params(row["params"])
+        if any(not it.get("id") for it in _items):
+            # Questionnaire écrit sans passer par l'éditeur : on l'identifie
+            # ici, avant la photo, pour que les réponses restent rattachables.
+            try:
+                _p = _json_alerts.loads(row["params"] or "{}")
+                attribuer_ids(_items, [])
+                _p.setdefault("checklist", {})["items"] = _items
+                conn.execute("UPDATE maintenance_alerts SET params=? WHERE id=?",
+                             (_json_alerts.dumps(_p, ensure_ascii=False), alert_id))
+            except (ValueError, TypeError, AttributeError):
+                pass
+        questionnaire_json = photo(_items)
         # Machine de l'opérateur (ou vide pour superadmin sans machine)
         machine = _machine_name_from_user(conn, user) or ""
         # v163+ : fallback serveur robuste — si le client n'a pas transmis de
@@ -7879,10 +7958,10 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
         conn.execute(
             """INSERT INTO maintenance_alert_acks
                (alert_id, user_id, user_nom, machine, no_dossier,
-                ack_at, responses, comment)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                ack_at, responses, comment, questionnaire)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (alert_id, user.get("id"), user.get("nom") or user.get("email") or "",
-             machine, no_dossier, now_paris, responses_json, comment),
+             machine, no_dossier, now_paris, responses_json, comment, questionnaire_json),
         )
         # Met à jour le last_ack_at sur l'alerte (cache utilisé en /settings)
         conn.execute(

@@ -20,18 +20,24 @@ le module MyPrint sans entrée supplémentaire dans la taxonomie.
   GET    /modeles/{id}/impressions      historique
   POST   /impressions/{id}/reimprimer   même ZPL, mêmes numéros
   POST   /ia/proposer                   assistant : consigne → mise en page
+  POST   /ia/depuis-photo               photo(s) + explication → nouvelle étiquette
+  GET    /modeles/{id}/sources/{fichier} photo source d'une étiquette créée par l'IA
   POST   /demandes                      demande de nouveau format (+ pièces)
   GET    /demandes                      toutes (super admin) ou les miennes
   GET    /demandes/{id}
   PATCH  /demandes/{id}                 statut, réponse (super admin)
   POST   /demandes/{id}/generer         premier jet par l'IA (super admin)
   GET    /pieces/{id}                   téléchargement d'une pièce jointe
+
+Sources de données, séries, versions, compteurs et contrôle IA :
+app/routers/etiq_avance.py (même préfixe).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 from datetime import datetime
 from typing import Optional
@@ -40,7 +46,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from config import ETIQ_IA_MODELE, ETIQ_PIECE_MAX_OCTETS, ETIQ_UPLOAD_DIR, ROLES_MYPRINT, etiq_ia_modeles
+from config import (
+    ETIQ_GS1_PREFIXE, ETIQ_IA_MODELE, ETIQ_PHOTO_IMAGE_MAX_OCTETS, ETIQ_PHOTO_MAX_FICHIERS, ETIQ_PIECE_MAX_OCTETS,
+    ETIQ_ROLES_CONCEPTION, ETIQ_UPLOAD_DIR, ETIQ_USAGES, FSC_LICENCE_SIFA, ROLES_MYPRINT, etiq_ia_modeles,
+    etiq_usages, public_base_url,
+)
 from app.core.database import get_db
 from app.services.auth_service import get_current_user, is_superadmin
 from app.services import etiq_specifiques as es
@@ -60,6 +70,18 @@ _MIME_PIECES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
+# Ce que l'assistant lit réellement (etiq_specifiques_ia._blocs_pieces) : une
+# création depuis photo n'accepte que ces formats. HEIC n'est pas lu par
+# l'API ; le navigateur le convertit en JPEG avant l'envoi.
+_MIME_PHOTO = {"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"}
+# Photos sources conservées à côté des pièces des demandes, sans table :
+# source_<id étiquette>_<aléa>.<ext>. Le nom porte l'étiquette, le motif
+# ci-dessous est le seul accepté au téléchargement.
+_SOURCES_DIR = os.path.join(ETIQ_UPLOAD_DIR, "sources")
+_SOURCE_RE = re.compile(r"^source_(\d+)_[0-9a-f]{16}\.(jpg|png|gif|webp|pdf)$")
+_EXT_MIME = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp",
+             "pdf": "application/pdf"}
+_MIME_EXT = {v: k for k, v in _EXT_MIME.items()}
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────
@@ -82,6 +104,18 @@ def _super(request: Request) -> dict:
     return user
 
 
+def concepteur(user: dict) -> bool:
+    """Peut modifier les objets figés et les calques verrouillés."""
+    return is_superadmin(user) or user.get("role") in ETIQ_ROLES_CONCEPTION
+
+
+def _usage(v) -> Optional[str]:
+    if v is None:
+        return None
+    v = str(v).strip().lower()
+    return v if v in dict(ETIQ_USAGES) else ""
+
+
 def _invalide(e: EtiquetteInvalide):
     raise HTTPException(status_code=400, detail=str(e))
 
@@ -92,6 +126,10 @@ def _serialize_modele(row, complet: bool = False) -> dict:
         "description": row["description"] or "",
         "largeur_mm": row["largeur_mm"], "hauteur_mm": row["hauteur_mm"], "dpi": row["dpi"],
         "duplique_de": row["duplique_de"], "demande_id": row["demande_id"],
+        "usage": row["usage"] if "usage" in row.keys() else "",
+        "client": row["client"] if "client" in row.keys() else "",
+        "version": row["version"] if "version" in row.keys() else 1,
+        **_etat_validation(row),
         "created_at": row["created_at"], "created_by": row["created_by"],
         "updated_at": row["updated_at"], "updated_by": row["updated_by"],
     }
@@ -101,7 +139,28 @@ def _serialize_modele(row, complet: bool = False) -> dict:
         except EtiquetteInvalide:
             d["layout"] = {"elements": [], "variables": []}
         d["avertissements"] = es.controles(d["layout"])
+        d["sources"] = _sources(row["id"])
     return d
+
+
+def _etat_validation(row) -> dict:
+    from app.services.etiq_validation import etat
+    return etat(row)
+
+
+def _sources(modele_id: int) -> list[dict]:
+    """Photos d'origine d'une étiquette créée depuis une photo."""
+    try:
+        noms = sorted(os.listdir(_SOURCES_DIR))
+    except OSError:
+        return []
+    out = []
+    for n in noms:
+        m = _SOURCE_RE.match(n)
+        if m and int(m.group(1)) == int(modele_id):
+            out.append({"fichier": n, "mime": _EXT_MIME[m.group(2)],
+                        "url": f"{router.prefix}/modeles/{modele_id}/sources/{n}"})
+    return out
 
 
 def _modele(conn, modele_id: int):
@@ -109,6 +168,17 @@ def _modele(conn, modele_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Étiquette introuvable.")
     return row
+
+
+def _production(conn, modele_id: int) -> dict:
+    """Format et mise en page de la version APPROUVÉE (etiq_validation.py) :
+    ce que l'atelier imprime, quel que soit le brouillon en cours."""
+    _modele(conn, modele_id)
+    from app.services.etiq_validation import modele_production
+    try:
+        return modele_production(conn, modele_id)
+    except EtiquetteInvalide as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 def _dossier_actif(conn, dossier_id) -> None:
@@ -189,10 +259,52 @@ def bootstrap(request: Request):
             "dpi": list(es.DPI_ADMIS), "statuts_demande": STATUTS_DEMANDE,
             "quantite_max": es.QUANTITE_MAX,
             "modeles_ia": etiq_ia_modeles(),
+            "usages": etiq_usages(),
+            "pictos": _pictos_ref(),
+            "sources": _sources_ref(),
+            "formats_date": [{"format": f, "libelle": l} for f, l in _formats_date()],
+            "fonctions": sorted(_fonctions()),
+            "calques_defaut": [dict(c) for c in es.CALQUES_DEFAUT],
+            "gs1": {"prefixe": ETIQ_GS1_PREFIXE, "ai": _ai_ref()},
+            "fsc_licence": FSC_LICENCE_SIFA,
+            "base_url": public_base_url(),
+            "concepteur": concepteur(user),
+            "approbateur": _approbateur(user),
+            "statuts_validation": {"brouillon": "Brouillon", "a_approuver": "À approuver", "approuve": "Approuvée"},
             "modele_ia_defaut": ETIQ_IA_MODELE if any(m["id"] == ETIQ_IA_MODELE for m in etiq_ia_modeles())
             else etiq_ia_modeles()[0]["id"],
         },
     }
+
+
+def _approbateur(user: dict) -> bool:
+    from app.routers.qualite import ROLES_QUALITE
+    return is_superadmin(user) or user.get("role") in ROLES_QUALITE
+
+
+def _pictos_ref():
+    from app.services.etiq_pictos import referentiel
+    return referentiel()
+
+
+def _sources_ref():
+    from app.services.etiq_sources import referentiel
+    return referentiel()
+
+
+def _formats_date():
+    from app.services.etiq_formules import FORMATS_DATE
+    return FORMATS_DATE
+
+
+def _fonctions():
+    from app.services.etiq_formules import FONCTIONS
+    return FONCTIONS.keys()
+
+
+def _ai_ref():
+    from app.services.etiq_gs1 import AI
+    return {k: {"libelle": v[0], "fixe": v[1], "max": v[2], "type": v[3]} for k, v in AI.items()}
 
 
 # ─── Dossiers ───────────────────────────────────────────────────────────
@@ -255,6 +367,9 @@ class ModelePayload(BaseModel):
     hauteur_mm: Optional[float] = None
     dpi: Optional[int] = None
     layout: Optional[dict] = None
+    usage: Optional[str] = None
+    client: Optional[str] = None
+    motif: Optional[str] = None
 
 
 @router.get("/modeles/{modele_id}")
@@ -280,9 +395,10 @@ def create_modele(payload: ModelePayload, request: Request):
         now = _now()
         cur = conn.execute(
             "INSERT INTO etiq_modeles (dossier_id,nom,description,largeur_mm,hauteur_mm,dpi,layout_json,"
-            "created_at,created_by,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "usage,client,created_at,created_by,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (payload.dossier_id, nom, (payload.description or "")[:1000], l, h, d,
-             json.dumps(layout, ensure_ascii=False), now, user.get("email"), now, user.get("email")))
+             json.dumps(layout, ensure_ascii=False), _usage(payload.usage) or "", (payload.client or "").strip()[:120],
+             now, user.get("email"), now, user.get("email")))
         conn.commit()
         return {"ok": True, "id": cur.lastrowid}
 
@@ -300,6 +416,10 @@ def patch_modele(modele_id: int, payload: ModelePayload, request: Request):
             champs["nom"] = nom
         if payload.description is not None:
             champs["description"] = payload.description[:1000]
+        if payload.usage is not None:
+            champs["usage"] = _usage(payload.usage) or ""
+        if payload.client is not None:
+            champs["client"] = payload.client.strip()[:120]
         if payload.dossier_id is not None and payload.dossier_id != row["dossier_id"]:
             _dossier_actif(conn, payload.dossier_id)
             champs["dossier_id"] = payload.dossier_id
@@ -311,11 +431,27 @@ def patch_modele(modele_id: int, payload: ModelePayload, request: Request):
             champs.update({"largeur_mm": l, "hauteur_mm": h, "dpi": d})
         if payload.layout is not None:
             try:
-                champs["layout_json"] = json.dumps(es.normaliser_layout(payload.layout), ensure_ascii=False)
+                nouveau = es.normaliser_layout(payload.layout)
+                if not concepteur(user):
+                    from app.services.etiq_bibliotheque import violations_verrous
+                    ko = violations_verrous(es.normaliser_layout(row["layout_json"]), nouveau)
+                    if ko:
+                        raise HTTPException(status_code=403, detail=" ".join(ko[:3]))
+                champs["layout_json"] = json.dumps(nouveau, ensure_ascii=False)
             except EtiquetteInvalide as e:
                 _invalide(e)
+            if champs["layout_json"] == row["layout_json"]:
+                champs.pop("layout_json")
         if not champs:
-            return {"ok": True}
+            return _serialize_modele(row, complet=True)
+        # Nouvelle version dès que le dessin change (mise en page ou format) :
+        # l'état précédent est rangé, on peut y revenir.
+        if any(k in champs and champs[k] != row[k] for k in ("layout_json", "largeur_mm", "hauteur_mm", "dpi")):
+            from app.services.etiq_bibliotheque import enregistrer_version
+            champs["version"] = enregistrer_version(conn, row, user.get("email"), payload.motif or "")
+            # Modifiée : la production garde la version approuvée jusqu'à la
+            # prochaine approbation.
+            champs["statut_validation"] = "brouillon"
         champs["updated_at"] = _now()
         champs["updated_by"] = user.get("email")
         sets = ", ".join(f"{k}=?" for k in champs)
@@ -327,6 +463,7 @@ def patch_modele(modele_id: int, payload: ModelePayload, request: Request):
 class DupliquerPayload(BaseModel):
     dossier_id: Optional[int] = None
     nom: Optional[str] = None
+    client: Optional[str] = None
 
 
 @router.post("/modeles/{modele_id}/dupliquer")
@@ -340,9 +477,12 @@ def dupliquer_modele(modele_id: int, payload: DupliquerPayload, request: Request
         now = _now()
         cur = conn.execute(
             "INSERT INTO etiq_modeles (dossier_id,nom,description,largeur_mm,hauteur_mm,dpi,layout_json,"
-            "duplique_de,created_at,created_by,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "usage,client,duplique_de,created_at,created_by,updated_at,updated_by)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (dossier_id, nom, row["description"], row["largeur_mm"], row["hauteur_mm"], row["dpi"],
-             row["layout_json"], modele_id, now, user.get("email"), now, user.get("email")))
+             row["layout_json"], row["usage"] if "usage" in row.keys() else "",
+             (payload.client if payload.client is not None else (row["client"] if "client" in row.keys() else ""))[:120],
+             modele_id, now, user.get("email"), now, user.get("email")))
         conn.commit()
         return {"ok": True, "id": cur.lastrowid}
 
@@ -422,7 +562,7 @@ def plan(modele_id: int, payload: PlanPayload, request: Request):
     _user(request)
     q = _quantite(payload.quantite)
     with get_db() as conn:
-        row = _modele(conn, modele_id)
+        row = _production(conn, modele_id)
         try:
             layout = es.normaliser_layout(row["layout_json"])
             p = es.plan_serie(conn, modele_id, layout, q, payload.departs)
@@ -450,7 +590,7 @@ def imprimer(modele_id: int, payload: ImprimerPayload, request: Request):
     ex = max(1, min(99, int(payload.exemplaires or 1)))
     saisies = {k: str(v)[:500] for k, v in (payload.saisies or {}).items()}
     with get_db() as conn:
-        row = _modele(conn, modele_id)
+        row = _production(conn, modele_id)   # version approuvée, jamais le brouillon
         imp = _imprimante(conn, payload.imprimante_id)
         sortie = _sortie(imp)
         # 1. Sous verrou d'écriture : lecture des compteurs, réservation, trace.
@@ -584,6 +724,133 @@ def ia_proposer(payload: IaPayload, request: Request):
             return proposer(payload.consigne[:4000], l, h, d, layout, modele=payload.modele)
     except EtiquetteInvalide as e:
         _invalide(e)
+
+
+@router.post("/ia/depuis-photo")
+async def ia_depuis_photo(
+    request: Request,
+    consigne: str = Form(""),
+    nom: str = Form(""),
+    dossier_id: Optional[int] = Form(None),
+    largeur_mm: Optional[float] = Form(None),
+    hauteur_mm: Optional[float] = Form(None),
+    dpi: int = Form(203),
+    modele: Optional[str] = Form(None),
+    usage: str = Form(""),
+    client: str = Form(""),
+    fichiers: list[UploadFile] = File(default=[]),
+):
+    """Accès direct (tout utilisateur MyPrint) : photo(s) ou PDF d'une
+    étiquette existante + explication → nouvelle étiquette dans le dossier,
+    prête à relire dans l'éditeur. Les fichiers sont conservés comme source."""
+    user = _user(request)
+    from app.services import ia_usage
+    from app.services.etiq_specifiques_ia import choisir_modele, contexte_photo, proposer
+    try:
+        choisir_modele(modele)  # refus immédiat, avant de lire les fichiers
+    except EtiquetteInvalide as e:
+        _invalide(e)
+    consigne = (consigne or "").strip()
+    nom = (nom or "").strip()[:120]
+    if not consigne:
+        raise HTTPException(status_code=400, detail="Expliquer l'étiquette : ce qui change d'une impression à l'autre, les codes attendus.")
+    if len(consigne) > 4000:
+        raise HTTPException(status_code=400, detail="Explication trop longue — 4 000 caractères au plus.")
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom de l'étiquette obligatoire.")
+    if not dossier_id:
+        raise HTTPException(status_code=400, detail="Choisir le dossier où créer l'étiquette.")
+    if (largeur_mm is None) != (hauteur_mm is None) or any(v is not None and v <= 0 for v in (largeur_mm, hauteur_mm)):
+        raise HTTPException(status_code=400, detail="Format incomplet — donner largeur et hauteur, ou aucune des deux.")
+    with get_db() as conn:
+        _dossier_actif(conn, dossier_id)
+
+    fichiers = [f for f in (fichiers or []) if f and f.filename]
+    if not fichiers:
+        raise HTTPException(status_code=400, detail="Joindre au moins une photo ou un PDF de l'étiquette.")
+    if len(fichiers) > ETIQ_PHOTO_MAX_FICHIERS:
+        raise HTTPException(status_code=400, detail=f"{ETIQ_PHOTO_MAX_FICHIERS} fichiers au plus.")
+    pieces = []
+    for f in fichiers:
+        mime = (f.content_type or "").lower()
+        if mime == "image/jpg":
+            mime = "image/jpeg"
+        if mime not in _MIME_PHOTO:
+            raise HTTPException(status_code=400,
+                                detail=f"« {f.filename} » : format non accepté — photo JPEG, PNG, WebP ou PDF.")
+        contenu = await f.read()
+        if not contenu:
+            raise HTTPException(status_code=400, detail=f"« {f.filename} » est vide.")
+        if len(contenu) > ETIQ_PIECE_MAX_OCTETS:
+            raise HTTPException(status_code=400,
+                                detail=f"« {f.filename} » dépasse {ETIQ_PIECE_MAX_OCTETS // (1024 * 1024)} Mo.")
+        if mime.startswith("image/") and len(contenu) > ETIQ_PHOTO_IMAGE_MAX_OCTETS:
+            raise HTTPException(status_code=400, detail=(
+                f"« {f.filename} » dépasse {ETIQ_PHOTO_IMAGE_MAX_OCTETS // (1024 * 1024)} Mo — "
+                "réduire la photo avant de l'envoyer."))
+        pieces.append({"mime": mime, "contenu": contenu, "nom": f.filename[:200]})
+
+    libre = largeur_mm is None
+    l, h, d = es.normaliser_format(largeur_mm or 100, hauteur_mm or 150, dpi)
+    contexte = contexte_photo(None if libre else l, None if libre else h) + f"\nNom de l'étiquette : {nom}"
+    try:
+        with ia_usage.suivi(user, "etiquettes", "photo"):
+            res = proposer(consigne, l, h, d, {"elements": [], "variables": []}, pieces, contexte,
+                           modele=modele, format_libre=libre)
+    except EtiquetteInvalide as e:
+        _invalide(e)
+    if not libre:
+        # Format imposé : la réponse ne le change pas.
+        res["largeur_mm"], res["hauteur_mm"] = l, h
+
+    description = res["resume"] + f" (créée depuis une photo : {res['modele_libelle']})"
+    if res["remarques"]:
+        description += "\nÀ vérifier : " + " · ".join(res["remarques"])
+    os.makedirs(_SOURCES_DIR, exist_ok=True)
+    ecrits = []
+    now = _now()
+    try:
+        with get_db() as conn:
+            _dossier_actif(conn, dossier_id)
+            cur = conn.execute(
+                "INSERT INTO etiq_modeles (dossier_id,nom,description,largeur_mm,hauteur_mm,dpi,layout_json,"
+                "usage,client,created_at,created_by,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (dossier_id, nom, description[:1000], res["largeur_mm"], res["hauteur_mm"], d,
+                 json.dumps(res["layout"], ensure_ascii=False), _usage(usage) or "", (client or "").strip()[:120],
+                 now, user.get("email"), now, user.get("email")))
+            mid = cur.lastrowid
+            for p in pieces:
+                chemin = os.path.join(_SOURCES_DIR, f"source_{mid}_{secrets.token_hex(8)}.{_MIME_EXT[p['mime']]}")
+                with open(chemin, "wb") as fh:
+                    fh.write(p["contenu"])
+                ecrits.append(chemin)
+            conn.commit()
+    except Exception:
+        for c in ecrits:
+            try:
+                os.remove(c)
+            except OSError:
+                pass
+        raise
+    return {"ok": True, "modele_id": mid, "resume": res["resume"], "remarques": res["remarques"],
+            "champs_detectes": res.get("champs_detectes", []),
+            "modele_libelle": res["modele_libelle"], "largeur_mm": res["largeur_mm"],
+            "hauteur_mm": res["hauteur_mm"]}
+
+
+@router.get("/modeles/{modele_id}/sources/{fichier}")
+def get_source(modele_id: int, fichier: str, request: Request):
+    _user(request)
+    m = _SOURCE_RE.match(fichier or "")
+    if not m or int(m.group(1)) != modele_id:
+        raise HTTPException(status_code=404, detail="Fichier introuvable.")
+    with get_db() as conn:
+        _modele(conn, modele_id)
+    chemin = os.path.join(_SOURCES_DIR, fichier)
+    if not os.path.exists(chemin):
+        raise HTTPException(status_code=404, detail="Fichier absent du serveur.")
+    return FileResponse(chemin, media_type=_EXT_MIME[m.group(2)], filename=fichier,
+                        content_disposition_type="inline")
 
 
 # ─── Demandes de nouveau format ─────────────────────────────────────────
@@ -765,6 +1032,7 @@ def generer_depuis_demande(demande_id: int, payload: GenererPayload, request: Re
                      (mid, dossier_id, now, user.get("email"), demande_id))
         conn.commit()
     return {"ok": True, "modele_id": mid, "resume": res["resume"], "remarques": res["remarques"],
+            "champs_detectes": res.get("champs_detectes", []),
             "modele_libelle": res["modele_libelle"]}
 
 

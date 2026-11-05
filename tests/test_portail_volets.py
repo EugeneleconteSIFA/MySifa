@@ -149,12 +149,15 @@ PARAMS = {
     ("/planning", "vue"): (RACINE / "app/web/planning_page.py",
                            r"PLANNING_VUES\s*=\s*\[(.*?)\];",
                            r'key\s*:\s*"([a-z0-9_-]+)"'),
-    # Postes d'étiquetage de MyPrint et outils adressables comme un poste
-    # (étiquettes spécifiques) : les identifiants vivent dans le JS de MyStock,
-    # le menu ne fait que les citer.
-    ("/stock", "poste"): (RACINE / "app/web/stock_page.py",
+    # Postes d'étiquetage de MyTools et outils adressables comme un poste
+    # (étiquettes spécifiques) : les identifiants vivent dans le module
+    # Étiquettes, le menu ne fait que les citer.
+    ("/tools", "poste"): (RACINE / "static/mysifa_tools_etiquettes.js",
                           r"TRACA_(?:POSTES|OUTILS)\s*=\s*\[(.*?)\];",
                           r"id\s*:\s*'([a-z0-9_-]+)'"),
+    ("/tools", "outil"): (RACINE / "static/mysifa_tools.js",
+                          r"TOOLS_OUTILS\s*=\s*\[(.*?)\];",
+                          r"\{\s*id\s*:\s*'([a-z0-9_-]+)'"),
 }
 mauvais_params = []
 for (chemin, nom), (fichier, motif, motif_val) in PARAMS.items():

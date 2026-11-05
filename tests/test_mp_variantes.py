@@ -139,6 +139,60 @@ with get_db() as c:
         "SELECT variante_id FROM erp_article_matiere WHERE code1='9999'").fetchone()[0], None)
     c.rollback()
 
+# Laizes et métrage par bobine d'un fournisseur.
+with get_db() as c:
+    F = c.execute("INSERT INTO fournisseurs_fsc (nom) VALUES ('Fournisseur L')").lastrowid
+    ml = c.execute(
+        """INSERT INTO matieres_premieres (categorie, reference, designation, actif, is_europe, prix_par_laize,
+                                           suivi_bobine, sous_section)
+           VALUES ('frontal', 'TESTL', 'Couché 80', 1, 0, 0, 0, 'Couchés')""").lastrowid
+    vl = mv.creer(c, ml, {"libelle_technique": "Couché 80 réf X", "fournisseur_id": F}, "t")
+    mv.poser_laize_fournisseur(c, vl, {"valeur_mm": "333", "ml_bobine": "6000"})
+    det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
+    check("laize fournisseur : nouvelle laize créée et rattachée",
+          [(d["valeur_mm"], [x["ml_bobine"] for x in d["conditionnements"]]) for d in det], [(333.0, [6000.0])])
+    check("laize fournisseur : ajoutée à la matière", [l["valeur_mm"] for l in mv.lister(c, ml)["laizes_matiere"]],
+          [333.0])
+    lid = det[0]["laize_id"]
+    mv.poser_laize_fournisseur(c, vl, {"laize_id": lid, "ml_bobine": "2000"})
+    det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
+    check("conditionnement : deux longueurs sur la même laize",
+          (len(det), [x["ml_bobine"] for x in det[0]["conditionnements"]]), (1, [2000.0, 6000.0]))
+    refus("conditionnement : doublon refusé",
+          lambda: mv.poser_laize_fournisseur(c, vl, {"laize_id": lid, "ml_bobine": "2000"}))
+    mv.retirer_conditionnement(c, vl, det[0]["conditionnements"][0]["id"])
+    det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
+    check("conditionnement : retiré, la laize reste", [x["ml_bobine"] for x in det[0]["conditionnements"]], [6000.0])
+    mv.retirer_laize_fournisseur(c, vl, lid)
+    check("laize fournisseur : retirée du fournisseur, gardée sur la matière",
+          ([v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"],
+           len(mv.lister(c, ml)["laizes_matiere"])), ([], 1))
+    check("laize fournisseur : ses conditionnements partent avec elle", c.execute(
+        "SELECT COUNT(*) FROM mp_conditionnements_fournisseur WHERE matiere_id=?", (ml,)).fetchone()[0], 0)
+    refus("laize fournisseur : valeur invalide", lambda: mv.poser_laize_fournisseur(c, vl, {"valeur_mm": "abc"}))
+    vsans = mv.creer(c, ml, {"libelle_technique": "Sans fournisseur", "fournisseur_id": None}, "t")
+    refus("laize fournisseur : article sans fournisseur", lambda: mv.poser_laize_fournisseur(c, vsans, {"valeur_mm": 400}))
+    c.rollback()
+
+# Article « Fournisseur non identifié » (reprise d'inventaire) : son prix doit
+# arriver dans Coûts matières comme celui d'un article avec fournisseur. Il
+# restait sur l'article seul, et la grille affichait « à compléter ».
+with get_db() as c:
+    c.execute("INSERT INTO matieres_premieres (categorie, reference, designation, actif) "
+              "VALUES ('frontal','T-SANS-FOU','Sans fournisseur',1)")
+    msf = c.execute("SELECT id FROM matieres_premieres WHERE reference='T-SANS-FOU'").fetchone()[0]
+    dsf = c.execute("INSERT INTO mp_matiere_declinaison (matiere_id, laize_id, grammage_id) VALUES (?,NULL,NULL)",
+                    (msf,)).lastrowid
+    c.execute("INSERT INTO mp_matiere_prix (matiere_id, declinaison_id, fournisseur_id, prix, principal) "
+              "VALUES (?,?,NULL,0,1)", (msf, dsf))
+    vsf = c.execute("INSERT INTO mp_variantes (matiere_id, fournisseur_id, libelle_technique, principal, actif) "
+                    "VALUES (?,NULL,'Polyester sans fournisseur',1,1)", (msf,)).lastrowid
+    res = mv.definir_prix_article(c, vsf, 0.4, user_name="t")
+    check("sans fournisseur : le prix de l'article est poussé", res.get("pousse"), True)
+    check("sans fournisseur : prix en vigueur dans Coûts matières", c.execute(
+        "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=?", (dsf,)).fetchone()[0], 0.4)
+    c.rollback()
+
 print()
 if FAIL:
     print("ÉCHEC : %d contrôle(s) en erreur" % len(FAIL))

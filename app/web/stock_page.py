@@ -5,6 +5,8 @@ Fixes:
 - Navigation / back button
 - Add product/emplacement button restored
 """
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -34,13 +36,18 @@ def stock_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/stock", status_code=302)
         raise
-    # Les fabricants peuvent accéder uniquement via ?tab=traca (outil d'étiquettes)
+    # Les étiquettes traça sont parties dans MyTools le 21/10/2026 : les liens
+    # posés (favoris, annonces, postes d'atelier) y sont renvoyés avec leurs
+    # paramètres — poste, étiquette spécifique ouverte, fenêtre. MyTools
+    # applique ses propres droits (app/web/tools_page.py).
     tab_param = request.query_params.get("tab", "")
+    if tab_param == "traca":
+        suite = [("outil", "etiquettes")] + [
+            (k, v) for k, v in request.query_params.multi_items() if k != "tab"
+        ]
+        return RedirectResponse(url="/tools?" + urlencode(suite), status_code=302)
     if not user_has_app_access(user, "stock"):
-        if user.get("role") == "fabrication" and tab_param == "traca":
-            pass  # autorisé → accès limité au traça dans le JS
-        else:
-            return access_denied_response("MyStock")
+        return access_denied_response("MyStock")
     # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
     html = STOCK_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
     html = html.replace(
@@ -79,7 +86,6 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -259,6 +265,22 @@ body.sb-open .sidebar-overlay{display:block}
 .si-des{font-size:11px;color:var(--muted);margin-top:1px}
 .si-badge{font-family:monospace;font-size:11px;font-weight:700;color:var(--accent);
   background:var(--accent-bg);padding:3px 8px;border-radius:10px;white-space:nowrap}
+.search-item.is-active{background:var(--accent-bg)}
+.si-main{display:flex;align-items:center;gap:10px;min-width:0}
+.si-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:2px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0;
+  background:color-mix(in srgb,var(--si-c,var(--accent)) 14%,transparent);color:var(--si-c,var(--accent))}
+.si-type.t-produit{--si-c:var(--accent)}
+.si-type.t-matiere{--si-c:var(--c2)}
+.si-type.t-emplacement{--si-c:var(--c3)}
+.si-type.t-bobine{--si-c:var(--c4)}
+.search-section-head{display:flex;justify-content:space-between;align-items:center;padding-right:10px}
+.search-clear-recent{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--muted);font-size:11px;padding:3px 8px;cursor:pointer;font-family:inherit}
+.search-clear-recent:hover{color:var(--accent);border-color:var(--accent)}
+.ref-create-link{background:none;border:none;padding:0;color:var(--accent);font-weight:700;
+  font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
+.search-item.si-create{color:var(--accent);font-weight:700;font-size:13px;justify-content:flex-start;gap:8px}
 
 /* ── Content ── */
 .content{padding:16px;max-width:900px}
@@ -1384,6 +1406,22 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-liste-n{font-size:12px;color:var(--muted)}
 .mp-tri-wrap{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .mp-tri{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:7px 10px;font:inherit;font-size:13px;color:var(--text)}
+/* Menu déroulant MySifa (mpSelect) */
+.mp-sel{display:inline-flex;align-items:center;gap:6px;max-width:260px;padding:7px 10px 7px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;font:inherit;font-size:13px;font-weight:500;color:var(--text);cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+.mp-sel:hover,.mp-sel.ouvert{border-color:var(--accent)}
+.mp-sel:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg);border-color:var(--accent)}
+.mp-sel-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-sel-chev{display:inline-flex;color:var(--muted)}
+.mp-sel.ouvert .mp-sel-chev{color:var(--accent);transform:rotate(180deg)}
+.mp-sel.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
+.mp-sel-pre{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;opacity:.75}
+.mp-sel-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:-3px;border-radius:50%;font-size:15px;line-height:1}
+.mp-sel-x:hover{background:var(--accent);color:white}
+.mp-sel-pop{position:fixed;z-index:10060;max-height:320px;overflow:auto;padding:4px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.mp-sel-opt{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px 7px 6px;border:none;border-radius:7px;background:var(--card);color:var(--text);font:inherit;font-size:13px;text-align:left;white-space:nowrap;cursor:pointer}
+.mp-sel-opt:hover,.mp-sel-opt:focus{outline:none;background:var(--accent-bg);color:var(--accent)}
+.mp-sel-opt.on{font-weight:700;color:var(--accent)}
+.mp-sel-check{width:14px;text-align:center;font-weight:700;color:var(--accent)}
 .mp-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2px;gap:2px}
 .mp-seg-btn{border:none;background:transparent;border-radius:8px;padding:6px 11px;font:inherit;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap}
 .mp-seg-btn:hover{color:var(--text)}
@@ -1421,7 +1459,7 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-var-card{margin-top:0}
 .mp-var-scroll{overflow-x:auto;margin:4px -4px 0}
 .mp-var-table{width:100%;border-collapse:collapse;font-size:13px}
-.mp-var-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.mp-var-table th{text-align:left;padding:9px 10px;font-size:12px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border);white-space:nowrap}
 .mp-var-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
 .mp-var-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mp-var-table .c-radio{width:28px}
@@ -1430,7 +1468,7 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-cond-champ{display:inline-flex;align-items:center;gap:6px;margin-right:10px;white-space:nowrap;font-size:12px;color:var(--muted)}
 .mp-cond-inp{width:96px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
 .mp-cond-inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.mp-var-table td .mp-cond-inp{background:var(--bg)}
+.mp-var-table td .mp-cond-inp{background:var(--card)}
 .mp-modal.mp-modal-cond{max-width:980px;padding:22px}
 .mp-cond-scroll{max-height:62vh;overflow:auto;margin-top:10px}
 .mp-cond-table td{vertical-align:middle}
@@ -1468,8 +1506,131 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-empl-code{font-size:13px;font-weight:700;color:var(--text);min-width:56px}
 .mp-empl-lbl{flex:1;min-width:0;font-size:12px;color:var(--muted)}
 .mp-empl-qty{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
-.mp-empl-ico{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer}
-.mp-empl-ico:hover{border-color:var(--accent);color:var(--accent)}
+.mp-empl-ico{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;transition:border-color .12s,color .12s,background .12s}
+.mp-empl-ico:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mp-empl-ico.ico-danger:hover{border-color:var(--danger);color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.mp-empl-ico.ico-warn:hover{border-color:var(--warn);color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.mp-empl-ico.ico-ok:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent)}
+/* Actions de la fiche matière : mêmes teintes que les produits finis
+   (entrée verte, inventaire violet), la correction en accent. */
+.mp-act.mp-act--entree{background:color-mix(in srgb,var(--success) 14%,transparent);border-color:color-mix(in srgb,var(--success) 40%,transparent);color:var(--success)}
+.mp-act.mp-act--entree svg{color:var(--success)}
+.mp-act.mp-act--entree:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 22%,transparent)}
+.mp-act.mp-act--inventaire{background:color-mix(in srgb,var(--c2) 14%,transparent);border-color:color-mix(in srgb,var(--c2) 40%,transparent);color:var(--c2)}
+.mp-act.mp-act--inventaire svg{color:var(--c2)}
+.mp-act.mp-act--inventaire:hover{border-color:var(--c2);color:var(--c2);background:color-mix(in srgb,var(--c2) 22%,transparent)}
+.mp-act.mp-act--ajust{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--accent)}
+.mp-act.mp-act--ajust:hover{border-color:var(--accent)}
+/* Bulle d'aide MySifa (remplace l'infobulle du navigateur sur MyStock). */
+.mtip{position:fixed;z-index:10050;max-width:300px;padding:5px 9px;border-radius:6px;background:var(--text);color:var(--card);font-size:11px;font-weight:600;line-height:1.4;pointer-events:none;opacity:0;transform:translateY(3px);transition:opacity .12s,transform .12s;white-space:normal}
+.mtip.on{opacity:1;transform:none}
+/* Lignes dépliables (laizes, articles fournisseur) */
+.mp-row-click{cursor:pointer;transition:background .12s}
+.mp-row-click:hover>td{background:var(--accent-bg)}
+.mp-row-click.open>td{background:var(--accent-bg)}
+.mp-chev{display:inline-flex;vertical-align:-2px;margin-right:6px;color:var(--muted);transition:transform .15s}
+.mp-chev.open{transform:rotate(90deg);color:var(--accent)}
+.mp-row-detail>td{background:var(--bg);padding:12px 14px!important;border-bottom:1px solid var(--border)}
+/* Détail d'une laize : à plat sous sa ligne, filet d'accent à gauche, pas de carte dans la carte. */
+.mp-row-detail.plat>td{background:var(--card);border-left:3px solid var(--accent);padding:12px 14px 14px 24px!important}
+.mp-ld{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:28px}
+@media(max-width:900px){.mp-ld{grid-template-columns:minmax(0,1fr);gap:16px}}
+.mp-ld-titre{display:flex;align-items:baseline;gap:8px;margin-bottom:4px;font-size:13px;font-weight:700;color:var(--text)}
+.mp-ld-titre span{font-size:12px;font-weight:500;color:var(--muted)}
+.mp-ld-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.mp-ld-tbl th{padding:4px 10px 5px 0;font-size:12px;font-weight:700;color:var(--text2);text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.mp-ld-tbl td{padding:7px 10px 7px 0;color:var(--text);border-bottom:1px solid var(--border);vertical-align:middle}
+.mp-ld-tbl tr:last-child td{border-bottom:none}
+.mp-ld-tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;padding-right:0;padding-left:10px}
+.mp-ld-tbl td.faible{color:var(--text2)}
+.mp-fl-table tr.mp-fl-premiere td{border-top:2px solid var(--border)}
+.mp-fl-table td{vertical-align:middle}
+.mp-ld-tag{margin-left:8px;font-size:11px;font-weight:600;color:var(--warn)}
+.mp-ld-vide{padding:6px 0;font-size:13px;color:var(--text2)}
+.mp-ld-note{margin-top:6px;font-size:12px;color:var(--text2)}
+.mp-det{display:flex;flex-direction:column;gap:6px;max-width:1100px}
+.mp-lzc{max-width:980px}
+.mp-lzc-row{display:grid;grid-template-columns:90px minmax(0,1fr) 150px 120px 36px;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
+.mp-lzc-row>strong{color:var(--text)}
+.mp-lzc-row .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-lzc-head{padding:4px 0 5px;font-size:12px;font-weight:700;color:var(--text2);border-bottom-width:2px}
+.mp-lzc-vide{padding:6px 0 8px;font-size:13px;color:var(--text2)}
+.mp-lzc-ajout{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 0 2px}
+.mp-lzc-ajout .mp-cond-inp{width:110px;text-align:left}
+.mp-lzc-sugg{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:var(--muted)}
+.mp-cond-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 4px 3px 9px;border-radius:999px;background:var(--accent-bg);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);color:var(--accent);font-size:12px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mp-cond-chip.defaut{background:var(--bg);border-color:var(--border);color:var(--text2);font-weight:600;padding-right:9px}
+.mp-cond-chip em{font-style:normal;font-weight:500;font-size:11px;color:var(--muted)}
+.mp-cond-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:none;border-radius:50%;background:transparent;color:inherit;font-size:14px;line-height:1;cursor:pointer}
+.mp-cond-x:hover{background:var(--danger);color:white}
+.mp-cond-plus{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border:1px dashed var(--accent);border-radius:999px;background:var(--card);color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.mp-cond-plus:hover{background:var(--accent-bg)}
+.mp-cond-new{width:96px;padding:3px 8px;border-radius:999px}
+.mp-det-pied{margin-top:6px;font-size:12px;color:var(--text2);line-height:1.5}
+@media(max-width:760px){.mp-lzc-row{grid-template-columns:70px minmax(0,1fr) 36px}.mp-lzc-row>.num{display:none}}
+.mp-det-titre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
+.mp-det-meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--text2)}
+.mp-det-meta strong{color:var(--text)}
+.mp-det-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.mp-det-table th{text-align:left;padding:6px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border)}
+.mp-det-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
+.mp-det-table tr:last-child td{border-bottom:none}
+.mp-det-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-det-vide{font-size:12px;color:var(--muted)}
+.mp-det-ajout{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.mp-det-ajout input{width:120px;padding:6px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font:inherit;font-size:13px}
+.mp-det-ajout input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.mp-det-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border:1px solid var(--accent);border-radius:8px;background:var(--accent-bg);color:var(--accent);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.mp-det-btn:hover{background:var(--accent);color:white}
+.mp-det-btn:disabled{opacity:.5;cursor:default}
+.mp-lz-chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.mp-var-table td .mp-lz-chips{min-width:150px}
+.mp-cond-inp::placeholder{color:var(--muted);font-style:italic}
+.mp-lz-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:var(--bg);border:1px solid var(--border);font-size:12px;color:var(--text);white-space:nowrap}
+.mp-lz-chip em{font-style:normal;color:var(--muted);font-size:11px}
+.mp-lz-chip-btn{cursor:pointer;font:inherit;font-size:12px}
+.mp-lz-chip-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mp-lz-plus{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:1px dashed var(--accent);border-radius:6px;background:var(--card);color:var(--accent);cursor:pointer}
+.mp-lz-plus:hover{background:var(--accent-bg)}
+/* Prix d'achat : carte à part, bordée d'accent, pour qu'on la voie. */
+.mp-prix-card{margin-top:14px;padding:14px 16px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:12px}
+.mp-prix-card-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 14px}
+.mp-prix-card-titre{font-size:15px;font-weight:700;color:var(--text)}
+.mp-prix-vig{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;background:var(--accent-bg);color:var(--accent);font-size:13px;font-weight:700}
+.mp-prix-grille th .mp-var-badge{margin-left:6px}
+.mp-prix-grille td.mp-prix-vigueur{background:var(--accent-bg)}
+/* Emplacement : liste des emplacements connus sous le champ. */
+.mp-ec-wrap{position:relative}
+.mp-ec-list{position:fixed;z-index:10040;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);overflow:auto;padding:4px}
+.mp-ec-sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:6px 8px 3px}
+.mp-ec-opt{display:flex;justify-content:space-between;gap:10px;width:100%;padding:6px 8px;border:none;border-radius:6px;background:var(--card);color:var(--text);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.mp-ec-opt span:last-child{color:var(--muted);font-size:11px}
+.mp-ec-opt:hover,.mp-ec-opt.on{background:var(--accent-bg);color:var(--accent)}
+.mp-ec-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.mp-empl-metres{font-size:12px;color:var(--muted);font-weight:500;margin-left:6px}
+.mp-empl-line.mp-row-click{border-radius:8px;padding-left:6px;padding-right:6px;margin:0 -6px}
+.mp-empl-line.mp-row-click:hover{background:var(--accent-bg)}
+/* Matières désactivées */
+.mp-inact{margin-top:18px;border:1px dashed var(--border);border-radius:12px;background:var(--card)}
+.mp-inact-head{display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;border:none;background:none;font:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;text-align:left;border-radius:12px}
+.mp-inact-head:hover{color:var(--accent);background:var(--accent-bg)}
+.mp-inact-n{font-size:11px;font-weight:700;color:var(--muted);background:var(--bg);border-radius:6px;padding:1px 7px}
+.mp-inact-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border);font-size:13px}
+.mp-inact-titre{flex:1;min-width:0;color:var(--muted);font-weight:600}
+.mp-inact-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.mp-inact-btn:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent)}
+/* Synthèse colorée des mouvements */
+.mvt-sum{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border)}
+.mvt-sum-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.mvt-sum-chip.entree{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success)}
+.mvt-sum-chip.sortie{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger)}
+.mvt-sum-chip.ajustement{background:var(--accent-bg);color:var(--accent)}
+.mvt-sum-chip.inventaire{background:color-mix(in srgb,var(--c2) 16%,transparent);color:var(--c2)}
+.mvt-sum-chip.transfert{background:color-mix(in srgb,var(--c4) 16%,transparent);color:var(--c4)}
+.mvt-icon.ajustement{background:var(--accent-bg);color:var(--accent)}
+.mvt-icon.transfert{background:color-mix(in srgb,var(--c4) 16%,transparent);color:var(--c4)}
+.mvt-qte-ajustement{color:var(--accent);font-family:monospace;font-weight:700}
+.mvt-qte-transfert{color:var(--c4);font-family:monospace;font-weight:700}
 .mp-empl-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
 .mp-empl-rows:empty{display:none}
 .mp-empl-row{display:flex;align-items:flex-start;gap:6px}
@@ -1619,18 +1780,23 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-etat-attente{color:var(--text2);background:var(--bg);border:1px solid var(--border)}
 .mon-page .mon-ligne{cursor:pointer}
 .mon-page .mon-ligne.ouvert td{background:color-mix(in srgb,var(--accent) 6%,var(--card));border-bottom-color:transparent}
-.mon-page .mon-det-ligne td{padding:0 14px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--accent) 6%,var(--card));box-shadow:inset 4px 0 0 var(--t,transparent)}
+.mon-page .mon-det-ligne > td{padding:0 14px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--accent) 6%,var(--card));box-shadow:inset 4px 0 0 var(--t,transparent)}
 .mon-page .mon-det{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
 .mon-page .mon-det-tete{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:13px;color:var(--text)}
-.mon-page .mon-det-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px}
-.mon-page .mon-det-sec{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;min-width:0;overflow-x:auto}
-.mon-page .mon-det-titre{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px}
+.mon-page .mon-det-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:14px}
+.mon-page .mon-det-sec{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:12px 14px;min-width:0;overflow-x:auto}
+.mon-page .mon-det-sec.vide{align-self:start}
+.mon-page .mon-det-titre{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px}
 .mon-page .mon-det-nb{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:10px;padding:0 7px}
 .mon-page .mon-det-total{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:700;color:var(--text)}
 .mon-page .mon-det-vide{padding:4px 0}
-.mon-page .mon-det-table{width:100%;border-collapse:collapse;font-size:12px}
-.mon-page .mon-det-table th{text-align:left;font-size:10.5px;font-weight:600;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap}
-.mon-page .mon-det-table td{padding:5px 6px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);color:var(--text);vertical-align:top}
+.mon-page .mon-det-table{width:100%;border-collapse:collapse;font-size:13px}
+.mon-page .mon-det-table th{text-align:left;font-size:11px;font-weight:600;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+.mon-page .mon-det-table th.mon-num,.mon-page .mon-det-table td.mon-num{text-align:right}
+.mon-page .mon-det-table td{padding:8px 10px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);color:var(--text);vertical-align:top;white-space:nowrap;background:var(--card)}
+.mon-page .mon-det-table td.mon-det-libre{white-space:normal;min-width:160px;color:var(--text2)}
+.mon-page .mon-det-table tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,var(--card))}
+.mon-page .mon-date-cell{font-weight:700;color:var(--text);white-space:nowrap;font-variant-numeric:tabular-nums}
 .mon-page .mon-det-table tr:last-child td{border-bottom:none}
 .mon-page .mon-det-lien{color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap}
 .mon-page .mon-det-lien:hover{text-decoration:underline}
@@ -1653,6 +1819,7 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-bg-warn{background:var(--warn)}
 .mon-page .mon-bg-neutre{background:var(--muted)}
 .mon-page .mon-depart{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.mon-page .mon-parti{display:inline-block;margin-top:5px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);white-space:nowrap;cursor:help}
 .mon-page .mon-point{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .mon-page .mon-etat{padding:28px 16px;text-align:center;color:var(--muted)}
 .mon-page .mon-alerte{margin-bottom:12px;padding:10px 14px;border-radius:9px;background:var(--card);border:1px solid var(--warn);font-size:12.5px;color:var(--text)}
@@ -1702,8 +1869,8 @@ body.light .hist-badge-mvt-inventaire{color:#7c3aed}
   .hist-filters-card.collapsed .hist-filters-grid,.hist-filters-card.collapsed .hist-filters-actions{display:none}
   .hist-filters-grid{grid-template-columns:1fr 1fr;gap:10px}
   .hist-head{flex-direction:column;align-items:stretch}
-  .hist-head-actions{width:100%}
-  .hist-head-actions .hist-export-btn{width:100%;justify-content:center}
+  .hist-head-actions{width:100%;flex-wrap:wrap}
+  .hist-head-actions .hist-export-btn{flex:1 1 130px;width:auto;justify-content:center}
   .hist-table-wrap{display:none}
   .hist-cards{display:flex}
   .hist-results-head{flex-direction:column;align-items:stretch}
@@ -1784,69 +1951,6 @@ body.light .hist-badge-mvt-inventaire{color:#7c3aed}
 .bob-alerte b{color:var(--warn)}
 .bob-alerte ul{margin:8px 0 0;padding-left:18px;color:var(--text2)}
 
-/* ── Étiquettes traçabilité ── */
-.traca-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 10px;padding:0 2px}
-.traca-postes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:8px}
-.traca-poste-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
-  padding:16px 12px;cursor:pointer;transition:all .15s;text-align:center;user-select:none}
-.traca-poste-card:hover{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-1px)}
-.traca-poste-card:active{transform:scale(.97)}
-.traca-poste-icon{display:flex;align-items:center;justify-content:center;
-  width:44px;height:44px;border-radius:12px;margin:0 auto 10px;font-size:22px}
-.traca-poste-label{font-size:12px;font-weight:700;color:var(--text);line-height:1.3}
-.traca-poste-count{font-size:10px;color:var(--muted);margin-top:3px}
-.traca-back-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.traca-back-btn{display:flex;align-items:center;gap:5px;background:none;border:none;
-  padding:6px 10px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;
-  color:var(--text2);font-family:inherit;transition:background .1s}
-.traca-back-btn:hover{background:var(--accent-bg);color:var(--accent)}
-.traca-poste-heading{font-size:16px;font-weight:800;color:var(--text)}
-.traca-etiq-list{display:flex;flex-direction:column;gap:10px}
-.traca-etiq-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
-  padding:14px 16px;display:flex;align-items:center;gap:14px;transition:border-color .15s}
-.traca-etiq-card:hover{border-color:var(--accent)}
-.traca-etiq-icon-wrap{width:40px;height:40px;border-radius:10px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center}
-.traca-etiq-body{flex:1;min-width:0}
-.traca-etiq-label{font-size:14px;font-weight:700;margin-bottom:3px}
-.traca-etiq-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.traca-format-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;
-  background:var(--accent-bg);color:var(--accent);letter-spacing:.3px}
-.traca-printer-badge{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px}
-.traca-print-btn{flex-shrink:0;display:flex;align-items:center;gap:6px;
-  padding:8px 14px;border-radius:10px;border:none;cursor:pointer;
-  font-size:12px;font-weight:700;font-family:inherit;
-  background:var(--accent);color:#fff;transition:opacity .15s}
-.traca-print-btn:active{opacity:.75}
-.traca-dev-banner{display:flex;align-items:center;gap:10px;background:var(--accent-bg);
-  border:1px solid var(--accent);border-radius:10px;padding:10px 14px;
-  font-size:12px;color:var(--accent);margin-bottom:14px;font-weight:600}
-/* -- Affiches memo (groupe Communication, poste Bureaux) -- */
-.traca-group-title{display:flex;align-items:center;gap:10px;margin:22px 0 12px;
-  font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
-.traca-group-title::after{content:"";flex:1;height:1px;background:var(--border)}
-.traca-aff-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
-  padding:14px 16px;display:flex;align-items:center;gap:14px;transition:border-color .15s}
-.traca-aff-card:hover{border-color:var(--accent)}
-.traca-aff-card--cyan{border-left:4px solid #22d3ee}
-.traca-aff-card--amber{border-left:4px solid #fbbf24}
-.traca-aff-card--violet{border-left:4px solid #8b5cf6}
-body.light .traca-aff-card--cyan{border-left-color:#0891b2}
-body.light .traca-aff-card--amber{border-left-color:#b45309}
-body.light .traca-aff-card--violet{border-left-color:#7c3aed}
-.traca-aff-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.traca-aff-title{font-size:14px;font-weight:700;color:var(--text)}
-.traca-aff-sub{font-size:12px;color:var(--text2);line-height:1.4}
-.traca-aff-sub b{color:var(--text)}
-.traca-aff-actions{display:flex;gap:6px;flex-shrink:0}
-.traca-aff-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;
-  border-radius:9px;border:1px solid var(--border);background:transparent;
-  color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
-  text-decoration:none;transition:border-color .15s,color .15s,background .15s}
-.traca-aff-btn:hover{color:var(--text);border-color:var(--accent);background:var(--accent-bg)}
-.traca-aff-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
-.traca-aff-btn--dark .traca-aff-dot{background:#0a0e17;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
-.traca-aff-btn--light .traca-aff-dot{background:#f1f5f9;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
 /* ── Formulaire étiquette palettes ── */
 .etiq-form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .etiq-form-field{display:flex;flex-direction:column;gap:4px}
@@ -2146,6 +2250,11 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .empl-sugg-item:last-child{border-bottom:none}
 .empl-sugg-item:hover{background:var(--accent-bg);color:var(--accent)}
+.empl-suggestion-item{padding:11px 14px;cursor:pointer;font-size:13px;line-height:1.35;
+  border-bottom:1px solid var(--border);transition:background .1s}
+.empl-suggestion-item:last-child{border-bottom:none}
+.empl-suggestion-item:hover{background:var(--accent-bg)}
+.empl-suggestions:has(.empl-suggestion-item){max-height:270px}
 .unit-suggest-item{padding:10px 14px;cursor:pointer;font-family:inherit;font-size:13px;
   font-weight:700;border-bottom:1px solid var(--border);transition:background .1s}
 .unit-suggest-item:last-child{border-bottom:none}
@@ -2237,7 +2346,7 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .btn-sec:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 32%,transparent),0 0 20px color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent);border-color:color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);color:var(--accent)}
 .btn-sec:active{transform:translateY(1px)}
 .btn-confirm{border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;
-  cursor:pointer;font-family:inherit;color:#0a0e17}
+  cursor:pointer;font-family:inherit;color:white;background:var(--accent)}
 .btn-confirm.entree{background:var(--success)}
 .btn-confirm.sortie{background:var(--danger)}
 .btn-confirm.pf-entree{background:var(--pf-entree)}
@@ -2538,12 +2647,11 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=unite2"></script>
-<script src="/static/mysifa_etiq_specifiques.js?v=4"></script>
-<script src="/static/mysifa_etiq_editeur.js?v=2"></script>
-<script src="/static/mysifa_donnees_prod.js?v=16"></script>
-<script src="/static/mysifa_destockage.js?v=10"></script>
-<script src="/static/mysifa_dock.js?v=3"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite3"></script>
+<script src="/static/mysifa_scanner.js?v=1"></script>
+<script src="/static/mysifa_donnees_prod.js?v=18"></script>
+<script src="/static/mysifa_destockage.js?v=12"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
@@ -2553,7 +2661,8 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=6"></script>
+<script src="/static/mysifa_haut_de_page.js?v=1" defer></script>
+<script src="/static/stock_url.js?v=8"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -3119,6 +3228,7 @@ function icon(name, size=16){
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+    'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
     'move': '<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>',
     'atelier': '<path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-5h6v5"/><path d="M10 10h4"/><path d="M12 10v5"/>',
     'scan': '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="11" y1="3" x2="11" y2="7"/><line x1="11" y1="11" x2="11" y2="17"/><line x1="3" y1="11" x2="7" y2="11"/><line x1="11" y1="11" x2="17" y2="11"/>',
@@ -3237,15 +3347,71 @@ function el(tag, attrs, ...children) {
 let searchTimer = null;
 function doSearch(q) {
   S.searchQuery = q;
+  S.searchActive = -1;
   clearTimeout(searchTimer);
-  if (!q || q.length < 1) { S.searchResults = null; updateSearchResults(); return; }
+  if (!q || !q.trim()) { S.searchResults = null; updateSearchResults(); return; }
   searchTimer = setTimeout(async () => {
     try {
-      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
+      const r = await api('/api/stock/search?q=' + encodeURIComponent(q.trim()) + '&limit=8&tout=1');
+      // Une réponse lente ne doit pas écraser celle d'une frappe plus récente.
+      if (S.searchQuery !== q) return;
       S.searchResults = r;
     } catch(e) {}
     updateSearchResults();
   }, 220);
+}
+
+// ── Recherches récentes (barre globale) ──────────────────────────
+// On retient ce qui a été OUVERT, pas le texte tapé : rouvrir « A121 » ou la
+// matière 2028Y en un clic, c'est ce qu'on vient chercher ici. Préférence
+// propre au poste, d'où le localStorage.
+const LS_STOCK_RECHERCHES = 'mystock_recherches_recentes';
+const STOCK_RECHERCHES_MAX = 5;
+function stockRecherchesRecentes() {
+  try {
+    const a = JSON.parse(localStorage.getItem(LS_STOCK_RECHERCHES) || '[]');
+    return Array.isArray(a) ? a.filter(x => x && x.type && x.cle != null).slice(0, STOCK_RECHERCHES_MAX) : [];
+  } catch (e) { return []; }
+}
+function stockRetenirRecherche(item) {
+  const cle = item.type + ':' + item.cle;
+  const reste = stockRecherchesRecentes().filter(x => (x.type + ':' + x.cle) !== cle);
+  const a = [{ type: item.type, cle: item.cle, libelle: item.libelle, detail: item.detail || '', negoce: !!item.negoce }, ...reste]
+    .slice(0, STOCK_RECHERCHES_MAX);
+  try { localStorage.setItem(LS_STOCK_RECHERCHES, JSON.stringify(a)); } catch (e) {}
+}
+function stockOublierRecherches() {
+  try { localStorage.removeItem(LS_STOCK_RECHERCHES); } catch (e) {}
+  updateSearchResults();
+}
+
+const STOCK_TYPES_RECHERCHE = {
+  produit: 'Produit', matiere: 'Matière', emplacement: 'Emplacement', bobine: 'Unité',
+};
+
+// Ouvre un résultat de la barre globale, quel que soit son type.
+function stockOuvrirResultat(item) {
+  stockRetenirRecherche(item);
+  S.searchResults = null;
+  const inp = document.getElementById('main-search');
+  if (inp) inp.blur();
+  if (item.type === 'produit') {
+    if (item.negoce) {
+      clearSearch();
+      if (S.tab !== 'negoce') goToTab('negoce');
+      loadNgDetail(item.libelle);
+    } else {
+      loadProduit(Number(item.cle));
+    }
+  } else if (item.type === 'matiere') {
+    loadMatiere(Number(item.cle));
+  } else if (item.type === 'emplacement') {
+    loadEmplacement(String(item.cle));
+  } else if (item.type === 'bobine') {
+    const b = bobEnsureState();
+    b.q = String(item.cle); b.etat = 'tous'; b.page = 0;
+    goToTab('bobines');
+  }
 }
 
 async function loadProduit(id) {
@@ -3323,6 +3489,15 @@ function stockMpRefLink(matiereId, label, options) {
   if (!mid) return el('span', null, txt);
   const href = stockDeepLinkUrl({ tab: 'matieres', matiere: mid });
   const baseStyle = opts.style || 'text-decoration:none';
+  // nouvelOnglet : la fiche s'ouvre à côté, la page courante (valorisation
+  // filtrée, défilée) reste où elle est.
+  if (opts.nouvelOnglet) {
+    return el('a', {
+      cls: 'mvt-ref-link', href: href, target: '_blank', rel: 'noopener',
+      style: baseStyle, title: opts.title || null,
+      on: { click: (e) => e.stopPropagation() },
+    }, txt);
+  }
   return el('a', {
     cls: 'mvt-ref-link',
     href: href,
@@ -3854,7 +4029,8 @@ function invV2OpenAddProductModal() {
         suggWrap.innerHTML = '';
         if (!prods.length) { suggWrap.style.display = 'none'; return; }
         prods.forEach(p => {
-          const item = el('div', { cls:'empl-suggestion-item',
+          const unite = String(p.unite || '').trim();
+          const item = el('div', { cls:'empl-suggestion-item empl-sugg-item-with-unit',
             on:{ click: () => {
               refInp.value = p.reference;
               _pid = p.id; _ref = p.reference;
@@ -3865,8 +4041,11 @@ function invV2OpenAddProductModal() {
               try { qteInp.focus(); } catch(e){}
             }}
           },
-            el('span', { style:{ fontWeight:'700', marginRight:'8px' } }, p.reference),
-            el('span', { style:{ color:'var(--muted)', fontSize:'12px' } }, p.designation || '')
+            el('span', { cls:'empl-sugg-item-label' },
+              el('span', { style:{ fontWeight:'700', marginRight:'8px' } }, p.reference),
+              el('span', { style:{ color:'var(--muted)', fontSize:'12px' } }, p.designation || '')
+            ),
+            unite ? el('span', { cls:'empl-sugg-item-unit-badge' }, unite) : null
           );
           suggWrap.appendChild(item);
         });
@@ -3893,8 +4072,13 @@ function invV2OpenAddProductModal() {
           (p.reference || '').toUpperCase() === ref.toUpperCase()
         );
         if (!match) {
-          refError.textContent = 'Référence produit introuvable.';
-          refError.style.display = '';
+          stockRefIntrouvable(refError, ref, (prod) => {
+            _pid = prod.id; _ref = prod.reference;
+            _designation = prod.designation || ''; _unite = prod.unite || '';
+            refInp.value = prod.reference;
+            refError.style.display = 'none';
+            try { qteInp.focus(); } catch (e) {}
+          });
           return;
         }
         _pid = match.id; _ref = match.reference;
@@ -4330,6 +4514,84 @@ function _checkUnitQtyRange(unite, qte){
   return null;
 }
 
+// ── Créer une référence produit (sans stock) ─────────────────────
+// Ouverte depuis la barre de recherche, les sélecteurs de référence produit
+// (« cette référence n'existe pas ») et le Référentiel. Elle ne crée que la
+// fiche : le stock s'ajoute ensuite par une entrée, comme pour toute référence.
+// Elle se pose PAR-DESSUS la fenêtre qui l'a ouverte, sans la fermer : la
+// saisie en cours (quantité, emplacement) n'est pas perdue.
+function openCreerRefProduitModal(seedRef, apres) {
+  document.querySelector('.ref-create-overlay')?.remove();
+  const overlay = el('div', { cls: 'modal-overlay ref-create-overlay', style: { zIndex: '10050' },
+    on: { click: e => { if (e.target === overlay) overlay.remove(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '460px' } });
+  sheet.addEventListener('click', e => e.stopPropagation());
+
+  const refInp = el('input', { cls: 'field-input', type: 'text', id: 'ref-create-ref',
+    placeholder: 'Ex. 973/0019', autocomplete: 'off', style: { direction: 'ltr', textTransform: 'uppercase' } });
+  refInp.value = String(seedRef || '').trim().toUpperCase();
+  const desInp = el('input', { cls: 'field-input', type: 'text', placeholder: 'Désignation (facultatif)', autocomplete: 'off' });
+  const uniteSel = el('select', { cls: 'field-input' });
+  allUnitLabels().forEach(u => {
+    const o = el('option', null, u); o.value = u;
+    if (u === 'étiquettes') o.selected = true;
+    uniteSel.appendChild(o);
+  });
+  const err = el('div', { style: { color: 'var(--danger)', fontSize: '12px', marginTop: '4px', display: 'none' } });
+
+  const confirmBtn = el('button', { cls: 'btn-confirm', type: 'button', on: { click: async () => {
+    const ref = refInp.value.trim().toUpperCase();
+    if (!ref) { err.textContent = 'Référence obligatoire.'; err.style.display = ''; refInp.focus(); return; }
+    confirmBtn.disabled = true;
+    try {
+      const body = { reference: ref, unite: uniteSel.value };
+      const des = desInp.value.trim();
+      if (des) body.designation = des;
+      const r = await api('/api/stock/produits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r || r.id == null) { confirmBtn.disabled = false; return; }
+      showToast(r.existing ? 'Référence ' + ref + ' déjà en base.' : 'Référence ' + ref + ' créée.', r.existing ? 'info' : 'success');
+      overlay.remove();
+      if (S.dashboard && S.dashboard.stats && !r.existing && S.dashboard.stats.nb_refs != null) S.dashboard.stats.nb_refs += 1;
+      if (typeof apres === 'function') apres({ id: r.id, reference: ref, designation: des || ref, unite: uniteSel.value, existing: !!r.existing });
+    } catch (e) {
+      err.textContent = e.message || 'Création impossible.'; err.style.display = '';
+      confirmBtn.disabled = false;
+    }
+  } } }, 'Créer la référence');
+  [refInp, desInp].forEach(i => i.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
+    if (e.key === 'Escape') { e.stopPropagation(); overlay.remove(); }
+  }));
+
+  sheet.append(
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Nouvelle référence produit'),
+    el('div', { cls: 'modal-sub' }, 'Crée la fiche produit, sans stock.'),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Référence *'), refInp, err),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Désignation'), desInp),
+    el('div', { cls: 'modal-field' }, el('label', { cls: 'field-label' }, 'Unité de vente'), uniteSel),
+    el('div', { cls: 'modal-actions' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: () => overlay.remove() } }, 'Annuler'),
+      confirmBtn,
+    ),
+  );
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => { (refInp.value ? desInp : refInp).focus(); });
+}
+
+// Message « référence introuvable » d'un sélecteur de produit, avec le lien
+// qui crée la référence tapée et la sélectionne aussitôt.
+function stockRefIntrouvable(errEl, ref, onCree) {
+  errEl.innerHTML = '';
+  errEl.append('Référence produit introuvable.');
+  if (!S.stockReadOnly) {
+    errEl.append(' ', el('button', { type: 'button', cls: 'ref-create-link',
+      on: { click: () => openCreerRefProduitModal(ref, onCree) } }, 'Créer la référence ' + String(ref || '').toUpperCase()));
+  }
+  errEl.style.display = '';
+}
+
 async function createProduit(ref, commentaire, quantite, emplacement, uniteVente) {
   try {
     const empl = (emplacement || '').trim().toUpperCase();
@@ -4377,12 +4639,14 @@ function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove(
 
 // ── Navigation ──────────────────────────────────────────────────
 function goToTab(tab) {
+  // Les étiquettes traça vivent dans MyTools depuis le 21/10/2026.
+  if (tab === 'traca') { tracaVersMyTools(); return; }
   // Accès restreints selon le mode
   if (S.tracaOnly && tab !== 'traca') return;
   if (S.fabStockMode && !['menu','production','matieres','bobines','historique','traca','plan-entrepot'].includes(tab)) return;
   if (tab === 'destockage' && !peutVoirDestockage()) return;
   // Arrêter la caméra si on quitte l'onglet réception
-  if (tab !== 'reception' && S.recepScanning) recepStopCamera();
+  if (tab !== 'reception' && window.MySifaScanner && MySifaScanner.actif()) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
   if (tab !== 'produits-finis') { S.pfModal = null; closeMroot(); }
   if (tab !== 'negoce') { S.ngModal = null; S.ngSelDetail = null; S.ngSelDetailLoading = false; }
@@ -4393,7 +4657,6 @@ function goToTab(tab) {
     clearTimeout(_refClientSearchTimer);
   }
   if (tab !== 'dashboard') closeDashboardAddPfModal();
-  if (tab !== 'traca') S.tracaPoste = null;
   if (tab !== 'monitoring') {
     if (S.monitoring) {
       S.monitoring.query = '';
@@ -4783,13 +5046,17 @@ function openEmplEntreeModal(codeEmpl) {
         suggWrap.innerHTML = '';
         if (!prods.length) { suggWrap.style.display = 'none'; return; }
         prods.forEach(p => {
-          const item = el('div', { cls:'empl-suggestion-item',
+          const unite = String(p.unite || '').trim();
+          const item = el('div', { cls:'empl-suggestion-item empl-sugg-item-with-unit',
             on:{ click: () => {
               refInp.value = p.reference; _pid = p.id;
               refError.style.display = 'none';
               suggWrap.innerHTML = ''; suggWrap.style.display = 'none';
             }}
-          }, el('span',{style:{fontWeight:'600',marginRight:'8px'}},p.reference), el('span',{style:{color:'var(--muted)',fontSize:'12px'}},p.designation||''));
+          }, el('span',{cls:'empl-sugg-item-label'},
+               el('span',{style:{fontWeight:'600',marginRight:'8px'}},p.reference),
+               el('span',{style:{color:'var(--muted)',fontSize:'12px'}},p.designation||'')),
+             unite ? el('span',{cls:'empl-sugg-item-unit-badge'},unite) : null);
           suggWrap.appendChild(item);
         });
         suggWrap.style.display = '';
@@ -4838,8 +5105,11 @@ function openEmplEntreeModal(codeEmpl) {
         const r = await api('/api/stock/search?q=' + encodeURIComponent(ref) + '&limit=10');
         const match = (r && r.produits || []).find(p => p.reference.toUpperCase() === ref);
         if (!match) {
-          refError.textContent = 'Référence produit non existante';
-          refError.style.display = '';
+          stockRefIntrouvable(refError, ref, (prod) => {
+            _pid = prod.id; refInp.value = prod.reference;
+            refError.style.display = 'none';
+            try { qteInp.focus(); } catch (e) {}
+          });
           return;
         }
         _pid = match.id;
@@ -5146,11 +5416,25 @@ function buildSearchBar() {
 
   const inp = el('input', {
     cls:'search-input', type:'text', id:'main-search',
-    placeholder:'Rechercher…',
+    placeholder:'Rechercher (produit, matière, emplacement, unité…)',
+    autocomplete:'off',
     style:{direction:'ltr'}
   });
   inp.addEventListener('input', e => doSearch(e.target.value));
-  inp.addEventListener('keydown', e => { if (e.key === 'Escape') clearSearch(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { clearSearch(); inp.blur(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') stockNavResultats(e);
+  });
+  // Champ vide : les dernières recherches s'affichent au focus.
+  inp.addEventListener('focus', () => { if (!inp.value.trim()) updateSearchResults(); });
+  inp.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (!inp.value.trim() && document.activeElement !== inp) {
+        const w = document.getElementById('search-results-wrap');
+        if (w) w.innerHTML = '';
+      }
+    }, 180);
+  });
 
   const iconSvg = (kind) => {
     const common = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
@@ -5180,59 +5464,116 @@ function buildSearchBar() {
   return wrap;
 }
 
+function stockNavResultats(e) {
+  const items = [...document.querySelectorAll('#search-results-wrap .search-item')];
+  if (!items.length) return;
+  e.preventDefault();
+  let i = S.searchActive == null ? -1 : S.searchActive;
+  if (e.key === 'Enter') {
+    (items[i >= 0 ? i : 0]).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    return;
+  }
+  i = e.key === 'ArrowDown' ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+  S.searchActive = i;
+  items.forEach((x, k) => x.classList.toggle('is-active', k === i));
+  items[i].scrollIntoView({ block: 'nearest' });
+}
+
+// Une ligne de résultat. mousedown plutôt que click : le champ perd le focus
+// au clic, et la liste des récentes se fermerait avant que le clic n'arrive.
+function stockLigneResultat(item, badge) {
+  return el('div', { cls: 'search-item', on: { mousedown: (e) => { e.preventDefault(); stockOuvrirResultat(item); } } },
+    el('div', { cls: 'si-main' },
+      el('span', { cls: 'si-type t-' + item.type }, STOCK_TYPES_RECHERCHE[item.type] || item.type),
+      el('div', { style: { minWidth: '0' } },
+        el('div', { cls: 'si-ref' }, item.libelle),
+        item.detail ? el('div', { cls: 'si-des' }, item.detail) : null,
+      ),
+    ),
+    badge != null && badge !== '' ? el('div', { cls: 'si-badge' }, badge) : null,
+  );
+}
+
 function updateSearchResults() {
   let wrap = document.getElementById('search-results-wrap');
   if (!wrap) return;
   wrap.innerHTML = '';
-  const q = S.searchQuery;
-  const res = S.searchResults;
-  if (!res || !q) return;
-  const { produits=[], emplacements=[] } = res;
-  if (!produits.length && !emplacements.length) {
-    wrap.appendChild(el('div',{cls:'search-results'},el('div',{cls:'card-empty'},'Aucun résultat pour \"'+q+'\"')));
+  S.searchActive = -1;
+  const q = String(S.searchQuery || '').trim();
+  if (!q) {
+    const inp = document.getElementById('main-search');
+    if (!inp || document.activeElement !== inp) return;
+    const recentes = stockRecherchesRecentes();
+    if (!recentes.length) return;
+    wrap.appendChild(el('div', { cls: 'search-results' },
+      el('div', { cls: 'search-section-head' },
+        el('div', { cls: 'search-section-title' }, 'Recherches récentes'),
+        el('button', { cls: 'search-clear-recent', type: 'button',
+          on: { mousedown: (e) => { e.preventDefault(); stockOublierRecherches(); } } }, 'Effacer'),
+      ),
+      ...recentes.map(it => stockLigneResultat(it)),
+    ));
     return;
   }
-  const box = el('div',{cls:'search-results'});
+  const res = S.searchResults;
+  if (!res) return;
+  const { produits = [], emplacements = [], matieres = [], bobines = [] } = res;
+  const box = el('div', { cls: 'search-results' });
+
   if (produits.length) {
-    box.appendChild(el('div',{cls:'search-section-title'},'📦 Produits'));
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Produits'));
     produits.forEach(p => {
-      const isNegoce = (p.type === 'negoce');
-      box.appendChild(
-        el('div',{cls:'search-item',on:{click:()=>{
-          if (isNegoce) {
-            S.searchResults = null; clearSearch();
-            if (S.tab !== 'negoce') goToTab('negoce');
-            loadNgDetail(p.reference);
-          } else {
-            loadProduit(p.id);
-          }
-        }}},
-          el('div',null,
-            el('div',{cls:'si-ref'},p.reference),
-            el('div',{cls:'si-des'},p.designation + (isNegoce ? ' · négoce' : '')),
-          ),
-          el('div',{cls:'si-badge'},fU(p.stock_total, p.unite))
-        )
-      );
+      const negoce = (p.type === 'negoce');
+      box.appendChild(stockLigneResultat({
+        type: 'produit', cle: p.id, libelle: p.reference, negoce,
+        detail: (p.designation || '') + (negoce ? ' · négoce' : ''),
+      }, fU(p.stock_total, p.unite)));
+    });
+  }
+  if (matieres.length) {
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Matières premières'));
+    matieres.forEach(m => {
+      const des = (m.designation && m.designation !== m.reference) ? m.designation : '';
+      box.appendChild(stockLigneResultat({
+        type: 'matiere', cle: m.id, libelle: m.reference || m.designation || ('#' + m.id),
+        detail: [des, m.emplacement ? 'en ' + m.emplacement : ''].filter(Boolean).join(' · '),
+      }, m.categorie || ''));
     });
   }
   if (emplacements.length) {
-    box.appendChild(el('div',{cls:'search-section-title'},'📍 Emplacements'));
-    emplacements.forEach(e => box.appendChild(
-      el('div',{cls:'search-item',on:{click:()=>loadEmplacement(e.emplacement)}},
-        el('div',null,
-          el('div',{cls:'si-ref'},stockEmplLabel(e.emplacement)),
-          el('div',{cls:'si-des'},
-            isStockEmplacementAuSol(e.emplacement)
-              ? 'Stock à expédier · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-              : isStockEmplacementSortieProd(e.emplacement)
-                ? 'Sortie de prod · ' + e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-                : e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '')
-          ),
-        ),
-        el('div',{cls:'si-badge'},fN(e.total_unites))
-      )
-    ));
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Emplacements'));
+    emplacements.forEach(e => {
+      const n = e.nb_refs + ' référence' + (e.nb_refs > 1 ? 's' : '');
+      const detail = isStockEmplacementAuSol(e.emplacement) ? 'Stock à expédier · ' + n
+        : isStockEmplacementSortieProd(e.emplacement) ? 'Sortie de prod · ' + n : n;
+      box.appendChild(stockLigneResultat({
+        type: 'emplacement', cle: e.emplacement, libelle: stockEmplLabel(e.emplacement), detail,
+      }, fN(e.total_unites)));
+    });
+  }
+  if (bobines.length) {
+    box.appendChild(el('div', { cls: 'search-section-title' }, 'Unités (bobines)'));
+    bobines.forEach(b => {
+      const etat = b.etat === 'stock' ? 'en stock' : b.etat === 'consommee' ? 'consommée' : (b.etat || '');
+      box.appendChild(stockLigneResultat({
+        type: 'bobine', cle: b.code_barre, libelle: b.code_barre,
+        detail: [b.matiere_reference || '', b.lot_fournisseur ? 'lot ' + b.lot_fournisseur : '', etat].filter(Boolean).join(' · '),
+      }, b.metrage_restant != null ? fN(b.metrage_restant) + ' m' : ''));
+    });
+  }
+
+  // La référence tapée n'existe pas telle quelle : on propose de la créer.
+  const refTapee = q.toUpperCase();
+  const existe = produits.some(p => String(p.reference || '').toUpperCase() === refTapee);
+  const proposerCreation = !S.stockReadOnly && !existe && refTapee.length >= 3;
+  const vide = !produits.length && !matieres.length && !emplacements.length && !bobines.length;
+  if (vide) box.appendChild(el('div', { cls: 'card-empty' }, 'Aucun résultat pour « ' + q + ' »'));
+  if (proposerCreation) {
+    box.appendChild(el('div', { cls: 'search-item si-create', on: { mousedown: (e) => {
+      e.preventDefault();
+      clearSearch();
+      openCreerRefProduitModal(refTapee, (prod) => loadProduit(prod.id));
+    } } }, iconEl('plus-circle', 14), 'Créer la référence produit « ' + refTapee + ' »'));
   }
   wrap.appendChild(box);
 }
@@ -5755,6 +6096,14 @@ function buildReferentielCard() {
   if (!S.stockReadOnly) {
     actions.appendChild(el('button', {
       cls: 'btn-ghost-sm', type: 'button',
+      on: { click: () => openCreerRefProduitModal('', async () => {
+        await loadDashboard();
+        if (String(S.refClientQ || '').trim()) await loadRefClientSearch(S.refClientQ);
+        renderReferentielView();
+      }) },
+    }, iconEl('plus-circle', 14), ' Nouvelle référence'));
+    actions.appendChild(el('button', {
+      cls: 'btn-ghost-sm', type: 'button',
       on: { click: () => { S.importRefsOpen = true; S.importRefsPreview = null; render(); } },
     }, iconEl('upload', 14), ' Importer'));
   }
@@ -5772,7 +6121,7 @@ function buildReferentielCard() {
     ),
     el('div', { cls: 'ref-card-body' },
       el('p', { cls: 'ref-card-desc' },
-        'Importez ou exportez le référentiel des références produit et de leur unité de vente (CSV ou Excel).'
+        'Créez une référence produit, ou importez et exportez le référentiel des références et de leur unité de vente (CSV ou Excel).'
       )
     )
   );
@@ -6304,8 +6653,11 @@ async function loadMatiere(id) {
       varInactives: false,
       // Précédent / suivant garde la sous-page ; un lien direct l'impose.
       vue: S.mpVueInit || (S.selMatiere && S.selMatiere.vue) || 'stock',
+      // Ligne dépliée (laize:<id> ou article:<id>) : seulement depuis un lien.
+      ouvert: S.mpDetailInit || null,
     };
     S.mpVueInit = null;
+    S.mpDetailInit = null;
     S.selProduit = null;
     S.selEmpl = null;
     S.searchResults = null;
@@ -6334,8 +6686,12 @@ async function refreshSelMatiere() {
       variantes: await mpFetchVariantes(id, varInactives),
       varInactives,
       vue: (S.selMatiere && S.selMatiere.vue) || 'stock',
+      ouvert: (S.selMatiere && S.selMatiere.ouvert) || null,
     };
+    const zone = document.getElementById('scroll-area');
+    const y = zone ? zone.scrollTop : 0;
     renderContent();
+    if (zone) zone.scrollTop = y;
     updateNavActive();
   } catch (e) {
     showToast(e.message, 'error');
@@ -6419,12 +6775,27 @@ function mpAdhesifEquivalent(qty, m) {
   return '';
 }
 
+// Compte des mouvements par type, aux couleurs de l'historique (et des produits finis).
+function mpMvtSynthese(mouvements) {
+  const n = {};
+  mouvements.forEach(m => {
+    const raw = (m.type_mouvement || '').toLowerCase();
+    const t = (raw === 'ajustement' && (m.note || '').startsWith('Inventaire du')) ? 'inventaire' : raw;
+    n[t] = (n[t] || 0) + 1;
+  });
+  const lib = { entree: 'entrée', sortie: 'sortie', ajustement: 'ajustement', inventaire: 'inventaire', transfert: 'transfert' };
+  return el('div', { cls: 'mvt-sum' },
+    ...['entree', 'sortie', 'ajustement', 'inventaire', 'transfert'].filter(t => n[t]).map(t =>
+      el('span', { cls: 'mvt-sum-chip ' + t }, fN(n[t]) + ' ' + lib[t] + (n[t] > 1 ? 's' : ''))));
+}
+
 function buildMpMvtHistory(mouvements, matiere) {
   const mpCat = matiere || null;
   // marginTop : sépare visuellement l'historique du tableau « Stocks par laize »
   // qui le précède sur la fiche matière (les deux cartes se touchaient).
   return el('div', { cls: 'card', style: { marginTop: '14px' } },
     el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements')),
+    mouvements.length ? mpMvtSynthese(mouvements) : null,
     !mouvements.length
       ? el('div', { cls: 'card-empty' }, 'Aucun mouvement')
       : el('div', null, ...mouvements.slice(0, 30).map(m => {
@@ -6540,19 +6911,22 @@ function buildMatiereDetail() {
   // (10/09/2026) : elles viennent des réceptions RVGI et du déstockage ; reste
   // la correction, réservée aux administrateurs matières.
   const actionBtns = [];
-  const act = (icone, label, onClick, titre) => el('button', {
-    cls: 'mp-act', type: 'button', attrs: titre ? { title: titre } : {}, on: { click: onClick },
+  const act = (icone, label, onClick, titre, ton) => el('button', {
+    cls: 'mp-act' + (ton ? ' mp-act--' + ton : ''), type: 'button', attrs: titre ? { title: titre } : {}, on: { click: onClick },
   }, iconEl(icone, 15), el('span', null, label));
   if (!S.stockReadOnly) {
-    if (m.laizee) actionBtns.push(act('truck', 'Réception', () => openReceptionMatiereModal(m)));
+    if (m.laizee) actionBtns.push(act('truck', 'Réception', () => openReceptionMatiereModal(m),
+      'Réceptionner des bobines livrées', 'entree'));
     if (isMatieresAdmin()) {
-      actionBtns.push(act('clipboard', 'Inventaire', () => openModalInventaireMatiere(m)));
+      actionBtns.push(act('clipboard', 'Inventaire', () => openModalInventaireMatiere(m),
+        'Compter le stock réel, laize par laize', 'inventaire'));
       actionBtns.push(act('edit', 'Corriger le stock', () => openModalMouvement('ajustement', m),
-        'Fixer le stock à sa valeur réelle, avec un motif. Les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers.'));
+        'Fixer le stock à sa valeur réelle, avec un motif. Les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers.', 'ajust'));
     }
   }
   if (isMatieresAdmin()) {
-    actionBtns.push(act('settings', 'Modifier la référence', () => openMatiereRefEditModal(m)));
+    actionBtns.push(act('settings', 'Modifier la référence', () => openMatiereRefEditModal(m),
+      'Libellé, catégorie, laizes, conditionnement — et désactivation'));
   }
   const actions = actionBtns.length ? el('div', { cls: 'mp-actions' }, ...actionBtns) : null;
 
@@ -6612,8 +6986,16 @@ function buildMatiereDetail() {
         const valoBobine = (parseFloat(spl.valeur_mm || 0) / 1000) * metres * prix_m2;
         const valo = valoBobine * parseFloat(spl.quantite || 0);
         const metrageTotal = metres * parseFloat(spl.quantite || 0);
-        tbody.appendChild(el('tr', { style: 'border-bottom:1px solid var(--border)' },
+        const cleLz = 'laize:' + spl.laize_id;
+        const ouvLz = mpDetailOuvert() === cleLz;
+        tbody.appendChild(el('tr', {
+          cls: 'mp-row-click' + (ouvLz ? ' open' : ''),
+          style: 'border-bottom:1px solid var(--border)',
+          attrs: { title: ouvLz ? 'Replier' : 'Voir les fournisseurs et emplacements de cette laize' },
+          on: { click: () => mpBasculerDetail(cleLz) },
+        },
           el('td', { style: 'padding:8px 10px;font-size:13px;color:var(--text);font-weight:600' },
+            el('span', { cls: 'mp-chev' + (ouvLz ? ' open' : '') }, iconEl('chevron-right', 12)),
             (spl.label || (spl.valeur_mm + ' mm')) + (prixParLaize && prix_m2 > 0
               ? ' · ' + prix_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²'
               : '')),
@@ -6624,6 +7006,10 @@ function buildMatiereDetail() {
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (valo > 0 ? 'var(--text)' : 'var(--muted)') },
             valo > 0 ? valo.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—'),
         ));
+        if (ouvLz) {
+          tbody.appendChild(el('tr', { cls: 'mp-row-detail plat' },
+            el('td', { attrs: { colspan: '4' } }, buildMpLaizeDetail(m, spl))));
+        }
       });
       tbl.appendChild(tbody);
       const paramsLine = el('div', { style: 'font-size:12px;color:var(--text2);margin-top:8px' },
@@ -6727,6 +7113,7 @@ function buildMpDetailTabs(m, mouvements) {
     on: { click: () => {
       if (!S.selMatiere || vue === cle) return;
       S.selMatiere.vue = cle;
+      S.selMatiere.ouvert = null;
       if (typeof stockSyncUrl === 'function') stockSyncUrl();
       renderMatieresView();
     } },
@@ -8951,6 +9338,14 @@ function matiereRefEditPayload(item, fields) {
       payload.unites_par_palette = upp;
     }
   }
+  if (fields.prixInp) {
+    const raw = (fields.prixInp.value || '').replace(',', '.').trim();
+    const prix = raw === '' ? 0 : parseFloat(raw);
+    if (isNaN(prix) || prix < 0) {
+      return { error: 'Prix unitaire invalide — valeur positive attendue.' };
+    }
+    if (Math.abs(prix - Number(item.prix_unitaire || 0)) > 1e-9) payload.prix_unitaire = prix;
+  }
   if (fields.isMandrin && fields.ltInp) {
     // Toujours envoyée, même vide, pour autoriser l'effacement de la longueur.
     const raw = (fields.ltInp.value || '').replace(',', '.').trim();
@@ -9479,7 +9874,9 @@ function appendMatiereRefEditFields(parent, item) {
   function refreshLongueurTube() {
     const lt = parseFloat((ltInp.value || '').replace(',', '.'));
     const upp = parseFloat((uppInp.value || '').replace(',', '.'));
-    if (lt > 0 && upp > 0) {
+    if (lt > 0 && unChk.checked) {
+      ltHint.textContent = 'Longueur du tube acheté.';
+    } else if (lt > 0 && upp > 0) {
       ltHint.textContent = 'Une palette représente ' + fN(upp) + ' tubes, soit '
         + fN(Math.round(lt * upp / 1000)) + ' m de mandrin à découper.';
     } else if (lt > 0) {
@@ -9492,8 +9889,34 @@ function appendMatiereRefEditFields(parent, item) {
   }
   ltInp.addEventListener('input', refreshLongueurTube);
   uppInp.addEventListener('input', refreshLongueurTube);
+  unChk.addEventListener('change', refreshLongueurTube);
   refreshLongueurTube();
   ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp, ltHint);
+
+  // ── Prix unitaire des consommables (bagues, cartons, palettes…) ───────────
+  // Saisi ici par l'administration ; les matières de production gardent leur
+  // prix dans Coûts matières (config.STOCK_CATEGORIES_PRIX_DIRECT).
+  const prixDirect = !!item.prix_direct && isMatieresAdmin();
+  const prixInp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,35' } });
+  prixInp.value = Number(item.prix_unitaire) > 0 ? String(item.prix_unitaire) : '';
+  const prixLbl = el('label', null, '');
+  const prixHint = el('div', { cls: 'mp-hint' }, '');
+  function refreshPrixLabel() {
+    const c = (item.categorie || '').toLowerCase();
+    const u = (hasCond && unChk.checked) ? (unSel.value || uniteAchat)
+      : hasCond ? uniteAchat
+      : c === 'palette' ? 'palette' : 'unité';
+    prixLbl.textContent = 'Prix unitaire (€ / ' + u + ')';
+    const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+    const prix = parseFloat((prixInp.value || '').replace(',', '.'));
+    prixHint.textContent = (hasCond && !unChk.checked && upp > 0 && prix > 0)
+      ? 'Soit ' + (prix * upp).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' € la palette de ' + fN(upp) + ' ' + uniteAchat + 's.'
+      : 'Repris dans la valorisation et dans Coûts matières.';
+  }
+  [prixInp, uppInp].forEach(i => i.addEventListener('input', refreshPrixLabel));
+  [unChk, unSel].forEach(i => i.addEventListener('change', refreshPrixLabel));
+  refreshPrixLabel();
+  const prixWrap = prixDirect ? el('div', { cls: 'mp-field' }, prixLbl, prixInp, prixHint) : null;
 
   // ── Conditionnement à l'achat des adhésifs ────────────────────────────────
   // Le stock est au kilo ; ces deux champs décrivent comment l'adhésif ARRIVE
@@ -9588,6 +10011,7 @@ function appendMatiereRefEditFields(parent, item) {
       fscWrap,
     ),
     sectionConditionnement,
+    prixWrap ? mpFormSection('Prix', prixWrap) : null,
     mpFormSection('Stock & inventaire',
       el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
       el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
@@ -9603,7 +10027,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, unSel, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, unSel, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc, prixInp: prixWrap ? prixInp : null };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -9686,6 +10110,7 @@ async function deleteMatiereRef(item) {
     await api('/api/stock/matieres/' + item.id, { method: 'DELETE' });
     closeMroot();
     showToast('Référence désactivée.', 'success');
+    S.mpInactives = null;
     if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === item.id) {
       S.selMatiere = null;
     }
@@ -10510,14 +10935,11 @@ function buildMatieres() {
     : null;
   const rvgiBloc = buildMpRvgiResults(q, filtered);
   if (S.matieresAccueil && !q) return buildMatieresAccueil(head, banner, searchWrap);
-  const triSel = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Ordre de la liste' } },
-    ...MP_TRIS.map(t => el('option', { value: t.id }, t.label)));
-  triSel.value = S.mpTri || 'alpha';
-  triSel.addEventListener('change', () => {
-    S.mpTri = triSel.value;
+  const triSel = mpSelect(MP_TRIS.map(t => ({ value: t.id, label: t.label })), S.mpTri || 'alpha', (v) => {
+    S.mpTri = v;
     try { localStorage.setItem('mp_tri', S.mpTri); } catch (e) {}
     renderMatieresView();
-  });
+  }, { aria: 'Ordre de la liste' });
   const grain = MP_GRAINS.some(g => g.id === S.mpGrain) ? S.mpGrain : 'matiere';
   let corps = list;
   let filtres = null;
@@ -10547,9 +10969,117 @@ function buildMatieres() {
     filtres,
     el('label', { cls: 'mp-tri-wrap' }, el('span', null, 'Trier'), triSel),
   );
+  const inactives = grain === 'matiere' ? buildMpInactives(q) : null;
   return el('div', { cls: 'content' },
-    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, barre, corps, rvgiBloc));
+    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, barre, corps, inactives, rvgiBloc));
 }
+
+// Matières désactivées de la catégorie (et de la recherche) en cours, repliées
+// sous la liste : on les retrouve, on les réactive. Administrateurs matières.
+function buildMpInactives(q) {
+  if (!isMatieresAdmin()) return null;
+  if (S.mpInactives == null) {
+    if (!S.mpInactivesLoading) {
+      S.mpInactivesLoading = true;
+      api('/api/stock/matieres?all=1')
+        .then(d => { S.mpInactives = (Array.isArray(d) ? d : []).filter(x => x.actif === 0 || x.actif === false); })
+        .catch(() => { S.mpInactives = []; })
+        .finally(() => {
+          S.mpInactivesLoading = false;
+          const root = document.getElementById('mroot');
+          if (!(root && root.firstElementChild) && S.tab === 'matieres' && !S.selMatiere) mpRerenderGarde();
+        });
+    }
+    return null;
+  }
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const cat = S.matieresCat && S.matieresCat !== 'tout' ? S.matieresCat : null;
+  const k = norm(q).trim();
+  const items = S.mpInactives
+    .filter(x => (!cat || x.categorie === cat) && (!k || norm((x.designation || '') + ' ' + (x.reference || '')).includes(k)))
+    .sort((a, b) => mpTitre(a).localeCompare(mpTitre(b), 'fr'));
+  if (!items.length) return null;
+  const ouvert = !!S.mpInactivesOuvert;
+  return el('div', { cls: 'mp-inact' },
+    el('button', {
+      cls: 'mp-inact-head', type: 'button',
+      attrs: { 'aria-expanded': ouvert ? 'true' : 'false' },
+      on: { click: () => { S.mpInactivesOuvert = !ouvert; mpRerenderGarde(); } },
+    },
+      el('span', { cls: 'mp-chev' + (ouvert ? ' open' : '') }, iconEl('chevron-right', 12)),
+      'Matières désactivées', el('span', { cls: 'mp-inact-n' }, String(items.length))),
+    ...(ouvert ? items.map(x => el('div', { cls: 'mp-inact-row' },
+      dashMpCatBadge(x.categorie, x.sous_section),
+      el('span', { cls: 'mp-inact-titre' }, mpTitre(x),
+        (x.reference && x.designation) ? el('span', { cls: 'mp-var-meta', style: 'margin-left:8px' }, 'Réf. ' + x.reference) : null),
+      el('button', {
+        cls: 'mp-inact-btn', type: 'button',
+        attrs: { title: 'Remettre cette matière dans la liste' },
+        on: { click: () => mpReactiverMatiere(x) },
+      }, iconEl('rotate-ccw', 13), 'Réactiver'))) : []));
+}
+
+async function mpReactiverMatiere(x) {
+  if (!confirm('Réactiver « ' + mpTitre(x) + ' » ? Elle revient dans la liste des matières.')) return;
+  try {
+    await api('/api/stock/matieres/' + x.id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actif: 1 }),
+    });
+    showToast('Matière réactivée.', 'success');
+    S.mpInactives = null;
+    await loadMatieres();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// Bulles d'aide MySifa : sur la fiche, la liste et les fenêtres de MyStock,
+// le `title` d'un bouton s'affiche dans une bulle aux couleurs de l'appli au
+// lieu de l'infobulle grise du navigateur, et sans son délai.
+(function mpInstallerBulles() {
+  if (window.__mpBulles) return;
+  window.__mpBulles = true;
+  // .val-mp-table : tableau des matières de la valorisation (actions en icônes,
+  // l'infobulle native y arrivait tard et sans le style MySifa).
+  const PORTEE = '.mp-detail, .hist-page, .mp-modal, .val-mp-table, .val-pf-table';
+  let bulle = null;
+  let cible = null;
+  const cacher = () => { if (bulle) bulle.classList.remove('on'); cible = null; };
+  document.addEventListener('mouseover', (e) => {
+    const t = e.target && e.target.closest ? e.target.closest('[title], [data-mtip]') : null;
+    if (!t || !t.closest(PORTEE)) { if (cible) cacher(); return; }
+    if (t === cible) return;
+    if (t.hasAttribute('title')) {
+      t.setAttribute('data-mtip', t.getAttribute('title'));
+      t.removeAttribute('title');
+    }
+    const txt = t.getAttribute('data-mtip');
+    if (!txt) { cacher(); return; }
+    cible = t;
+    if (!bulle) {
+      bulle = document.createElement('div');
+      bulle.className = 'mtip';
+      bulle.setAttribute('role', 'tooltip');
+      document.body.appendChild(bulle);
+    }
+    bulle.textContent = txt;
+    const r = t.getBoundingClientRect();
+    const b = bulle.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    let x = r.left + r.width / 2 - b.width / 2;
+    x = Math.max(8, Math.min(vw - b.width - 8, x));
+    let y = r.top - b.height - 8;
+    if (y < 8) y = r.bottom + 8;
+    bulle.style.left = Math.round(x) + 'px';
+    bulle.style.top = Math.round(y) + 'px';
+    bulle.classList.add('on');
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (cible && !(e.relatedTarget && cible.contains(e.relatedTarget))) cacher();
+  });
+  document.addEventListener('mousedown', cacher, true);
+  window.addEventListener('scroll', cacher, true);
+})();
 
 // ── Widget « Métrage bobine » ───────────────────────────────────────────────
 // Longueur approximative enroulée sur une bobine, d'après l'épaisseur de la
@@ -10591,7 +11121,9 @@ function mtrSetOpen(v) {
 async function mtrChargerEpaisseurs() {
   try {
     const d = await api('/api/stock/metrage-epaisseurs');
-    MTR.epaisseurs = Array.isArray(d) ? d : [];
+    // Le référentiel porte aussi les grammages (Poids de colle, saisie prod) :
+    // seules les lignes avec une épaisseur servent ici.
+    MTR.epaisseurs = Array.isArray(d) ? d.filter(t => t.microns != null) : [];
   } catch (e) {
     MTR.epaisseurs = [];
   }
@@ -10703,7 +11235,7 @@ function mtrRender() {
 }
 
 function mtrRenderEdition(body) {
-  const lignes = (MTR.epaisseurs || []).map(t => ({ libelle: t.libelle, microns: t.microns }));
+  const lignes = (MTR.epaisseurs || []).map(t => ({ id: t.id, libelle: t.libelle, microns: t.microns }));
   const liste = el('div', { cls: 'mtr-edit' });
   const errEl = el('div', { cls: 'mtr-err' });
   const dessiner = () => {
@@ -10727,15 +11259,16 @@ function mtrRenderEdition(body) {
   enregistrer.addEventListener('click', async () => {
     errEl.textContent = '';
     const items = lignes
-      .map(l => ({ libelle: String(l.libelle || '').trim(), microns: String(l.microns || '').replace(',', '.') }))
+      .map(l => ({ id: l.id, libelle: String(l.libelle || '').trim(), microns: String(l.microns || '').replace(',', '.') }))
       .filter(l => l.libelle || l.microns);
     enregistrer.disabled = true;
     try {
-      MTR.epaisseurs = await api('/api/stock/metrage-epaisseurs', {
+      const d = await api('/api/stock/metrage-epaisseurs', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ perimetre: 'epaisseur', items }),
       });
+      MTR.epaisseurs = (Array.isArray(d) ? d : []).filter(t => t.microns != null);
       MTR.edit = false;
       showToast('Épaisseurs enregistrées.', 'success');
       mtrRender();
@@ -11001,6 +11534,7 @@ function buildMpEmplacementsCard(m) {
       ? el('button', {
           cls: 'mp-empl-add-link',
           type: 'button',
+          attrs: { title: 'Indiquer où une partie du stock est rangée' },
           on: { click: () => openMpEmplacementModal(m, null) },
         }, iconEl('plus', 14), 'Ajouter un emplacement')
       : null,
@@ -11015,21 +11549,27 @@ function buildMpEmplacementsCard(m) {
       isStockZoneSpeciale(e.emplacement) ? stockEmplLabel(e.emplacement) : '',
       e.laize_label || '',
     ].filter(Boolean).join(' · ');
-    card.appendChild(el('div', { cls: 'mp-empl-line' },
+    const metres = mpMetresDe(m, e.quantite);
+    card.appendChild(el('div', {
+      cls: 'mp-empl-line' + (canEdit ? ' mp-row-click' : ''),
+      attrs: canEdit ? { title: 'Modifier : emplacement, laize ou quantité' } : {},
+      on: canEdit ? { click: (ev) => { if (!ev.target.closest('button')) openMpEmplacementModal(m, e); } } : {},
+    },
       el('span', { cls: 'mp-empl-code' }, e.emplacement),
       el('span', { cls: 'mp-empl-lbl' }, lbl),
-      el('span', { cls: 'mp-empl-qty' }, mpStockLine(e.quantite, m)),
+      el('span', { cls: 'mp-empl-qty' }, mpStockLine(e.quantite, m),
+        metres != null ? el('span', { cls: 'mp-empl-metres' }, fN(metres) + ' m') : null),
       canEdit
         ? el('button', {
             cls: 'mp-empl-ico',
             type: 'button',
-            attrs: { title: 'Modifier la quantité', 'aria-label': 'Modifier la quantité' },
+            attrs: { title: 'Modifier l\'emplacement', 'aria-label': 'Modifier l\'emplacement' },
             on: { click: () => openMpEmplacementModal(m, e) },
           }, iconEl('edit', 14))
         : null,
       canEdit
         ? el('button', {
-            cls: 'mp-empl-ico',
+            cls: 'mp-empl-ico ico-danger',
             type: 'button',
             attrs: { title: 'Retirer l\'emplacement', 'aria-label': 'Retirer l\'emplacement' },
             on: { click: () => deleteMpEmplacement(m, e) },
@@ -11042,10 +11582,199 @@ function buildMpEmplacementsCard(m) {
   const estNc = (e) => /^NC\b/.test(String(e.emplacement || ''));
   const total = rows.filter(e => !estNc(e)).reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
   const nc = rows.filter(estNc).reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
+  const mTot = mpMetresDe(m, total);
   card.appendChild(el('div', { cls: 'mp-hint', style: 'margin-top:8px' },
-    'Localisé : ' + mpStockLine(total, m) + ' sur ' + mpStockLine(m.quantite, m) + ' en stock.'
+    'Localisé : ' + mpStockLine(total, m) + (mTot != null ? ' (' + fN(mTot) + ' m)' : '')
+    + ' sur ' + mpStockLine(m.quantite, m) + ' en stock.'
     + (nc > 0 ? ' Hors stock : ' + mpStockLine(nc, m) + ' en non-conformité.' : '')));
   return card;
+}
+
+// Métrage d'une quantité de bobines, au métrage standard de la matière. Null
+// quand on ne sait pas le calculer : « 0 m » se lirait « il n'y en a plus ».
+function mpMetresDe(m, q) {
+  const ml = Number((m && m.metres_lineaires_par_bobine) || 0);
+  if (!m || !m.laizee || !(ml > 0)) return null;
+  return Math.round(Number(q || 0) * ml);
+}
+
+// Détail d'une laize (onglet Stock) : qui la livre, à quelle longueur et quel
+// prix, combien RVGI en voit chez chacun, et où elle est rangée.
+function buildMpLaizeDetail(m, spl) {
+  const data = S.selMatiere && S.selMatiere.variantes;
+  const vs = (data && Array.isArray(data.variantes) ? data.variantes : []).filter(v => v.actif);
+  const mlStd = Number(m.metres_lineaires_par_bobine || 0);
+  const mm = Math.round(Number(spl.valeur_mm || 0));
+  const stock = mpStockFournData();
+  const rvgi = (stock && stock.disponible ? mpLignesFourn(m.id) : []).filter(l => Math.round(l.laize_mm || 0) === mm);
+  const lignes = new Map();
+  vs.forEach(v => {
+    const d = (v.laizes_detail || []).find(x => x.laize_id === spl.laize_id);
+    const k = v.fournisseur_id || 0;
+    if (!d || lignes.has(k)) return;
+    const conds = (d.conditionnements || []).map(c => c.ml_bobine);
+    lignes.set(k, { nom: v.fournisseur_nom || 'Fournisseur non identifié', fid: k, principal: false,
+      mls: conds.length ? conds : [Number(v.ml_bobine || 0) || mlStd].filter(x => x > 0),
+      mlSource: conds.length ? 'laize' : (v.ml_bobine ? 'article' : 'standard') });
+  });
+  vs.filter(v => v.principal).forEach(v => { const l = lignes.get(v.fournisseur_id || 0); if (l) l.principal = true; });
+  // Fournisseurs vus en stock RVGI sur cette laize sans y être rattachés.
+  rvgi.forEach(l => {
+    const k = l.fournisseur_id || 0;
+    if (!lignes.has(k)) lignes.set(k, { nom: l.fournisseur || 'Fournisseur non identifié', fid: k, principal: false, ml: null, horsLien: true });
+  });
+  const decl = mpDeclDeLaize(data, mm);
+  const th = (t, num, titre) => el('th', { cls: num ? 'num' : '', attrs: titre ? { title: titre } : {} }, t);
+
+  // Fournisseurs : une ligne chacun, le principal d'abord.
+  const fours = [...lignes.values()].sort((a, b) => (b.principal - a.principal) || a.nom.localeCompare(b.nom, 'fr'));
+  let blocF;
+  if (fours.length) {
+    const tb = el('tbody');
+    fours.forEach(l => {
+      const st = mpTotalRvgi(rvgi.filter(x => (x.fournisseur_id || 0) === l.fid));
+      const mls = (l.mls && l.mls.length) ? l.mls.map(x => fN(x)).join(' / ') + ' m' : '—';
+      tb.appendChild(el('tr', null,
+        el('td', null, el('strong', null, l.nom),
+          l.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null,
+          l.horsLien ? el('span', { cls: 'mp-ld-tag', attrs: { title: 'Vu dans le stock RVGI, mais cette laize n\'est pas rattachée à ce fournisseur (onglet Fournisseurs).' } }, 'non rattachée') : null),
+        el('td', { cls: 'num' + (l.mlSource === 'laize' ? '' : ' faible'), attrs: { title: { laize: 'Conditionnements de ce fournisseur sur cette laize', article: 'Longueur de l\'article fournisseur', standard: 'Métrage standard de la matière' }[l.mlSource] || '' } }, mls),
+        el('td', { cls: 'num' }, data ? mpPrixTexte(data, l.fid, decl ? decl.id : undefined) : '—'),
+        el('td', { cls: 'num' }, mpFmtStockRvgi(st))));
+    });
+    blocF = el('table', { cls: 'mp-ld-tbl' },
+      el('thead', null, el('tr', null, th('Fournisseur'), th('m / bobine', true), th('Prix d\'achat', true), th('Stock RVGI', true))),
+      tb);
+  } else {
+    blocF = el('div', { cls: 'mp-ld-vide' }, 'Aucun fournisseur rattaché. ',
+      el('button', { cls: 'mp-var-link', type: 'button', on: { click: (e) => {
+        e.stopPropagation(); S.selMatiere.vue = 'fournisseurs'; S.selMatiere.ouvert = null;
+        if (typeof stockSyncUrl === 'function') stockSyncUrl(); mpRerenderGarde();
+      } } }, 'Rattacher dans l\'onglet Fournisseurs'));
+  }
+
+  // Emplacements de la laize, avec leur métrage.
+  const empls = (Array.isArray(m.emplacements) ? m.emplacements : []).filter(e => (e.laize_id || 0) === spl.laize_id)
+    .sort((a, b) => (parseFloat(b.quantite) || 0) - (parseFloat(a.quantite) || 0));
+  let blocE;
+  if (empls.length) {
+    const tb = el('tbody');
+    empls.forEach(e => {
+      const mt = mpMetresDe(m, e.quantite);
+      tb.appendChild(el('tr', null,
+        el('td', null, el('strong', null, e.emplacement)),
+        el('td', { cls: 'num' }, mpStockLine(e.quantite, m)),
+        el('td', { cls: 'num' }, mt != null ? fN(mt) + ' m' : '—')));
+    });
+    const loc = empls.reduce((t, e) => t + (parseFloat(e.quantite) || 0), 0);
+    const reste = Math.round((Number(spl.quantite || 0) - loc) * 1000) / 1000;
+    blocE = el('div', null,
+      el('table', { cls: 'mp-ld-tbl' },
+        el('thead', null, el('tr', null, th('Emplacement'), th('Bobines', true), th('Métrage', true))), tb),
+      reste > 0 ? el('div', { cls: 'mp-ld-note' }, mpStockLine(reste, m) + ' non localisé' + (reste > 1 ? 's' : '') + '.') : null);
+  } else {
+    blocE = el('div', { cls: 'mp-ld-vide' }, 'Aucun emplacement renseigné.');
+  }
+
+  return el('div', { cls: 'mp-ld' },
+    el('div', null, el('div', { cls: 'mp-ld-titre' }, 'Fournisseurs', el('span', null, fN(mm) + ' mm')), blocF),
+    el('div', null, el('div', { cls: 'mp-ld-titre' }, 'Emplacements', el('span', null, empls.length ? String(empls.length) : '')), blocE));
+}
+
+// Déclinaison de prix d'une laize ; à défaut la seule déclinaison de la
+// matière (prix commun à toutes ses laizes).
+function mpDeclDeLaize(data, mm) {
+  const decls = (data && data.prix && Array.isArray(data.prix.declinaisons)) ? data.prix.declinaisons : [];
+  return decls.find(d => Math.round(d.laize_mm || 0) === Math.round(mm || 0)) || (decls.length === 1 ? decls[0] : null);
+}
+
+// Champ emplacement de la fiche matière : la liste des emplacements connus
+// s'ouvre au focus (ceux de cette matière, ceux des autres matières, puis le
+// plan dès qu'on tape), et un nom nouveau reste possible.
+function mpEmplCombo(m, valeur) {
+  const inp = el('input', { cls: 'field-input empl-upper', attrs: {
+    type: 'text', autocomplete: 'off', maxlength: '20', role: 'combobox', 'aria-expanded': 'false',
+    'aria-label': 'Emplacement',
+    placeholder: 'Choisir dans la liste ou taper un nom (A121, DROITE 3…)',
+  } });
+  inp.value = valeur || '';
+  const liste = el('div', { cls: 'mp-ec-list', attrs: { role: 'listbox' }, style: 'display:none' });
+  const connus = S.mpEmplConnus || { utilises: [], plan: [] };
+  const ici = [...new Set((Array.isArray(m.emplacements) ? m.emplacements : []).map(e => e.emplacement))].sort();
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+  let opts = [];
+  let actif = -1;
+  const fermer = () => { liste.style.display = 'none'; inp.setAttribute('aria-expanded', 'false'); };
+  const choisir = (code) => { inp.value = code; fermer(); inp.dispatchEvent(new Event('change')); };
+  const placer = () => {
+    if (liste.style.display === 'none' || !inp.isConnected) return;
+    const r = inp.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const dessous = vh - r.bottom - 8;
+    const haut = dessous < 180 && r.top > dessous;
+    liste.style.left = Math.round(r.left) + 'px';
+    liste.style.width = Math.round(r.width) + 'px';
+    liste.style.maxHeight = Math.max(140, Math.min(300, haut ? r.top - 8 : dessous)) + 'px';
+    if (haut) { liste.style.top = 'auto'; liste.style.bottom = Math.round(vh - r.top + 4) + 'px'; }
+    else { liste.style.bottom = 'auto'; liste.style.top = Math.round(r.bottom + 4) + 'px'; }
+  };
+  const dessiner = () => {
+    const k = norm(inp.value);
+    liste.innerHTML = '';
+    opts = []; actif = -1;
+    const vus = new Set();
+    const ok = (c) => !k || norm(c).includes(k);
+    const section = (titre, items) => {
+      if (!items.length) return;
+      liste.appendChild(el('div', { cls: 'mp-ec-sec' }, titre));
+      items.forEach(it => {
+        const b = el('button', { cls: 'mp-ec-opt', type: 'button', attrs: { role: 'option', tabindex: '-1' },
+          on: { mousedown: (e) => { e.preventDefault(); choisir(it.code); } } },
+          el('span', null, it.code), el('span', null, it.info || ''));
+        opts.push({ b, code: it.code });
+        liste.appendChild(b);
+      });
+    };
+    const a = ici.filter(ok).map(c => { vus.add(c); return { code: c, info: 'cette matière' }; });
+    const b = (connus.utilises || []).filter(u => !vus.has(u.code) && ok(u.code))
+      .map(u => { vus.add(u.code); return { code: u.code, info: u.matieres + ' matière' + (u.matieres > 1 ? 's' : '') }; });
+    const c = k ? (connus.plan || []).filter(x => !vus.has(x) && ok(x)).slice(0, 30)
+      .map(x => { vus.add(x); return { code: x, info: 'plan' }; }) : [];
+    if (k && !vus.has(k)) {
+      section('Nouvel emplacement', [{ code: k, info: validateMpEmplacement(k) ? 'format invalide' : 'à créer' }]);
+    }
+    section('Utilisés pour cette matière', a);
+    section('Emplacements des matières', b);
+    section('Plan d\'entrepôt', c);
+    if (!opts.length) liste.appendChild(el('div', { cls: 'mp-ec-sec' }, 'Aucun emplacement connu — tape un nom.'));
+    placer();
+  };
+  const ouvrir = () => { liste.style.display = ''; inp.setAttribute('aria-expanded', 'true'); dessiner(); };
+  inp.addEventListener('focus', ouvrir);
+  inp.addEventListener('input', ouvrir);
+  inp.addEventListener('blur', () => setTimeout(fermer, 150));
+  inp.addEventListener('keydown', (e) => {
+    if (liste.style.display === 'none') {
+      if (e.key === 'ArrowDown') { e.preventDefault(); ouvrir(); }
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!opts.length) return;
+      actif = (actif + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+      opts.forEach((o, i) => o.b.classList.toggle('on', i === actif));
+      opts[actif].b.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && actif >= 0) {
+      e.preventDefault(); e.stopPropagation();
+      choisir(opts[actif].code);
+    } else if (e.key === 'Escape') {
+      e.stopPropagation(); fermer();
+    }
+  });
+  window.addEventListener('scroll', placer, true);
+  window.addEventListener('resize', placer);
+  const wrap = el('div', { cls: 'mp-field mp-ec-wrap' }, el('label', null, 'Emplacement'), inp, liste);
+  return { wrap, inp };
 }
 
 // ── Stock par fournisseur (RVGI) ───────────────────────────────────
@@ -11058,9 +11787,11 @@ const MP_GRAINS = [
   { id: 'fournisseur', label: 'Fournisseur' },
   { id: 'laize', label: 'Fournisseur × laize' },
 ];
+// `laize` garde son id (liens existants : ?var_grain=laize) : c'est la vue par laize.
 const MP_VAR_GRAINS = [
   { id: 'fournisseur', label: 'Par fournisseur' },
-  { id: 'laize', label: 'Fournisseur × laize' },
+  { id: 'fourn_laize', label: 'Fournisseur × laize' },
+  { id: 'laize', label: 'Par laize' },
 ];
 
 function mpSeg(options, value, onPick, aria) {
@@ -11179,23 +11910,96 @@ function mpFiltresFourn(lignes, avecLaize, cle, laizesEnPlus) {
   });
   if (S[kF] && !fours.has(S[kF])) S[kF] = '';
   if (S[kL] && !laizes.has(Number(S[kL]))) S[kL] = '';
-  const selF = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Filtrer par fournisseur' } },
-    el('option', { value: '' }, 'Tous les fournisseurs'),
-    ...[...fours.entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr'))
-      .map(([id, nom]) => el('option', { value: id }, nom)));
-  selF.value = S[kF] || '';
-  selF.addEventListener('change', () => { S[kF] = selF.value; renderMatieresView(); });
+  const selF = mpSelect([{ value: '', label: 'Tous les fournisseurs' }]
+    .concat([...fours.entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr')).map(([id, nom]) => ({ value: id, label: nom }))),
+    S[kF] || '', (v) => { S[kF] = v; mpRerenderGarde(); },
+    { aria: 'Filtrer par fournisseur', defaut: '', prefixe: 'Fournisseur' });
   const out = [selF];
   if (avecLaize && laizes.size) {
-    const selL = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Filtrer par laize' } },
-      el('option', { value: '' }, 'Toutes les laizes'),
-      ...[...laizes].sort((a, b) => a - b).map(v => el('option', { value: String(v) }, fN(v) + ' mm')));
-    selL.value = S[kL] || '';
-    selL.addEventListener('change', () => { S[kL] = selL.value; renderMatieresView(); });
-    out.push(selL);
+    out.push(mpSelect([{ value: '', label: 'Toutes les laizes' }]
+      .concat([...laizes].sort((a, b) => a - b).map(v => ({ value: String(v), label: fN(v) + ' mm' }))),
+      S[kL] || '', (v) => { S[kL] = v; mpRerenderGarde(); },
+      { aria: 'Filtrer par laize', defaut: '', prefixe: 'Laize' }));
   }
   return el('div', { cls: 'mp-filtres' }, ...out);
 }
+
+// Menu déroulant aux couleurs de MySifa, à la place du <select> natif.
+// `o.defaut` : valeur « sans filtre ». Un autre choix colore le bouton (accent),
+// préfixe son libellé (« Laize : 333 mm ») et ajoute un × qui retire le filtre.
+function mpSelect(opts, valeur, onPick, o) {
+  o = o || {};
+  const cur = opts.find(x => x.value === valeur) || opts[0];
+  const actif = o.defaut !== undefined && valeur !== o.defaut && !!cur && cur.value === valeur;
+  const btn = el('button', {
+    cls: 'mp-sel' + (actif ? ' actif' : ''), type: 'button',
+    attrs: { 'aria-haspopup': 'listbox', 'aria-expanded': 'false', 'aria-label': (o.aria || '') + (cur ? ' : ' + cur.label : '') },
+  },
+    actif && o.prefixe ? el('span', { cls: 'mp-sel-pre' }, o.prefixe) : null,
+    el('span', { cls: 'mp-sel-txt' }, cur ? cur.label : ''),
+    actif
+      ? el('span', { cls: 'mp-sel-x', attrs: { title: 'Retirer ce filtre', 'aria-label': 'Retirer ce filtre' },
+          on: { click: (e) => { e.stopPropagation(); mpSelFermer(); onPick(o.defaut); } } }, '×')
+      : el('span', { cls: 'mp-sel-chev' }, iconEl('chevron-down', 14)));
+  btn.addEventListener('click', () => {
+    if (window.__mpSelPop && window.__mpSelPop.btn === btn) { mpSelFermer(); return; }
+    mpSelFermer();
+    const pop = el('div', { cls: 'mp-sel-pop', attrs: { role: 'listbox' } });
+    const boutons = opts.map(x => {
+      const on = x.value === valeur;
+      const b = el('button', {
+        cls: 'mp-sel-opt' + (on ? ' on' : ''), type: 'button',
+        attrs: { role: 'option', 'aria-selected': on ? 'true' : 'false' },
+        on: { click: (e) => { e.stopPropagation(); mpSelFermer(); btn.focus(); if (!on) onPick(x.value); } },
+      }, el('span', { cls: 'mp-sel-check' }, on ? '✓' : ''), el('span', null, x.label));
+      pop.appendChild(b);
+      return b;
+    });
+    pop.addEventListener('keydown', (e) => {
+      const i = boutons.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const k = (i + (e.key === 'ArrowDown' ? 1 : -1) + boutons.length) % boutons.length;
+        boutons[k].focus();
+      } else if (e.key === 'Escape' || e.key === 'Tab') {
+        e.preventDefault(); mpSelFermer(); btn.focus();
+      }
+    });
+    document.body.appendChild(pop);
+    const r = btn.getBoundingClientRect();
+    const vh = window.innerHeight, vw = window.innerWidth;
+    pop.style.minWidth = Math.round(r.width) + 'px';
+    const h = pop.offsetHeight, w = pop.offsetWidth;
+    const top = (r.bottom + 4 + h > vh - 8 && r.top - 4 - h > 8) ? r.top - 4 - h : r.bottom + 4;
+    pop.style.top = Math.round(top) + 'px';
+    pop.style.left = Math.round(Math.max(8, Math.min(r.left, vw - w - 8))) + 'px';
+    window.__mpSelPop = { pop, btn };
+    btn.setAttribute('aria-expanded', 'true');
+    btn.classList.add('ouvert');
+    (boutons.find(b => b.classList.contains('on')) || boutons[0]).focus();
+  });
+  btn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); btn.click(); } });
+  return btn;
+}
+
+function mpSelFermer() {
+  const p = window.__mpSelPop;
+  if (!p) return;
+  window.__mpSelPop = null;
+  p.pop.remove();
+  p.btn.setAttribute('aria-expanded', 'false');
+  p.btn.classList.remove('ouvert');
+}
+
+document.addEventListener('mousedown', (e) => {
+  const p = window.__mpSelPop;
+  if (p && !p.pop.contains(e.target) && !p.btn.contains(e.target)) mpSelFermer();
+}, true);
+window.addEventListener('scroll', (e) => {
+  const p = window.__mpSelPop;
+  if (p && !p.pop.contains(e.target)) mpSelFermer();
+}, true);
+window.addEventListener('resize', () => mpSelFermer());
 
 // Liste des matières, une ligne par fournisseur (ou par fournisseur et laize).
 // Stock MySifa d'une laize, en chiffre : mètres pour une bobine dont la fiche
@@ -11351,7 +12155,25 @@ async function mpFetchVariantes(id, inactives) {
 function mpVarSetData(d) {
   if (!S.selMatiere || !d) return;
   S.selMatiere.variantes = Object.assign({}, S.selMatiere.variantes || {}, d);
+  mpRerenderGarde();
+}
+
+// Redessine la vue matières sans perdre la position de défilement.
+function mpRerenderGarde() {
+  const zone = document.getElementById('scroll-area');
+  const y = zone ? zone.scrollTop : 0;
   renderMatieresView();
+  if (zone) zone.scrollTop = y;
+}
+
+function mpDetailOuvert() { return (S.selMatiere && S.selMatiere.ouvert) || null; }
+
+// Déplie une ligne (une seule à la fois) ; un second clic la replie.
+function mpBasculerDetail(cle, forcer) {
+  if (!S.selMatiere) return;
+  S.selMatiere.ouvert = (forcer || S.selMatiere.ouvert !== cle) ? cle : null;
+  if (typeof stockSyncUrl === 'function') stockSyncUrl();
+  mpRerenderGarde();
 }
 
 function mpVarDate(iso) {
@@ -11392,7 +12214,7 @@ function buildMpVariantesTable(m) {
   if (!rows.length) {
     card.appendChild(el('div', { cls: 'mp-hint' },
       'Aucun fournisseur renseigné. Chaque fournisseur porte le libellé technique de la matière chez lui.'));
-    return card;
+    return mpAvecPrix(card, m, data);
   }
   // Stock RVGI des articles : une ligne par fournisseur, ou par fournisseur et laize.
   const stockData = mpStockFournData();
@@ -11418,9 +12240,11 @@ function buildMpVariantesTable(m) {
   const lignesVues = lignesRvgi.filter(l => mpFiltreLigne(l, 'mpVarFiltre'));
   if (varGrain === 'laize') {
     card.appendChild(buildMpVarParLaize(m, lignesVues));
-    const grille = buildMpPrixParLaize(m, data);
-    if (grille) card.appendChild(grille);
-    return card;
+    return mpAvecPrix(card, m, data);
+  }
+  if (varGrain === 'fourn_laize') {
+    card.appendChild(buildMpVarFournLaize(m, data, lignesVues, canEdit));
+    return mpAvecPrix(card, m, data);
   }
   const totVar = mpTotalRvgi(lignesVues);
   card.appendChild(el('div', { cls: 'mp-var-stock' },
@@ -11432,7 +12256,7 @@ function buildMpVariantesTable(m) {
       : mpStockMySifa(m)),
     ' · Stock RVGI des articles ', el('strong', null, totVar ? mpFmtStockRvgi(totVar) : '—'),
     el('span', { cls: 'mp-var-meta', style: 'margin-left:8px' },
-      'MySifa ne sait pas de quel fournisseur vient une bobine : son stock se lit par laize (vue Fournisseur × laize).')));
+      'MySifa ne sait pas de quel fournisseur vient une bobine : son stock se lit par laize (vue Par laize).')));
   const stockArticle = (v) => mpTotalRvgi(lignesVues.filter(l =>
     (l.variante_id && l.variante_id === v.id) || (!l.variante_id && v.ref_rvgi && l.article === v.ref_rvgi)));
   // Un groupe par fournisseur : le principal d'abord, puis l'ordre alphabétique,
@@ -11484,17 +12308,25 @@ function buildMpVariantesTable(m) {
       });
       if (!canEdit || !v.actif || v.principal) radio.disabled = true;
       const note = (v.note && !/^Reprise de l'inventaire/.test(v.note)) ? v.note : '';
-      tb.appendChild(el('tr', { cls: 'mp-var-row' + (v.actif ? '' : ' inactive') },
+      const cleArt = 'article:' + v.id;
+      const ouvArt = mpDetailOuvert() === cleArt;
+      tb.appendChild(el('tr', {
+        cls: 'mp-var-row mp-row-click' + (v.actif ? '' : ' inactive') + (ouvArt ? ' open' : ''),
+        on: { click: (e) => {
+          if (e.target.closest('button,input,select,a,textarea,label')) return;
+          mpBasculerDetail(cleArt);
+        } },
+      },
         el('td', { cls: 'c-radio' }, radio),
-        el('td', { cls: 'c-type' },
-          el('div', { cls: 'mp-var-type' }, mpVarLibelle(v) || '—'),
+        el('td', { cls: 'c-type', attrs: { title: ouvArt ? 'Replier le détail' : 'Détail : laizes, m / bobine, prix, stock RVGI' } },
+          el('div', { cls: 'mp-var-type' },
+            el('span', { cls: 'mp-chev' + (ouvArt ? ' open' : '') }, iconEl('chevron-right', 12)),
+            mpVarLibelle(v) || '—'),
           note ? el('div', { cls: 'mp-var-meta' }, note) : null,
           v.actif ? null : el('div', { cls: 'mp-var-meta' }, 'Désactivé')),
         el('td', null, v.ref_fournisseur || '—'),
         el('td', null, v.ref_rvgi || '—'),
-        el('td', null, (v.laizes && v.laizes.length) ? v.laizes.join(', ')
-          : (stockArticle(v) && stockArticle(v).laizes.size
-            ? [...stockArticle(v).laizes].sort((x, y) => x - y).map(x => fN(x)).join(', ') : '—')),
+        el('td', null, mpLaizeChips(m, data, v, stockArticle(v), canEdit)),
         el('td', { cls: 'num' }, (canEdit && v.actif) ? mpVarMlInput(m, v) : (v.ml_bobine ? fN(v.ml_bobine) : '—')),
         el('td', { cls: 'num' },
           v.dernier_achat ? mpVarDate(v.dernier_achat) : '—',
@@ -11506,16 +12338,16 @@ function buildMpVariantesTable(m) {
           ? el('div', { cls: 'mp-var-actions' },
               v.actif ? el('button', {
                 cls: 'mp-empl-ico', type: 'button',
-                attrs: { title: 'Modifier', 'aria-label': 'Modifier le fournisseur' },
+                attrs: { title: 'Modifier : fournisseur, libellé, références', 'aria-label': 'Modifier le fournisseur' },
                 on: { click: () => openMpVarianteModal(m, v) },
               }, iconEl('edit', 14)) : null,
               v.actif ? el('button', {
                 cls: 'mp-empl-ico', type: 'button',
-                attrs: { title: 'Déplacer vers une autre matière', 'aria-label': 'Déplacer vers une autre matière' },
+                attrs: { title: 'Ranger sous une autre matière, existante ou nouvelle', 'aria-label': 'Déplacer vers une autre matière' },
                 on: { click: () => openMpDeplacerModal(m, v) },
               }, iconEl('move', 14)) : null,
               el('button', {
-                cls: 'mp-empl-ico', type: 'button',
+                cls: 'mp-empl-ico ' + (v.actif ? 'ico-warn' : 'ico-ok'), type: 'button',
                 attrs: v.actif
                   ? { title: 'Désactiver', 'aria-label': 'Désactiver cet article' }
                   : { title: 'Réactiver', 'aria-label': 'Réactiver cet article' },
@@ -11523,6 +12355,10 @@ function buildMpVariantesTable(m) {
               }, iconEl(v.actif ? 'archive' : 'rotate-ccw', 14)))
           : null),
       ));
+      if (ouvArt) {
+        tb.appendChild(el('tr', { cls: 'mp-row-detail plat' },
+          el('td', { attrs: { colspan: String(cols.length) } }, buildMpArticleDetail(m, data, v, lignesVues, canEdit))));
+      }
     });
   });
   tbl.appendChild(tb);
@@ -11552,7 +12388,302 @@ function buildMpVariantesTable(m) {
       } },
     }, S.selMatiere.varInactives ? 'Masquer les désactivés' : 'Voir les désactivés'),
   ));
-  return card;
+  return mpAvecPrix(card, m, data);
+}
+
+// Une ligne par fournisseur et par laize : laizes rattachées au fournisseur et
+// laizes que RVGI voit en stock chez lui. Conditionnements, prix, stock RVGI ;
+// une laize vue dans RVGI mais pas rattachée se rattache d'un clic.
+function buildMpVarFournLaize(m, data, lignes, canEdit) {
+  const vs = (data.variantes || []).filter(v => v.actif);
+  const mlStd = Number(m.metres_lineaires_par_bobine || 0);
+  const fours = new Map();
+  const fiche = (fid, nom) => {
+    if (!fours.has(fid)) fours.set(fid, { fid, nom: nom || 'Fournisseur non identifié', principal: false, v: null, laizes: new Map() });
+    return fours.get(fid);
+  };
+  vs.forEach(v => {
+    const f = fiche(v.fournisseur_id || 0, v.fournisseur_nom);
+    if (v.principal) f.principal = true;
+    if (!f.v || v.principal) f.v = v;
+    (v.laizes_detail || []).forEach(d => {
+      const mm = Math.round(d.valeur_mm || 0);
+      const prev = f.laizes.get(mm);
+      const conds = (d.conditionnements || []).map(c => c.ml_bobine);
+      f.laizes.set(mm, { mm, laize_id: d.laize_id, lie: true,
+        mls: [...new Set([...(prev ? prev.mls : []), ...conds])].sort((a, b) => a - b) });
+    });
+  });
+  lignes.forEach(l => {
+    const f = fiche(l.fournisseur_id || 0, l.fournisseur);
+    const mm = Math.round(l.laize_mm || 0);
+    if (mm && !f.laizes.has(mm)) f.laizes.set(mm, { mm, laize_id: null, lie: false, mls: [] });
+  });
+  const tbl = el('table', { cls: 'mp-var-table mp-fl-table' });
+  tbl.appendChild(el('thead', null, el('tr', null,
+    el('th', null, 'Fournisseur'), el('th', null, 'Laize'),
+    el('th', { attrs: { title: 'Conditionnements du fournisseur sur la laize ; à défaut, longueur de son article' } }, 'm / bobine'),
+    el('th', { cls: 'num' }, 'Prix d\'achat'), el('th', { cls: 'num' }, 'Stock RVGI'), el('th', null, ''))));
+  const tb = el('tbody');
+  let n = 0;
+  [...fours.values()]
+    .filter(f => !S.mpVarFiltreFourn || String(f.fid) === S.mpVarFiltreFourn)
+    .sort((a, b) => (b.principal - a.principal) || (!a.fid - !b.fid) || a.nom.localeCompare(b.nom, 'fr'))
+    .forEach(f => {
+      const lz = [...f.laizes.values()].filter(x => !S.mpVarFiltreLaize || String(x.mm) === S.mpVarFiltreLaize)
+        .sort((a, b) => b.mm - a.mm);
+      if (!lz.length) return;
+      const mlArt = Number((f.v && f.v.ml_bobine) || 0) || mlStd;
+      lz.forEach((x, i) => {
+        n++;
+        const st = mpTotalRvgi(lignes.filter(l => (l.fournisseur_id || 0) === f.fid && Math.round(l.laize_mm || 0) === x.mm));
+        const decl = mpDeclDeLaize(data, x.mm);
+        const peutLier = canEdit && !x.lie && f.v && f.fid && data.laizee;
+        tb.appendChild(el('tr', { cls: i === 0 ? 'mp-fl-premiere' : '' },
+          el('td', null, i === 0 ? el('span', null, el('strong', { style: 'color:var(--text)' }, f.nom),
+            f.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null) : null),
+          el('td', null, el('strong', { style: 'color:var(--text)' }, fN(x.mm) + ' mm')),
+          el('td', null, x.mls.length
+            ? el('div', { cls: 'mp-lz-chips' }, ...x.mls.map(v => el('span', { cls: 'mp-cond-chip', style: 'padding-right:9px' }, fN(v) + ' m')))
+            : el('span', { style: 'color:var(--text2)' }, mlArt ? fN(mlArt) + ' m' : '—',
+                mlArt ? el('span', { cls: 'mp-var-meta', style: 'margin-left:6px' }, 'article') : null)),
+          el('td', { cls: 'num' }, f.fid ? mpPrixTexte(data, f.fid, decl ? decl.id : undefined) : '—'),
+          el('td', { cls: 'num' }, mpFmtStockRvgi(st)),
+          el('td', { cls: 'num' }, x.lie ? null
+            : peutLier
+              ? el('button', { cls: 'mp-det-btn', type: 'button',
+                  attrs: { title: 'Vue dans le stock RVGI : la rattacher à ' + f.nom },
+                  on: { click: () => mpPoserLaizeFourn(f.v, { valeur_mm: x.mm }, 'Laize ' + fN(x.mm) + ' mm rattachée à ' + f.nom + '.') },
+                }, iconEl('plus', 12), 'Rattacher')
+              : el('span', { cls: 'mp-ld-tag', attrs: { title: 'Vue dans le stock RVGI, laize non rattachée à ce fournisseur' } }, 'non rattachée'))));
+      });
+    });
+  tbl.appendChild(tb);
+  if (!n) return el('div', { cls: 'mp-hint' }, 'Aucune laize rattachée ni vue en stock RVGI pour cette sélection.');
+  return el('div', { cls: 'mp-var-scroll' }, tbl);
+}
+
+// Laizes livrées par le fournisseur de l'article, avec leur longueur propre.
+function mpLaizeChips(m, data, v, st, canEdit) {
+  const det = Array.isArray(v.laizes_detail) ? v.laizes_detail : [];
+  const out = el('div', { cls: 'mp-lz-chips' });
+  if (det.length) {
+    det.forEach(d => {
+      const mls = (d.conditionnements || []).map(c => fN(c.ml_bobine));
+      out.appendChild(el('span', {
+        cls: 'mp-lz-chip',
+        attrs: { title: mls.length ? 'Conditionnements : ' + mls.join(' / ') + ' m par bobine' : 'Longueur de l\'article' },
+      }, fN(d.valeur_mm), mls.length ? el('em', null, mls.join(' / ') + ' m') : null));
+    });
+  } else if (st && st.laizes.size) {
+    [...st.laizes].sort((a, b) => a - b).forEach(x => out.appendChild(el('span', {
+      cls: 'mp-lz-chip', attrs: { title: 'Vue en stock RVGI, non rattachée à ce fournisseur' },
+    }, el('em', null, fN(x)))));
+  } else {
+    out.appendChild(el('span', null, '—'));
+  }
+  if (canEdit && v.actif && v.fournisseur_id && data.laizee) {
+    out.appendChild(el('button', {
+      cls: 'mp-lz-plus', type: 'button',
+      attrs: { title: 'Ajouter une laize à ce fournisseur', 'aria-label': 'Ajouter une laize' },
+      on: { click: (e) => { e.stopPropagation(); S.mpFocusAjoutLaize = v.id; mpBasculerDetail('article:' + v.id, true); } },
+    }, iconEl('plus', 12)));
+  }
+  return out;
+}
+
+async function mpPoserLaizeFourn(v, body, msg) {
+  const avant = ((S.selMatiere && S.selMatiere.variantes && S.selMatiere.variantes.laizes_matiere) || []).length;
+  try {
+    const d = await api('/api/stock/variantes/' + v.id + '/laizes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    showToast(msg || 'Laize enregistrée.', 'success');
+    mpVarSetData(d);
+    // Laize nouvelle sur la matière : son stock par laize change aussi.
+    if ((d.laizes_matiere || []).length !== avant) await refreshSelMatiere();
+    return true;
+  } catch (err) {
+    showToast(err.message, 'error');
+    return false;
+  }
+}
+
+// Détail d'un article fournisseur, déplié sous sa ligne : ses laizes, chacune
+// avec ses conditionnements (une ou plusieurs longueurs de bobine), son prix et
+// son stock RVGI. Ce que la ligne dit déjà (réf. fournisseur, article RVGI,
+// m / bobine de l'article) n'est pas répété.
+function buildMpArticleDetail(m, data, v, lignesVues, canEdit) {
+  const edit = canEdit && v.actif;
+  const mlStd = Number(m.metres_lineaires_par_bobine || 0);
+  const mlArt = Number(v.ml_bobine || 0) || mlStd;
+  const nomF = v.fournisseur_nom || 'ce fournisseur';
+  const pied = [];
+  const libCourt = mpVarLibelle(v);
+  if (v.libelle_technique && v.libelle_technique !== libCourt) pied.push(v.libelle_technique);
+  const note = (v.note && !/^Reprise de l'inventaire/.test(v.note)) ? v.note : '';
+  if (note) pied.push('Note : ' + note);
+  if (v.updated_at) pied.push('Modifié le ' + mpVarDate(v.updated_at) + (v.updated_by_name ? ' par ' + v.updated_by_name : ''));
+  const piedEl = pied.length ? el('div', { cls: 'mp-det-pied' }, pied.join(' · ')) : null;
+
+  if (!data.laizee) return el('div', { cls: 'mp-det' }, piedEl || el('div', { cls: 'mp-det-vide' }, 'Rien de plus sur cet article.'));
+  if (!v.fournisseur_id) {
+    return el('div', { cls: 'mp-det' },
+      el('div', { cls: 'mp-det-vide' }, 'Article sans fournisseur : le choisir (Modifier) pour lui rattacher des laizes.'), piedEl);
+  }
+  const det = Array.isArray(v.laizes_detail) ? v.laizes_detail : [];
+  const deCetArticle = (l) => (l.variante_id && l.variante_id === v.id) || (!l.variante_id && v.ref_rvgi && l.article === v.ref_rvgi);
+  const stockLz = (mm) => mpTotalRvgi(lignesVues.filter(l => deCetArticle(l) && Math.round(l.laize_mm || 0) === Math.round(mm)));
+
+  const grille = el('div', { cls: 'mp-lzc' });
+  if (det.length) grille.appendChild(el('div', { cls: 'mp-lzc-row mp-lzc-head' },
+    el('span', null, 'Laize'),
+    el('span', { attrs: { title: 'Longueurs de bobine livrées sur cette laize. Aucune : longueur de l\'article (' + (mlArt ? fN(mlArt) + ' m' : 'non renseignée') + ').' } }, 'm / bobine'),
+    el('span', { cls: 'num' }, 'Prix d\'achat'),
+    el('span', { cls: 'num' }, 'Stock RVGI'),
+    el('span', null, '')));
+
+  det.forEach(d => {
+    const conds = Array.isArray(d.conditionnements) ? d.conditionnements : [];
+    const cell = el('div', { cls: 'mp-lz-chips' });
+    conds.forEach(c => cell.appendChild(el('span', { cls: 'mp-cond-chip' },
+      fN(c.ml_bobine) + ' m',
+      edit ? el('button', {
+        cls: 'mp-cond-x', type: 'button',
+        attrs: { title: 'Retirer ce conditionnement', 'aria-label': 'Retirer ' + fN(c.ml_bobine) + ' m' },
+        on: { click: async () => {
+          try {
+            mpVarSetData(await api('/api/stock/variantes/' + v.id + '/conditionnements/' + c.id, { method: 'DELETE' }));
+            showToast('Conditionnement retiré.', 'success');
+          } catch (err) { showToast(err.message, 'error'); }
+        } },
+      }, '×') : null)));
+    if (!conds.length) {
+      cell.appendChild(el('span', { cls: 'mp-cond-chip defaut', attrs: { title: 'Aucun conditionnement propre : longueur de l\'article' } },
+        mlArt ? fN(mlArt) + ' m' : '—', el('em', null, 'article')));
+    }
+    if (edit) {
+      const ajout = el('button', {
+        cls: 'mp-cond-plus', type: 'button',
+        attrs: { title: 'Ajouter une longueur de bobine sur cette laize' },
+      }, iconEl('plus', 11), 'longueur');
+      ajout.addEventListener('click', () => {
+        const inp = el('input', { cls: 'mp-cond-inp mp-cond-new', attrs: {
+          type: 'number', min: '1', step: '1', inputmode: 'numeric', placeholder: 'm / bobine',
+          'aria-label': 'Nouvelle longueur sur la laize ' + fN(d.valeur_mm),
+        } });
+        let fait = false;
+        const valider = async () => {
+          if (fait) return;
+          const r = mpLireNombre(inp);
+          if (r.vide) { fait = true; inp.replaceWith(ajout); return; }
+          if (r.error) { showToast('Longueur invalide — nombre de mètres > 0.', 'error'); inp.focus(); return; }
+          fait = true;
+          if (!(await mpPoserLaizeFourn(v, { laize_id: d.laize_id, ml_bobine: r.value }, 'Conditionnement ajouté.'))) {
+            fait = false; inp.focus();
+          }
+        };
+        inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); valider(); }
+          else if (e.key === 'Escape') { e.stopPropagation(); fait = true; inp.replaceWith(ajout); }
+        });
+        inp.addEventListener('blur', valider);
+        ajout.replaceWith(inp);
+        inp.focus();
+      });
+      cell.appendChild(ajout);
+    }
+    const decl = mpDeclDeLaize(data, d.valeur_mm);
+    const declPropre = decl && Math.round(decl.laize_mm || 0) === Math.round(d.valeur_mm || 0);
+    grille.appendChild(el('div', { cls: 'mp-lzc-row' },
+      el('strong', null, d.label || fN(d.valeur_mm) + ' mm'),
+      cell,
+      el('span', { cls: 'num' }, (declPropre && data.peut_modifier_prix)
+        ? mpPrixInput(m, data, v.fournisseur_id, nomF, decl.id)
+        : mpPrixTexte(data, v.fournisseur_id, decl ? decl.id : undefined)),
+      el('span', { cls: 'num' }, mpFmtStockRvgi(stockLz(d.valeur_mm))),
+      edit ? el('button', {
+        cls: 'mp-empl-ico ico-danger', type: 'button',
+        attrs: { title: nomF + ' ne livre plus cette laize', 'aria-label': 'Retirer la laize' },
+        on: { click: async () => {
+          if (!confirm('Retirer la laize ' + fN(d.valeur_mm) + ' mm de ' + nomF + ' ?\n\nElle reste sur la matière, avec son stock.')) return;
+          try {
+            mpVarSetData(await api('/api/stock/variantes/' + v.id + '/laizes/' + d.laize_id, { method: 'DELETE' }));
+            showToast('Laize retirée du fournisseur.', 'success');
+          } catch (err) { showToast(err.message, 'error'); }
+        } },
+      }, iconEl('trash-2', 13)) : el('span', null, '')));
+  });
+  if (!det.length) {
+    grille.appendChild(el('div', { cls: 'mp-lzc-vide' }, 'Aucune laize rattachée. Ajouter ci-dessous celles que '
+      + nomF + ' livre' + (edit ? '.' : ' (administrateurs matières).')));
+  }
+
+  if (edit) {
+    const lies = new Set(det.map(d => Math.round(d.valeur_mm || 0)));
+    const proposees = new Set((data.laizes_matiere || []).map(l => Math.round(l.valeur_mm || 0)));
+    lignesVues.filter(deCetArticle).forEach(l => { if (l.laize_mm) proposees.add(Math.round(l.laize_mm)); });
+    const libres = [...proposees].filter(x => x && !lies.has(x)).sort((a, b) => a - b);
+    const lzInp = el('input', { cls: 'mp-cond-inp', attrs: { type: 'number', min: '1', max: '5000', step: '1',
+      inputmode: 'numeric', placeholder: 'Laize (mm)', 'aria-label': 'Laize en mm' } });
+    const mlInp = el('input', { cls: 'mp-cond-inp', attrs: { type: 'number', min: '0', step: '1', inputmode: 'numeric',
+      placeholder: 'm / bobine', 'aria-label': 'Mètres par bobine (facultatif)',
+      title: 'Facultatif. Vide : longueur de l\'article' } });
+    const okBtn = el('button', { cls: 'mp-det-btn', type: 'button' }, iconEl('plus', 13), 'Ajouter');
+    const ajouter = async () => {
+      const mm = parseFloat(String(lzInp.value || '').replace(',', '.'));
+      if (!(mm > 0)) { showToast('Laize invalide — valeur en mm attendue.', 'error'); lzInp.focus(); return; }
+      const r = mpLireNombre(mlInp);
+      if (r.error) { showToast('m / bobine : valeur > 0, ou vide.', 'error'); return; }
+      okBtn.disabled = true;
+      S.mpFocusAjoutLaize = v.id;
+      const body = { valeur_mm: mm };
+      if (!r.vide) body.ml_bobine = r.value;
+      const deja = lies.has(Math.round(mm));
+      const msg = deja ? 'Conditionnement ajouté sur la ' + fN(mm) + ' mm.' : 'Laize ' + fN(mm) + ' mm ajoutée à ' + nomF + '.';
+      if (!(await mpPoserLaizeFourn(v, body, msg))) okBtn.disabled = false;
+    };
+    okBtn.addEventListener('click', ajouter);
+    [lzInp, mlInp].forEach(x => x.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ajouter(); } }));
+    grille.appendChild(el('div', { cls: 'mp-lzc-ajout' },
+      lzInp, mlInp, okBtn,
+      libres.length ? el('span', { cls: 'mp-lzc-sugg' }, 'Connues :',
+        ...libres.map(x => el('button', {
+          cls: 'mp-lz-chip mp-lz-chip-btn', type: 'button',
+          attrs: { title: 'Reprendre ' + fN(x) + ' mm' },
+          on: { click: () => { lzInp.value = String(x); mlInp.focus(); } },
+        }, fN(x)))) : null));
+    if (S.mpFocusAjoutLaize === v.id) {
+      S.mpFocusAjoutLaize = null;
+      requestAnimationFrame(() => lzInp.focus());
+    }
+  }
+  return el('div', { cls: 'mp-det' },
+    el('div', { cls: 'mp-ld-titre' }, 'Laizes livrées', el('span', null, nomF)),
+    grille, piedEl);
+}
+
+// Le tableau des fournisseurs, suivi de la carte des prix d'achat.
+function mpAvecPrix(card, m, data) {
+  const prix = buildMpPrixCard(m, data);
+  return prix ? el('div', null, card, prix) : card;
+}
+
+function buildMpPrixCard(m, data) {
+  const grille = buildMpPrixParLaize(m, data);
+  if (!grille) return null;
+  const unite = (data.prix && data.prix.unite) || '';
+  const princ = (data.variantes || []).find(v => v.principal && v.actif);
+  const vig = mpPrixFourchette(((data.prix && data.prix.lignes) || []).filter(l => l.principal).map(l => Number(l.prix || 0)));
+  return el('div', { cls: 'mp-prix-card' },
+    el('div', { cls: 'mp-prix-card-head' },
+      el('div', { cls: 'mp-prix-card-titre' }, 'Prix d\'achat par fournisseur'),
+      vig
+        ? el('span', { cls: 'mp-prix-vig', attrs: { title: 'Prix en vigueur : celui du fournisseur principal, repris par les devis et Coûts matières' } },
+            'En vigueur ' + vig.txt + ' ' + unite + (princ ? ' · ' + (princ.fournisseur_nom || 'principal') : ''))
+        : el('span', { cls: 'mp-prix-vig', style: 'background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn)' },
+            'Aucun prix en vigueur')),
+    grille);
 }
 
 // ── Prix d'achat par fournisseur et par laize ─────────────────────
@@ -11702,9 +12833,9 @@ function buildMpPrixParLaize(m, data) {
   });
   tbl.appendChild(tb);
   return el('div', { cls: 'mp-prix-bloc' },
-    el('div', { cls: 'mp-empl-card-title', style: 'margin:16px 0 4px' }, 'Prix d\'achat par laize'),
-    el('div', { cls: 'mp-hint', style: 'margin:0 0 8px' },
-      'Un prix par fournisseur et par laize. Le prix en vigueur (encadré) est celui du principal ; il sert aux devis et aux coûts produits.'),
+    el('div', { cls: 'mp-hint', style: 'margin:4px 0 8px' },
+      'Un prix par fournisseur et par laize. Le prix en vigueur (surligné) est celui du fournisseur principal ; il sert aux devis et aux coûts produits.'
+      + (peut ? ' Un prix saisi est enregistré dès qu\'on quitte le champ.' : '')),
     el('div', { cls: 'mp-var-scroll' }, tbl));
 }
 
@@ -11807,7 +12938,9 @@ function openMpDeplacerModal(m, v) {
   const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const toutes = (Array.isArray(S.matieres) ? S.matieres : [])
     .filter(x => x.id !== m.id && x.actif !== false && x.actif !== 0)
-    .sort((a, b) => String(a.designation || a.reference || '').localeCompare(String(b.designation || b.reference || ''), 'fr'));
+    // Même catégorie d'abord : c'est presque toujours là qu'on range l'article.
+    .sort((a, b) => ((a.categorie === m.categorie ? 0 : 1) - (b.categorie === m.categorie ? 0 : 1))
+      || String(a.designation || a.reference || '').localeCompare(String(b.designation || b.reference || ''), 'fr'));
   const remplir = () => {
     const k = norm(q.value);
     sel.innerHTML = '';
@@ -11845,13 +12978,45 @@ function openMpDeplacerModal(m, v) {
   };
   okBtn.addEventListener('click', valider);
   sel.addEventListener('dblclick', valider);
+  const nouvBtn = el('button', {
+    cls: 'mp-det-btn', type: 'button',
+    attrs: { title: 'Créer une matière (libellé commercial) et y ranger cet article' },
+    on: { click: () => mpDeplacerVersNouvelle(m, v) },
+  }, iconEl('plus', 13), 'Nouvelle matière');
   box.appendChild(el('div', { cls: 'mp-modal-actions' },
+    nouvBtn,
     el('div', { cls: 'mp-modal-actions-right' },
       el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
       okBtn)));
   overlay.appendChild(box);
   mroot.appendChild(overlay);
   q.focus();
+}
+
+// Crée une matière à partir de l'article (même catégorie, libellé repris), puis
+// y range l'article. Le formulaire de création reste celui de MyStock.
+function mpDeplacerVersNouvelle(m, v) {
+  const origine = m.id;
+  openMatiereCreateModal({
+    categorie: m.categorie,
+    sous_section: m.sous_section || '',
+    reference: v.ref_fournisseur || '',
+    designation: mpVarLibelle(v) || v.libelle_technique || m.designation || '',
+  }, { onCreated: async (created) => {
+    if (!created || !created.id) return;
+    try {
+      const d = await api('/api/stock/variantes/' + v.id + '/deplacer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matiere_id: created.id }),
+      });
+      showToast('Matière créée, article rangé dessous'
+        + ((d.deplacement && d.deplacement.principal) ? ' comme fournisseur principal.' : '.'), 'success');
+    } catch (err) {
+      showToast('Matière créée, mais l\'article n\'a pas été déplacé : ' + err.message, 'error');
+    }
+    if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === origine) await refreshSelMatiere();
+    else await loadMatiere(origine);
+  } });
 }
 
 function openMpVarianteModal(m, existing) {
@@ -11971,7 +13136,7 @@ async function deleteMpEmplacement(m, e) {
 
 async function openMpEmplacementModal(m, existing) {
   if (!m || S.stockReadOnly) return;
-  if (!_emplListFromDB.length) await fetchEmplacementsFromDB();
+  try { S.mpEmplConnus = await api('/api/stock/mp-emplacements-connus'); } catch (e) { /* liste vide : saisie libre */ }
   closeMroot();
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
@@ -11992,11 +13157,7 @@ async function openMpEmplacementModal(m, existing) {
   box.appendChild(el('div', { cls: 'mp-modal-sub' },
     (m.reference || '') + (m.designation ? ' — ' + m.designation : '')));
 
-  const f = mpEmplacementFieldFlottant();
-  if (existing) {
-    f.emplInp.value = existing.emplacement;
-    f.emplInp.readOnly = true;
-  }
+  const f = mpEmplCombo(m, existing ? existing.emplacement : '');
   box.appendChild(f.wrap);
 
   let laizeSel = null;
@@ -12005,13 +13166,9 @@ async function openMpEmplacementModal(m, existing) {
     laizeSel = el('select');
     laizeSel.appendChild(el('option', { value: '' }, laizes.length ? 'Choisir une laize…' : 'Aucune laize associée'));
     laizes.forEach(l => laizeSel.appendChild(el('option', { value: String(l.laize_id) },
-      l.label || (l.valeur_mm + ' mm'))));
-    if (existing && existing.laize_id) {
-      laizeSel.value = String(existing.laize_id);
-      laizeSel.disabled = true;
-    } else if (laizes.length === 1) {
-      laizeSel.value = String(laizes[0].laize_id);
-    }
+      (l.label || (l.valeur_mm + ' mm')) + ' · ' + fN(l.quantite) + ' bob. en stock')));
+    if (existing && existing.laize_id) laizeSel.value = String(existing.laize_id);
+    else if (laizes.length === 1) laizeSel.value = String(laizes[0].laize_id);
     box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Laize'), laizeSel));
   }
 
@@ -12020,16 +13177,27 @@ async function openMpEmplacementModal(m, existing) {
     attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' },
   });
   if (existing) qtyInp.value = String(existing.quantite);
+  const metresEl = el('div', { cls: 'mp-hint', style: 'margin-top:-6px' });
+  const majMetres = () => {
+    const q = parseFloat(String(qtyInp.value || '').replace(',', '.'));
+    const mt = q > 0 ? mpMetresDe(m, q) : null;
+    metresEl.textContent = mt != null ? '= ' + fN(mt) + ' m au métrage standard ('
+      + fN(m.metres_lineaires_par_bobine) + ' m / bobine)' : '';
+  };
+  qtyInp.addEventListener('input', majMetres);
+  majMetres();
   box.appendChild(el('div', { cls: 'mp-field' },
     el('label', null, mpQuantiteFieldLabel(m)), qtyInp));
-  box.appendChild(el('div', { cls: 'mp-hint' },
-    'Le stock total n\'est pas modifié : l\'emplacement indique où se trouve la matière.'));
+  box.appendChild(metresEl);
+  box.appendChild(el('div', { cls: 'mp-hint' }, existing
+    ? 'Changer l\'emplacement ou la laize déplace la ligne ; si la cible existe déjà, les quantités s\'additionnent. Le stock total n\'est pas modifié.'
+    : 'Le stock total n\'est pas modifié : l\'emplacement indique où se trouve la matière. Un emplacement déjà renseigné pour cette laize reçoit la quantité en plus.'));
   const errEl = el('div', { cls: 'mp-admin-err' });
   box.appendChild(errEl);
 
   const submit = async (btn) => {
     errEl.textContent = '';
-    const code = mpEmplacementValue(f.emplInp);
+    const code = mpEmplacementValue(f.inp);
     if (!code) { errEl.textContent = 'Emplacement obligatoire.'; return; }
     const errCode = validateMpEmplacement(code);
     if (errCode) { errEl.textContent = errCode; return; }
@@ -12042,13 +13210,28 @@ async function openMpEmplacementModal(m, existing) {
     }
     btn.disabled = true;
     try {
-      await api('/api/stock/matieres/' + m.id + '/emplacements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emplacement: code, quantite: qv, laize_id: laizeId }),
-      });
+      let msg = 'Emplacement enregistré.';
+      if (existing && existing.id) {
+        const r = await api('/api/stock/matieres/' + m.id + '/emplacements/' + existing.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emplacement: code, quantite: qv, laize_id: laizeId }),
+        });
+        if (r && r.fusion) msg = 'Regroupé avec ' + code + '.';
+      } else {
+        // Même emplacement, même laize : la quantité s'ajoute à celle déjà posée.
+        const deja = (Array.isArray(m.emplacements) ? m.emplacements : [])
+          .find(e => e.emplacement === code && (e.laize_id || 0) === (laizeId || 0));
+        const total = deja ? (parseFloat(deja.quantite) || 0) + qv : qv;
+        await api('/api/stock/matieres/' + m.id + '/emplacements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emplacement: code, quantite: total, laize_id: laizeId }),
+        });
+        if (deja) msg = 'Ajouté à ' + code + ' : ' + mpStockLine(total, m) + ' au total.';
+      }
       closeMroot();
-      showToast('Emplacement enregistré.', 'success');
+      showToast(msg, 'success');
       await fetchEmplacementsFromDB();
       await loadMatieres();
     } catch (err) {
@@ -12058,6 +13241,7 @@ async function openMpEmplacementModal(m, existing) {
   };
   const saveBtn = el('button', { cls: 'btn', type: 'button' }, 'Enregistrer');
   saveBtn.addEventListener('click', () => submit(saveBtn));
+  qtyInp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(saveBtn); } });
   if (m.laizee && !laizes.length) saveBtn.disabled = true;
   box.appendChild(el('div', { cls: 'mp-modal-actions' },
     el('div', { cls: 'mp-modal-actions-right' },
@@ -12067,7 +13251,7 @@ async function openMpEmplacementModal(m, existing) {
   ));
   overlay.appendChild(box);
   mroot.appendChild(overlay);
-  requestAnimationFrame(() => (existing ? qtyInp : f.emplInp).focus());
+  requestAnimationFrame(() => (existing ? qtyInp : f.inp).focus());
 }
 
 
@@ -12274,7 +13458,7 @@ function renderModalInventaireMatiere(data) {
     style: { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '10px', flexWrap: 'wrap' },
   },
     el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
-    el('button', { cls: 'btn-confirm', on: { click: async () => {
+    el('button', { cls: 'btn-confirm inventaire', on: { click: async () => {
       // Construire les lignes valides (comptée renseignée)
       const payload = [];
       lignes.forEach(li => {
@@ -12683,6 +13867,7 @@ async function toggleMatieresActif(item) {
       });
       showToast('Référence réactivée.', 'success');
     }
+    S.mpInactives = null;
     await loadMatieresAdminList();
     await loadMatieres();
     renderMatieresAdminDrawer();
@@ -15222,933 +16407,12 @@ function buildEmplacementDetail() {
 
   return el('div',{cls:'content'}, back, head, actions, refBlock, buildMvtHistory(sel.mouvements||[], '', { primary:'emplacement' }));
 }
-// ── Config traçabilité ────────────────────────────────────────────
-const TRACA_POSTES = [
-  { id:'bureaux',    label:'Bureaux',      icon:'briefcase', color:'#6366f1', colorBg:'rgba(99,102,241,.12)' },
-  { id:'cohesio1',   label:'Cohésio 1',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
-  { id:'cohesio2',   label:'Cohésio 2',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
-  { id:'logistique', label:'Logistique',   icon:'truck',     color:'#10b981', colorBg:'rgba(16,185,129,.12)' },
-];
-
-// Outils de MyPrint adressables comme un poste (?tab=traca&poste=…), mais qui
-// ne sont pas un poste d'étiquetage : ils ont leur propre écran.
-const TRACA_OUTILS = [
-  { id:'specifiques', label:'Étiquettes spécifiques', icon:'tag', sous:'Par client, séries, SSCC' },
-];
-
-const TRACA_FORMATS = [
-  { id:'a4p',     label:'A4 paysage',   dims:'297×210 mm' },
-  { id:'120x105', label:'120×105 mm',   dims:'120×105 mm' },
-  { id:'105x50',  label:'105×50 mm',    dims:'105×50 mm'  },
-  // Etiquettes bobine. Les formats 40x20 et 40x30 de l'ancienne
-  // identification bobine ont ete retires avec elle : plus aucune etiquette
-  // ne les utilise, et un format orphelin dans la liste laisse croire qu'on
-  // peut encore imprimer dessus.
-  { id:'100x150', label:'100×150 mm',   dims:'100×150 mm' },
-  { id:'100x50',  label:'100×50 mm',    dims:'100×50 mm'  },
-];
-
-const TRACA_ETIQUETTES = [
-  // Logistique
-  { id:'id_palette_a4',   label:'Identification palette',  format:'a4p',    postes:['logistique']               },
-  { id:'nb_palettes_logi',label:'Nombre de palettes',      format:'120x105',postes:['logistique']               },
-  // Bureaux
-  { id:'id_plaque',       label:'Identification plaques',  format:'105x50', postes:['bureaux']                  },
-  { id:'id_cliche',       label:'Identification clichés',  format:'105x50', postes:['bureaux']                  },
-  // Cohésio
-  { id:'nb_palettes_c',   label:'Nombre de palettes',      format:'105x50', postes:['cohesio1','cohesio2']      },
-  { id:'id_carton',       label:'Identification carton',   format:'105x50', postes:['cohesio1','cohesio2']      },
-  // Identification bobine — section présente sur TOUS les postes.
-  //
-  // Elle remplace l'ancienne étiquette bobine 40×20 des Cohésio, qui ne
-  // portait que la référence produit et le nombre d'étiquettes par bobine :
-  // ni lot, ni claim FSC, ni laize. Une bobine entamée réétiquetée avec ça
-  // perdait sa traçabilité matière, ce qui n'est plus tenable sous
-  // certification.
-  //
-  // Le format n'est pas un choix de l'utilisateur mais une propriété du
-  // poste : la logistique étiquette des bobines qui partent en rack et doit
-  // les lire de loin (grand format), les Cohésio recollent une étiquette sur
-  // le mandrin d'une bobine en cours (petit format). Le bureau ADV dépanne
-  // les deux, donc lui seul voit les deux entrées.
-  { id:'id_bobine_grand', label:'Identification bobine — grand format', format:'100x150',
-    groupe:'bobines', postes:['logistique','bureaux'] },
-  { id:'id_bobine_petit', label:'Identification bobine — petit format',  format:'100x50',
-    groupe:'bobines', postes:['cohesio1','cohesio2','bureaux'] },
-];
-
-// Sections d'un poste. Une étiquette sans `groupe` reste dans la liste
-// principale ; celles qui en portent un sont rassemblées sous ce titre, sur
-// le modèle de la section « Communication » des Bureaux.
-const TRACA_GROUPES = [
-  { id:'bobines', label:'Identification bobines', icon:'layers' },
-];
-
-// -- Affiches memo (poste Bureaux > Communication) --
-const TRACA_AFFICHES = [
-  { id:'expe-z0',        variant:'cyan',
-    title:"Tu prepares une expe ?",
-    sub:"Pense a deplacer ton stock en <b>Z0</b>.",
-    icon:'truck',
-    dark:'/static/affiches/affiche-expe-z0.html',
-    light:'/static/affiches/affiche-expe-z0-light.html' },
-  { id:'palette-z1',     variant:'amber',
-    title:"Ta palette est complete ?",
-    sub:"Pense a l'ajouter en <b>Z1</b>.",
-    icon:'layers',
-    dark:'/static/affiches/affiche-palette-z1.html',
-    light:'/static/affiches/affiche-palette-z1-light.html' },
-  { id:'verif-inv',      variant:'violet',
-    title:"Tu verifies un stock ?",
-    sub:"Profites-en pour faire l'<b>inventaire</b>.",
-    icon:'clipboard',
-    dark:'/static/affiches/affiche-verif-inventaire.html',
-    light:'/static/affiches/affiche-verif-inventaire-light.html' },
-];
-
-// ── Helpers impression ────────────────────────────────────────────
-function _printWin(title, pageSize, css, body) {
-  const w = window.open('', '_blank');
-  if (!w) { showToast('Autorisez les popups pour imprimer', 'error'); return null; }
-  w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>${title}</title>
-<style>
-@page { size: ${pageSize}; margin: 0; }
-*{ margin:0; padding:0; box-sizing:border-box; }
-body{ font-family: Arial, Helvetica, sans-serif; background:#fff; }
-${css}
-</style>
-</head><body>${body}<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js?v=2"><\/script>
-</body></html>`);
-  w.document.close();
-  return w;
-}
-
-function _inp(placeholder, opts={}) {
-  return el('input', { cls:'field-input', attrs:{ type: opts.type||'text', placeholder, autocomplete:'off', ...(opts.attrs||{}) }, style: opts.style||{} });
-}
-
-// ── 1. Logistique — Identification palette (A4 paysage) ───────────
-function buildIdPaletteA4Form() {
-  let _ref='', _qty='', _unit=allUnitLabels()[0]||'étiquettes', _qctn='', _fsc=false;
-  function doPrint() {
-    const ref = _ref.trim(), qty = _qty.trim(), qctn = _qctn.trim();
-    if (!ref) { showToast('Référence requise', 'error'); return; }
-    // Format nombre avec points entre milliers
-    function fmtNb(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
-    // Abréviation étiquettes → ETQ
-    const unitDisplay = (_unit||'').toLowerCase()==='étiquettes'?'ETQ':(_unit||'').toUpperCase();
-    const quv = qty ? fmtNb(qty) + '\u00a0' + unitDisplay : '';
-    const unitLow = _unit.toLowerCase().replace(/s$/, '');  // 'cartons' → 'carton'
-    const showCtn = !!qctn && unitLow !== 'carton';
-    const qctnNum = parseInt(qctn) || 0;
-    const ctnLabel = qctnNum === 1 ? '1\u00a0CARTON' : (fmtNb(qctn) + '\u00a0CARTONS');
-    _printWin('Palette — '+ref, '297mm 210mm',
-      `.label{width:297mm;height:210mm;padding:14mm 18mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;gap:10mm;
-              text-align:center;page-break-after:always;page-break-inside:avoid;
-              font-family:'Berlin Sans FB','Berlin Sans FB Demi',Arial,sans-serif;text-transform:uppercase}
-       .ref{font-size:112pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1;text-decoration:underline}
-       .quv{font-size:100pt;font-weight:800;color:#111}
-       .qctn{font-size:72pt;font-weight:700;color:#333}
-       /* Bandeau FSC : même code visuel que l'étiquette bobine matière, pour
-          qu'un cariste lise la même chose sur une palette et sur une bobine.
-          Contour épais et non couleur seule : les imprimantes d'atelier sont
-          en noir et blanc. */
-       .fsc-banner{font-size:34pt;font-weight:900;letter-spacing:3pt;
-                   padding:4mm 14mm;border:3mm solid #0f7c3a;border-radius:6mm;
-                   background:#e6f4ea;color:#0f7c3a}`,
-      `<div class="label">
-         ${_fsc?`<div class="fsc-banner">PRODUIT CERTIFIÉ FSC</div>`:''}
-         <div class="ref">${ref} FS</div>
-         ${quv?`<div class="quv">${quv}</div>`:''}
-         ${showCtn?`<div class="qctn">(${ctnLabel})</div>`:''}
-       </div>`);
-  }
-  const rInp=_inp('Référence produit — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value;});
-  // Quantité
-  const qtyInp=_inp('Quantité — ex. 500',{type:'number',attrs:{min:'1',step:'1'}});
-  qtyInp.style.width='100%';
-  qtyInp.addEventListener('input',e=>{_qty=e.target.value;});
-  // Sélecteur unité de vente (même liste que le dashboard add-form)
-  const unitSel=document.createElement('select');
-  unitSel.className='field-input';
-  unitSel.style.cssText='width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;cursor:pointer;outline:none';
-  allUnitLabels().forEach(u=>{
-    const opt=document.createElement('option');
-    opt.value=u; opt.textContent=u;
-    if(u===_unit) opt.selected=true;
-    unitSel.appendChild(opt);
-  });
-  unitSel.addEventListener('change',e=>{_unit=e.target.value;});
-  // Cartons
-  const cInp=_inp('Quantité cartons — ex. 20',{type:'text'}); cInp.addEventListener('input',e=>{_qctn=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  // Ligne qty + unité côte-à-côte
-  const qtyUnitRow=el('div',{cls:'etiq-form-row'},
-    el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Quantité'),qtyInp),
-    el('div',{cls:'etiq-form-field',style:{flex:'1.6'}},el('label',{cls:'etiq-form-label'},'Unité de vente'),unitSel)
-  );
-  // Case FSC : l'étiquette palette est saisie à la main (elle ne descend pas
-  // d'un lot précis), donc le claim ne peut pas être hérité automatiquement.
-  // Non cochée par défaut — sur une certification, l'oubli d'un marquage est
-  // récupérable, un marquage abusif ne l'est pas.
-  const fscChk=el('input',{attrs:{type:'checkbox',id:'palette-fsc-chk'},style:{width:'16px',height:'16px',cursor:'pointer'}});
-  fscChk.addEventListener('change',e=>{_fsc=e.target.checked;});
-  const fscRow=el('label',{cls:'etiq-form-field',style:{display:'flex',flexDirection:'row',alignItems:'center',gap:'10px',cursor:'pointer'}},
-    fscChk,
-    el('span',{cls:'etiq-form-label',style:{margin:'0'}},'Palette certifiée FSC — ajouter le bandeau sur l\'étiquette')
-  );
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-    qtyUnitRow,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité cartons'),cInp),
-    fscRow,
-    btn);
-}
-
-// ── 2. Logistique — Nombre de palettes (120mm × 105mm) ────────────
-function buildNbPalettesLogiForm() {
-  let _n='';
-  function doPrint() {
-    const n=parseInt(_n)||0;
-    if(n<1||n>500){showToast('Nombre invalide (1–500)','error');return;}
-    let html='';
-    for(let i=1;i<=n;i++)
-      html+=`<div class="label"><div class="head">PALETTE</div><div class="num">${i}/${n}</div></div>`;
-    _printWin('Palettes','120mm 105mm',
-      `.label{width:120mm;height:105mm;display:flex;flex-direction:column;align-items:center;
-              justify-content:center;gap:7mm;text-align:center;
-              page-break-after:always;page-break-inside:avoid}
-       .head{font-size:62pt;font-weight:900;letter-spacing:4pt;text-transform:uppercase}
-       .num{font-size:86pt;font-weight:900;letter-spacing:2pt}`,html);
-  }
-  const nInp=_inp('Nombre de palettes — ex. 8',{type:'number',attrs:{min:'1',max:'500'},style:{width:'140px'}});
-  nInp.addEventListener('input',e=>{_n=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Nombre de palettes *'),nInp),
-    btn);
-}
-
-// ── 3. Bureaux — Identification plaques (105mm × 74mm + EAN128) ───
-function buildIdPlaqueForm() {
-  let _num='', _fl='', _fw='', _note='';
-  const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
-  function doPrint() {
-    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim(), note=_note.trim();
-    if(!num){showToast('Numéro de plaque requis','error');return;}
-    const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
-    const w=_printWin('Plaque '+num,'105mm 74mm',
-      `.label{width:105mm;height:74mm;padding:3mm 4mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;text-align:center;gap:1.5mm;
-              page-break-after:always;page-break-inside:avoid}
-       .head{font-size:14pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
-       .num{font-size:88pt;font-weight:900;letter-spacing:.5pt;line-height:0.95}
-       .fmt{font-size:16pt;font-weight:600;color:#333}
-       .note{font-size:12pt;font-weight:500;color:#444;margin-top:1mm}
-       .bar{display:flex;justify-content:center;margin-top:1.5mm}
-       svg{max-width:97mm;height:10mm}`,
-      `<div class="label">
-         <div class="head">Plaque N°</div>
-         <div class="num">${num}</div>
-         ${fmt?`<div class="fmt">${fmt}</div>`:''}
-         ${note?`<div class="note">${escHtml(note)}</div>`:''}
-         <div class="bar"><svg id="bc"></svg></div>
-       </div>
-       <script src="${JSBARCODE_CDN}"><\/script>
-       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:36});}catch(e){}window.focus();window.print();}<\/script>`);
-    if(w) w.document.close();
-  }
-  const nInp=_inp('N° de plaque — ex. 1234'); nInp.addEventListener('input',e=>{_num=e.target.value;});
-  const lInp=_inp('L (mm)',{style:{width:'90px'}}); lInp.addEventListener('input',e=>{_fl=e.target.value;});
-  const wInp=_inp('l (mm)',{style:{width:'90px'}}); wInp.addEventListener('input',e=>{_fw=e.target.value;});
-  const noteInp=_inp('Note (optionnel)'); noteInp.addEventListener('input',e=>{_note=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Numéro de plaque *'),nInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format L (mm)'),lInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format l (mm)'),wInp)),
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Note'),noteInp),
-    btn);
-}
-
-// ── 4. Bureaux — Identification clichés (105mm × 74mm + EAN128) ───
-function buildIdClicheForm() {
-  let _num='', _fl='', _fw='';
-  const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
-  function doPrint() {
-    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim();
-    if(!num){showToast('Numéro de cliché requis','error');return;}
-    const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
-    const w=_printWin('Cliché '+num,'105mm 74mm',
-      `.label{width:105mm;height:74mm;padding:3mm 4mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;text-align:center;gap:1.5mm;
-              page-break-after:always;page-break-inside:avoid}
-       .head{font-size:14pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
-       .num{font-size:88pt;font-weight:900;letter-spacing:.5pt;line-height:0.95}
-       .fmt{font-size:16pt;font-weight:600;color:#333}
-       .bar{display:flex;justify-content:center;margin-top:1.5mm}
-       svg{max-width:97mm;height:10mm}`,
-      `<div class="label">
-         <div class="head">Cliché N°</div>
-         <div class="num">${num}</div>
-         ${fmt?`<div class="fmt">${fmt}</div>`:''}
-         <div class="bar"><svg id="bc"></svg></div>
-       </div>
-       <script src="${JSBARCODE_CDN}"><\/script>
-       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:36});}catch(e){}window.focus();window.print();}<\/script>`);
-    if(w) w.document.close();
-  }
-  const nInp=_inp('N° de cliché — ex. 5678'); nInp.addEventListener('input',e=>{_num=e.target.value;});
-  const lInp=_inp('L (mm)',{style:{width:'90px'}}); lInp.addEventListener('input',e=>{_fl=e.target.value;});
-  const wInp=_inp('l (mm)',{style:{width:'90px'}}); wInp.addEventListener('input',e=>{_fw=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Numéro de cliché *'),nInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format L (mm)'),lInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format l (mm)'),wInp)),
-    btn);
-}
-
-// ── 5. Cohésio 1 & 2 — Nombre de palettes (105mm × 50mm) ─────────
-function buildNbPalettesCForm() {
-  let _ref='', _n='';
-  function doPrint() {
-    const ref=_ref.trim(), n=parseInt(_n)||0;
-    if(!ref){showToast('Référence requise','error');return;}
-    if(n<1||n>500){showToast('Nombre invalide (1–500)','error');return;}
-    let html='';
-    for(let i=1;i<=n;i++)
-      html+=`<div class="label">
-        <div class="l1">Produit\u00a0: ${ref}</div>
-        <div class="l2">Palette n.\u00a0:</div>
-        <div class="l3">${i}/${n}</div>
-      </div>`;
-    _printWin('Palettes — '+ref,'105mm 50mm',
-      `.label{width:105mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;gap:1mm;
-              page-break-after:always;page-break-inside:avoid;text-align:center}
-       .l1{font-size:28pt;font-weight:700;word-break:break-all;line-height:1.2}
-       .l2{font-size:28pt;font-weight:700;line-height:1.2}
-       .l3{font-size:43pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
-      html);
-  }
-  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
-  const nInp=_inp('Nb palettes',{type:'number',attrs:{min:'1',max:'500'},style:{width:'120px'}}); nInp.addEventListener('input',e=>{_n=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Nb palettes *'),nInp)),
-    btn);
-}
-
-// ── 6. Cohésio 1 & 2 — Identification carton (105mm × 50mm) ──────
-function buildIdCartonForm() {
-  let _ref='', _bpc='', _epb='';
-  function doPrint() {
-    const ref=_ref.trim(), bpc=_bpc.trim(), epb=_epb.trim();
-    if(!ref){showToast('Référence requise','error');return;}
-    const cond=[bpc?bpc+' bob/ctn':'', epb?epb+' étiq/bob':''].filter(Boolean).join(' · ');
-    _printWin('Carton — '+ref,'105mm 50mm',
-      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:20pt;font-weight:900;word-break:break-all}
-       .cond{font-size:13pt;font-weight:600;color:#333}`,
-      `<div class="label"><div class="ref">${ref}</div>${cond?`<div class="cond">${cond}</div>`:''}</div>`);
-  }
-  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
-  const bInp=_inp('Bobines/carton — ex. 12',{type:'number',style:{width:'130px'}}); bInp.addEventListener('input',e=>{_bpc=e.target.value;});
-  const eInp=_inp('Étiquettes/bobine — ex. 500',{type:'number',style:{width:'160px'}}); eInp.addEventListener('input',e=>{_epb=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Bobines / carton'),bInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Étiquettes / bobine'),eInp)),
-    btn);
-}
-
-// ── 7. Tous postes — Identification bobine matière (100×150 / 100×50) ──
-//
-// Remplace l'ancienne étiquette bobine 40×20. Le contenu est celui de
-// l'étiquette imprimée en réception matière (MyStock › Réception) : même
-// bandeau FSC, mêmes intitulés, même code-barres CODE128. Une bobine porte
-// ainsi la même étiquette qu'elle sorte à la réception, en logistique ou au
-// pied de la machine — c'est ce qui rend la traçabilité lisible d'un bout à
-// l'autre de la chaîne.
-//
-// `taille` vaut 'grand' (100×150, logistique) ou 'petit' (100×50, Cohésio).
-// Le bureau ADV a accès aux deux.
-//
-// Les champs sont pré-remplis depuis un lot de réception mais restent
-// éditables : une bobine peut avoir été reçue avant MySifa, ou son étiquette
-// être refaite pour une bobine qui n'a jamais été scannée. Si l'API n'est pas
-// joignable (opérateur hors ligne, rôle sans accès stock), le sélecteur reste
-// vide et le formulaire fonctionne en saisie manuelle — une étiquette de
-// traçabilité ne doit jamais être indisponible faute de réseau.
-function buildIdBobineMatiereForm(taille) {
-  const grand = (taille === 'grand');
-  const JSBARCODE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
-  const esc = s => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const SEL_CSS = 'width:100%;background:var(--bg);border:1px solid var(--border);'
-    + 'border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);'
-    + 'font-family:inherit;cursor:pointer;outline:none';
-
-  let lots = [];              // lots de réception récents ; peut rester vide
-  let lotCourant = null;
-  let toutesBobines = false;
-
-  const refInp   = _inp('Référence matière — ex. 1077/0026');
-  const laizeInp = _inp('Laize — ex. 570 mm');
-  const lotInp   = _inp('N° de lot');
-  const fourInp  = _inp('Fournisseur');
-  const codeInp  = _inp('Code-barres de la bobine');
-  const certInp  = _inp('N° de certificat FSC du fournisseur');
-  const copInp   = _inp('1', { type:'number', attrs:{ min:'1', step:'1' } });
-  copInp.value = '1';
-
-  const claimSel = el('select', { style: SEL_CSS });
-  Object.entries(FSC_CLAIM_LABELS).forEach(([v, lbl]) => {
-    claimSel.appendChild(el('option', { attrs:{ value: v } }, lbl));
-  });
-  claimSel.value = 'non_fsc';
-
-  const lotSel = el('select', { style: SEL_CSS });
-  lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
-  lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } }, 'Chargement des réceptions…'));
-
-  const bobSel = el('select', { style: SEL_CSS });
-  const bobField = el('div', { cls:'etiq-form-row', style:{ display:'none' } },
-    el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-      el('label', { cls:'etiq-form-label' }, 'Bobine du lot'), bobSel));
-
-  // Retrouve une bobine dans les lots deja charges a partir de son code-barres.
-  // C'est ce qui fait l'interet du scan face a une saisie clavier : le code
-  // ramene avec lui le lot, le fournisseur, le claim FSC, la reference et la
-  // laize, donc l'etiquette est complete sans rien retaper.
-  function trouverBobineParCode(code) {
-    const c = String(code || '').trim().toLowerCase();
-    if (!c) return null;
-    for (const l of lots) {
-      const bs = l.bobines || [];
-      for (let i = 0; i < bs.length; i++) {
-        if (String(bs[i].code_barre || '').trim().toLowerCase() === c) {
-          return { lot: l, bobine: bs[i], index: i };
-        }
-      }
-    }
-    return null;
-  }
-
-  function appliquerCodeScanne(code) {
-    const c = String(code || '').trim();
-    if (!c) return;
-    codeInp.value = c;
-    // Une bobine scannee n'est plus « toutes les bobines » : ce qui doit
-    // sortir, c'est l'etiquette de la bobine qu'on vient de lire.
-    toutesBobines = false;
-    const t = trouverBobineParCode(c);
-    if (!t) {
-      showToast('Code ' + c + ' — bobine inconnue, complete les champs.', 'warn');
-      return;
-    }
-    lotCourant = t.lot;
-    lotSel.value  = String(t.lot.id);
-    lotInp.value  = t.lot.lot_numero || '';
-    fourInp.value = t.lot.fournisseur || '';
-    certInp.value = t.lot.certificat_fsc || '';
-    claimSel.value = t.lot.fsc_type_claim || 'non_fsc';
-    majBobSel();
-    bobSel.value = String(t.index);
-    toutesBobines = false;
-    remplirDepuisBobine(t.bobine);
-    codeInp.value = c;
-    showToast('Bobine trouvee — lot ' + (t.lot.lot_numero || '?'), 'success');
-  }
-
-  function remplirDepuisBobine(b) {
-    refInp.value   = (b && b.matiere_reference) || '';
-    laizeInp.value = (b && b.laize) || '';
-    codeInp.value  = (b && b.code_barre) || '';
-  }
-
-  function majBobSel() {
-    bobSel.innerHTML = '';
-    const bobines = (lotCourant && lotCourant.bobines) || [];
-    if (!lotCourant || !bobines.length) {
-      bobField.style.display = 'none';
-      toutesBobines = false;
-      return;
-    }
-    // « Toutes les bobines » n'a de sens qu'à partir de deux : sur un lot
-    // d'une seule bobine l'option ferait croire à un choix qui n'en est pas un.
-    if (bobines.length > 1) {
-      bobSel.appendChild(el('option', { attrs:{ value:'*' } },
-        'Toutes les bobines (' + bobines.length + ') — une étiquette chacune'));
-    }
-    bobines.forEach((b, i) => {
-      const parts = [b.code_barre || ('Bobine ' + (i + 1))];
-      if (b.matiere_reference) parts.push(b.matiere_reference);
-      if (b.laize) parts.push(b.laize);
-      bobSel.appendChild(el('option', { attrs:{ value: String(i) } }, parts.join(' · ')));
-    });
-    bobField.style.display = '';
-    bobSel.value = bobines.length > 1 ? '*' : '0';
-    toutesBobines = bobines.length > 1;
-    if (!toutesBobines) remplirDepuisBobine(bobines[0]);
-    else { refInp.value = ''; laizeInp.value = ''; codeInp.value = ''; }
-  }
-
-  bobSel.addEventListener('change', e => {
-    const v = e.target.value;
-    if (v === '*') {
-      toutesBobines = true;
-      refInp.value = ''; laizeInp.value = ''; codeInp.value = '';
-      return;
-    }
-    toutesBobines = false;
-    const bobines = (lotCourant && lotCourant.bobines) || [];
-    remplirDepuisBobine(bobines[parseInt(v, 10)]);
-  });
-
-  lotSel.addEventListener('change', e => {
-    const id = e.target.value;
-    lotCourant = id ? lots.find(l => String(l.id) === String(id)) || null : null;
-    if (!lotCourant) {
-      toutesBobines = false;
-      bobField.style.display = 'none';
-      return;
-    }
-    lotInp.value   = lotCourant.lot_numero || '';
-    fourInp.value  = lotCourant.fournisseur || '';
-    certInp.value  = lotCourant.certificat_fsc || '';
-    claimSel.value = lotCourant.fsc_type_claim || 'non_fsc';
-    majBobSel();
-  });
-
-  // Chargement asynchrone : le formulaire est utilisable immédiatement en
-  // saisie manuelle, la liste des lots se greffe quand elle arrive.
-  (async () => {
-    try {
-      const r = await api('/api/stock/traca/bobines-recentes?limit=40');
-      lots = (r && r.lots) || [];
-    } catch (e) {
-      lots = [];
-    }
-    lotSel.innerHTML = '';
-    lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
-    if (!lots.length) {
-      lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } },
-        'Aucune réception disponible'));
-      return;
-    }
-    lots.forEach(l => {
-      const parts = [l.lot_numero || ('Lot ' + l.id)];
-      if (l.fournisseur) parts.push(l.fournisseur);
-      if (l.date_reception) parts.push(l.date_reception);
-      const nb = (l.bobines || []).length;
-      if (nb) parts.push(nb + ' bob.');
-      lotSel.appendChild(el('option', { attrs:{ value: String(l.id) } }, parts.join(' · ')));
-    });
-  })();
-
-  // Une entrée = une étiquette imprimée.
-  function etiquettesAImprimer() {
-    const copies = Math.max(1, Math.min(parseInt(copInp.value, 10) || 1, 200));
-    const commun = {
-      lot: lotInp.value.trim(),
-      fournisseur: fourInp.value.trim(),
-      certificat: certInp.value.trim(),
-      claim: claimSel.value || 'non_fsc',
-    };
-    const out = [];
-    const bobines = (lotCourant && lotCourant.bobines) || [];
-    if (toutesBobines && bobines.length) {
-      bobines.forEach(b => {
-        for (let i = 0; i < copies; i++) out.push(Object.assign({
-          ref: b.matiere_reference || '',
-          laize: b.laize || '',
-          code: b.code_barre || commun.lot,
-        }, commun));
-      });
-      return out;
-    }
-    const un = Object.assign({
-      ref: refInp.value.trim(),
-      laize: laizeInp.value.trim(),
-      code: codeInp.value.trim() || commun.lot,
-    }, commun);
-    for (let i = 0; i < copies; i++) out.push(un);
-    return out;
-  }
-
-  // Gabarits — miroir HTML des deux templates ZPL de la réception matière
-  // (print_render.py : DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL pour le grand,
-  // DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL pour le petit). Même ordre des
-  // blocs, mêmes intitulés, même hiérarchie de tailles.
-  //
-  // Strictement noir et blanc : ces étiquettes sortent sur thermique
-  // monochrome, où la couleur n'existe pas. Le bandeau FSC est un pavé plein
-  // inversé (l'équivalent HTML du ^GB rempli + ^FR du ZPL), pas un fond vert
-  // ou rouge — sinon la version navigateur ment sur ce que l'étiqueteuse
-  // produira.
-  function labelHtml(d) {
-    const bandeau = (d.claim || 'non_fsc') !== 'non_fsc' ? 'MATIÈRE FSC' : 'MATIÈRE NON FSC';
-    // Ce que porte le code-barres dépend du format, parce que les deux
-    // étiquettes ne sont pas scannées par les mêmes gestes :
-    //   - grand format (logistique) : le NUMÉRO DE LOT, comme le gabarit ZPL
-    //     d'origine — c'est le lot qui rattache la bobine à sa réception, et
-    //     le code bobine reste lisible en clair dans le bloc du bas ;
-    //   - petit format (Cohésio) : le CODE BOBINE, parce que c'est lui que
-    //     l'opérateur scanne dans la traçabilité matière au pied de la
-    //     machine. Un code-barres qu'on ne peut pas scanner là où il est
-    //     collé ne sert à rien.
-    const codeBarre = (grand ? (d.lot || d.code) : (d.code || d.lot)) || '';
-    const bar = codeBarre
-      ? '<div class="bar"><svg class="bc" data-code="' + esc(codeBarre) + '"></svg></div>'
-      : '<div class="bar nobar">Pas de code-barres</div>';
-    if (grand) {
-      return '<div class="label">'
-        + '<div class="brand">__APP_ORG_NAME__</div>'
-        + '<div class="band">' + bandeau + '</div>'
-        + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
-        + bar
-        + '<div class="lines">'
-        + '<div class="strong">Référence : ' + esc(d.ref || '—') + '</div>'
-        + '<div>' + esc(d.fournisseur || '—') + '</div>'
-        + '<div>FSC : ' + esc(d.certificat || '—') + '</div>'
-        + '<div>Laize : ' + esc(d.laize || '—') + '</div>'
-        + '<div>Réception : ' + esc(d.date) + '</div>'
-        + '</div>'
-        + '<div class="sep"></div>'
-        + '<div class="code-title">CODE BOBINE</div>'
-        + '<div class="code-val">' + esc(d.code || '—') + '</div>'
-        + '</div>';
-    }
-    return '<div class="label">'
-      + '<div class="band">' + bandeau + '</div>'
-      + '<div class="grid">'
-      + '<div class="cell"><div class="lab">Référence</div><div class="val">' + esc(d.ref || '—') + '</div></div>'
-      + '<div class="cell"><div class="lab">Laize</div><div class="val">' + esc(d.laize || '—') + '</div></div>'
-      + '</div>'
-      + '<div class="grid">'
-      + '<div class="cell"><div class="lab">Fournisseur</div><div class="val sm">' + esc(d.fournisseur || '—') + '</div></div>'
-      + '<div class="cell"><div class="lab">Réception</div><div class="val sm">' + esc(d.date) + '</div></div>'
-      + '<div class="cell"><div class="lab">Opérateur</div><div class="val sm">' + esc(d.operateur || '—') + '</div></div>'
-      + '</div>'
-      + '<div class="sep"></div>'
-      + '<div class="lot-title">NUMÉRO LOT</div>'
-      + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
-      + bar
-      + '</div>';
-  }
-
-  // `print-color-adjust` sur body : sans lui le navigateur « économise »
-  // l'aplat noir du bandeau à l'impression et le rend en gris clair, ce qui
-  // fait disparaître le texte blanc posé dessus.
-  const CSS_COMMUN =
-    'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#000}'
-  + '.band{background:#000;color:#fff;text-align:center;font-weight:900;line-height:1.1}'
-  + '.bar{display:flex;justify-content:center}'
-  + '.bar.nobar{font-size:8pt;color:#555;font-style:italic}'
-  + '.sep{margin-top:auto;border-top:2px solid #000}';
-
-  const CSS_GRAND = CSS_COMMUN
-  + '.label{width:100mm;height:150mm;padding:4mm 5mm;display:flex;flex-direction:column;'
-  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
-  + '.brand{text-align:center;font-size:30pt;font-weight:900;letter-spacing:2pt;line-height:1}'
-  + '.band{margin-top:2.5mm;font-size:21pt;letter-spacing:1.5pt;padding:2.5mm 2mm}'
-  + '.lot-big{margin-top:3mm;text-align:center;font-size:22pt;font-weight:800;'
-  + '         word-break:break-all;line-height:1.1}'
-  + '.bar{margin-top:2mm}'
-  + '.bar svg{max-width:88mm;height:26mm}'
-  + '.lines{margin-top:3mm;text-align:center;font-size:12.5pt;font-weight:700;'
-  + '       line-height:1.5;word-break:break-word}'
-  + '.lines .strong{font-size:14.5pt}'
-  + '.code-title{text-align:center;font-size:12pt;font-weight:800;letter-spacing:1.5pt;margin-top:2.5mm}'
-  + '.code-val{text-align:center;font-size:15pt;font-weight:800;font-family:"Courier New",monospace;'
-  + '          word-break:break-all;margin-top:1mm}';
-
-  const CSS_PETIT = CSS_COMMUN
-  + '.label{width:100mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;'
-  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
-  + '.band{font-size:12pt;letter-spacing:1pt;padding:1.2mm 2mm}'
-  + '.grid{display:flex;gap:3mm;margin-top:1.5mm;min-width:0}'
-  + '.cell{flex:1;min-width:0;overflow:hidden}'
-  + '.lab{font-size:7pt;text-transform:uppercase;letter-spacing:.5pt;color:#333;'
-  + '     font-weight:700;line-height:1.1}'
-  + '.val{font-size:12pt;font-weight:800;line-height:1.15;word-break:break-word}'
-  + '.val.sm{font-size:9pt;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-  + '.lot-title{text-align:center;font-size:7.5pt;font-weight:800;letter-spacing:1.2pt;margin-top:1mm}'
-  + '.lot-big{text-align:center;font-size:14pt;font-weight:900;font-family:"Courier New",monospace;'
-  + '         line-height:1.1;word-break:break-all}'
-  + '.bar{margin-top:1mm}'
-  + '.bar svg{max-width:88mm;height:9mm}';
-
-  function doPrint() {
-    const items = etiquettesAImprimer();
-    if (!items.length) { showToast('Rien à imprimer', 'error'); return; }
-    if (!toutesBobines && !items[0].ref) { showToast('Référence matière requise', 'error'); return; }
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const dateStr = pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' + now.getFullYear();
-    const operateur = (S && S.user && S.user.nom) || '';
-    const html = items
-      .map(d => labelHtml(Object.assign({}, d, { date: dateStr, operateur: operateur })))
-      .join('');
-    // Le titre part dans <title> sans passer par _printWin : une référence
-    // matière contenant un chevron casserait la page d'impression.
-    const titre = esc('Bobine — ' + (items[0].ref || items[0].lot || 'sans référence'));
-    const w = _printWin(titre, grand ? '100mm 150mm' : '100mm 50mm',
-      grand ? CSS_GRAND : CSS_PETIT,
-      html
-      + '<script src="' + JSBARCODE_CDN + '"><\/script>'
-      + '<script>'
-      /* Génération synchrone, pas de window.onload : _printWin écrit son
-         propre window.onload = print() APRÈS ce bloc et écraserait notre
-         handler — les codes-barres sortiraient vides. Même contrainte que
-         recepPrintLabels. */
-      + '(function(){var n=document.querySelectorAll("svg.bc");'
-      + 'for(var i=0;i<n.length;i++){try{JsBarcode(n[i],n[i].getAttribute("data-code"),'
-      + '{format:"CODE128",displayValue:true,fontSize:' + (grand ? 15 : 9) + ','
-      + 'textMargin:0,margin:0,height:' + (grand ? 95 : 30) + '});}catch(e){}}})();'
-      + '<\/script>');
-    if (w) w.document.close();
-  }
-
-  // Scan camera du code bobine. On appelle le scanner de la reception matiere
-  // avec un callback plutot que d'en ecrire un second : c'est le meme geste,
-  // le meme materiel et les memes pieges (HTTPS obligatoire, autofocus
-  // Android, ZXing sur iOS) — un second scanner divergerait au premier
-  // correctif.
-  const scanBtn = el('button', {
-    cls: 'traca-print-btn',
-    type: 'button',
-    style: { flexShrink:'0', padding:'8px 12px' },
-  }, iconEl('scan', 14), ' Scanner');
-  scanBtn.addEventListener('click', () => {
-    if (typeof recepStartCamera !== 'function') {
-      showToast('Scanner indisponible sur cette page.', 'error');
-      return;
-    }
-    recepStartCamera({
-      hint: 'Pointez vers le code-barres de la bobine',
-      onCode: appliquerCodeScanne,
-    });
-  });
-
-  const btn = el('button', { cls:'traca-print-btn',
-    style:{ width:'100%', marginTop:'12px', justifyContent:'center' } },
-    iconEl('printer', 15), ' Imprimer');
-  btn.addEventListener('click', doPrint);
-
-  return el('div', null,
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Lot de réception'), lotSel)),
-    bobField,
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Référence matière *'), refInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Laize'), laizeInp),
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'N° de lot'), lotInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Fournisseur'), fourInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Certificat FSC'), certInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1.6' } },
-        el('label', { cls:'etiq-form-label' }, 'Code-barres'),
-        el('div', { style:{ display:'flex', gap:'6px' } }, codeInp, scanBtn)),
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Exemplaires'), copInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Statut FSC'), claimSel)),
-    btn);
-}
-
-function openTracaPrint(etiq) {
-  const overlay = el('div', { cls:'modal-overlay', on:{ click:e=>{ if(e.target===overlay){ overlay.remove(); } } } });
-  const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
-
-  const formBuilders = {
-    id_palette_a4:    buildIdPaletteA4Form,
-    nb_palettes_logi: buildNbPalettesLogiForm,
-    id_plaque:        buildIdPlaqueForm,
-    id_cliche:        buildIdClicheForm,
-    nb_palettes_c:    buildNbPalettesCForm,
-    id_carton:        buildIdCartonForm,
-    // Même formulaire pour les deux tailles : seul le gabarit d'impression
-    // change, jamais les champs saisis.
-    id_bobine_grand:  () => buildIdBobineMatiereForm('grand'),
-    id_bobine_petit:  () => buildIdBobineMatiereForm('petit'),
-  };
-  const builder = formBuilders[etiq.id];
-  const formContent = builder ? builder() : el('div',{cls:'traca-dev-banner'},iconEl('settings',14),' À venir.');
-
-  const sheet = el('div', { cls:'modal-sheet' },
-    el('span',{cls:'modal-handle'}),
-    el('div',{cls:'modal-title'}, iconEl('printer',17), '\u00a0'+etiq.label),
-    el('div',{cls:'modal-sub'}, 'Format\u00a0: ', el('strong',null,fmtObj.label+' ('+fmtObj.dims+')')),
-    formContent,
-    el('button',{cls:'btn-ghost',style:{width:'100%',marginTop:'10px'},on:{click:()=>overlay.remove()}},'Fermer')
-  );
-  overlay.appendChild(sheet);
-  document.body.appendChild(overlay);
-}
-
-function buildTracaPosteView(poste) {
-  const etiquettes = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id));
-  const backBar = el('div',{cls:'traca-back-bar'},
-    el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; tracaSyncUrl(null); renderContent(); }}},
-      iconEl('arrow-left',15), ' Postes'),
-    el('span',{cls:'traca-poste-heading'}, poste.label)
-  );
-  // Une carte d'étiquette. Extraite de la boucle parce que la vue poste rend
-  // désormais plusieurs listes : les étiquettes courantes du poste, puis une
-  // section par groupe (voir TRACA_GROUPES).
-  function mkEtiqCard(etiq){
-    const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
-    return el('div',{cls:'traca-etiq-card'},
-      el('div',{cls:'traca-etiq-icon-wrap',style:{background:poste.colorBg,color:poste.color}},
-        iconEl('tag',18)),
-      el('div',{cls:'traca-etiq-body'},
-        el('div',{cls:'traca-etiq-label'},etiq.label),
-        el('div',{cls:'traca-etiq-meta'},
-          el('span',{cls:'traca-format-badge'},fmtObj.label),
-          el('span',{cls:'traca-printer-badge'},
-            iconEl('printer',10),
-            '\u00a0'+(etiq.printer||'Non configurée'))
-        )
-      ),
-      el('button',{cls:'traca-print-btn',on:{click:()=>openTracaPrint(etiq)}},
-        iconEl('printer',13),' Imprimer')
-    );
-  }
-
-  const principales = etiquettes.filter(e=>!e.groupe);
-  let listEl = null;
-  if (etiquettes.length===0) {
-    listEl = el('div',{cls:'card'},el('div',{cls:'card-empty'},'Aucune étiquette configurée pour ce poste.'));
-  } else if (principales.length) {
-    listEl = el('div',{cls:'traca-etiq-list'},...principales.map(mkEtiqCard));
-  }
-
-  // Sections groupées — aujourd'hui « Identification bobines », présente sur
-  // les quatre postes. Un groupe sans étiquette pour ce poste ne rend rien :
-  // un titre de section vide se lit comme une fonctionnalité en panne.
-  const groupSections = TRACA_GROUPES.map(g=>{
-    const items = etiquettes.filter(e=>e.groupe===g.id);
-    if(!items.length) return null;
-    return el('div',null,
-      el('div',{cls:'traca-group-title'}, iconEl(g.icon||'folder',12), g.label),
-      el('div',{cls:'traca-etiq-list'}, ...items.map(mkEtiqCard))
-    );
-  }).filter(Boolean);
-
-  // -- Dossier "Communication" - uniquement pour le poste Bureaux --
-  let commSection = null;
-  if (poste.id === 'bureaux') {
-    const POSTE_TINT = {
-      cyan:   { bg:'color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent)',  color:'#22d3ee' },
-      amber:  { bg:'rgba(251,191,36,.16)',  color:'#fbbf24' },
-      violet: { bg:'rgba(139,92,246,.18)',  color:'#a78bfa' },
-    };
-    const affCards = TRACA_AFFICHES.map(aff=>{
-      const tint = POSTE_TINT[aff.variant] || POSTE_TINT.cyan;
-      const body = el('div',{cls:'traca-aff-body'});
-      body.appendChild(el('div',{cls:'traca-aff-title'},aff.title));
-      const subEl = el('div',{cls:'traca-aff-sub'});
-      subEl.innerHTML = aff.sub;
-      body.appendChild(subEl);
-      return el('div',{cls:'traca-aff-card traca-aff-card--'+aff.variant},
-        el('div',{cls:'traca-etiq-icon-wrap',style:{background:tint.bg,color:tint.color}},
-          iconEl(aff.icon,18)),
-        body,
-        el('div',{cls:'traca-aff-actions'},
-          el('a',{cls:'traca-aff-btn traca-aff-btn--dark',
-            attrs:{href:aff.dark,target:'_blank',rel:'noopener'}},
-            el('span',{cls:'traca-aff-dot'}), 'Sombre'),
-          el('a',{cls:'traca-aff-btn traca-aff-btn--light',
-            attrs:{href:aff.light,target:'_blank',rel:'noopener'}},
-            el('span',{cls:'traca-aff-dot'}), 'Clair')
-        )
-      );
-    });
-    commSection = el('div',null,
-      el('div',{cls:'traca-group-title'}, iconEl('folder',12), 'Communication'),
-      el('div',{cls:'traca-etiq-list'}, ...affCards)
-    );
-  }
-
-  return el('div',{cls:'content'}, backBar, listEl, ...groupSections, commSection);
-}
-
-// L'URL suit la navigation entre postes (stockSyncUrl). Choisir un poste
-// empile une entrée — Retour ramène à la grille ; le bouton « ← » de la page
-// RECULE au lieu d'empiler (mysifa_url.js) : regarder quatre postes ne fait
-// donc pas dix retours pour sortir de la page.
-function tracaSyncUrl(posteId) {
-  // S.tracaPoste est déjà posé par l'appelant.
-  stockSyncUrl();
-}
-
-function buildTraca() {
-  // Étiquettes spécifiques : éditeur façon BarTender, monté par
-  // static/mysifa_etiq_specifiques.js. Le module garde son propre nœud et son
-  // état : un renderContent() le rattache sans le reconstruire.
-  if (S.tracaPoste === 'specifiques') {
-    const root = el('div',{id:'etiq-spec-root'});
-    if (window.EtiqSpec) window.EtiqSpec.mount(root);
-    // Pleine largeur : l'éditeur a besoin de place pour l'aperçu à l'échelle.
-    return el('div',{cls:'content',style:{maxWidth:'none'}},
-      el('div',{cls:'traca-back-bar'},
-        el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; tracaSyncUrl(null); renderContent(); }}},
-          iconEl('arrow-left',15), ' Postes')),
-      root);
-  }
-  if (S.tracaPoste) {
-    const poste = TRACA_POSTES.find(p=>p.id===S.tracaPoste);
-    if (poste) return buildTracaPosteView(poste);
-  }
-  // Vue sélection poste
-  const cards = TRACA_POSTES.map(poste=>{
-    const count = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id)).length;
-    const card = el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=poste.id; tracaSyncUrl(poste.id); renderContent(); }}},
-      el('div',{cls:'traca-poste-icon',style:{background:poste.colorBg,color:poste.color}},
-        iconEl(poste.icon,22)),
-      el('div',{cls:'traca-poste-label'},poste.label),
-      el('div',{cls:'traca-poste-count'},count+' étiquette'+(count>1?'s':''))
-    );
-    return card;
-  });
-  const outils = TRACA_OUTILS.map(o=>el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=o.id; tracaSyncUrl(o.id); renderContent(); }}},
-    el('div',{cls:'traca-poste-icon',style:{background:'var(--accent-bg)',color:'var(--accent)'}}, iconEl(o.icon,22)),
-    el('div',{cls:'traca-poste-label'},o.label),
-    el('div',{cls:'traca-poste-count'},o.sous)
-  ));
-  return el('div',{cls:'content'},
-    el('div',{cls:'traca-section-title'},'Sélectionner un poste de travail'),
-    el('div',{cls:'traca-postes-grid'},...cards),
-    el('div',{cls:'traca-section-title',style:{marginTop:'18px'}},'Outils'),
-    el('div',{cls:'traca-postes-grid'},...outils)
-  );
+// Étiquettes traça : parties dans MyTools le 21/10/2026
+// (static/mysifa_tools_etiquettes.js). L'onglet `traca` redirige vers
+// /tools?outil=etiquettes — côté serveur au chargement (stock_page), côté
+// client depuis goToTab() et le Retour du navigateur.
+function tracaVersMyTools(poste) {
+  window.location.href = '/tools?outil=etiquettes' + (poste ? '&poste=' + encodeURIComponent(poste) : '');
 }
 
 function buildInventaire() {
@@ -19476,7 +19740,6 @@ function renderContent() {
   else if (S.tab === 'besoins-matieres') content = buildBesoinsMatieres();
   else if (S.tab === 'destockage') content = buildDestockage();
   else if (S.tab === 'bobines') content = buildBobines();
-  else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
   else if (S.tab === 'historique') content = buildHistorique();
   else if (S.tab === 'plan-entrepot') { buildPlanEntrepot(); return; }
@@ -19977,10 +20240,15 @@ function monDesignation(l) {
 function monColonnes(page) {
   const statut = {
     cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1],
-    txt: l => monStatutDef(page, l.statut)[1], td: l => el('td', { cls: 'mon-cell' }, monBadge(page, l.statut)),
+    txt: l => monStatutDef(page, l.statut)[1] + ((l.departs_apres || []).length ? ' parti' : ''),
+    td: l => el('td', { cls: 'mon-cell' }, monBadge(page, l.statut), monPartiPastille(l)),
   };
   if (page === 'expedition') return [
     statut,
+    { cle: 'date_expedition', label: 'Expédié le', val: l => l.date_expedition || '', txt: l => l.date_expedition ? fD(l.date_expedition) : '',
+      td: l => l.date_expedition
+        ? monDouble(fD(l.date_expedition), { bl: 'date du BL', depart: 'date du départ', sortie: 'date de sortie' }[l.date_expedition_source] || '', 'mon-date-cell')
+        : el('td', { cls: 'mon-cell' }, el('div', { cls: 'mon-vide' }, '—')) },
     { cle: 'reference', label: 'Référence', val: l => l.reference || '',
       txt: l => [l.reference, l.designation].join(' '),
       td: l => monDouble(l.reference, monDesignation(l), 'mon-ref') },
@@ -20012,6 +20280,14 @@ function monColonnes(page) {
   ];
   return [
     statut,
+    { cle: 'derniere_saisie', label: 'Produit le', val: l => l.derniere_saisie || l.derniere_entree || '',
+      txt: l => [l.derniere_saisie ? fD(l.derniere_saisie) : '', l.debut_prod ? fD(l.debut_prod) : ''].join(' '),
+      td: l => {
+        const fin = l.derniere_saisie, deb = l.debut_prod;
+        if (!fin) return el('td', { cls: 'mon-cell' }, el('div', { cls: 'mon-vide' }, 'pas de saisie'));
+        const memeJour = deb && deb.slice(0, 10) === fin.slice(0, 10);
+        return monDouble(fD(fin), deb && !memeJour ? 'depuis le ' + fD(deb) : (fin.length >= 16 ? 'à ' + fin.slice(11, 16) : ''), 'mon-date-cell');
+      } },
     { cle: 'no_dossier', label: 'Dossier', val: l => l.no_dossier || '',
       txt: l => [l.no_dossier, l.client, l.machine, monEtatDossier(l).label].join(' '),
       td: l => {
@@ -20215,7 +20491,7 @@ function monToggleDetail(cle) {
 
 // Mini-tableau d'une section : colonnes [libellé, (x) => contenu, num?].
 function monSection(titre, lignes, cols, vide, extra) {
-  const sec = el('div', { cls: 'mon-det-sec' },
+  const sec = el('div', { cls: 'mon-det-sec' + (!lignes || !lignes.length ? ' vide' : '') },
     el('div', { cls: 'mon-det-titre' }, titre,
       el('span', { cls: 'mon-det-nb' }, String((lignes || []).length)), extra || null));
   if (!lignes || !lignes.length) {
@@ -20223,9 +20499,9 @@ function monSection(titre, lignes, cols, vide, extra) {
     return sec;
   }
   sec.appendChild(el('table', { cls: 'mon-det-table' },
-    el('thead', null, el('tr', null, ...cols.map(c => el('th', { cls: c[2] ? 'mon-num' : '' }, c[0])))),
+    el('thead', null, el('tr', null, ...cols.map(c => el('th', { cls: c[2] === true ? 'mon-num' : '' }, c[0])))),
     el('tbody', null, ...lignes.map(x => el('tr', null,
-      ...cols.map(c => { const v = c[1](x); return el('td', { cls: c[2] ? 'mon-num' : '' }, v == null || v === '' ? '—' : v); }))))));
+      ...cols.map(c => { const v = c[1](x); return el('td', { cls: c[2] === true ? 'mon-num' : c[2] === 'libre' ? 'mon-det-libre' : '' }, v == null || v === '' ? '—' : v); }))))));
   return sec;
 }
 
@@ -20243,6 +20519,17 @@ function monLienProduit(ref) {
   if (!ref) return null;
   return el('a', { cls: 'mon-det-lien', href: '/stock?tab=produits-finis&ref=' + encodeURIComponent(ref) },
     'Fiche produit ' + ref + ' ↗');
+}
+
+// Production → stock : la référence est partie (départ MyExpé ou BL RVGI)
+// dans les jours qui ont suivi la production.
+function monPartiPastille(l) {
+  const deps = l.departs_apres || [];
+  if (!deps.length) return null;
+  const p = deps[0];
+  const titre = deps.map(d => fD(d.jour) + (d.no_bl ? ' · BL ' + d.no_bl : '') + (d.client ? ' · ' + d.client : '')).join('\n');
+  return el('div', { cls: 'mon-parti', title: titre },
+    '→ parti le ' + monCourt(p.jour) + (deps.length > 1 ? ' +' + (deps.length - 1) : ''));
 }
 
 function monDetailProduction(l) {
@@ -20266,7 +20553,7 @@ function monDetailProduction(l) {
         ['Emplacement', x => x.emplacement],
         ['Quantité', x => monQteExacte(x.quantite, u), true],
         ['Par', x => x.par],
-        ['Note', x => [x.note, x.rattachement === 'reference' ? '(rapprochée par la réf.)' : x.rattachement === 'of' ? '(rapprochée par l\'OF)' : ''].filter(Boolean).join(' ')],
+        ['Note', x => [x.note, x.rattachement === 'reference' ? '(rapprochée par la réf.)' : x.rattachement === 'of' ? '(rapprochée par l\'OF)' : ''].filter(Boolean).join(' '), 'libre'],
       ], 'Aucune entrée en stock.', monTotal(d.entrees, u)),
       monSection('Déplacements', d.deplacements, [
         ['Date', x => fDateTime(x.date)],
@@ -20278,6 +20565,16 @@ function monDetailProduction(l) {
         ['Emplacement', x => x.emplacement],
         ['Quantité', x => monQteExacte(x.quantite, u), true],
       ], 'Plus rien en stock pour ce dossier.', monTotal(d.restants, u)),
+      monSection('Départs après la production', l.departs_apres, [
+        ['Date', x => fD(x.jour)],
+        ['Origine', x => x.source === 'depart'
+          ? el('span', { cls: 'mon-depart' }, el('span', { cls: 'mon-point mon-bg-' + (x.statut === 'valide' ? 'ok' : 'neutre') }), 'MyExpé · ' + (MON_STATUT_DEPART[x.statut] || x.statut || '—'))
+          : 'BL RVGI'],
+        ['Client', x => x.client, 'libre'],
+        ['BL', x => x.no_bl],
+        ['Quantité', x => x.quantite ? monQteExacte(x.quantite, u) : '', true],
+        ['', x => x.depart_id ? el('a', { cls: 'mon-det-lien', href: '/expe?onglet=suivi_departs' + (x.jour ? '&jour=' + encodeURIComponent(x.jour) : '') + '&depart=' + encodeURIComponent(x.depart_id) }, 'Ouvrir ↗') : null],
+      ], 'Aucun départ de cette référence dans les ' + ((monEnsureState().data || {}).fenetre_expe_jours || 7) + ' jours qui ont suivi la production.'),
     ));
 }
 
@@ -20293,7 +20590,7 @@ function monDetailExpedition(l) {
       monSection('BL RVGI', d.bls, [
         ['BL', x => x.bl],
         ['Date', x => fD(x.jour)],
-        ['Client', x => x.client],
+        ['Client', x => x.client, 'libre'],
         ['Commande', x => x.commande],
         ['Quantité', x => monQteExacte(x.quantite, u), true],
       ], monEnsureState().data && monEnsureState().data.miroir === false ? 'Miroir RVGI absent.' : 'Aucun BL sur la période.', monTotal(d.bls, u)),
@@ -20303,7 +20600,7 @@ function monDetailExpedition(l) {
         ['Quantité', x => monQteExacte(x.quantite, u), true],
         ['BL rapproché', x => x.bl_jour ? 'BL du ' + fD(x.bl_jour) : el('span', { cls: 'mon-sous' }, 'aucun')],
         ['Par', x => x.par],
-        ['Note', x => x.note],
+        ['Note', x => x.note, 'libre'],
       ], 'Aucune sortie rapprochée.', monTotal(d.sorties, u)),
       monSection('Départs MyExpé', l.departs, [
         ['Date', x => fD(x.jour)],
@@ -21020,191 +21317,26 @@ async function getBackCameraDeviceId() {
   }
 }
 
+// Scanner caméra : static/mysifa_scanner.js depuis le 21/10/2026, partagé avec
+// MyTools › Étiquettes (identification bobine). Les deux noms restent : ils
+// sont branchés tels quels dans l'écran de réception.
+//
 // `opts` est optionnel : la fonction est aussi branchée directement comme
 // handler de clic (`on:{click: recepStartCamera}`), auquel cas le premier
 // argument est l'Event du DOM — d'où le test sur `onCode` plutôt qu'un test
-// de vérité. Sans paramètre, comportement historique inchangé : le code
-// scanné part dans la liste de la réception matière.
-//
-// Le paramétrage existe pour que MyPrint réutilise CE scanner (chemins iOS /
-// Android, ZXing + BarcodeDetector, délai anti-scan-parasite) au lieu d'en
-// faire vivre un second qui divergerait au premier correctif.
+// de vérité. Sans paramètre, le code scanné part dans la liste de la
+// réception matière.
 async function recepStartCamera(opts) {
   const o = (opts && typeof opts.onCode === 'function') ? opts : {};
-  const onFound = o.onCode || recepAddCode;
-  if (S.recepScanning) return;
-  S.recepScanning = true;
-
-  // Overlay créé en premier (synchrone) — le geste utilisateur est encore actif
-  const overlay = el('div', { cls: 'camera-modal recep-overlay' });
-  const wrap = el('div', { cls: 'camera-wrap' });
-  const video = el('video', { cls: 'camera-video', autoplay: '', playsinline: '' });
-  const frame = el('div', { cls: 'camera-frame' });
-  wrap.append(video, frame);
-  const hint = el('p', { cls: 'camera-hint' }, o.hint || 'Pointez vers le code-barres de la bobine');
-  const resultEl = el('div', { cls: 'camera-result' }, 'En attente…');
-  const closeBtn = el('button', { cls: 'btn-close-cam', on: { click: () => recepStopCamera(overlay) } }, '✕ Fermer');
-  overlay.append(wrap, hint, resultEl, closeBtn);
-  document.body.appendChild(overlay);
-
-  try {
-    // getUserMedia est le PREMIER await — Android refuse silencieusement si on a fait
-    // un await long (chargement ZXing CDN) avant : le "user gesture token" est expiré
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Caméra non disponible (page non HTTPS ?)');
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    S.recepStream = stream;
-    video.srcObject = stream;
-
-    // Stratégie de décodage selon la plateforme :
-    // Android Chrome 83+ → BarcodeDetector (Google ML Kit natif) : gère nativement l'autofocus
-    //   et les codes 1D fins. ZXing JS ne peut pas rivaliser avec le moteur natif de l'OS.
-    // iOS + fallback Android → ZXing (BarcodeDetector absent sur Safari)
-    const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
-
-    // Délai de latence avant activation — évite les scans parasites au démarrage
-    const RECEP_SCAN_DELAY_MS = 1500;
-    const recepScanStartTime = Date.now();
-    resultEl.textContent = 'Positionnez-vous devant le code…';
-    setTimeout(() => { if (S.recepScanning) resultEl.textContent = 'En attente…'; }, RECEP_SCAN_DELAY_MS);
-
-    // Callback partagé — arrêt IMMÉDIAT des deux moteurs dès détection
-    // (évite que ZXing continue d'appeler le callback pendant le délai d'animation)
-    let recepDetected = false;
-    const onRecepCode = (code) => {
-      if (Date.now() - recepScanStartTime < RECEP_SCAN_DELAY_MS) return;
-      if (recepDetected) return;
-      recepDetected = true;
-      // Stopper tout immédiatement — plus aucun callback possible après ça
-      S.recepScanning = false;
-      if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
-      if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
-      resultEl.textContent = '✅ ' + code;
-      resultEl.style.color = 'var(--success)';
-      // Garder l'overlay 600ms pour l'animation, puis fermer et ajouter
-      setTimeout(() => { overlay.remove(); onFound(code); }, 600);
-    };
-
-    // ZXing nécessaire sur iOS et pour QR codes sur Android
-    if (typeof ZXing === 'undefined') {
-      resultEl.textContent = 'Chargement scanner…';
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-        s.onload = res; s.onerror = rej; document.head.appendChild(s);
-      });
-      resultEl.textContent = 'En attente…';
-    }
-
-    if (useNativeDetector) {
-      // ── Android : BarcodeDetector (codes 1D) + ZXing decodeFromStream (QR) ──────
-      const qrHints = new Map();
-      qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
-      qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
-      S.recepBarcodeReader = qrReader;
-
-      // Moteur 1 : BarcodeDetector pour codes 1D (ML Kit natif, autofocus natif)
-      const detector = new BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
-      });
-      const barcodeLoop = async () => {
-        if (!S.recepScanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(barcodeLoop, 100); return; }
-        try {
-          const found = await detector.detect(video);
-          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
-          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
-          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
-          // pas de replanification ; lecture ignoree -> on continue.
-          if (found.length > 0) onRecepCode(found[0].rawValue);
-        } catch(e) {}
-        if (S.recepScanning) setTimeout(barcodeLoop, 150);
-      };
-      setTimeout(barcodeLoop, 500);
-
-      // Moteur 2 : ZXing decodeFromStream pour QR codes
-      // decodeFromStream est la seule méthode ZXing qui fonctionne pour les QR sur Android
-      // (drawImage canvas ne capture pas correctement les frames live sur certains Android Chrome)
-      // Le double scan est évité par l'arrêt immédiat dans onRecepCode (reader.reset() + stream stop)
-      qrReader.decodeFromStream(stream, video, (result) => {
-        if (result) onRecepCode(result.getText().trim());
-      });
-
-    } else {
-      // ── iOS + fallback : ZXing canvas loop tous formats ──────────────────────────
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      // MultiFormatReader.decodeWithState() et NON BrowserMultiFormatReader.decode() :
-      // cette derniere attend un element <video>/<img>, pas un BinaryBitmap. Elle levait
-      // un TypeError avale par le catch — le scan restait indefiniment « En attente… ».
-      const reader = new ZXing.MultiFormatReader();
-      reader.setHints(hints);
-      S.recepBarcodeReader = reader;
-      // Passes alternees, une par tick : cadrage du viseur puis plus large, chacune
-      // dans les deux orientations. Un echec coute ~150 ms, une lecture ~10 ms.
-      const SCAN_PASSES = [
-        { zoom: 0.56, rot: 0 }, { zoom: 0.56, rot: 90 },
-        { zoom: 0.42, rot: 0 }, { zoom: 0.42, rot: 90 },
-        { zoom: 0.75, rot: 0 }, { zoom: 0.75, rot: 90 },
-      ];
-      let passIndex = 0;
-      const loop = () => {
-        if (!S.recepScanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(loop, 100); return; }
-        try {
-          // Recadrage sur le viseur + rotation : deux faces d'un meme constat.
-          // (1) Le lecteur 1D binarise chaque ligne sur un histogramme GLOBAL. Une ligne qui
-          //     traverse l'etiquette ET le fond (bois clair, carton sombre) prend un seuil qui
-          //     noie les barres. Mesure sur une frame reelle en 720p : plein cadre -> echec,
-          //     recadre sur le viseur -> lu en 5 ms.
-          // (2) RGBLuminanceSource.isRotateSupported() vaut false : TRY_HARDER n'essaie donc
-          //     JAMAIS l'orientation a 90 degres. Un code tenu a la verticale — le cas normal
-          //     sur une bobine — etait illisible. On tourne nous-memes, canvas carre a l'appui.
-          const pass = SCAN_PASSES[passIndex++ % SCAN_PASSES.length];
-          const side = Math.min(Math.round(video.videoWidth * pass.zoom), video.videoHeight);
-          const sx = (video.videoWidth - side) / 2, sy = (video.videoHeight - side) / 2;
-          canvas.width = side; canvas.height = side;
-          if (pass.rot) { ctx.translate(side / 2, side / 2); ctx.rotate(Math.PI / 2); ctx.translate(-side / 2, -side / 2); }
-          ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
-          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
-          // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
-          const gray = new Uint8ClampedArray(canvas.width * canvas.height);
-          const px = img.data;
-          for (let i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
-          const lum = new ZXing.RGBLuminanceSource(gray, canvas.width, canvas.height);
-          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          const result = reader.decodeWithState(bmp);
-          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
-          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
-          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
-          // pas de replanification ; lecture ignoree -> on continue.
-          if (result) onRecepCode(result.getText().trim());
-        } catch(e) {}
-        if (S.recepScanning) setTimeout(loop, 60);
-      };
-      setTimeout(loop, 400);
-    }
-  } catch(e) {
-    showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
-    recepStopCamera(overlay);
-  }
+  if (!window.MySifaScanner) { showToast('Scanner indisponible — recharger la page.', 'error'); return; }
+  return MySifaScanner.demarrer({
+    hint: o.hint || 'Pointez vers le code-barres de la bobine',
+    onCode: o.onCode || recepAddCode,
+  });
 }
 
 function recepStopCamera(overlay) {
-  if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
-  if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
-  S.recepScanning = false;
-  // Retirer l'overlay du body (passé en paramètre ou recherche de secours)
-  if (overlay) { overlay.remove(); } else { document.querySelector('.camera-modal.recep-overlay')?.remove(); }
+  if (window.MySifaScanner) MySifaScanner.arreter(overlay);
 }
 
 async function recepValider() {
@@ -22234,8 +22366,10 @@ function buildReception() {
         loadReceptionRvgi();
       }}
     }, iconEl('download', 13), ' Depuis l\'ERP',
-       (S.rvgiFile && S.rvgiFile.total
-        ? el('span', { cls: 'recep-hist-lot' }, String(S.rvgiFile.total)) : null)),
+       // Même compte que la pastille de la sidebar : lignes à intégrer ET
+       // entrées à valider.
+       (rvgiNbEnAttente()
+        ? el('span', { cls: 'recep-hist-lot' }, String(rvgiNbEnAttente())) : null)),
     el('button', {
       cls: 'recep-subtab' + (sub === 'rvgi-historique' ? ' active' : ''),
       on: { click: () => {
@@ -22320,7 +22454,9 @@ async function loadReceptionRvgi() {
 
 function rvgiNbEnAttente() {
   const f = S.rvgiFile;
-  return f ? Number(f.total != null ? f.total : (f.lignes || []).length) || 0 : 0;
+  if (!f) return 0;
+  return (Number(f.total != null ? f.total : (f.lignes || []).length) || 0)
+    + (f.a_valider || []).length;
 }
 
 // Met à jour la pastille de la sidebar sans reconstruire la page.
@@ -22506,7 +22642,8 @@ function buildReceptionRvgi() {
   }
 
   const lignes = f.lignes || [];
-  if (!lignes.length) {
+  const aValider = f.a_valider || [];
+  if (!lignes.length && !aValider.length) {
     // État vide au format des autres écrans de MyStock (bes-empty) : la
     // classe `muted` n'existe pas ici, la phrase sortait en gros texte noir.
     wrap.appendChild(el('div', { cls: 'bes-empty' },
@@ -22516,7 +22653,30 @@ function buildReceptionRvgi() {
         + (f.depuis ? ' depuis le ' + _fmtDate(f.depuis) : '') + '.')));
     return wrap;
   }
+  if (lignes.length) wrap.appendChild(rvgiBlocAIntegrer(f, lignes));
+  if (aValider.length) wrap.appendChild(rvgiBlocAValider(aValider));
+  return wrap;
+}
 
+// Les entrées faites par la synchro restent dans la file tant que personne ne
+// les a relues : le stock est déjà à jour, la réception n'est pas encore
+// vérifiée. Une fois validée, la ligne passe dans l'historique.
+function rvgiBlocAValider(aValider) {
+  const bloc = el('div', { style: 'margin-top:18px' });
+  bloc.appendChild(el('div', { style: 'display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 12px' },
+    el('span', { style: 'font-size:15px;font-weight:700;color:var(--text)' }, 'Entrées en stock à valider'),
+    el('span', { style: 'font-size:13px;color:var(--text2)' },
+      el('b', null, String(aValider.length)),
+      ' réception' + (aValider.length > 1 ? 's' : '') + ' entrée' + (aValider.length > 1 ? 's' : '')
+      + ' par la synchro — article, quantité et BL à vérifier')));
+  const tbody = el('tbody');
+  aValider.forEach(l => tbody.appendChild(rvgiLigneEntree(l, loadReceptionRvgi)));
+  bloc.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, el('table', { cls: 'bes-table' }, rvgiTheadEntrees(), tbody)));
+  return bloc;
+}
+
+function rvgiBlocAIntegrer(f, lignes) {
+  const wrap = el('div');
   const pretes = lignes.filter(l => l.integrable);
   wrap.appendChild(el('div', {
     style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 12px' },
@@ -22582,10 +22742,12 @@ function buildRvgiHistorique() {
     return wrap;
   }
   const q = (S.rvgiHistoQ || '').trim().toLowerCase();
+  // Seulement les réceptions validées : celles qui attendent une validation
+  // sont dans « Depuis l'ERP ».
   const toutes = h.lignes || [];
   const lignes = q ? toutes.filter(l => [
       l.fournisseur, l.article, l.libelle, l.libelle_technique, l.matiere_ref, l.matiere_designation,
-      l.integre_par, l.ref_br, l.numero, l.operateur_erp,
+      l.integre_par, l.valide_par, l.ref_br, l.numero, l.operateur_erp,
     ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)) : toutes;
 
   const search = el('input', {
@@ -22604,18 +22766,40 @@ function buildRvgiHistorique() {
     search,
     el('span', { style: 'font-size:13px;color:var(--text2)' },
       el('b', null, String(lignes.length)),
-      ' réception' + (lignes.length > 1 ? 's' : '') + ' entrée' + (lignes.length > 1 ? 's' : '') + ' en stock'
+      ' réception' + (lignes.length > 1 ? 's' : '') + ' validée' + (lignes.length > 1 ? 's' : '')
       + (q ? ' (sur ' + toutes.length + ')' : ''))));
 
   if (!lignes.length) {
     wrap.appendChild(el('div', { cls: 'bes-empty' },
-      q ? 'Aucune réception pour « ' + S.rvgiHistoQ.trim() + ' ».' : 'Aucune réception RVGI entrée en stock pour le moment.'));
+      q ? 'Aucune réception pour « ' + S.rvgiHistoQ.trim() + ' ».' : 'Aucune réception RVGI validée pour le moment.'));
     return wrap;
   }
-  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
   const tbody = el('tbody');
-  lignes.forEach(l => {
-    tbody.appendChild(el('tr', l.matiere_fsc ? { cls: 'recep-ligne-fsc' } : null,
+  lignes.forEach(l => tbody.appendChild(rvgiLigneEntree(l, loadRvgiHistorique)));
+  const table = el('table', { cls: 'bes-table' }, rvgiTheadEntrees(), tbody);
+  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
+  return wrap;
+}
+
+// Une réception entrée en stock, dans l'historique comme dans la file des
+// entrées à valider : mêmes colonnes, pour qu'une ligne validée se retrouve à
+// l'identique d'un écran à l'autre.
+function rvgiTheadEntrees() {
+  return el('thead', null, el('tr', null,
+    el('th', null, 'Livraison'),
+    el('th', null, 'Commande RVGI'),
+    el('th', null, 'Article RVGI'),
+    el('th', null, 'Référence MySifa'),
+    el('th', { cls: 'num' }, 'Quantité'),
+    el('th', null, 'Saisie RVGI'),
+    el('th', null, 'Pièces'),
+    el('th', null, 'Entrée MySifa'),
+    el('th', null, 'Validation')));
+}
+
+function rvgiLigneEntree(l, apres) {
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
+  return el('tr', l.matiere_fsc ? { cls: 'recep-ligne-fsc' } : null,
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
         l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null),
@@ -22643,7 +22827,7 @@ function buildRvgiHistorique() {
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.saisie_erp)),
         el('div', { style: petit }, l.operateur_erp != null ? 'opérateur RVGI n° ' + l.operateur_erp : '—')),
-      recepCelluleDocuments(l, loadRvgiHistorique),
+      recepCelluleDocuments(l, apres),
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.integre_at)),
         el('div', { style: petit }, l.integre_par ? 'par ' + l.integre_par : '—'),
@@ -22653,21 +22837,74 @@ function buildRvgiHistorique() {
           style: 'margin-top:6px',
           on: { click: (ev) => rvgiAnnulerEntree(l, ev.currentTarget) },
         }, iconEl('rotate-ccw', 12), ' Annuler l\'entrée')),
-    ));
-  });
-  const table = el('table', { cls: 'bes-table' },
-    el('thead', null, el('tr', null,
-      el('th', null, 'Livraison'),
-      el('th', null, 'Commande RVGI'),
-      el('th', null, 'Article RVGI'),
-      el('th', null, 'Référence MySifa'),
-      el('th', { cls: 'num' }, 'Quantité'),
-      el('th', null, 'Saisie RVGI'),
-      el('th', null, 'Pièces'),
-      el('th', null, 'Entrée MySifa'))),
-    tbody);
-  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
-  return wrap;
+      rvgiCelluleValidation(l),
+    );
+}
+
+// Validation d'une réception entrée en stock. Le stock ne bouge pas : la
+// cellule dit qui a relu la ligne (article, quantité, BL), ou qu'il reste à
+// le faire. Une entrée faite à la main est validée par son auteur.
+function rvgiCelluleValidation(l) {
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
+  const td = el('td', { style: 'white-space:nowrap;vertical-align:top' });
+  if (l.valide_at) {
+    td.appendChild(el('div', { style: 'font-weight:700;color:var(--success)' }, '✓ Validée'));
+    td.appendChild(el('div', { style: petit },
+      _rvgiFmtDateHeure(l.valide_at) + (l.valide_par ? ' · ' + l.valide_par : '')));
+    if (!S.stockReadOnly) {
+      td.appendChild(el('button', {
+        type: 'button', cls: 'recep-rvgi-mini', style: 'margin-top:6px',
+        attrs: { title: 'Remettre cette réception parmi celles à valider' },
+        on: { click: (ev) => rvgiValider(l, false, ev.currentTarget) },
+      }, 'Retirer la validation'));
+    }
+    return td;
+  }
+  td.appendChild(el('span', {
+    style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
+      + 'background:var(--bg);border:1px solid var(--warn);color:var(--warn)' }, 'À valider'));
+  if (!S.stockReadOnly) {
+    td.appendChild(el('div', { style: 'margin-top:6px' }, el('button', {
+      type: 'button', cls: 'btn-sm',
+      attrs: { title: 'Article, quantité et BL vérifiés : la réception est correcte' },
+      on: { click: (ev) => rvgiValider(l, true, ev.currentTarget) },
+    }, 'Valider')));
+  }
+  return td;
+}
+
+async function rvgiValider(l, valide, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/stock/reception-rvgi/' + l.lif_id + '/valider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valide }),
+    });
+    // Validée, la ligne quitte la file pour l'historique ; dévalidée, elle y
+    // revient. On la retire sur place plutôt que de recharger : la page ne
+    // doit pas sauter sous la souris de qui en valide une série.
+    l.valide_at = r.valide_at;
+    l.valide_par = r.valide_par;
+    if (valide) {
+      if (S.rvgiFile && S.rvgiFile.a_valider) {
+        S.rvgiFile.a_valider = S.rvgiFile.a_valider.filter(x => x.lif_id !== l.lif_id);
+      }
+      S.rvgiHisto = null;
+    } else {
+      if (S.rvgiHisto && S.rvgiHisto.lignes) {
+        S.rvgiHisto.lignes = S.rvgiHisto.lignes.filter(x => x.lif_id !== l.lif_id);
+      }
+      S.rvgiFile = null;
+      loadRvgiCountBackground();
+    }
+    rvgiMajBadgeNav();
+    showToast(valide ? 'Réception validée.' : 'Validation retirée — la ligne est de retour dans « Depuis l\'ERP ».', 'success');
+    renderContent();
+  } catch (e) {
+    showToast((valide ? 'Validation impossible : ' : 'Retrait impossible : ') + ((e && e.message) || e), 'error');
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Défait une entrée validée par erreur : le stock est repris par une sortie
@@ -24035,8 +24272,11 @@ async function loadValorisationTrend() {
     v.trend.points = [];
   } finally {
     v.trend.loading = false;
-    // Re-render juste la card total (via full render pour rester simple)
-    renderValorisationView(true);
+    // Seules les cartes du haut portent la courbe : on ne reconstruit qu'elles.
+    // Un rendu complet refaisait tout le tableau des matières pour un graphe.
+    const kpis = document.querySelector('#scroll-area .val-kpis');
+    if (kpis && S.tab === 'valorisation') kpis.replaceWith(buildValorisationKpis());
+    else renderValorisationView(true);
   }
 }
 
@@ -24078,6 +24318,16 @@ function valAbbrUnite(u) {
   if (s === 'bobine') return 'bob.';
   if (s === 'unite' || s === 'unité') return 'u.';
   return s || '';
+}
+
+function valUniteLibelle(u, n) {
+  // Unité accordée à la quantité : « 0,45 palette », « 9,63 palettes ».
+  // Pluriel au-delà de 1 ; le kilo et le mètre ne s'accordent pas.
+  let s = (u || '').toLowerCase();
+  if (s === 'unite') s = 'unité';
+  if (!s || !(Math.abs(Number(n || 0)) > 1)) return s;
+  if (s === 'kg' || s === 'm' || /[sx]$/.test(s)) return s;
+  return s + 's';
 }
 
 function valFormatPrixDetail(n) {
@@ -24594,7 +24844,30 @@ function buildValorisationKpis() {
     ...kpiPFChildren
   );
 
-  wrap.append(kpiTotal, kpiMP, kpiPF);
+  // ── Dévalorisation : le stock marqué « à jeter », déjà soustrait des totaux ──
+  // On l'affiche à part pour qu'il se lise : sans cette carte, une baisse du
+  // total ne disait pas si elle venait d'un stock jeté ou d'un prix.
+  const devalItems = (v.items || []).filter(it => it.devalorise);
+  const devalMontant = devalItems.reduce((acc, it) => acc + Math.abs(valItemAchat(it)), 0);
+  const nbDeval = devalItems.length;
+  const kpiDeval = el('div', { style:
+    'background:var(--card);border:1px solid ' + (nbDeval ? 'var(--danger)' : 'var(--border)')
+    + ';border-radius:12px;padding:16px 18px;' + (nbDeval ? 'cursor:pointer' : ''),
+    title: nbDeval ? 'Afficher les lignes dévalorisées' : null,
+    on: nbDeval ? { click: () => {
+      v.query = ''; v.filterCategorie = null; v.filterSousSection = null;
+      v.sortColumn = 'valorisation'; v.sortDirection = 'asc';
+      renderValorisationView(true);
+    } } : null },
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Dévalorisation'),
+    el('div', { style: 'font-size:24px;font-weight:800;color:' + (nbDeval ? 'var(--danger)' : 'var(--muted)') },
+      nbDeval ? '− ' + valFormatEuro(devalMontant) : '0 €'),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
+      nbDeval ? nbDeval + ' ligne' + (nbDeval > 1 ? 's' : '') + ' de stock à jeter, soustraite' + (nbDeval > 1 ? 's' : '') + ' du total'
+              : 'Aucun stock à jeter')
+  );
+
+  wrap.append(kpiTotal, kpiMP, kpiPF, kpiDeval);
   // Widget d'accueil (app/services/blocs_registre.py) : les montants mis en
   // avant par les cartes — le réel quand il est affiché en gros, la base
   // sinon. Une date figée se capture aussi : elle devient le filtre
@@ -24739,6 +25012,46 @@ function buildValorisationCategoriePills() {
 // ces valeurs et les affiche — les endpoints correspondants restent en place
 // côté serveur pour les reprises et les scripts.
 
+// Largeurs des colonnes du tableau des matières : [min, max] en px. Le min
+// tient sur th (min-width), le max sur le contenu des cellules de texte (un
+// max-width sur une cellule de tableau est ignoré par les navigateurs).
+const VAL_COLS = {
+  categorie: [96, 140], commercial: [200, 320], technique: [220, 400],
+  quantite: [110, 190], achat: [130, 200], vente: [120, 190], valo: [110, 170],
+};
+
+// Bouton d'action carré, icône seule : le libellé passe dans l'infobulle.
+function valBoutonIcone(icone, titre, couleur, bordure, fond, onClick) {
+  // Survol : fond qui s'assombrit et bordure accentuée ; un bouton plein
+  // (dévalorisé) s'éclaircit à peine. mouseleave rend exactement le repos.
+  const plein = fond !== 'var(--card)';
+  const b = el('button', {
+    type: 'button', title: titre, 'aria-label': titre,
+    style: 'width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;'
+      + 'border-radius:8px;cursor:pointer;flex:0 0 auto;transition:all .15s;'
+      + 'border:1px solid ' + bordure + ';background:' + fond + ';color:' + couleur,
+    on: {
+      click: onClick,
+      mouseenter: (e) => {
+        const t = e.currentTarget;
+        if (plein) { t.style.filter = 'brightness(1.1)'; return; }
+        t.style.background = 'var(--bg)';
+        t.style.borderColor = bordure === 'var(--border)' ? 'var(--accent)' : bordure;
+        if (couleur === 'var(--text2)') t.style.color = 'var(--accent)';
+      },
+      mouseleave: (e) => {
+        const t = e.currentTarget;
+        t.style.filter = '';
+        t.style.background = fond;
+        t.style.borderColor = bordure;
+        t.style.color = couleur;
+      },
+    },
+  });
+  b.appendChild(iconEl(icone, 14));
+  return b;
+}
+
 function buildValorisationTableRow(item) {
   const rowKey = item.row_key || ('m' + item.id);
   const tr = el('tr', { 'data-row-key': rowKey, style: 'border-bottom:1px solid var(--border)' });
@@ -24754,8 +25067,9 @@ function buildValorisationTableRow(item) {
   const refLabel = item.libelle_commercial || item.designation || item.reference || '';
   const matiereId = item.matiere_id || item.id;
   const refLink = stockMpRefLink(matiereId, refLabel, {
-    title: 'Ouvrir la matière' + (item.reference ? ' · ' + item.reference : ''),
+    title: 'Ouvrir la matière dans un nouvel onglet' + (item.reference ? ' · ' + item.reference : ''),
     style: 'text-decoration:none;color:var(--text);font-weight:700;font-size:13px',
+    nouvelOnglet: true,
   });
   const refChildren = [refLink];
   if (item.laizee && item.laize_label) {
@@ -24767,43 +25081,60 @@ function buildValorisationTableRow(item) {
       'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(251,146,60,0.15);color:#fb923c;font-size:11px;font-weight:700;font-family:inherit' },
       'Aucune laize'));
   }
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)' }, ...refChildren);
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)' },
+    el('div', { style: 'max-width:' + VAL_COLS.commercial[1] + 'px' }, ...refChildren));
   const desText = item.libelle_technique || '—';
-  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') }, desText);
+  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') },
+    el('div', { style: 'max-width:' + VAL_COLS.technique[1] + 'px' }, desText));
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
-    valFormatQte(item.quantite),
-    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || '')
+    el('div', { style: 'white-space:nowrap' },
+      valFormatQte(item.quantite),
+      el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' },
+        valUniteLibelle(item.unite, item.quantite))
+    )
   );
+  // Quantité convertie par le conditionnement (400 cartons par palette) :
+  // le calcul s'affiche, sinon la valorisation ne se refait pas de tête.
+  const uppQte = Number(item.unites_par_palette || 0);
+  if (item.avec_conditionnement && !item.stock_a_l_unite && uppQte > 1) {
+    const uAchat = item.unite_achat || 'unité';
+    const totalUnites = Number(item.quantite || 0) * uppQte;
+    tdQte.appendChild(el('div', {
+      style: 'font-size:10px;color:var(--muted);margin-top:2px',
+      title: 'Conditionnement : ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + ' par palette',
+    }, '× ' + uppQte.toLocaleString('fr-FR') + ' ' + valUniteLibelle(uAchat, uppQte) + '/pal. = '
+      + valFormatQte(totalUnites) + ' ' + valUniteLibelle(uAchat, totalUnites)));
+  }
 
   // Plus de colonne « Prix unitaire » : elle montrait le miroir de Coûts
   // matières dans la devise d'achat, pas un prix en euros. Les prix viennent
   // des colonnes Sous-total achat € et Prix de vente. Le conditionnement
   // (métrage par bobine, unités par palette) se règle depuis les actions.
   let cfgBtn = null;
-  if (item.laizee || item.avec_conditionnement) {
+  const prixSeul = !item.laizee && !item.avec_conditionnement && !!item.prix_direct && isMatieresAdmin();
+  if (item.laizee || item.avec_conditionnement || prixSeul) {
     const aConfigurer = item.laizee
       ? !((item.metres_lineaires_par_bobine || 0) > 0)
+      : prixSeul ? !((item.prix_unitaire || 0) > 0)
       : !((item.unites_par_palette || 0) > 0);
-    const libelle = item.laizee ? 'Métrage' : 'Conditionnement';
-    cfgBtn = el('button', {
-      type: 'button',
-      title: item.laizee ? 'Éditer le métrage par bobine'
-        : 'Éditer le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
-      style: 'background:var(--card);border:1px solid ' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--border)')
-        + ';border-radius:6px;padding:4px 8px;cursor:pointer;color:' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--text2)')
-        + ';font-size:11px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap',
-      on: { click: () => item.laizee
+    const libelle = item.laizee ? 'Métrage' : prixSeul ? 'Prix' : 'Conditionnement';
+    const titre = (item.laizee ? 'Métrage par bobine'
+        : prixSeul ? 'Prix unitaire'
+        : 'Prix et conditionnement (' + (item.unite_achat || 'unité') + ' par palette)')
+      + (aConfigurer ? ' — ' + libelle.toLowerCase() + ' à renseigner' : '');
+    cfgBtn = valBoutonIcone('edit', titre,
+      aConfigurer ? 'var(--warn)' : 'var(--text2)',
+      aConfigurer ? 'var(--warn)' : 'var(--border)',
+      'var(--card)',
+      () => item.laizee
         ? openValorisationParamsModal(item.matiere_id)
-        : openValorisationConditionnementModal(item.matiere_id || item.id) },
-    });
-    cfgBtn.appendChild(iconEl('edit', 11));
-    cfgBtn.appendChild(el('span', null, aConfigurer ? libelle + ' ?' : libelle));
+        : openValorisationConditionnementModal(item.matiere_id || item.id));
   }
 
   // "Valorisée" = prix > 0 ET (si conditionnement requis) unites_par_palette > 0
   const valored = (item.prix_unitaire || 0) > 0
     && (!item.avec_conditionnement || (item.unites_par_palette || 0) > 0);
-  const valColor = valored ? 'var(--text)' : 'var(--muted)';
+  const valColor = item.devalorise ? 'var(--danger)' : (valored ? 'var(--text)' : 'var(--muted)');
   // Une ligne est « réelle » dès qu'au moins un flag (USD, taxe ou transport) est actif
   // ET produit un ajustement (multiplicateur ≠ 1 OU forfait transport > 0).
   const hasReel = valored
@@ -24917,22 +25248,54 @@ function buildValorisationTableRow(item) {
     style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
     on: {
       click: () => openValorisationHistorique(item.matiere_id || item.id),
-      mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-      mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
+      mouseenter: (e) => { const t = e.currentTarget; t.style.background = 'var(--bg)'; t.style.color = 'var(--accent)'; t.style.borderColor = 'var(--accent)'; },
+      mouseleave: (e) => { const t = e.currentTarget; t.style.background = 'var(--card)'; t.style.color = 'var(--text2)'; t.style.borderColor = 'var(--border)'; },
     },
   });
   histBtn.appendChild(iconEl('clock', 14));
 
-  const lienCm = valLienCoutsMatieres(item, 'Coûts matières');
-  lienCm.style.marginTop = '0';
-  lienCm.style.whiteSpace = 'nowrap';
-  const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), histBtn];
+  // Lien Coûts matières en icône seule, même gabarit que les autres actions.
+  const lienCm = valLienCoutsMatieres(item, '');
+  lienCm.textContent = '';
+  lienCm.appendChild(iconEl('external-link', 14));
+  lienCm.title = 'Ouvrir dans Coûts matières' + (item.reference ? ' — ' + item.reference : '');
+  lienCm.setAttribute('aria-label', 'Ouvrir dans Coûts matières');
+  Object.assign(lienCm.style, { marginTop: '0', width: '28px', height: '28px', padding: '0',
+    justifyContent: 'center', borderRadius: '8px', flex: '0 0 auto', transition: 'all .15s' });
+  lienCm.addEventListener('mouseenter', () => { lienCm.style.background = 'var(--bg)'; });
+  lienCm.addEventListener('mouseleave', () => { lienCm.style.background = 'var(--card)'; });
+  // Stock à jeter : la ligne compte pour (-1) × sa valorisation.
+  const devalBtn = valBoutonIcone('trash-2',
+    item.devalorise
+      ? 'Dévalorisé : stock à jeter, soustrait de la valorisation. Cliquer pour le revaloriser.'
+      : 'Dévalorisation : marquer comme stock à jeter, la ligne sera soustraite de la valorisation.',
+    item.devalorise ? 'white' : 'var(--danger)',
+    'var(--danger)',
+    item.devalorise ? 'var(--danger)' : 'var(--card)',
+    () => valBasculerDevalorisation(item));
+  if (item.devalorise) tr.style.background = 'color-mix(in srgb, var(--danger) 7%, transparent)';
+  const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), devalBtn, histBtn];
   const tdHist = el('td', {
-    style: 'padding:10px 12px;text-align:center;white-space:nowrap'
+    style: 'padding:10px 12px;text-align:right;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
 
   tr.append(tdCat, tdRef, tdDes, tdQte, tdPrixReel, tdVente, tdVal, tdHist);
   return tr;
+}
+
+async function valBasculerDevalorisation(item) {
+  const voulu = !item.devalorise;
+  try {
+    await api('/api/stock/valorisation/devalorisation/' + (item.matiere_id || item.id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ laize_id: item.laize_id || null, devalorise: voulu }),
+    });
+    showToast(voulu ? 'Stock dévalorisé.' : 'Dévalorisation retirée.', 'success');
+    await loadValorisation();
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+  }
 }
 
 // Cellule de prix issue de Coûts matières, à l'échelle de la ligne (bobine,
@@ -25116,27 +25479,50 @@ async function openValorisationConditionnementModal(matiereId) {
   box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px' },
     (item.reference || '') + ' — ' + (item.designation || '')));
 
-  const uniteAchat = item.unite_achat || 'unité';
+  // Une bague tenue à l'unité se paie à la bague, pas au tube.
+  const sansPalette = !!item.stock_a_l_unite || !item.avec_conditionnement;
+  const uniteAchat = sansPalette ? (item.unite_achat && !item.stock_a_l_unite ? item.unite_achat
+    : (item.unite === 'unite' ? 'unité' : (item.unite || 'unité'))) : (item.unite_achat || 'unité');
   const prixUnit = Number(item.prix_unitaire || 0);
-  const uppInp = el('input', { type: 'number', step: '1', min: '0',
-    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  const champStyle = 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums';
+  const labelStyle = 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px';
+  const uppInp = el('input', { type: 'number', step: '1', min: '0', style: champStyle });
   uppInp.value = String(Number(item.unites_par_palette || 0) || '');
+  // Consommable : le prix unitaire se saisit ici (administration). Sinon il
+  // reste en lecture seule, il appartient à Coûts matières.
+  const prixEditable = !!item.prix_direct && isMatieresAdmin();
+  const prixInp = prixEditable
+    ? el('input', { type: 'number', step: '0.0001', min: '0', placeholder: 'Ex. 0,35', style: champStyle })
+    : null;
+  if (prixInp) prixInp.value = prixUnit > 0 ? String(prixUnit) : '';
+  const prixSaisi = () => prixInp ? (parseFloat((prixInp.value || '').replace(',', '.')) || 0) : prixUnit;
 
-  box.appendChild(valBlocPrixLectureSeule(item,
-    prixUnit > 0
-      ? prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/' + uniteAchat
-      : 'non valorisé'));
-  box.appendChild(el('div', { style: 'height:14px' }));
-  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, uniteAchat + ' par palette'));
-  box.appendChild(uppInp);
+  if (prixInp) {
+    box.appendChild(el('label', { style: labelStyle }, 'Prix unitaire (€ / ' + uniteAchat + ')'));
+    box.appendChild(prixInp);
+  } else {
+    box.appendChild(valBlocPrixLectureSeule(item,
+      prixUnit > 0
+        ? prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/' + uniteAchat
+        : 'non valorisé'));
+  }
+  // Tenue à l'unité, palette, autre : pas de conditionnement à saisir.
+  if (!sansPalette) {
+    box.appendChild(el('div', { style: 'height:14px' }));
+    box.appendChild(el('label', { style: labelStyle }, uniteAchat + ' par palette'));
+    box.appendChild(uppInp);
+  }
 
   // Aperçu prix palette : le prix vient de Coûts matières, seul le
   // conditionnement bouge ici.
   const preview = el('div', { style: 'margin-top:12px;font-size:12px;color:var(--text2);background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:10px 12px' });
   const updatePreview = () => {
-    const u = parseFloat((uppInp.value || '').replace(',', '.')) || 0;
-    if (prixUnit > 0 && u > 0) {
-      const total = prixUnit * u;
+    const u = sansPalette ? 1 : (parseFloat((uppInp.value || '').replace(',', '.')) || 0);
+    const prix = prixSaisi();
+    if (sansPalette) {
+      preview.textContent = 'Valorisation = quantité × prix unitaire.';
+    } else if (prix > 0 && u > 0) {
+      const total = prix * u;
       preview.innerHTML = '';
       preview.append(
         el('span', { style: 'color:var(--muted)' }, 'Prix palette calculé : '),
@@ -25148,6 +25534,7 @@ async function openValorisationConditionnementModal(matiereId) {
     }
   };
   uppInp.addEventListener('input', updatePreview);
+  if (prixInp) prixInp.addEventListener('input', updatePreview);
   updatePreview();
   box.appendChild(preview);
 
@@ -25161,15 +25548,26 @@ async function openValorisationConditionnementModal(matiereId) {
     type: 'button',
     style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
     on: { click: async () => {
-      const upp = parseFloat((uppInp.value || '').replace(',', '.'));
-      if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
+      const corps = {};
+      if (!sansPalette) {
+        const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+        if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
+        corps.unites_par_palette = upp;
+      }
+      if (prixInp) {
+        const raw = (prixInp.value || '').replace(',', '.').trim();
+        const prix = raw === '' ? 0 : parseFloat(raw);
+        if (isNaN(prix) || prix < 0) { showToast('Prix unitaire invalide — valeur positive attendue.', 'danger'); return; }
+        if (Math.abs(prix - prixUnit) > 1e-9) corps.prix_unitaire = prix;
+      }
+      if (!Object.keys(corps).length) { root.innerHTML = ''; return; }
       try {
         await api('/api/stock/matieres/' + matiereId, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ unites_par_palette: upp }),
+          body: JSON.stringify(corps),
         });
-        showToast('Conditionnement enregistré.', 'success');
+        showToast('prix_unitaire' in corps ? 'Prix et conditionnement enregistrés.' : 'Conditionnement enregistré.', 'success');
         root.innerHTML = '';
         await loadValorisation();
       } catch (e) {
@@ -25182,7 +25580,7 @@ async function openValorisationConditionnementModal(matiereId) {
 
   overlay.appendChild(box);
   root.appendChild(overlay);
-  setTimeout(() => uppInp.focus(), 50);
+  setTimeout(() => (prixInp || uppInp).focus(), 50);
 }
 
 /**
@@ -25291,11 +25689,11 @@ function buildValorisationTable() {
   const v = valEnsureState();
   const rows = valFilteredItems();
 
-  const wrap = el('div', { style:
+  const wrap = el('div', { cls: 'val-mp-table', style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
   const tableWrap = el('div', { style: 'overflow-x:auto' });
-  const table = el('table', { style: 'width:100%;border-collapse:collapse;min-width:880px' });
+  const table = el('table', { style: 'width:100%;border-collapse:collapse' });
 
   const arrow = (col) => {
     if (v.sortColumn !== col) return '';
@@ -25306,24 +25704,26 @@ function buildValorisationTable() {
   const thStyleC = thStyle + ';text-align:center;cursor:default';
 
   const thChildren = [
-    el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
-    el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
+    // Bornes de largeur : VAL_COLS. La colonne Actions se serre sur ses
+    // boutons (width:1%), les libellés prennent la place libre jusqu'à leur max.
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.categorie[0] + 'px', on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.commercial[0] + 'px', on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
+    el('th', { style: thStyle + ';min-width:' + VAL_COLS.technique[0] + 'px', on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.quantite[0] + 'px', on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
   ];
   thChildren.push(
-    el('th', { style: thStyleR + ';color:var(--success, #16a34a)',
+    el('th', { style: thStyleR + ';color:var(--success, #16a34a);min-width:' + VAL_COLS.achat[0] + 'px',
       on: { click: () => valToggleSort('prix_unitaire_reel') },
       title: "Sous-total d'achat (prix + transport + taxes) converti en euros, calculé par Coûts matières."
     }, 'Sous-total achat €' + arrow('prix_unitaire_reel')),
-    el('th', { style: thStyleR,
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.vente[0] + 'px',
       on: { click: () => valToggleSort('prix_vente') },
       title: "Sous-total d'achat en euros + marge de la catégorie (Coûts matières)."
     }, 'Prix de vente' + arrow('prix_vente')),
   );
   thChildren.push(
-    el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
-    el('th', { style: thStyleC }, 'Actions'),
+    el('th', { style: thStyleR + ';min-width:' + VAL_COLS.valo[0] + 'px', on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+    el('th', { style: thStyleC + ';width:1%;text-align:right' }, 'Actions'),
   );
   const thead = el('thead', null, el('tr', null, ...thChildren));
 
@@ -25487,7 +25887,8 @@ async function loadValorisationPF() {
   const pf = valPFEnsureState();
   const v = valEnsureState();
   pf.loading = true;
-  renderValorisationView(true);
+  // Pas de rendu complet ici : il reconstruisait le tableau des matières
+  // juste pour marquer la section PF « en chargement ». Le rendu de fin suffit.
   try {
     const qs = v.snapshotDate ? ('?date=' + encodeURIComponent(v.snapshotDate)) : '';
     const data = await api('/api/stock/valorisation/pf' + qs);
@@ -25866,15 +26267,13 @@ function buildValorisationPFTableRow(item) {
   // Quantité stock
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     valFormatQte(item.quantite),
-    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || ''),
+    el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, valUniteLibelle(item.unite, item.quantite)),
   );
 
-  // Prix unitaire HT — lecture seule.
-  //
-  // Comme pour les matières premières, la valorisation ne saisit plus de prix :
-  // elle affiche ce que la source de vérité lui donne. Ici cette source est
-  // l'import de la feuille de facturation (bouton « Importer Excel » au-dessus
-  // du tableau), pas une saisie ligne à ligne.
+  // Prix unitaire HT. Il vient de l'import de la feuille de facturation, à
+  // défaut de RVGI (achat, commande, facture, tarif). Le crayon permet de le
+  // corriger à la main quand aucune source n'est juste ; la saisie est
+  // historisée comme un import.
   const uniteLow = (item.unite || '').toLowerCase()
     .replace(/é/g, 'e').replace(/è/g, 'e').replace(/ê/g, 'e');
   const parMille = item.par_mille || uniteLow === 'etiquette' || uniteLow === 'etiquettes';
@@ -25892,7 +26291,23 @@ function buildValorisationPFTableRow(item) {
   if (!item.has_price) {
     tdPrix.appendChild(el('div', { style: 'font-size:10px;color:#fb923c;font-weight:700;margin-top:3px' }, 'Sans prix'));
   } else if (item.source_prix) {
-    tdPrix.appendChild(el('div', { style: 'font-size:10px;color:var(--muted);margin-top:3px' }, item.source_prix));
+    // Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
+    // défaut dernière commande client, à défaut tarif article. Tiers et
+    // conversion au survol.
+    const achat = ['achat_rvgi', 'commande_rvgi', 'facture_rvgi', 'tarif_rvgi'].includes(item.prix_origine);
+    const titre = achat
+      ? [item.achat_fournisseur, item.achat_detail].filter(Boolean).join(' · ')
+      : null;
+    tdPrix.appendChild(el('div', {
+      style: 'font-size:10px;margin-top:3px;color:' + (achat ? 'var(--accent)' : 'var(--muted)'),
+      title: titre || null,
+    }, item.source_prix));
+  }
+  // Transport d'un produit importé : ajouté au prix, il est nommé à part.
+  if (item.transport_import && Number(item.transport_ht) > 0) {
+    tdPrix.appendChild(el('div', { style: 'font-size:10px;margin-top:2px;color:var(--text2);font-variant-numeric:tabular-nums' },
+      '+ transport ' + (item.transport_part || '') + ' : ' + valFormatPrixDetail(item.transport_ht)
+      + ' → ' + valFormatPrixDetail(item.prix_avec_transport) + ' € HT/' + prixUniteLabel));
   }
 
   // Valorisation
@@ -25919,7 +26334,23 @@ function buildValorisationPFTableRow(item) {
     on: { click: () => openPFHistorique(item.id) },
   });
   histBtn.appendChild(iconEl('clock', 14));
-  const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
+  // Transport d'un produit importé : bascule, pleine quand il est ajouté.
+  const transportActif = !!item.transport_import;
+  const part = item.transport_part || '';
+  const transportBtn = valBoutonIcone('truck',
+    transportActif
+      ? 'Transport ajouté (' + part + ' du prix HT). Cliquer pour le retirer.'
+      : (item.has_price ? 'Ajouter le prix du transport (' + part + ' du prix HT) — produit importé'
+                        : 'Pas de prix : rien sur quoi calculer le transport'),
+    transportActif ? 'white' : 'var(--text2)',
+    transportActif ? 'var(--accent)' : 'var(--border)',
+    transportActif ? 'var(--accent)' : 'var(--card)',
+    () => valBasculerTransportPF(item));
+  if (!item.has_price && !transportActif) { transportBtn.disabled = true; transportBtn.style.opacity = '.4'; transportBtn.style.cursor = 'default'; }
+  const editBtn = valBoutonIcone('edit', 'Saisir le prix à la main (€ HT/' + prixUniteLabel + ')',
+    'var(--text2)', 'var(--border)', 'var(--card)', () => valEditerPrixPF(item, prixUniteLabel));
+  const tdHist = el('td', { style: 'padding:10px 12px;text-align:right;white-space:nowrap' },
+    el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, editBtn, transportBtn, histBtn));
 
   tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal);
   if (tdCharges) tr.append(tdCharges);
@@ -25927,10 +26358,82 @@ function buildValorisationPFTableRow(item) {
   return tr;
 }
 
+function valEditerPrixPF(item, uniteLabel) {
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  const fermer = () => { root.innerHTML = ''; };
+  const overlay = el('div', {
+    'data-modal': 'pf-prix',
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) fermer(); } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:440px;padding:18px 20px' });
+  const actuel = Number(item.prix_unitaire_ht) || 0;
+  const inp = el('input', { type: 'number', min: '0', step: 'any', id: 'pf-prix-saisie',
+    style: 'width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  if (actuel > 0) inp.value = String(actuel);
+  const enregistrer = async () => {
+    const v = parseFloat(String(inp.value).replace(',', '.'));
+    if (!(v >= 0)) { showToast('Prix invalide — saisir un nombre positif.', 'danger'); return; }
+    saveBtn.disabled = true;
+    try {
+      await api('/api/stock/valorisation/pf/' + item.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prix_unitaire_ht: v }),
+      });
+      fermer();
+      showToast('Prix enregistré.', 'success');
+      await loadValorisationPF();
+    } catch (e) {
+      showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+      saveBtn.disabled = false;
+    }
+  };
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') enregistrer(); if (e.key === 'Escape') fermer(); });
+  const saveBtn = el('button', { type: 'button',
+    style: 'padding:10px 16px;border:none;border-radius:8px;background:var(--accent);color:white;cursor:pointer;font-size:13px;font-weight:700',
+    on: { click: enregistrer } }, 'Enregistrer');
+  box.append(
+    el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Prix à la main'),
+    el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px' }, item.reference || ''),
+    el('div', { style: 'font-size:12px;color:var(--text2);margin-bottom:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: item.designation || '' }, item.designation || ''),
+    el('label', { for: 'pf-prix-saisie', style: 'display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, '€ HT/' + uniteLabel),
+    inp,
+    el('div', { style: 'font-size:12px;color:var(--muted);margin-top:8px' },
+      (item.source_prix ? 'Source actuelle : ' + item.source_prix + '. ' : '')
+      + 'La saisie remplace le prix importé et figure dans l\'historique. 0 rend la main à RVGI.'),
+    el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px' },
+      el('button', { type: 'button',
+        style: 'padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;font-size:13px;font-weight:600',
+        on: { click: fermer } }, 'Annuler'),
+      saveBtn),
+  );
+  overlay.appendChild(box);
+  root.innerHTML = '';
+  root.appendChild(overlay);
+  requestAnimationFrame(() => { inp.focus(); inp.select(); });
+}
+
+async function valBasculerTransportPF(item) {
+  const voulu = !item.transport_import;
+  try {
+    await api('/api/stock/valorisation/pf/' + item.id + '/transport', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transport: voulu }),
+    });
+    showToast(voulu ? 'Transport ajouté.' : 'Transport retiré.', 'success');
+    await loadValorisationPF();
+  } catch (e) {
+    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+  }
+}
+
 function buildValorisationPFTable() {
   const pf = valPFEnsureState();
   const rows = pfFilteredItems();
-  const wrap = el('div', { style:
+  const wrap = el('div', { cls: 'val-pf-table', style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden' });
 
   const tableWrap = el('div', { style: 'overflow-x:auto' });
@@ -25959,7 +26462,7 @@ function buildValorisationPFTable() {
       el('th', { style: thStyleR + ';color:#16a34a', on: { click: () => valTogglePFSort('charges_prod') }, title: 'Charge de production + frais de stockage appliqués à la valorisation' }, 'Dont charges de prod.' + arrow('charges_prod')),
     );
   }
-  headerCells.push(el('th', { style: thStyleC }, 'Historique'));
+  headerCells.push(el('th', { style: thStyleC + ';width:1%;text-align:right' }, 'Actions'));
   const thead = el('thead', null, el('tr', null, ...headerCells));
   const emptyColspan = canSeeChargesCol ? '8' : '7';
 
@@ -26591,6 +27094,22 @@ async function openValorisationClotureModal() {
   body.appendChild(limiteRow);
   const compteur = el('div', { style: 'font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600' });
   body.appendChild(compteur);
+  // Corrections cochées dont la somme dépasse le stock reconstitué au soir de
+  // la clôture : elles portent sur du stock entré après la date. La
+  // valorisation ramène la ligne à zéro, mais l'écart rattaché est faux.
+  const alerte = el('div', { style: 'display:none;font-size:12px;color:var(--danger);background:var(--bg);border:1px solid var(--danger);border-radius:8px;padding:8px 12px;margin-bottom:8px' });
+  body.appendChild(alerte);
+  const depassements = () => {
+    const somme = {}, stock = {};
+    for (const m of mvts) {
+      if (!m.cle_stock || m.stock_soir == null || !coche.has(m.source + ':' + m.id)) continue;
+      somme[m.cle_stock] = (somme[m.cle_stock] || 0) + (Number(m.ecart) || 0);
+      stock[m.cle_stock] = Number(m.stock_soir) || 0;
+    }
+    const out = {};
+    for (const c in somme) { if (stock[c] + somme[c] < -0.0001) out[c] = { stock: stock[c], somme: somme[c] }; }
+    return out;
+  };
   const liste = el('div');
   body.appendChild(liste);
 
@@ -26612,6 +27131,12 @@ async function openValorisationClotureModal() {
       majCompteur();
       return;
     }
+    const dep = depassements();
+    const nbDep = Object.keys(dep).length;
+    alerte.style.display = nbDep ? 'block' : 'none';
+    alerte.textContent = nbDep
+      ? nbDep + ' stock(s) passent sous zéro au ' + frDate(date) + ' avec les corrections cochées. Elles portent sur du stock entré après la clôture : à décocher, ou la ligne sera ramenée à zéro.'
+      : '';
     for (const g of groupes) {
       const lignes = g.lignes.filter(correspond);
       if (!lignes.length) continue;
@@ -26646,12 +27171,15 @@ async function openValorisationClotureModal() {
           cb.disabled = !!m.rattache_ailleurs;
           cb.addEventListener('change', () => { if (cb.checked) coche.add(k); else coche.delete(k); renderListe(); });
           const ecartCol = m.ecart > 0 ? 'var(--success)' : (m.ecart < 0 ? 'var(--danger)' : 'var(--muted)');
-          const row = el('label', { style: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;cursor:pointer' });
+          const d = coche.has(k) ? dep[m.cle_stock] : null;
+          const row = el('label', { style: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;cursor:pointer' + (d ? ';box-shadow:inset 3px 0 0 var(--danger)' : '') });
           row.appendChild(cb);
           row.appendChild(el('div', { style: 'flex:1;min-width:0' },
             el('div', { style: 'font-weight:600;color:var(--text)' }, (m.reference || '—') + (m.detail ? ' · ' + m.detail : '')),
             el('div', { style: 'color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
-              m.designation + (m.par ? ' · ' + m.par : '') + (m.rattache_ailleurs ? ' · rattaché à la clôture du ' + frDate(m.rattache_ailleurs) : ''))));
+              m.designation + (m.par ? ' · ' + m.par : '') + (m.rattache_ailleurs ? ' · rattaché à la clôture du ' + frDate(m.rattache_ailleurs) : '')),
+            d ? el('div', { style: 'color:var(--danger);font-weight:600' },
+              'Dépasse le stock du ' + frDate(date) + ' : ' + fmtQ(d.stock) + ' en stock, ' + fmtQ(d.somme) + ' rattachés') : null));
           row.appendChild(el('div', { style: 'text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums' },
             el('div', { style: 'color:var(--text2)' }, fmtQ(m.avant) + ' → ' + fmtQ(m.apres) + (m.complement && m.source === 'pf' ? ' ' + m.complement : '')),
             el('div', { style: 'font-weight:700;color:' + ecartCol }, (m.ecart > 0 ? '+' : '') + fmtQ(m.ecart))));
@@ -26697,7 +27225,8 @@ async function openValorisationClotureModal() {
 
 function buildValorisation() {
   const v = valEnsureState();
-  const root = el('div', { style: 'padding:18px 20px;max-width:1400px;margin:0 auto' });
+  // Pleine largeur : le tableau des matières a besoin de place pour ses libellés.
+  const root = el('div', { style: 'padding:18px 20px' });
 
   const head = el('div', { style: 'margin-bottom:18px' },
     el('h2', { style: 'font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px' }, 'Valorisation du stock'),
@@ -27575,7 +28104,7 @@ function peutVoirDestockage() {
 
 function buildSidebarNavStructure() {
   if (S.tracaOnly) {
-    return [{ kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' }];
+    return [{ kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes (MyTools)' }];
   }
   // Fabrication : vue dédiée Production + sections Matières premières + Outils
   if (S.fabStockMode) {
@@ -27587,7 +28116,7 @@ function buildSidebarNavStructure() {
       { kind: 'sep', label: 'Outils' },
       { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
       { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Traçabilité' },
-      { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
+      { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes (MyTools)' },
       { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
     ];
   }
@@ -27622,7 +28151,7 @@ function buildSidebarNavStructure() {
     { kind: 'sep', label: 'Outils' },
     { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
     { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Traçabilité' },
-    { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
+    { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes (MyTools)' },
     { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
   );
   return items;
@@ -28422,6 +28951,8 @@ async function init() {
   }
   const urlFiche = (urlParams.get('fiche') || '').trim();
   if (['fournisseurs', 'mouvements'].includes(urlFiche)) S.mpVueInit = urlFiche;
+  const urlDetail = (urlParams.get('detail') || '').trim();
+  if (/^(laize|article):\d+$/.test(urlDetail)) S.mpDetailInit = urlDetail;
   const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
   const urlProduitRef = (urlParams.get('ref') || '').trim();
   if (urlMatiereId > 0 && !S.tracaOnly) {
@@ -28446,18 +28977,7 @@ async function init() {
   // l'onglet, qui les passe à l'API ou s'en sert pour son premier rendu.
   try { if (window.MySifaUrl) stockLireFiltres(MySifaUrl.lire(), S.tab, false); } catch (e) {}
   render();
-  if (S.tab === 'traca') {
-    // Poste d'étiquetage adressable par URL. Sans ça, le portail ne peut
-    // proposer que « les étiquettes » en bloc, alors que personne n'imprime
-    // « des étiquettes » : on imprime celles de Cohésio 1 ou de la logistique.
-    // render() est déjà passé au-dessus : il faut redessiner le contenu, sinon
-    // l'écran reste sur la grille des postes malgré l'URL.
-    const urlPoste = urlParams.get('poste');
-    if (urlPoste && (TRACA_OUTILS.some(o => o.id === urlPoste) || TRACA_POSTES.some(p => p.id === urlPoste))) {
-      S.tracaPoste = urlPoste;
-      renderContent();
-    }
-  }
+  if (S.tab === 'traca') { tracaVersMyTools(urlParams.get('poste')); return; }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }

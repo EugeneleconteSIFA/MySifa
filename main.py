@@ -16,9 +16,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE, COOKIE_NAME, KERNSE_THEME
 from app.core.audit_middleware import AuditMiddleware
+from app.core.requete_courante import RequeteCouranteMiddleware
 from app.web.html import render_frontend_html
+from app.core.noindex import CHEMINS_PUBLICS, NoindexMiddleware
 
 from routers.auth       import router as auth_router
 from routers.imports    import router as router_imports
@@ -69,6 +71,7 @@ from app.routers.rh_outil import router as rh_outil_api_router
 from app.routers.rh_outil_contrat import router as rh_outil_contrat_api_router
 from app.routers.rh_outil_formations import router as rh_outil_formations_api_router
 from app.routers.rh_outil_pieces import router as rh_outil_pieces_api_router
+from app.routers.rh_outil_postes import router as rh_outil_postes_api_router
 from app.web.paie_page import router as paie_page_router
 from app.routers.widget_router import router as widget_router
 from app.routers.db_viewer import router as db_viewer_api_router
@@ -105,11 +108,21 @@ from app.routers.qualite_fsc import router as qualite_fsc_router
 from app.routers.qualite_eudr import router as qualite_eudr_router
 from app.routers.qualite_formulaires import router as qualite_formulaires_router
 from app.routers.maintenance_alertes_ia import router as maintenance_alertes_ia_router
+from app.routers.maintenance_alertes_stats import router as maintenance_alertes_stats_router
+from app.routers.poids_colle import router as poids_colle_router
 from app.routers.portail_espace import router_api as portail_espace_api_router
 from app.routers.portail_espace import router_html as portail_espace_html_router
 from app.routers.qualite_eudr import router_api as eudr_portail_api_router
 from app.routers.qualite_eudr import router_html as eudr_portail_html_router
 from app.web.qualite_page import router as qualite_page_router
+from app.web.tools_page import router as tools_page_router
+from app.routers.tools_convertir import router as tools_convertir_router
+from app.routers.tools_cartons import router as tools_cartons_router
+from app.routers.tools_parapheur import router as tools_parapheur_router
+from app.routers.tools_parapheur import router_espace as tools_parapheur_espace_router
+from app.routers.tools_pdf_ia import router as tools_pdf_ia_router
+from app.routers.tools_pdf import router as tools_pdf_router
+from app.routers.tools_image import router as tools_image_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
 from app.routers.notifications import router as notifications_router
@@ -127,6 +140,9 @@ from app.routers.guides import router as guides_api_router
 from app.web.learning_page import router as learning_page_router
 from app.routers.print import router as print_router
 from app.routers.print_specifiques import router as print_specifiques_router
+from app.routers.etiq_impression import router as etiq_impression_router
+from app.routers.etiq_atelier import router as etiq_atelier_router
+from app.routers.etiq_avance import router as etiq_avance_router
 from app.routers.besoins_matieres import router as besoins_matieres_router
 from app.routers.taches import router as taches_api_router
 from app.web.taches_page import router as taches_page_router
@@ -198,6 +214,7 @@ async def lifespan(app: FastAPI):
     _emails_task = asyncio.create_task(_boucle_emails_commandes())
     _cloture_task = asyncio.create_task(_boucle_cloture_fin_prevue())
     _coherence_task = asyncio.create_task(_boucle_coherence())
+    _parapheur_task = asyncio.create_task(_boucle_parapheur())
     try:
         yield
     finally:
@@ -207,6 +224,7 @@ async def lifespan(app: FastAPI):
         _emails_task.cancel()
         _cloture_task.cancel()
         _coherence_task.cancel()
+        _parapheur_task.cancel()
 
 
 async def _boucle_releves_accueil():
@@ -308,6 +326,27 @@ async def _boucle_coherence():
         except Exception as e:
             print(f"[MySifa] cohérence : tour en échec ({e})")
         await asyncio.sleep(1800)
+
+
+async def _boucle_parapheur():
+    """Toutes les 15 minutes, expire les demandes de signature échues et
+    relance les signataires qui tardent (MyTools › Parapheur ; jours ouvrés,
+    8 h – 18 h, rythme réglé par demande). Prod uniquement, comme les autres
+    boucles qui écrivent ou envoient : v1 a déjà quitté le lifespan."""
+    from app.core.database import get_db as _get_db
+    from app.services import parapheur as _parapheur
+
+    await asyncio.sleep(180)
+    while True:
+        try:
+            res = await asyncio.to_thread(_parapheur.tour, _get_db)
+            if res.get("relances") or res.get("expirees"):
+                print(f"[MySifa] parapheur : {res['relances']} relance(s), {res['expirees']} demande(s) expirée(s)")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] parapheur : tour en échec ({e})")
+        await asyncio.sleep(900)
 
 
 async def _boucle_emails_commandes():
@@ -429,7 +468,7 @@ async def router_hote_erp(request: Request, call_next):
     p = request.scope.get("path") or "/"
     dans_prefixe = p == ERP2_PREFIXE or p.startswith(ERP2_PREFIXE + "/")
     if hote in ERP2_HOSTS:
-        if not dans_prefixe and not p.startswith(("/api/", "/static/", "/uploads/")):
+        if not dans_prefixe and not p.startswith(("/api/", "/static/", "/uploads/")) and p not in CHEMINS_PUBLICS[1:]:
             nouveau = ERP2_PREFIXE + p
             request.scope["path"] = nouveau
             request.scope["raw_path"] = nouveau.encode("utf-8")
@@ -477,7 +516,13 @@ _STAGING_BANDEAU_CSS = (
     ".staging-bandeau::before{content:\"●\";color:#fef2f2;font-size:9px;line-height:1}"
     "body{padding-top:24px!important}"
     "body .sidebar{top:24px!important}"
+    # Une sidebar en 100vh décalée de 24 px perdait ses 24 derniers pixels
+    # (version, déconnexion) sous le bas de l'écran. Sous 900 px elle est un
+    # tiroir fixe, borné en haut et en bas : rien à corriger.
+    "@media (min-width:901px){body .sidebar{height:calc(100vh - 24px)!important;"
+    "min-height:calc(100vh - 24px)!important;max-height:calc(100vh - 24px)!important}}"
     "body .mobile-topbar{top:24px!important}"
+    "@media (max-width:600px){.staging-bandeau{white-space:nowrap;overflow:hidden;justify-content:flex-start;padding:0 8px}}"
     "</style>"
 )
 _STAGING_BANDEAU_HTML = (
@@ -615,10 +660,13 @@ async def inject_staging_bandeau(request: Request, call_next):
 # Coût pour les autres rôles : un <script> de 20 Ko en cache navigateur, aucun
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
-_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=4" defer></script>'
+_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=5" defer></script>'
 # Même logique pour la capture de blocs en widget d'accueil (mysifa_blocs.js) :
 # un bloc capturable doit l'être sur toutes les pages, sans liste à tenir.
 _BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></script>'.encode()
+# Téléphone : aucune page ne déborde en largeur. Toutes les pages, y compris celles
+# qui n'ont pas les boutons flottants (MyRH).
+_LARGEUR_TAG = b'<script src="/static/mysifa_largeur_mobile.js?v=3"></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 _HEAD_OPEN_RE = re.compile(rb"<head(?:\s[^>]*)?>", re.IGNORECASE)
 
@@ -638,6 +686,11 @@ _BOUTONS_CSS = (
 # ses trois fichiers, le démarreur en dernier.
 _BOUTONS_JS = (
     (b"/static/mysifa_dock.js", None),
+    # Efface la barre sous une fenêtre ouverte, sur téléphone. Jamais inclus
+    # par une page : c'est ici qu'il arrive partout.
+    (b"/static/mysifa_dock_fenetres.js", None),
+    # Sur téléphone, range tous les boutons dans une feuille (poignée ou onglet).
+    (b"/static/mysifa_outils_mobile.js", None),
     (b"/static/mysifa_postit.js", "postit"),
     (b"/static/mysifa_calc.js", "calculette"),
     (b"/static/mysifa_ai_chat.js", "ia"),
@@ -655,6 +708,9 @@ _VERSION_ASSET = {
     b"/static/mysifa_ai_chat.css": b"?v=4",
     b"/static/mysifa_ai_chat.js": b"?v=4",
     b"/static/chat_url.js": b"?v=1",
+    b"/static/mysifa_dock.js": b"?v=4",
+    b"/static/mysifa_dock_fenetres.js": b"?v=1",
+    b"/static/mysifa_outils_mobile.js": b"?v=3",
 }
 
 
@@ -720,6 +776,14 @@ async def inject_tache_quick(request: Request, call_next):
         except Exception:
             # Un réglage illisible ne doit jamais casser une page.
             _tete = b""
+    # Dans le <head> : la page est contenue dès sa construction, sans image trop large.
+    if not p.startswith("/portail/") and not _vitrine and _LARGEUR_TAG not in body:
+        _tete = _LARGEUR_TAG + _tete
+    # Écran de chargement sur téléphone : le premier élément du document, pour remplacer
+    # la page blanche. Une réponse sans <head> n'est pas une page qu'on ouvre.
+    if not p.startswith(("/portail/", "/api/", "/static/")) and not _vitrine and not KERNSE_THEME and _HEAD_OPEN_RE.search(body):
+        from app.services import ecran_chargement as _ec
+        _tete = _ec.tete_de_page() + (_ec.images_demarrage() if p == "/" else b"") + _tete
     if _tete:
         _h = _HEAD_OPEN_RE.search(body)
         if _h:
@@ -758,6 +822,15 @@ async def inject_tache_quick(request: Request, call_next):
 # AVANT GZip pour rester a l'interieur de la compression, et cede le pas aux
 # appels explicites des routers, plus precis (voir app/core/audit_middleware.py).
 app.add_middleware(AuditMiddleware)
+
+# Requête en cours (API appelée + page d'origine) lisible par les services :
+# le suivi de l'usage IA s'en sert pour dire d'où vient chaque appel
+# (app/core/requete_courante.py).
+app.add_middleware(RequeteCouranteMiddleware)
+
+# Référencement : X-Robots-Tag « noindex » partout sauf l'accueil public de la prod
+# (app/core/noindex.py).
+app.add_middleware(NoindexMiddleware)
 
 # Compression des reponses (>1 Ko). Ajoute en dernier => middleware le plus
 # externe : compresse apres l'injection du bandeau staging (qui lit le HTML
@@ -815,6 +888,7 @@ app.include_router(rh_outil_api_router)
 app.include_router(rh_outil_contrat_api_router)
 app.include_router(rh_outil_formations_api_router)
 app.include_router(rh_outil_pieces_api_router)
+app.include_router(rh_outil_postes_api_router)
 app.include_router(paie_page_router)
 app.include_router(widget_router)
 app.include_router(db_viewer_api_router)
@@ -851,11 +925,21 @@ app.include_router(qualite_fsc_router)
 app.include_router(qualite_eudr_router)
 app.include_router(qualite_formulaires_router)
 app.include_router(maintenance_alertes_ia_router)
+app.include_router(maintenance_alertes_stats_router)
+app.include_router(poids_colle_router)
 app.include_router(portail_espace_api_router)
 app.include_router(portail_espace_html_router)
 app.include_router(eudr_portail_html_router)
 app.include_router(eudr_portail_api_router)
 app.include_router(qualite_page_router)
+app.include_router(tools_page_router)
+app.include_router(tools_convertir_router)
+app.include_router(tools_cartons_router)
+app.include_router(tools_parapheur_router)
+app.include_router(tools_parapheur_espace_router)
+app.include_router(tools_pdf_ia_router)
+app.include_router(tools_pdf_router)
+app.include_router(tools_image_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
 app.include_router(notifications_router)
@@ -873,6 +957,9 @@ app.include_router(guides_api_router)
 app.include_router(learning_page_router)
 app.include_router(print_router)
 app.include_router(print_specifiques_router)
+app.include_router(etiq_impression_router)
+app.include_router(etiq_atelier_router)
+app.include_router(etiq_avance_router)
 app.include_router(taches_api_router)
 app.include_router(taches_page_router)
 # Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.
@@ -931,8 +1018,9 @@ def favicon():
 
 
 @app.get("/", response_class=HTMLResponse)
-def serve_frontend():
-    return render_frontend_html("portal")
+def serve_frontend(request: Request):
+    # Sans cookie de session : visiteur ou moteur, qui reçoit le titre et les balises de l'accueil public.
+    return render_frontend_html("portal", visiteur=not request.cookies.get(COOKIE_NAME))
 
 @app.get("/users")
 def users_redirect():

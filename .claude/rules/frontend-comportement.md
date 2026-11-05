@@ -88,6 +88,33 @@ La topbar mobile (`.mobile-topbar`) est toujours présente et contient :
 - `body.sb-open` l'affiche
 - Un overlay `.sidebar-overlay` ferme la sidebar au clic en dehors
 
+### Boutons flottants sur téléphone
+Sous 900 px, aucun bouton flottant : `static/mysifa_outils_mobile.js` masque ceux
+du dock et les range dans une feuille, ouverte par un bouton posé à côté du retour
+à l'accueil de la `.mobile-topbar` (une nouvelle page n'a rien à faire s'il porte la
+classe `.mobile-home-btn`), par l'onglet « Outils » de la barre du bas à l'accueil,
+ou à défaut par une poignée déplaçable au bord droit. Un nouvel outil
+flottant (`.mysifa-dock-extra`) y apparaît seul ; ne pas lui redonner de position
+sur téléphone. Ce fichier montre aussi une seule fenêtre d'accueil à la fois.
+
+Au doigt, `:hover` s'allume dès qu'on pose le doigt, y compris pour faire défiler,
+et reste allumé : ne pas colorer un élément tactile sur `:hover`.
+
+### Largeur sur téléphone
+Sous 900 px, une page ne défile jamais en largeur : `static/mysifa_largeur_mobile.js`,
+injecté partout par `main.py`, surveille les zones de page et contient ce qui les
+élargit (rangée de boutons à la ligne, tableau ou bande d'onglets qui défile dans
+son propre bloc). Il rattrape ce qu'un écran oublie, mais un écran neuf doit tenir
+de lui-même : pas de `min-width` fixe sur un conteneur de page, `flex-wrap` sur une
+rangée de boutons, un `overflow-x:auto` autour d'un tableau large.
+
+### Écran de chargement sur téléphone
+`app/services/ecran_chargement.py`, posé en tête du `<head>` par `main.py` sur toutes les
+pages : logo et barre sur un dégradé du thème, à l'ouverture et entre deux applis. Il se
+retire dès que `.portal-page` ou `.mobile-topbar` existe et que `#root` n'est plus vide.
+Une page sans ces repères le garde jusqu'à la fin de son chargement. Changer le logo ou
+le fond par défaut impose de refaire les images, unies et sans logo, de `static/demarrage/`.
+
 ### Liens de navigation
 Toujours inclure les liens vers les modules auxquels l'utilisateur a accès (vérifiés via le contexte de session). La cohérence des icônes entre pages est obligatoire — si un module utilise un certain SVG dans une page, il doit utiliser le même dans toutes les autres.
 

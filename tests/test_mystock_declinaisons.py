@@ -352,11 +352,12 @@ with dbmod.get_db() as conn:
     check("le coût produit repart sur les prix MyStock",
           float(cout.total_eur_per_m2), round(1.62 + 2.95 * 0.028, 4))
 
-    # Les trois écrans MyStock qui écrivent un prix doivent appeler ce retour,
-    # sinon la correction reste invisible côté Coûts matières.
+    # Les quatre écrans MyStock qui écrivent un prix doivent appeler ce retour,
+    # sinon la correction reste invisible côté Coûts matières (le quatrième :
+    # prix unitaire d'un consommable saisi sur la fiche matière).
     _stock = io.open(RACINE / "app/routers/stock.py", encoding="utf-8").read()
     check("les écrans MyStock déclenchent le retour",
-          _stock.count("_mystock_prix.resync_depuis_mystock("), 3)
+          _stock.count("_mystock_prix.resync_depuis_mystock("), 4)
 
     print("\n--- paramétrage porté par la déclinaison ---")
     from app.services.pricing.repository import declinaison_to_pricing_material  # noqa: E402

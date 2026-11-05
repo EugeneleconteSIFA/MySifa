@@ -186,6 +186,7 @@ def proposer(consigne: str, *, nom: str, params: Optional[dict], machines: list[
     except Exception as e:
         raise AlerteIaErreur(f"Appel à l'assistant en échec : {e}")
     ia_usage.noter(reponse, "alertes")
+    ia_usage.preciser(modele_demande=choix["id"], fichiers=len(pieces or []))
 
     if getattr(reponse, "stop_reason", "") == "refusal":
         raise AlerteIaErreur("L'assistant a refusé cette demande. Reformuler la consigne.")

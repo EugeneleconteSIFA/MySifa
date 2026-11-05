@@ -644,14 +644,17 @@ def dashboard_production(
         # non jouee sur le serveur), on utilise 0 par defaut.
         pd_cols = {r[1] for r in conn.execute('PRAGMA table_info(production_data)').fetchall()}
         nb_cartons_col = 'COALESCE(nb_cartons, 0) AS nb_cartons' if 'nb_cartons' in pd_cols else '0 AS nb_cartons'
+        # Saisies annulées écartées : la fiche dossier (`_saisies_dossier`) les
+        # écarte aussi, sinon les deux écrans ne tombent pas sur le même chiffre.
+        sans_annulees = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in pd_cols else ""
         all_rows = conn.execute(
-            f"""SELECT operateur,date_operation,operation_code,operation_category,
+            f"""SELECT id,operateur,date_operation,operation_code,operation_category,
                        machine,no_dossier,client,designation,quantite_traitee,
                        {nb_cartons_col},
                        COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
                        COALESCE(metrage_total_fin,   metrage_reel)  AS metrage_reel
                 FROM production_data
-                WHERE {wc}
+                WHERE {wc}{sans_annulees}
                 ORDER BY operateur,date_operation""",
             params,
         ).fetchall()
@@ -689,22 +692,24 @@ def dashboard_production(
         return s
 
     # ── Construire debut_entries et fin_data ─────────────────────────────────
-    # all_list est trié par (operateur, date_operation), donc quand on traite
-    # un code-89, tous les code-01 antérieurs pour cet opérateur sont déjà indexés.
-    #
-    # Fallback (cas poste de nuit) : si aucun code-01 n'est trouvé dans la
-    # fenêtre date filtrée, on requête le code-01 du même (operateur, dossier)
-    # en dehors de la fenêtre, sans quoi le métrage produit serait calculé
-    # comme `metrage_reel - 0`, ce qui prend tout le compteur cumulé machine.
-    debut_entries = {}   # (op, dos) -> [(norm_dt_iso, compteur_debut_float), ...]
+    # Mêmes règles que la fiche dossier (`dossier_stats._enrich_metrage`) :
+    # - le compteur de début appartient au DOSSIER, pas à l'opérateur (une
+    #   équipe qui prend la suite n'a pas posé le 01) ;
+    # - lecture chronologique, le 01 retenu est le dernier avant la fin ;
+    # - sans compteur de début connu, pas de métrage (un 0 implicite sortirait
+    #   le compteur machine entier).
+    # Repli (poste de nuit) : 01 hors de la fenêtre de dates, cherché en base
+    # pour le même dossier.
+    debut_entries = {}   # dos -> [(norm_dt_iso, compteur_debut_float), ...]
     fin_data      = {}   # (op, jour_iso, dos) -> {"metrage_m": float, "etiquettes": float}
     fallback_debut_ctr_cache: dict = {}  # (op, dos) -> float
 
-    def _fallback_debut_ctr(op_key: str, dos_key: str, fin_dt_iso: str) -> float:
+    def _fallback_debut_ctr(dos_key: str, fin_dt_iso: str):
         """Cherche le compteur début du dossier dans production_data, sans
         filtre de date (sauf <= fin_dt). Utilisé seulement quand la fenêtre
-        date filtrée ne contient pas le code-01 (production de nuit, etc.)."""
-        cache_key = (op_key, dos_key)
+        date filtrée ne contient pas le code-01 (production de nuit, etc.).
+        None si le dossier n'en a aucun."""
+        cache_key = (dos_key, fin_dt_iso)
         if cache_key in fallback_debut_ctr_cache:
             return fallback_debut_ctr_cache[cache_key]
         try:
@@ -712,20 +717,22 @@ def dashboard_production(
                 row = _conn.execute(
                     """SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr
                        FROM production_data
-                       WHERE operateur=? AND trim(no_dossier)=trim(?)
+                       WHERE trim(no_dossier)=trim(?)
                          AND operation_code='01'
                          AND date_operation <= ?
                          AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
                        ORDER BY date_operation DESC, id DESC LIMIT 1""",
-                    (op_key, dos_key, fin_dt_iso),
+                    (dos_key, fin_dt_iso),
                 ).fetchone()
-            ctr_val = float(row["ctr"]) if (row and row["ctr"] is not None) else 0.0
+            ctr_val = float(row["ctr"]) if (row and row["ctr"] is not None) else None
         except Exception:
-            ctr_val = 0.0
+            ctr_val = None
         fallback_debut_ctr_cache[cache_key] = ctr_val
         return ctr_val
 
-    for r in all_list:
+    chrono = sorted(all_list, key=lambda r: (_norm_dt(str(r.get("date_operation") or "")),
+                                             int(r.get("id") or 0)))
+    for r in chrono:
         code  = str(r.get("operation_code") or "")
         dos   = str(r.get("no_dossier") or "").strip()
         if not dos or dos == "0":
@@ -734,9 +741,8 @@ def dashboard_production(
         dt_op = str(r.get("date_operation") or "")
 
         if code == "01":
-            # Compteur début = metrage_prevu, ou 0 si absent (1re session du dossier)
-            ctr = float(r["metrage_prevu"]) if r.get("metrage_prevu") is not None else 0.0
-            debut_entries.setdefault((op, dos), []).append((_norm_dt(dt_op), ctr))
+            if r.get("metrage_prevu") is not None:
+                debut_entries.setdefault(dos, []).append((_norm_dt(dt_op), float(r["metrage_prevu"])))
 
         elif code in ("89", "90") and r.get("metrage_reel") is not None:
             # 90 = annulation de dossier. Le compteur de fin saisi par
@@ -747,15 +753,19 @@ def dashboard_production(
             key      = (op, jour_iso, dos)
             entry    = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0})
 
-            # Compteur début = dernier code-01 dont l'heure ≤ heure de cette fin
-            debuts   = debut_entries.get((op, dos), [])
-            before   = [(dt, m) for dt, m in debuts if dt <= fin_dt]
-            if before:
-                debut_ctr = sorted(before, reverse=True)[0][1]
-            else:
-                # Aucun 01 dans la fenêtre date : on va le chercher en DB
-                # sans filtre — typique du poste de nuit (01 la veille, 89 le matin).
-                debut_ctr = _fallback_debut_ctr(op, dos, fin_dt)
+            # Compteur début : celui que porte la ligne d'annulation (90), sinon
+            # le dernier 01 du dossier dont l'heure ≤ heure de cette fin.
+            debut_ctr = float(r["metrage_prevu"]) if (code == "90" and r.get("metrage_prevu") is not None) else None
+            if debut_ctr is None:
+                before = [m for dt, m in debut_entries.get(dos, []) if dt <= fin_dt]
+                if before:
+                    debut_ctr = before[-1]
+                else:
+                    # Aucun 01 dans la fenêtre date : on va le chercher en DB
+                    # sans filtre — typique du poste de nuit (01 la veille, 89 le matin).
+                    debut_ctr = _fallback_debut_ctr(dos, fin_dt)
+            if debut_ctr is None:
+                continue
 
             produit = max(0.0, float(r["metrage_reel"]) - debut_ctr)
             entry["metrage_m"] += produit
@@ -930,7 +940,9 @@ def dossier_detail(request: Request, no_dossier: str = ""):
         rows = _saisies_dossier(conn, ref)
         alertes = _alertes_dossier(conn, ref)
     anonyme = not can_view_all_prod(user)
-    stats = build_dossier_production_stats(rows, ref)
+    with get_db() as conn:
+        contexte = _saisies_journees(conn, rows)
+    stats = build_dossier_production_stats(rows, ref, contexte=contexte)
     if anonyme:
         # Calcul fait sur les saisies nominatives (les temps se découpent par
         # opérateur), les noms ne sortent qu'ensuite.
@@ -966,6 +978,30 @@ def dossier_detail(request: Request, no_dossier: str = ""):
     return {"no_dossier": ref, "stats": stats, "saisies": rows,
             "alerte": _alerte_metrage(metrage, rows), "comparaison": comparaison,
             "alertes": alertes, "identite": _identite_dossier(ref)}
+
+
+def _saisies_journees(conn, rows: list) -> list:
+    """Saisies des mêmes opérateurs les mêmes jours que `rows`, tous dossiers
+    confondus : le contexte dont les temps du dossier ont besoin (voir
+    `build_dossier_production_stats`)."""
+    paires = sorted({(str(r.get("operateur") or ""), str(r.get("date_operation") or "")[:10])
+                     for r in rows if r.get("operateur") and r.get("date_operation")})
+    if not paires:
+        return []
+    cond = " OR ".join(["(operateur = ? AND substr(date_operation, 1, 10) = ?)"] * len(paires))
+    params = [v for p in paires for v in p]
+    try:
+        res = conn.execute(
+            """SELECT id, operateur, date_operation, operation, operation_code,
+                      operation_category, machine, no_dossier, client, designation,
+                      quantite_a_traiter, quantite_traitee, fin_dossier
+                 FROM production_data
+                WHERE COALESCE(est_annule, 0) = 0 AND (""" + cond + ")",
+            params,
+        ).fetchall()
+    except Exception:
+        return []  # repli : temps calculés sur les seules saisies du dossier
+    return [dict(r) for r in res]
 
 
 def _identite_dossier(ref: str) -> dict:
@@ -1017,7 +1053,7 @@ def _alertes_dossier(conn, ref: str) -> list:
     try:
         acks = conn.execute(
             """SELECT a.id, a.alert_id, a.user_nom, a.machine, a.ack_at, a.responses, a.comment,
-                      m.nom AS alerte_nom, m.params AS alerte_params, u.operateur_lie
+                      a.questionnaire, m.nom AS alerte_nom, m.params AS alerte_params, u.operateur_lie
                  FROM maintenance_alert_acks a
                  LEFT JOIN maintenance_alerts m ON m.id = a.alert_id
                  LEFT JOIN users u ON u.id = a.user_id
@@ -1032,6 +1068,7 @@ def _alertes_dossier(conn, ref: str) -> list:
         ).fetchall()
     except Exception:
         return []  # tables de maintenance absentes : le détail reste lisible
+    from app.services.alertes_questionnaire import items_de_params, lire_saisie
     out = []
     for r in acks:
         try:
@@ -1042,7 +1079,11 @@ def _alertes_dossier(conn, ref: str) -> list:
             params = json.loads(r["alerte_params"] or "{}")
         except (TypeError, ValueError):
             params = {}
-        items = ((params.get("checklist") or {}).get("items")) or []
+        items = items_de_params(params)
+        # Réponses rangées sous les questions actuelles (par identifiant) :
+        # l'écran lit toutes les validations avec les mêmes points de
+        # contrôle. Une réponse à une question retirée depuis n'y figure pas.
+        reponses = lire_saisie(reponses, r["questionnaire"], items)["responses"]
         out.append({
             "id": r["id"], "alert_id": r["alert_id"], "nom": r["alerte_nom"] or "Alerte",
             "user_nom": r["user_nom"], "operateur_lie": r["operateur_lie"],

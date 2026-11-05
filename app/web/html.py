@@ -3,7 +3,6 @@ import json as _json
 from config import (
     APP_VERSION,
     APP_META_DESCRIPTION,
-    APP_PAGE_TITLE,
     THEME_COLOR_META,
     ENV_NAME,
     IS_STAGING,
@@ -49,6 +48,7 @@ from app.web.expe_notes_assets import (
     EXPE_ZONES_JS,
 )
 from app.web.expe_guide import EXPE_DEVIS_GUIDE_JS
+from app.web.components.seo_accueil import titre_et_seo
 from app.web.expe_pilotage_assets import EXPE_PILOTAGE_CSS, EXPE_PILOTAGE_JS
 from app.web.expe_emails_assets import EXPE_EMAILS_CSS, EXPE_EMAILS_JS
 from app.web.expe_carburant_assets import EXPE_CARBURANT_CSS, EXPE_CARBURANT_JS
@@ -80,6 +80,16 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+// Accueil sur téléphone : ces deux réponses partent avant le reste de la page,
+// devant la vingtaine d'appels du démarrage (portalBlocCharger).
+if(location.pathname==='/'&&window.matchMedia('(max-width:900px)').matches){
+  window.__portailAvance={};
+  [['a-traiter','/api/portail/a-traiter'],['atelier','/api/portail/atelier']].forEach(function(c){
+    window.__portailAvance[c[0]]=fetch(c[1],{credentials:'include'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});
+  });
+}
+</script>
 <meta name="description" content="__META_DESCRIPTION__">
 <link rel="icon" href="__FAV_ICO__" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon__FAV_SFX__-32.png">
@@ -94,7 +104,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0a0e17">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>__PAGE_TITLE__</title>
+__TITRE_SEO__
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
@@ -1680,10 +1690,10 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <div id="gsm-backdrop" class="gsm-backdrop" aria-hidden="true"></div>
 <div id="gsm-modal" class="gsm-modal" role="dialog" aria-modal="true" aria-label="Recherche Google" aria-hidden="true"></div>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_portail_tour.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_resize.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -1705,10 +1715,10 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page (url-etat.md) : portail, MyExpé, MyCompta, MyRH ; chacun inactif hors de son chemin. -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/portail_url.js?v=2"></script>
+<script src="/static/portail_url.js?v=3"></script>
 <script src="/static/expe_url.js?v=3"></script>
 <script src="/static/compta_url.js?v=1"></script>
-<script src="/static/myrh_url.js?v=1"></script>
+<script src="/static/myrh_url.js?v=5"></script>
 <script src="/static/motion.js" defer></script>
 <script>
 const API=window.location.origin;
@@ -1972,6 +1982,16 @@ function set(u){
   }
   render();
 }
+// Un compteur qui arrive ne reconstruit pas l'accueil sur téléphone : seule la
+// barre du bas l'affiche, et reconstruire remplacerait les tuiles sous le doigt.
+function setCompteur(u){
+  if(S.app==='portal'&&window.matchMedia('(max-width:900px)').matches){
+    Object.assign(S,u);
+    try{renderMobileNavbar();}catch(_){}
+    return;
+  }
+  set(u);
+}
 function toast(m,t='success'){set({toast:{message:m,type:t}});setTimeout(()=>set({toast:null}),3500);}
 function showToast(message,type){
   const t=type==='danger'?'error':(type==='success'?'success':'success');
@@ -2123,6 +2143,8 @@ function icon(name,size=16){
     'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
     'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     'tool': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    // MyTools (21/10/2026) : couteau multifonction, dessiné pour l'appli — la clé est à MyProd.
+    'mytools': '<rect x="2.5" y="14" width="19" height="6.5" rx="3.25"/><path d="M6.5 14c3.5-4.5 8-7.8 14-9.5L10 14"/><path d="M15.5 14l2.2-3.6"/><path d="M6 17.25h.01M18 17.25h.01"/>',
     'toolbox': '<rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>',
     'credit-card': '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
@@ -2250,7 +2272,11 @@ async function checkAuth(){
     if(_handleProdQueryRouting()) return;
     if(await _loadInitialAppData()) return;
   }
-  else{S.user=null;S.app='login';}
+  else{
+    S.user=null;S.app='login';
+    // Demandées sans session : à refaire après la connexion.
+    window.__portailAvance=null;
+  }
   render();
   if(S.user&&window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(S.user));
 }
@@ -2261,7 +2287,7 @@ function isSuperAdmin(u){return !!(u && u.role==='superadmin');}
 async function loadMessagesUnread(){
   if(!isSuperAdmin(S.user))return;
   const r=await api('/api/messages/unread-count');
-  if(r && typeof r.count==='number' && r.count!==S.msgUnread) set({msgUnread:r.count});
+  if(r && typeof r.count==='number' && r.count!==S.msgUnread) setCompteur({msgUnread:r.count});
 }
 // Pastille « mes tâches » : tâches ouvertes qui me sont assignées. L'endpoint
 // répond 0 plutôt qu'une erreur pour un rôle non autorisé — une pastille ne
@@ -2278,7 +2304,7 @@ function _peutVoirTaches(u){
 async function loadTachesCount(){
   if(!_peutVoirTaches(S.user))return;
   const r=await api('/api/taches/badge');
-  if(r && typeof r.count==='number' && r.count!==S.tachesCount) set({tachesCount:r.count});
+  if(r && typeof r.count==='number' && r.count!==S.tachesCount) setCompteur({tachesCount:r.count});
 }
 // Pastille « invitations » : alimentée par mysifa_cal_rappel.js, qui interroge
 // déjà /api/calendrier/notifications une fois par minute pour la pop-up de
@@ -2286,7 +2312,7 @@ async function loadTachesCount(){
 function ecouterInvitationsCalendrier(){
   window.addEventListener('mysifa:cal-invitations',function(e){
     const n=Number((e&&e.detail&&e.detail.nombre)||0);
-    if(n!==Number(S.calInvitCount||0))set({calInvitCount:n});
+    if(n!==Number(S.calInvitCount||0))setCompteur({calInvitCount:n});
   });
   if(window.MySifaCalRappel&&window.MySifaCalRappel.rafraichir){
     window.MySifaCalRappel.rafraichir();
@@ -2387,6 +2413,8 @@ async function sendContact(){
     toast('Envoi impossible','error');
   }
 }
+// Studio Kernse : compte les connexions réussies (événement seul : ni page vue, ni donnée personnelle).
+function kernseConnexion(){try{if(window.kernse)return window.kernse.track('connexion');var s=document.createElement('script');s.src='https://www.kernse.fr/k.js';s.defer=true;s.dataset.app='mysifa';s.dataset.badge='off';s.dataset.view='off';s.onload=function(){window.kernse&&window.kernse.track('connexion')};document.head.appendChild(s);}catch(e){}}
 async function doLogin(email,password){
   if(S.loginSubmitting)return;
   S.loginError=null;
@@ -2401,6 +2429,8 @@ async function doLogin(email,password){
       return;
     }
     authEpoch++;
+    kernseConnexion();
+    const tc=document.querySelector('title[data-titre-connecte]');if(tc)document.title=tc.dataset.titreConnecte;
     // Profil complet : la réponse login ne contient pas tous les champs (adresse, date_naissance).
     try{
       const me=await api('/api/auth/me');
@@ -2445,6 +2475,7 @@ async function doLogout(){
   await api('/api/auth/logout',{method:'POST'});
   try{ if(typeof clearPostitsUi==='function') clearPostitsUi(); }catch(e){}
   try{ MySifaTheme.applyDefault(); }catch(e){}
+  try{portalBlocsOublier();}catch(e){}
   S.user=null;S.app='login';S.historique=null;S.production=null;S.traceabilite=null;
   S.tracFilters={ref:'',client:'',machine:'',statut:''};S.tracSort={col:null,dir:'asc'};
   S.stockGlobale=null;S.stockInvPriorites=[];S.stockProduits=[];S.stockSelProduit=null;S.stockSelEmpl=null;
@@ -8249,13 +8280,13 @@ async function loadFiches(){
 async function loadPendingOfCount(){
   try{
     const data=await api('/api/admin/of-link-pending/count');
-    set({
+    setCompteur({
       pendingOfCount:Number(data&&data.count||0),
       pendingOfAmbigus:Number(data&&data.ambigus||0),
       pendingOfSansOf:Number(data&&data.sans_of||0),
     });
   }catch(e){
-    set({pendingOfCount:0,pendingOfAmbigus:0,pendingOfSansOf:0});
+    setCompteur({pendingOfCount:0,pendingOfAmbigus:0,pendingOfSansOf:0});
   }
 }
 
@@ -10559,6 +10590,7 @@ function renderMobileNavbar(){
     grid:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
     chat:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
     ai:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+    outils:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
   };
   function tab(id,ico,label,active,badge){
     const bdg=badge>0?('<span class="mobile-navbar-tab-badge">'+(badge>9?'9+':badge)+'</span>'):'';
@@ -10569,7 +10601,9 @@ function renderMobileNavbar(){
   }
   const tabs=[
     tab('home',   ICO.home, 'Accueil',      isPortal, 0),
-    tab('switch', ICO.grid, "Changer d'app", isCmdKOpen, 0),
+    // À l'accueil, le champ de recherche et les tuiles servent déjà à changer
+    // d'application : l'onglet porte les outils (mysifa_outils_mobile.js).
+    isPortal?tab('outils', ICO.outils, 'Outils', false, 0):tab('switch', ICO.grid, "Changer d'app", isCmdKOpen, 0),
     tab('msg',    ICO.chat, 'Messagerie',   isMessages, msgUnread),
   ];
   if(aiEnabled){
@@ -10582,8 +10616,15 @@ function renderMobileNavbar(){
       e.stopPropagation();
       const id=btn.getAttribute('data-nav');
       if(id==='home'){
-        if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}
+        if(S.app==='portal'){
+          // Depuis l'écran des tableaux de bord, Accueil ramène aux applications.
+          const _colonne=document.getElementById('mysifa-accueil');
+          if(_colonne&&!_colonne.classList.contains('repliee')){_colonne.querySelector('.mac-repli').click();return;}
+          window.scrollTo({top:0,behavior:'smooth'});return;
+        }
         window.location.href='/';
+      } else if(id==='outils'){
+        if(window.MySifaOutilsMobile)window.MySifaOutilsMobile.ouvrir();
       } else if(id==='switch'){
         if(window.MysifaCmdK&&typeof window.MysifaCmdK.toggle==='function'){
           window.MysifaCmdK.toggle('');
@@ -10775,7 +10816,7 @@ function __restoreScroll(pos){
 // saisie perd le focus et la fenetre revient en haut — la frappe part dans le
 // vide. On note le chemin du champ actif et le defilement des modals avant le
 // rendu, puis on les reapplique si l'element au meme chemin est le meme champ.
-const MODAL_KEEP_SEL='.add-row-modal,.expe-devis-modal-overlay,.expe-trp-overlay,.expe-trp-modal-overlay,.contact-modal-overlay,[role="dialog"]';
+const MODAL_KEEP_SEL='.rho-cv,.add-row-modal,.expe-devis-modal-overlay,.expe-trp-overlay,.expe-trp-modal-overlay,.contact-modal-overlay,[role="dialog"]';
 function __domPath(el,root){
   const path=[];
   while(el&&el!==root){
@@ -11080,8 +11121,14 @@ try{
       if(!sessionStorage.getItem(k)){
         sessionStorage.setItem(k,'1');
         navigator.serviceWorker.getRegistrations()
-          .then(rs=>Promise.all(rs.map(r=>r.unregister().catch(()=>false))))
-          .then(()=>{ try{ location.reload(); }catch(e){} });
+          .then(rs=>{
+            // Rien à nettoyer, rien à recharger. Sans ce test, l'app installée, dont
+            // chaque lancement est une nouvelle session, chargeait l'accueil deux fois.
+            if(!rs.length)return;
+            return Promise.all(rs.map(r=>r.unregister().catch(()=>false)))
+              .then(()=>{ try{ location.reload(); }catch(e){} });
+          })
+          .catch(()=>{});
       }
     }
   }
@@ -11121,10 +11168,10 @@ _DEFAULT_CONFIG = {
 }
 
 
-# Rendu 100% déterminé par initial_app (le reste = constantes de config lues
+# Rendu 100% déterminé par initial_app et visiteur (le reste = constantes lues
 # au boot) : cache pour éviter 84 .replace() sur ~500 Ko à chaque hit.
 @_functools.lru_cache(maxsize=32)
-def render_frontend_html(initial_app: str = "portal") -> str:
+def render_frontend_html(initial_app: str = "portal", visiteur: bool = False) -> str:
     cfg = _MODULE_CONFIG.get(initial_app, _DEFAULT_CONFIG)
     # Bandeau : toujours dans le DOM. Visibilité initiale = IS_STAGING (rouge).
     # En prod : caché par défaut ; le JS d'impersonation le révèle pour le superadmin.
@@ -11170,7 +11217,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__FAV_SFX2__", fav_sfx)
         .replace("__FAV_ICO__", "/static/favicon-light-32.png" if IS_STAGING else "/static/favicon.ico")
         .replace("__TOUCH_ICON__", touch_icon)
-        .replace("__PAGE_TITLE__", page_title)
+        .replace("__TITRE_SEO__", titre_et_seo(initial_app, page_title, visiteur))
         .replace("__BRAND__", brand)
         .replace("__APP_TITLE__", cfg["app_title"])
         .replace("__MANIFEST__", cfg["manifest"])
@@ -11240,6 +11287,3 @@ def _js_escape(s: str) -> str:
          .replace("\n", "\\n")
          .replace("\r", "")
     )
-
-
-FRONTEND_HTML = render_frontend_html("portal")

@@ -101,11 +101,11 @@ body.sb-open .sidebar-overlay{display:block}
 /* ── Mobile topbar ── */
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 @media(max-width:768px){.mobile-topbar{display:flex}}
-.mobile-menu-btn{background:none;border:none;color:var(--text2);cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center}
 .mobile-topbar-title{font-size:14px;font-weight:700;color:var(--text)}
 .mobile-topbar-sub{font-size:11px;color:var(--muted)}
-.mobile-home-btn{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:4px;border-radius:6px;transition:.15s}
-.mobile-home-btn:hover{color:var(--accent)}
+.mobile-menu-btn,.mobile-home-btn{width:40px;height:40px;flex-shrink:0;padding:0;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.mobile-menu-btn:hover,.mobile-home-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.mobile-home-btn{margin-left:auto}
 
 /* ── Content ── */
 .content{padding:28px 32px;max-width:1600px;width:100%}
@@ -233,6 +233,7 @@ body.light .toast.danger{background:#fee2e2;color:#991b1b}
 body.light .toast.info{background:#f1f5f9;color:var(--text)}
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
+<link rel="stylesheet" href="/static/mysifa_tools_image.css?v=__V_LABEL__">
 <script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
@@ -251,6 +252,10 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         BAT
       </button>
+      <button type="button" class="nav-btn" id="nav-image" onclick="openImageOutil()" data-bulle="Outil Image de MyTools">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/></svg>
+        Améliorer / vectoriser
+      </button>
     </div>
     <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
     <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="MyBAT" data-msb-version="__V_LABEL__"></div>
@@ -267,7 +272,9 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         <div class="mobile-topbar-title">MyBAT</div>
         <div class="mobile-topbar-sub">Bons À Tirer</div>
       </div>
-      <button type="button" class="mobile-home-btn" onclick="location.href='/'">⌂</button>
+      <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
+      </button>
     </div>
 
     <div class="content">
@@ -310,6 +317,15 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <div class="table-wrap" id="table-wrap"></div>
     </div>
   </main>
+</div>
+
+<!-- Outil Image de MyTools (static/mysifa_tools_image.js), plein écran -->
+<div class="timg-fenetre" id="image-outil" style="display:none" role="dialog" aria-label="Améliorer et vectoriser une image">
+  <div class="timg-fenetre-tete">
+    <h2>Image — améliorer et vectoriser</h2>
+    <button type="button" class="timg-btn" onclick="closeImageOutil()" data-bulle="Retour aux BAT" data-bulle-touche="Échap">Fermer</button>
+  </div>
+  <div class="timg-fenetre-corps" id="image-outil-corps"></div>
 </div>
 
 <!-- Modal création -->
@@ -446,7 +462,8 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 
 <!-- Adresse de la page : statut, tri, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/bat_url.js?v=1"></script>
+<script src="/static/bat_url.js?v=3"></script>
+<script src="/static/mysifa_bulles.js?v=__V_LABEL__"></script>
 <script>
 'use strict';
 
@@ -517,6 +534,35 @@ function showToast(msg, type='info'){
 
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
+
+// Outil Image de MyTools (static/mysifa_tools_image.js) : vectoriser un logo,
+// remonter la qualité d'une image client avant un BAT. Chargé au premier usage.
+let _imageOutilCharge=null;
+function openImageOutil(){
+  const ov=document.getElementById('image-outil');
+  ov.style.display='flex'; closeSidebar();
+  document.getElementById('nav-image').classList.add('active');
+  if(!_imageOutilCharge){
+    _imageOutilCharge=new Promise((ok,ko)=>{
+      const s=document.createElement('script');
+      s.src='/static/mysifa_tools_image.js?v=__V_LABEL__';
+      s.onload=ok; s.onerror=()=>{_imageOutilCharge=null;ko();};
+      document.head.appendChild(s);
+    });
+  }
+  // Rend la promesse : l'adresse (static/bat_url.js) rouvre ensuite le projet demandé.
+  return _imageOutilCharge
+    .then(()=>{window.MyToolsImage.mount(document.getElementById('image-outil-corps'),
+      {toast:(m,t)=>showToast(m,t),surChange:()=>{if(typeof batSyncUrl==='function') batSyncUrl();}});})
+    .catch(()=>showToast('Outil image indisponible — vérifier la connexion.','danger'));
+}
+function closeImageOutil(){
+  const ov=document.getElementById('image-outil');
+  if(!ov || ov.style.display==='none') return;
+  ov.style.display='none';
+  document.getElementById('nav-image').classList.remove('active');
+  if(window.MyToolsImage) window.MyToolsImage.demonter();
+}
 
 // Le pied commun bascule le thème via MySifaTheme ; on recopie le mode dans
 // l'ancienne clé lue par le script de pré-rendu (light-pre) pour éviter un flash.
@@ -1153,13 +1199,13 @@ async function submitPdfDelete(){
   document.addEventListener('keydown', e=>{
     if(e.key==='Escape'){
       closeCreateModal();closeUploadModal();closeEditModal();closeStatutModal();closeDelModal();
-      closePdfPicker();closePdfDelModal();
+      closePdfPicker();closePdfDelModal();closeImageOutil();
     }
   });
 })();
 </script>
 <script>window.__MYSIFA_APP__='bat';</script>
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script>
 if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
@@ -1171,7 +1217,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 </body>
 </html>"""
 

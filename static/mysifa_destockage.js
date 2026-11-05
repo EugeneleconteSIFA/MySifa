@@ -26,7 +26,7 @@
   'use strict';
 
   const E = { opts: null, data: null, cand: {}, rows: [], entryId: null, edition: null, paravent: false,
-    choix: null };
+    complexe: false, choix: null };
 
   const UNITES = {ml: ['ml', 'ml'], kg: ['kg', 'kg'], bobine: ['bobine', 'bobines'],
     tube: ['tube', 'tubes'], palette: ['palette', 'palettes'], carton: ['carton', 'cartons'],
@@ -133,8 +133,11 @@
   }
   async function appel(path, options) {
     const o = options || {};
+    // Un fichier (import du PDF d'un OF) part en multipart : c'est le
+    // navigateur qui pose l'en-tête et sa frontière, pas nous.
+    const json = !(o.body instanceof FormData);
     const r = await fetch(path, Object.assign({credentials: 'include'}, o, {
-      headers: Object.assign({'Content-Type': 'application/json'}, o.headers || {}),
+      headers: Object.assign(json ? {'Content-Type': 'application/json'} : {}, o.headers || {}),
     }));
     if (!r.ok) {
       let msg = 'Erreur ' + r.status;
@@ -169,6 +172,35 @@
   // Conditionnement paravent (02/10/2026) : l'étiquette est pliée, pas
   // enroulée — aucun mandrin ne sort, quoi que dise le calcul.
   function sansMandrin(r) { return E.paravent && r.ligne.kind === 'mandrin'; }
+
+  // Matière complexée (04/11/2026) : la bobine passée embarque déjà adhésif
+  // et glassine, même si la fiche technique annonce un frontal. Les lignes
+  // calculées d'adhésif et de glassine sont alors ramenées à zéro — ce qui
+  // rend au stock ce qui en était déjà sorti. Une ligne ajoutée à la main
+  // reste saisissable : c'est qu'on en a réellement remis.
+  function sansComplexe(r) {
+    return E.complexe && !r.ligne.ajout && ['adhesif', 'glassine'].includes(r.ligne.kind);
+  }
+
+  function neutralisee(r) { return sansMandrin(r) || sansComplexe(r); }
+
+  // Un complexe retenu sur la ligne support alors que le serveur a raisonné
+  // sur un frontal (lignes adhésif / glassine non marquées « inclus ») : la
+  // case se coche d'elle-même à l'ouverture.
+  function complexeDetecte() {
+    const support = E.rows.some(r => r.ligne.kind === 'support' && r.mid
+      && ((candidat(r.mid) || {}).categorie || '').toLowerCase() === 'complexe');
+    return support && E.rows.some(r => ['adhesif', 'glassine'].includes(r.ligne.kind)
+      && !r.ligne.ajout && !r.ligne.inclus_complexe);
+  }
+
+  // Coche « Lever la réserve » quand plus aucune ligne ne reste à compléter.
+  function proposerLeverReserve() {
+    const lever = document.getElementById('dr-lever');
+    if (!lever) return;
+    const reste = E.rows.some(r => !neutralisee(r) && !r.mid && !r.ligne.facultative && !r.ligne.ajout);
+    if (!reste) lever.checked = true;
+  }
 
   function cleLigne(l) { return (l.kind || '') + '|' + (l.source_value || '') + '|' + (l.hors_fiche ? l.matiere_id : ''); }
 
@@ -215,6 +247,7 @@
     E.rows.forEach(r => {
       if (r.mid && r.lid == null) r.lid = laizeParDefaut(candidat(r.mid));
     });
+    if (!garder && complexeDetecte()) E.complexe = true;
   }
 
   function boutonPetit(attr, i, libelle) {
@@ -404,12 +437,13 @@
         : (l.remplace && r.mid === l.matiere_id ? 'remplace « ' + esc(l.remplace.matiere_ref || '') + ' »' : ''));
     const sous = [laizeManque, remplace, (l.hors_fiche && !l.ajout) ? 'ajoutée à la main' : '',
       l.depuis_of ? 'd\'après l\'OF (fiche technique vide)' : '',
-      l.inclus_complexe ? 'déjà dans le complexe — à ne sortir que si on en a ajouté' : '',
+      (l.inclus_complexe && !sansComplexe(r)) ? 'déjà dans le complexe — à ne sortir que si on en a ajouté' : '',
       (l.attendue && r.mid) ? 'absente de la fiche technique' : '',
-      sansMandrin(r) ? 'conditionnement paravent — pas de mandrin' : ''].filter(Boolean)
+      sansMandrin(r) ? 'conditionnement paravent — pas de mandrin' : '',
+      sansComplexe(r) ? 'matière complexée — déjà dans la bobine' : ''].filter(Boolean)
       .join('<span style="color:var(--muted)"> · </span>');
 
-    const paravent = sansMandrin(r);
+    const paravent = neutralisee(r);
     const bloque = paravent || !r.mid || conv.facteur_stock == null;
     const step = conv.entier ? '1' : (conv.unite_reelle === 'ml' ? '1' : '0.001');
     const u = conv.unite_reelle || l.besoin_unite || '';
@@ -682,7 +716,15 @@
     if (c && c.conversion && c.conversion.entier) r.val = Math.round(Number(r.val || 0));
     if (!avant && c && !r.val && r.ligne.consomme) r.val = Number(r.ligne.consomme);
     if (E.edition && E.edition.i === i) E.edition = null;
+    const devientComplexe = !E.complexe && r.ligne.kind === 'support' && !r.ligne.ajout
+      && c && (c.categorie || '').toLowerCase() === 'complexe';
+    if (devientComplexe) {
+      E.complexe = true;
+      const cb = document.getElementById('dr-complexe');
+      if (cb) cb.checked = true;
+    }
     rendreLignes();
+    if (devientComplexe) proposerLeverReserve();
     if (r.ligne.ajout && mid) {
       const q = document.querySelector('[data-dr-q="' + i + '"]');
       if (q && !q.disabled) { q.focus(); q.select(); }
@@ -850,7 +892,10 @@
       + '<button type="button" class="dr-ajout" data-dr-ajout><span style="font-size:16px;line-height:1">+</span> Ajouter une matière</button>'
       + '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">'
       + '<input type="checkbox" id="dr-paravent"' + (E.paravent ? ' checked' : '') + '> Conditionnement paravent'
-      + '<span style="font-weight:400;color:var(--muted)">— pas de mandrin</span></label></div>'
+      + '<span style="font-weight:400;color:var(--muted)">— pas de mandrin</span></label>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">'
+      + '<input type="checkbox" id="dr-complexe"' + (E.complexe ? ' checked' : '') + '> Matière complexée'
+      + '<span style="font-weight:400;color:var(--muted)">— pas d\'adhésif ni de glassine</span></label></div>'
       + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">' + lever + boutons + '</div>';
   }
 
@@ -900,6 +945,13 @@
     body.addEventListener('change', (ev) => {
       const t = ev.target;
       if (t.id === 'dr-paravent') { E.paravent = t.checked; rendreLignes(); return; }
+      if (t.id === 'dr-complexe') {
+        E.complexe = t.checked;
+        if (E.edition && E.rows[E.edition.i] && sansComplexe(E.rows[E.edition.i])) E.edition = null;
+        rendreLignes();
+        if (E.complexe) proposerLeverReserve();
+        return;
+      }
       if (t.hasAttribute('data-dr-nat')) changerNature(Number(t.getAttribute('data-dr-nat')), t.value);
       else if (t.hasAttribute('data-dr-lz')) {
         const r = E.rows[Number(t.getAttribute('data-dr-lz'))];
@@ -992,17 +1044,208 @@
       const b = document.querySelector('[data-dr-doc="' + type + '"]');
       if (!b) return;
       const id = E.docs[type];
-      b.disabled = !id;
-      b.style.opacity = id ? '' : '.5';
-      b.style.cursor = id ? 'pointer' : 'not-allowed';
-      b.title = id ? 'Aperçu ' + (type === 'of' ? 'de l\'OF' : 'de la fiche technique') : DOCS[type].absent;
+      // Un document absent n'est plus un bouton grisé : c'est depuis ici qu'on
+      // le rattache, sans repasser par Besoins matières.
+      b.disabled = false;
+      b.style.opacity = '';
+      b.style.cursor = 'pointer';
+      b.style.borderStyle = id ? 'solid' : 'dashed';
+      b.textContent = (id ? '' : '+ ') + DOCS[type].libelle;
+      b.title = id ? 'Aperçu ' + (type === 'of' ? 'de l\'OF' : 'de la fiche technique')
+        : DOCS[type].absent + ' Cliquer pour en ajouter un' + (type === 'of' ? '.' : 'e.');
     });
+  }
+
+  // ── Ajouter le document manquant ───────────────────────────────────────
+  // Mêmes routes que la modale de Besoins matières : on rattache un OF ou une
+  // fiche existants, on importe le PDF d'un OF (moteur d'import de MyProd), ou
+  // on crée la fiche. Tout s'écrit dans les tables de référence : le dossier
+  // est réparé partout, pas seulement dans ce contrôle. Les valeurs de la fiche
+  // créée se complètent ensuite ligne par ligne, avec « Compléter la fiche ».
+  const BTN_PETIT = 'padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);'
+    + 'color:var(--text);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap';
+  const CHAMP = 'padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);'
+    + 'color:var(--text);font-family:inherit;font-size:13px;min-width:0';
+
+  function ajoutStatut(txt, erreur) {
+    const s = document.querySelector('[data-dr-ajout-statut]');
+    if (!s) return;
+    s.textContent = txt || '';
+    s.style.color = erreur ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  function ajoutListe(type, data) {
+    const items = !data ? [] : (type === 'of' ? (data.ofs || []) : (data.fiches || []));
+    if (!items.length) {
+      return '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">'
+        + (data ? 'Aucun document trouvé — essayer une recherche.' : '—') + '</div>';
+    }
+    return items.map(it => {
+      const ref = type === 'of' ? (it.of_numero || '—') : (it.reference || '—');
+      const meta = type === 'of'
+        ? [it.reference, it.machine,
+           it.qte_etiquettes ? Number(it.qte_etiquettes).toLocaleString('fr-FR') + ' étiq.' : null,
+           it.date_creation].filter(Boolean).join(' · ')
+        : [it.designation, it.client, it.machine].filter(Boolean).join(' · ');
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;'
+        + 'border-bottom:1px solid var(--border)">'
+        + '<div style="min-width:0"><div style="font-weight:700;color:var(--text)">' + esc(ref) + '</div>'
+        + (meta ? '<div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          + esc(meta) + '</div>' : '')
+        + '</div><button type="button" data-dr-ajout-lier="' + esc(it.id) + '" data-dr-ajout-lib="' + esc(ref) + '" '
+        + 'style="' + BTN_PETIT + '">Rattacher</button></div>';
+    }).join('');
+  }
+
+  async function ajoutCharger(type, q) {
+    const zone = document.querySelector('[data-dr-ajout-liste]');
+    if (!zone) return;
+    ajoutStatut('Chargement…');
+    try {
+      E.ajout = await appel('/api/stock/besoins-matieres/dossier/' + E.entryId + '/documents'
+        + (q ? '?q=' + encodeURIComponent(q) : ''));
+      ajoutStatut('');
+    } catch (e) {
+      E.ajout = null;
+      ajoutStatut(e.message || 'Chargement impossible.', true);
+    }
+    zone.innerHTML = ajoutListe(type, E.ajout);
+    // Préremplit la fiche à créer avec ce que le dossier sait de lui-même.
+    const dos = (E.ajout && E.ajout.dossier) || {};
+    const refInp = document.querySelector('[data-dr-ft-champ="reference"]');
+    if (refInp && !refInp.value) refInp.value = dos.ref_produit || '';
+  }
+
+  // Le dossier a changé de documents : son calcul aussi. On rouvre le
+  // contrôle à neuf plutôt que de garder des lignes calculées sans eux.
+  async function ajoutTermine(message) {
+    toast(message, 'success');
+    await ouvrir(E.entryId, E.opts);
+  }
+
+  async function ajoutRattacher(type, id, libelle) {
+    ajoutStatut('Rattachement…');
+    try {
+      await appel('/api/stock/besoins-matieres/dossier/' + E.entryId
+        + (type === 'of' ? '/rattacher-of' : '/rattacher-fiche'),
+        {method: 'POST', body: JSON.stringify(type === 'of' ? {of_id: id} : {fiche_id: id})});
+      await ajoutTermine((type === 'of' ? 'OF ' : 'Fiche ') + libelle + ' rattaché' + (type === 'of' ? '.' : 'e.'));
+    } catch (e) {
+      ajoutStatut(e.message || 'Rattachement impossible.', true);
+    }
+  }
+
+  async function ajoutImporterOf(fichier) {
+    try {
+      ajoutStatut('Lecture du PDF…');
+      const fd = new FormData();
+      fd.append('file', fichier);
+      const champs = await appel('/api/of/parse', {method: 'POST', body: fd});
+      ajoutStatut('OF n° ' + (champs.of_numero || '?') + ' lu — enregistrement…');
+      const fd2 = new FormData();
+      fd2.append('file', fichier);
+      fd2.append('data', JSON.stringify(champs));
+      const cree = await appel('/api/of/validate', {method: 'POST', body: fd2});
+      await ajoutRattacher('of', cree.id, champs.of_numero || String(cree.id));
+    } catch (e) {
+      ajoutStatut('Import impossible : ' + (e.message || 'erreur inconnue'), true);
+    }
+  }
+
+  async function ajoutCreerFiche(bouton) {
+    const val = k => ((document.querySelector('[data-dr-ft-champ="' + k + '"]') || {}).value || '').trim();
+    const reference = val('reference');
+    if (!reference) { ajoutStatut('Référence produit obligatoire.', true); return; }
+    bouton.disabled = true;
+    ajoutStatut('Création de la fiche…');
+    try {
+      const cree = await appel('/api/fiches-techniques', {method: 'POST', body: JSON.stringify({
+        reference, designation: val('designation') || null, client: val('client') || null,
+        machine: ((E.data || {}).dossier || {}).machine || null,
+      })});
+      await ajoutRattacher('ft', cree.id, cree.reference || reference);
+    } catch (e) {
+      ajoutStatut(e.message || 'Création impossible.', true);
+      bouton.disabled = false;
+    }
+  }
+
+  function ouvrirAjout(type, zone) {
+    const dos = (E.data && E.data.dossier) || {};
+    const estOf = type === 'of';
+    zone.innerHTML = '<div style="border:1px dashed var(--border);border-radius:10px;background:var(--bg);padding:12px 14px">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">'
+      + '<span style="font-weight:700;color:var(--text)">' + esc(DOCS[type].absent) + '</span>'
+      + '<button type="button" data-dr-doc-fermer style="' + BTN_PETIT + '">Masquer</button></div>'
+      + '<input type="search" data-dr-ajout-q placeholder="'
+      + (estOf ? 'Rechercher un OF (n°, référence, machine)…' : 'Rechercher une fiche (référence, désignation, client)…')
+      + '" style="' + CHAMP + ';width:100%;box-sizing:border-box;margin-bottom:8px">'
+      + '<div data-dr-ajout-liste style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;'
+      + 'background:var(--card)"></div>'
+      + '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">'
+      + (estOf
+        ? '<div style="font-weight:600;color:var(--text);margin-bottom:4px">L\'OF n\'est pas encore dans MySifa ?</div>'
+          + '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'
+          + 'Déposer le PDF : il est lu, enregistré comme OF, puis rattaché à ce dossier.</div>'
+          + '<input type="file" accept=".pdf" data-dr-ajout-fichier hidden>'
+          + '<button type="button" data-dr-ajout-importer style="' + BTN_PETIT + '">Importer le PDF de l\'OF</button>'
+        : '<div style="font-weight:600;color:var(--text);margin-bottom:4px">La fiche n\'existe pas ?</div>'
+          + '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'
+          + 'Elle est créée puis rattachée à ce dossier. Support, adhésif, mandrin se complètent ensuite '
+          + 'ligne par ligne, ou dans MyProd.</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:8px">'
+          + '<input data-dr-ft-champ="reference" placeholder="Référence produit" style="' + CHAMP + '">'
+          + '<input data-dr-ft-champ="designation" placeholder="Désignation" style="' + CHAMP + '">'
+          + '<input data-dr-ft-champ="client" placeholder="Client" value="' + esc(dos.client || '') + '" style="' + CHAMP + '">'
+          + '</div>'
+          + '<button type="button" data-dr-ajout-creer style="' + BTN_PETIT + '">Créer et rattacher la fiche</button>')
+      + '</div>'
+      + '<div data-dr-ajout-statut style="margin-top:8px;font-size:12px;color:var(--muted)"></div></div>';
+
+    zone.querySelector('[data-dr-doc-fermer]').addEventListener('click', () => basculerDoc(type));
+    let minuterie = null;
+    zone.querySelector('[data-dr-ajout-q]').addEventListener('input', (ev) => {
+      clearTimeout(minuterie);
+      const q = (ev.target.value || '').trim();
+      minuterie = setTimeout(() => ajoutCharger(type, q), 250);
+    });
+    zone.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button');
+      if (!b) return;
+      if (b.hasAttribute('data-dr-ajout-lier')) {
+        b.disabled = true;
+        ajoutRattacher(type, Number(b.getAttribute('data-dr-ajout-lier')), b.getAttribute('data-dr-ajout-lib') || '');
+      } else if (b.hasAttribute('data-dr-ajout-importer')) {
+        zone.querySelector('[data-dr-ajout-fichier]').click();
+      } else if (b.hasAttribute('data-dr-ajout-creer')) {
+        ajoutCreerFiche(b);
+      }
+    });
+    const fichier = zone.querySelector('[data-dr-ajout-fichier]');
+    if (fichier) {
+      fichier.addEventListener('change', () => {
+        const f = fichier.files && fichier.files[0];
+        fichier.value = '';
+        if (f) ajoutImporterOf(f);
+      });
+    }
+    ajoutCharger(type, '');
   }
 
   function basculerDoc(type) {
     const zone = document.getElementById('dr-doc');
+    if (!zone) return;
     const id = E.docs && E.docs[type];
-    if (!zone || !id) return;
+    if (!id) {
+      const ouvertAjout = !zone.hidden && zone.dataset.type === type;
+      document.querySelectorAll('[data-dr-doc]').forEach(b => styleBouton(b, false));
+      if (ouvertAjout) { zone.hidden = true; zone.innerHTML = ''; zone.dataset.type = ''; return; }
+      zone.dataset.type = type;
+      zone.hidden = false;
+      styleBouton(document.querySelector('[data-dr-doc="' + type + '"]'), true);
+      ouvrirAjout(type, zone);
+      return;
+    }
     const ouvert = !zone.hidden && zone.dataset.type === type;
     document.querySelectorAll('[data-dr-doc]').forEach(b => styleBouton(b, false));
     if (ouvert) { zone.hidden = true; zone.innerHTML = ''; zone.dataset.type = ''; return; }
@@ -1031,7 +1274,7 @@
     E.opts = opts || {};
     E.entryId = entryId;
     fermerChoix();
-    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false; E.docs = {};
+    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false; E.complexe = false; E.docs = {}; E.ajout = null;
     const root = document.getElementById('mroot');
     if (!root) return;
     injecterStyle();
@@ -1096,7 +1339,7 @@
       // « 0 + quantité ».
       (r.ligne.cles_initiales || []).forEach(([mid, lid]) =>
         lignes.push({matiere_id: mid, laize_id: lid ?? null, quantite_reelle: 0}));
-      if (!r.mid || sansMandrin(r)) continue;
+      if (!r.mid || neutralisee(r)) continue;
       const c = candidat(r.mid);
       const conv = (c && c.conversion) || {};
       const q = Number(r.val || 0);
@@ -1128,7 +1371,8 @@
         try { await lier(i, E.rows[i].mid); } catch (e) { /* l'association est un confort, pas une condition */ }
       }
       const r = await appel('/api/stock/destockage/' + E.entryId + '/ajuster', {
-        method: 'POST', body: JSON.stringify({lignes, lever_reserve: !!(lever && lever.checked)})});
+        method: 'POST', body: JSON.stringify({lignes, lever_reserve: !!(lever && lever.checked),
+          complexe: E.complexe})});
       const n = (r.ajustements || []).length;
       fermer();
       if (E.opts.onChange) {

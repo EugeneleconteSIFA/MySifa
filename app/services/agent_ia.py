@@ -191,7 +191,9 @@ par `mysifa_resolve`.
 - résous chaque identifiant avec les outils de lecture (machine, emplacement, article,
   saisie, tâche, réunion) ; s'il reste une ambiguïté, pose une question courte ;
 - vérifie la valeur actuelle quand tu modifies (prix, quantité, saisie) et cite-la ;
-- n'annonce jamais une action comme faite : dis qu'elle attend la confirmation.
+- n'annonce jamais une action comme faite : dis qu'elle attend la confirmation ;
+- une série de corrections (plusieurs saisies) se propose par paquets de 15 au plus par
+  réponse, en enchaînant les paquets jusqu'au bout, dans l'ordre chronologique.
 Si l'utilisateur demande une écriture absente du catalogue, dis-le simplement.
 
 Forme — court avant tout :
@@ -279,18 +281,28 @@ def converser(conn, user: dict, historique: list[dict], page: Optional[dict] = N
         except Exception as e:
             raise ErreurAgent(f"Appel au modèle en échec : {e}")
         ia_usage.noter(rep, "agent")
+        ia_usage.preciser(modele_demande=choix["id"])
         texte = "".join(b.text for b in rep.content if getattr(b, "type", "") == "text")
         if rep.stop_reason == "refusal":
             texte = texte or "Je ne peux pas traiter cette demande."
             break
-        if rep.stop_reason != "tool_use":
-            if rep.stop_reason == "max_tokens":
+        contenu_rep = list(rep.content)
+        coupe = rep.stop_reason == "max_tokens"
+        if coupe:
+            # Coupé en plein vol : le dernier bloc est incomplet. Les appels
+            # d'outil déjà entiers sont traités et le modèle reprend où il
+            # s'est arrêté — sans quoi une série de corrections (une carte par
+            # saisie) dépassait la limite et toutes les cartes étaient perdues.
+            contenu_rep = contenu_rep[:-1]
+            if not any(getattr(b, "type", "") == "tool_use" for b in contenu_rep):
                 texte += "\n\n[Réponse coupée : demande trop large, la préciser.]"
+                break
+        elif rep.stop_reason != "tool_use":
             break
         # Le contenu complet (réflexion comprise) repart tel quel au tour suivant.
-        messages.append({"role": "assistant", "content": rep.content})
+        messages.append({"role": "assistant", "content": contenu_rep})
         resultats = []
-        for b in rep.content:
+        for b in contenu_rep:
             if getattr(b, "type", "") != "tool_use":
                 continue
             utilises.append(b.name)
@@ -310,6 +322,11 @@ def converser(conn, user: dict, historique: list[dict], page: Optional[dict] = N
                 contenu, erreur = executer_lecture(user, b.name, args), False
             resultats.append({"type": "tool_result", "tool_use_id": b.id, "content": contenu,
                               **({"is_error": True} if erreur else {})})
+        if coupe:
+            resultats.append({"type": "text", "text": (
+                "Ta réponse a été coupée par la limite de longueur ; le dernier appel incomplet est "
+                "perdu. Continue avec les propositions restantes, par paquets plus petits, sans "
+                "refaire celles déjà enregistrées.")})
         messages.append({"role": "user", "content": resultats})
     else:
         texte = (texte + "\n\n" if texte else "") + "[Arrêt : trop d'étapes pour une seule demande. Préciser la question.]"

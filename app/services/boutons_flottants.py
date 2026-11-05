@@ -12,7 +12,7 @@ Deux sortes de boutons :
 
 - **communs** : réglables dans chaque appli ;
 - **propres à une appli** (Métrage bobine dans MyStock, Carte de France dans
-  MyExpé) : ils dépendent du code de leur page, on peut les couper chez elle
+  MyExpé, Poids de colle dans la saisie prod) : ils dépendent du code de leur page, on peut les couper chez elle
   mais pas les étendre ailleurs. Pour en faire un bouton commun, il faut
   d'abord sortir son code dans un fichier partagé.
 
@@ -26,6 +26,9 @@ le <head> de la page : le placement du dock (mysifa_dock.js) ignore déjà les
 éléments masqués, et aucune page n'a à connaître ce réglage. Les deux boutons
 sans icône propre (raccourcis Alt+C et Option+T) lisent en plus
 `window.MySifaBoutons.actif(cle)`.
+
+Sur téléphone, les boutons actifs ne flottent pas : ils sont listés dans une
+feuille (static/mysifa_outils_mobile.js), le réglage s'y applique de la même façon.
 """
 
 from __future__ import annotations
@@ -61,6 +64,7 @@ APPLIS: tuple[Appli, ...] = (
     Appli("stock", "MyStock", ("/stock",)),
     Appli("expe", "MyExpé", ("/expe",)),
     Appli("qualite", "MyQualité", ("/qualite",)),
+    Appli("tools", "MyTools", ("/tools",)),
     Appli("maintenance", "Maintenance", ("/maintenance",)),
     Appli("bat", "MyBAT", ("/bat",)),
     Appli("ao", "MyAO", ("/ao",)),
@@ -96,6 +100,8 @@ BOUTONS: tuple[Bouton, ...] = (
     Bouton("carte_france", "Carte de France (délais)", "", "#expe-carte-fab,#expe-carte-panel",
            appli="expe"),
     Bouton("metrage", "Métrage bobine", "", "#mtr-fab,#mtr-panel", appli="stock"),
+    Bouton("poids_colle", "Poids de colle", "Grammage d'adhésif d'après une pesée d'étiquettes",
+           "#pc-fab,#pc-panel", appli="fabrication"),
 )
 
 PAR_CLE = {b.cle: b for b in BOUTONS}

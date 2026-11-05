@@ -326,6 +326,7 @@ def lire_ia(file_bytes: bytes, filename: str, mime: str, kind: str) -> tuple[Opt
     except Exception as e:
         return None, f"Appel au modèle en échec : {e}"
     ia_usage.noter(reponse, "fsc")
+    ia_usage.preciser(modele_demande=FSC_LECTURE_IA_MODELE, fichiers=1)
 
     for b in reponse.content:
         if getattr(b, "type", "") != "tool_use":

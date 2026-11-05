@@ -30,6 +30,10 @@ mysifa.db
 # Fichiers deposes par les utilisateurs a l'execution (certificats fournisseurs,
 # justificatifs de controle, lots d'import). Donnee d'exploitation, jamais du code.
 data/uploads/
+# Parapheur : PDF signés et originaux (config.PARAPHEUR_DIR).
+data/parapheur/
+# MyTools › Image : projets enregistrés (config.TOOLS_IMAGE_DIR).
+data/tools_image/
 production.db
 
 # Widget Electron (build local — upload via deploy.sh --widget)
@@ -76,3 +80,6 @@ Claude outputs/
 
 # Documents fournisseurs déposés dans l'ERP (si UPLOADS_ROOT reste à sa valeur par défaut)
 uploads/erp/
+
+# Environnement Python complet de la CI locale (scripts/installer_ci_local.sh)
+.venv-ci/

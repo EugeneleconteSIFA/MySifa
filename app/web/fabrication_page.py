@@ -311,6 +311,12 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-op-chip-code{font-family:monospace;font-weight:800;font-size:11px}
 .fab-metrage{font-family:monospace;font-size:11px;color:var(--muted)}
+/* Métrage corrigeable par le conducteur : la cellule entière est le bouton. */
+.fab-metrage-btn{display:inline-flex;align-items:center;gap:6px;font-family:monospace;
+  font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);
+  border-radius:6px;padding:3px 8px;cursor:pointer;transition:border-color .12s,color .12s}
+.fab-metrage-btn:hover{border-color:var(--accent);color:var(--accent)}
+.fab-metrage-btn svg{flex:none;opacity:.7}
 .fab-comment-cell{font-size:11px;color:var(--muted);max-width:200px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fab-comment-btn{
@@ -562,6 +568,19 @@ body.light table.fab-table tr.fab-row-last td{
   border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)
 }
 .fab-field textarea{resize:vertical;min-height:70px}
+/* Compteur machine : champ texte numerique, pas d'input number. Les fleches
+   +/- du navigateur mangeaient la place du chiffre, et un input number ne
+   rend pas la position du curseur — chaque re-rendu le renvoyait en fin. */
+.fab-metrage-wrap{position:relative}
+.fab-field .fab-metrage-wrap input{background:var(--card);font-size:20px;font-weight:700;
+  padding:10px 44px 10px 14px;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.fab-metrage-unite{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  font-size:14px;font-weight:700;color:var(--muted);pointer-events:none}
+.fab-metrage-lu{font-size:12px;color:var(--muted);margin-top:6px;min-height:16px;
+  font-variant-numeric:tabular-nums}
+.fab-metrage-lu b{color:var(--text)}
+.fab-metrage-lu.ok .fab-metrage-ecart{color:var(--success)}
+.fab-metrage-lu.ko{color:var(--danger)}
 /* Moteur de saisie d'outil : resultats sous le champ de recherche. La liste
    reste dans le flux (pas en absolu) — sur un ecran d'atelier, un calque qui
    recouvre le champ suivant se ferme par accident au premier effleurement. */
@@ -581,8 +600,28 @@ body.light table.fab-table tr.fab-row-last td{
   letter-spacing:.4px;color:var(--muted);border:1px solid var(--border);
   border-radius:20px;padding:2px 7px;white-space:nowrap}
 .fab-outil-vide{font-size:12px;color:var(--muted);padding:6px 2px}
+.fab-outil-meme{margin-bottom:8px}
 .fab-outil-choisi{display:flex;align-items:center;gap:5px;margin-top:6px;
   font-size:12px;font-weight:700;color:var(--success)}
+/* Plaque confirmée au démarrage : la proposition de la fiche en gros, deux
+   boutons, la recherche seulement si on change. */
+.fab-demarrage-outil{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 12px;margin-top:6px;display:flex;flex-direction:column;gap:8px}
+.fab-demarrage-tete{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.fab-demarrage-nature{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}
+.fab-demarrage-source{font-size:12px;color:var(--muted)}
+.fab-demarrage-choisi{display:flex;align-items:center;gap:8px;color:var(--success);flex-wrap:wrap}
+.fab-demarrage-choisi.is-ecart{color:var(--warn)}
+.fab-demarrage-num{font-size:22px;font-weight:800;color:var(--text);letter-spacing:.3px}
+.fab-demarrage-ecart{font-size:12px;font-weight:700}
+.fab-demarrage-vide{font-size:13px;color:var(--muted)}
+.fab-demarrage-choix{display:flex;gap:8px;flex-wrap:wrap}
+.fab-demarrage-btn{display:inline-flex;align-items:center;gap:4px;background:var(--card);
+  border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-family:inherit;
+  font-size:13px;font-weight:700;color:var(--text);cursor:pointer;transition:border-color .12s,background .12s}
+.fab-demarrage-btn:hover:not(:disabled){border-color:var(--accent)}
+.fab-demarrage-btn:disabled{opacity:.45;cursor:default}
+.fab-demarrage-btn.is-actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .fab-modal-btns{
   display:flex;gap:8px;justify-content:flex-end;align-items:center;
   flex-wrap:wrap;margin-top:18px;
@@ -782,6 +821,25 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
   padding:20px 24px;gap:18px;
 }
 .fab-prod-head{margin-bottom:2px}
+/* Onglet Qualité : deux sous-onglets, pesées (static/mysifa_pesees.css) et
+   opérations de maintenance (static/mysifa_maint_saisie.css) ; tout
+   l'onglet défile. */
+/* Marge basse : le dock (outils en bas à droite) ne recouvre pas le bouton
+   d'enregistrement en fin de défilement. */
+.fab-qualite{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:20px 24px 96px;gap:14px}
+/* Les blocs gardent leur hauteur : la vue des pesées est réglée pour
+   remplir une fenêtre (flex:1, min-height:0), ici elle rétrécissait et
+   débordait sous la section maintenance. */
+.fab-qualite>*{flex-shrink:0}
+.fab-qualite .pf-vue{flex:none;min-height:auto}
+.fab-qualite .pf-corps{padding-bottom:4px}
+/* Sous-onglets de Qualité : les cartes de l'onglet Stock, la carte ouverte
+   marquée. Elles disent d'emblée que l'onglet a deux parties. */
+.fab-qualite-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.fab-qualite-nav .fab-prod-card[aria-pressed="true"]{border:2px solid var(--accent);background:var(--accent-bg);padding:15px 17px}
+.fab-qualite-nav .fab-prod-card[aria-pressed="true"] .fab-prod-card-title{color:var(--accent)}
+.fab-prod-card-pesees .fab-prod-card-ico{background:var(--accent)}
+.fab-prod-card-maintenance .fab-prod-card-ico{background:var(--c4)}
 .fab-prod-head-title{
   font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
 }
@@ -1315,16 +1373,19 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script>window.__STOCK_UNITE_VENTE_DEFAUT__="__STOCK_UNITE_VENTE_DEFAUT__";</script>
-<script src="/static/mysifa_stock_modals.js?v=unite2"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite3"></script>
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
+<link rel="stylesheet" href="/static/mysifa_pesees.css?v=6">
+<link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
-<script src="/static/mysifa_dock.js?v=fab1"></script>
+<script src="/static/mysifa_dock.js?v=fab2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
@@ -1343,7 +1404,20 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>if(window.MySifaProduitMemoire)window.MySifaProduitMemoire.regler({ongletParDefaut:'documents',ofUnParUn:true});</script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/fabrication_url.js?v=2"></script>
+<script src="/static/fabrication_url.js?v=5"></script>
+<!-- Plaque confirmée au démarrage du dossier. -->
+<script src="/static/fabrication_outils_demarrage.js?v=1"></script>
+<!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
+<script src="/static/mysifa_pesees.js?v=5"></script>
+<script src="/static/mysifa_maint_saisie.js?v=5"></script>
+<script src="/static/mysifa_poids_colle.js?v=4"></script>
+<script>
+  // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
+  window.mysifaPoidsColleContexte = function () {
+    return { no_dossier: (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || '',
+             machine: (S.machine && S.machine.nom) || '' };
+  };
+</script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1461,6 +1535,9 @@ let S = {
   compteurCalageVal: '',
   compteurCalageBusy: false,
   showCommentModal: false,
+  metrageCorr: null,
+  releveMachine: null,          // dernier relevé du compteur (/api/fabrication/dernier-releve)
+  releveMachinePour: null,
   explicationSeuil: null,
   commentSaisieId: null,
   showTracaCommentModal: false,
@@ -1512,7 +1589,7 @@ let S = {
   searchQuery: '',
 
   // Footer tabs
-  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'stats' (Stock) | 'of'
+  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'qualite' | 'stats' (Stock) | 'of'
   stockProdZ1: {refs:[],total_unites:0,nb_refs:0}, // Z1 en attente sortie de prod
   stockProdLoading: false,
 
@@ -1526,6 +1603,7 @@ let S = {
   ofEditModal: null,
   ofSelected: new Set(),   // Set d'ids d'OFs sélectionnés
   ofSubTab: 'of',        // 'of' | 'fiche'
+  qualiteSous: 'pesees', // onglet Qualité : 'pesees' | 'maintenance'
   ficheSearch: '',
   fichePage: 0,
   ficheTotal: 0,
@@ -1676,7 +1754,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.metrageCorr || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -1907,6 +1985,12 @@ function icon(name,size=16){
     'refresh-ccw':'<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L23 14"/>',
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    scale:'<path d="M12 3v18"/><path d="M5 21h14"/><path d="M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0z"/><path d="M17 7l-3 7a3 3 0 0 0 6 0z"/>',
+    // Inspections des produits finis (onglet Qualité) et widget Poids de
+    // colle (static/mysifa_poids_colle.js) : balance à afficheur, pastille « 5 ».
+    balance:'<path d="M11.5 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H9.5"/><circle cx="17.5" cy="17.5" r="5"/><path d="M19.2 14.6h-3l-.4 2.7c.4-.3.9-.4 1.4-.4a1.65 1.65 0 0 1 0 3.3c-.6 0-1.1-.2-1.5-.6" stroke-width="1.6"/>',
+    // Onglet Qualité : un check au-dessus d'une main ouverte.
+    qualite:'<circle cx="12" cy="6" r="4.5"/><path d="m10 6 1.4 1.4 2.8-2.8"/><g transform="translate(0 2.5)"><path d="M11 14h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16"/><path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 15 6 6"/></g>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -2173,14 +2257,16 @@ function renderConfirmCompteurModal(){
       onClick:(e)=>{ if(e.target===e.currentTarget) fermer(); }},
     h('div',{className:'fab-modal',style:{maxWidth:'440px'}},
       h('div',{className:'fab-modal-title'},c.titre || 'Compteur à vérifier'),
-      h('div',{className:'fab-modal-sub'},
-        'Ce relevé donne une vitesse au-dessus de ce que la machine peut faire. '
-        +'Vérifiez le compteur avant de confirmer.'),
+      h('div',{className:'fab-modal-sub'}, c.bloquant
+        ? 'La machine ne peut pas avoir produit autant depuis le relevé précédent. '
+          +'Vérifiez le nombre de chiffres du compteur.'
+        : 'Ce relevé donne une vitesse au-dessus de ce que la machine peut faire. '
+          +'Vérifiez le compteur avant de confirmer.'),
       ...(c.lignes||[]).map(l => ligne(l[0], l[1], l[2])),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',style:{background:'var(--bg)'},
           onClick:fermer},'Corriger le compteur'),
-        h('button',{className:'fab-btn fab-btn-primary',style:{color:'white'},
+        c.bloquant ? null : h('button',{className:'fab-btn fab-btn-primary',style:{color:'white'},
           onClick:()=>{
             const r = c.relance;
             S[c.cle] = c.valeur;
@@ -2785,6 +2871,14 @@ function handleOpTrigger(code, label, cat){
   // rien sans une phrase — c'est a ceux-la, et a eux seuls, qu'on demande un
   // commentaire. Exiger un texte partout ferait taper « RAS » partout, et on
   // aurait perdu la seule chose que ce champ apporte.
+  // Opération de maintenance : intervention, machine, date et commentaire
+  // d'abord, enregistrés dans MyMaintenance ; la saisie part ensuite, avec
+  // l'intervention en commentaire. Annuler n'enregistre rien. C'est l'attribut
+  // `formulaire` du code (Paramètres › Opérations) qui décide, pas son numéro.
+  if(opFormulaire(code)==='maintenance' && window.MySifaMaintSaisie){
+    void ouvrirOperationMaintenance(code, label);
+    return;
+  }
   // Changement d'outil : la saisie part tout de suite (l'heure du clic est la
   // bonne), et triggerOp ouvre le formulaire sur la reponse du serveur.
   if(opOutilType(code)){
@@ -2827,9 +2921,11 @@ async function switchFabTab(tab){
   if(tab==='stats'){
     await loadStockProduction();
   }
+  // Machines proposées pour une opération de maintenance (onglet Qualité).
+  if(tab==='qualite' && !(S.machines || []).length) await loadMachines();
 }
 
-var FAB_VALID_TABS=['saisie','print','traca','of','stats'];
+var FAB_VALID_TABS=['saisie','print','traca','qualite','of','stats'];
 function _readFabTab(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(FAB_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
@@ -3588,7 +3684,7 @@ function _fabPrintWin(title, pageSize, css, bodyHtml){
   if(!w) return;
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+title+'</title><style>'
     +'@page{size:'+pageSize+';margin:0}body{margin:0;padding:0;font-family:Arial,sans-serif}'+css+'</style></head><body>'
-    +bodyHtml+'<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js?v=2"><\/script></body></html>');
+    +bodyHtml+'<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js?v=3"><\/script></body></html>');
   w.document.close();
 }
 
@@ -5307,6 +5403,51 @@ function renderStatsPanel(){
   );
 }
 
+/* ── Onglet Qualité : pesées par front ───────────────────────────
+   La vue vient de static/mysifa_pesees.js : un élément durable, rendu une
+   fois et reposé à chaque render() — ses filtres, ses sections dépliées,
+   son défilement et le texte en cours de frappe survivent au
+   rafraîchissement automatique.
+   Machine par défaut : celle de l'opérateur. */
+// Défilement de l'onglet : le panneau est recréé à chaque render().
+let _fabQualiteHaut = 0;
+// Lien « Inspections des produits finis » du widget Poids de colle.
+window.mysifaAllerInspections = () => { set({qualiteSous:'pesees'}); void switchFabTab('qualite'); };
+function _fabQualiteSous(sous){
+  if(sous === S.qualiteSous) return;
+  _fabQualiteHaut = 0;
+  set({qualiteSous: sous});
+}
+function renderQualitePanel(){
+  const P = window.MySifaPesees, MM = window.MySifaMaintSaisie;
+  const machine = (S.machine && S.machine.nom) || '';
+  const sous = S.qualiteSous === 'maintenance' ? 'maintenance' : 'pesees';
+  const carte = (cle, icone, titre, texte) => h('button',{
+      type:'button', className:'fab-prod-card fab-prod-card-'+cle,
+      'aria-pressed': sous===cle ? 'true' : 'false', onClick:()=>_fabQualiteSous(cle)},
+    h('div',{className:'fab-prod-card-ico'}, svgIcon(icone,22)),
+    h('div',{className:'fab-prod-card-txt'},
+      h('div',{className:'fab-prod-card-title'}, titre),
+      h('div',{className:'fab-prod-card-sub'}, texte)));
+  const wrap = h('div',{className:'fab-main fab-qualite',
+      onScroll:e=>{ _fabQualiteHaut = e.currentTarget.scrollTop; }},
+    h('div',{className:'fab-qualite-nav',role:'group','aria-label':'Qualité'},
+      carte('pesees', 'balance', 'Inspections des produits finis', 'Pesées et mesures, dossier par dossier'),
+      carte('maintenance', 'tool', 'Opérations de maintenance', 'Enregistrer une intervention')));
+  // Opérations de maintenance : enregistrées dans MyMaintenance.
+  if(sous === 'maintenance' && MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',
+    machines:(S.machines || []).map(m => m.nom).filter(Boolean)}));
+  else if(sous === 'pesees' && P) wrap.appendChild(P.vue({machine}));
+  else wrap.appendChild(h('div',{className:'fab-prod-head-sub'},'Module indisponible.'));
+  // Sortie puis remise dans la page, les vues perdent focus et défilement :
+  // les modules les ont suivis et les rendent une fois la page reconstruite.
+  queueMicrotask(()=>{
+    if(wrap.isConnected) wrap.scrollTop = _fabQualiteHaut;
+    if(P && sous === 'pesees') P.retablir();
+  });
+  return wrap;
+}
+
 function renderMain(){
   if(S.fabTab==='of'){
     return h('div',{className:'fab-of-panel',style:{display:'flex',flexDirection:'column',flex:'1',minHeight:0}},
@@ -5329,6 +5470,7 @@ function renderMain(){
   }
   if(S.fabTab==='print') return renderPrintPanel();
   if(S.fabTab==='traca') return renderTracaPanel();
+  if(S.fabTab==='qualite') return renderQualitePanel();
   if(S.fabTab==='stats') return renderStatsPanel();
 
   // Vue Repiquage : machine effective = Repiquage → vue simplifiée (saisies code 92)
@@ -5430,7 +5572,14 @@ function renderMain(){
             op.label||s.operation||code),
             annuleRow ? h('span',{className:'fab-annule-tag'},'Annulé') : null,
             cycleAnnule ? h('span',{className:'fab-annule-tag',style:{opacity:'.75'}},'Cycle annulé') : null),
-          h('td',null, metrageText ? h('span',{className:'fab-metrage'},metrageText) : null),
+          h('td',null, metrageText
+            ? (!isAdminView && relevesCorrigeables(s).length
+                ? h('button',{type:'button',className:'fab-metrage-btn',
+                    title:'Corriger le métrage relevé',
+                    onClick:()=>ouvrirCorrectionMetrage(s)},
+                    metrageText, svgIcon('edit',11))
+                : h('span',{className:'fab-metrage'},metrageText))
+            : null),
           h('td',null, s.commentaire
             ? h('span',{className:'fab-comment-cell',title:s.commentaire}, s.commentaire)
             : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')
@@ -5747,6 +5896,7 @@ function _fabTabDefs(){
     {key:'saisie', icon:'edit',    label:'Saisie'},
     {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
     {key:'traca',  icon:'scan',    label:'Traça'},
+    {key:'qualite',icon:'qualite', label:'Qualité'},
     {key:'stats',  icon:'box',     label:'Stock'},
     // « Fiches et OF » : meme intitule que la section de la barre laterale
     // de MyProd. Ici l'onglet couvre bien les deux (sous-onglets OF et
@@ -6630,12 +6780,18 @@ function renderDebutModal(){
     S.debutMontees = null;
     S.debutRetirer = {};
     loadDebutMontees(refChoisie);
+    // Plaque prévue par la fiche, à confirmer (static/fabrication_outils_demarrage.js).
+    loadDebutOutils(refChoisie);
   }
-  const inp = h('input',{type:'number',placeholder:'Ex: 15000',step:'1',min:'0',
-    style:{textAlign:'right'}});
-  inp.value = S.metrageDebut||'';
-  inp.addEventListener('input',e=>{ S.metrageDebut=e.target.value; });
-  inp.focus();
+  if(!S.releveMachinePour) chargerDernierReleve();
+  const machDeb = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
+  const inp = champCompteur({id:'debut-metrage', valeur:S.metrageDebut,
+    reference: machDeb ? machDeb.dernier_metrage : null, plafond: plafondCompteur(),
+    onInput:v=>{ S.metrageDebut = v; }});
+  setTimeout(()=>{
+    const el = document.getElementById('debut-metrage');
+    if(el && document.activeElement?.tagName!=='INPUT') el.focus();
+  },0);
 
   const submit = async()=>{
     const dos = S._selectedDossier;
@@ -6658,6 +6814,8 @@ function renderDebutModal(){
       showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
       return;
     }
+    const plDeb = plafondCompteur();
+    if(plDeb && mDebut > plDeb.plafond){ refuserAuDelaPlafond(mDebut, plDeb); return; }
     // Plus d'une heure a pleine vitesse depuis le dernier releve : suspect.
     const ecartDebut = (dernierM != null) ? mDebut - dernierM : 0;
     if(S.vitesseMax && ecartDebut > S.vitesseMax * 60
@@ -6696,6 +6854,8 @@ function renderDebutModal(){
         const retirer = Object.keys(S.debutRetirer||{}).filter(k => S.debutRetirer[k]).map(Number);
         body.bobines_montees = {retirer: retirer};
       }
+      const outilsDemarrage = debutOutilsPayload();
+      if(outilsDemarrage) body.outils_demarrage = outilsDemarrage;
       const r = await apiFetch('/api/fabrication/saisie',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(body),
@@ -6703,7 +6863,11 @@ function renderDebutModal(){
       if(r&&r.success){
         const bh = r.bobines_heritees;
         const nRep = bh && bh.rattachees ? bh.rattachees.length : 0;
-        showToast(nRep ? 'Dossier démarré · '+nRep+' bobine'+(nRep>1?'s':'')+' reprise'+(nRep>1?'s':'')+'.' : 'Dossier démarré.');
+        const od = r.outils_demarrage || [];
+        const txtOutils = od.map(o => String(o.label||'').toLowerCase()+' '+o.numero).join(', ');
+        showToast('Dossier démarré'
+          + (txtOutils ? ' · '+txtOutils : '')
+          + (nRep ? ' · '+nRep+' bobine'+(nRep>1?'s':'')+' reprise'+(nRep>1?'s':'') : '') + '.');
         S.debutMonteesPour = null;
         if(bh) setTimeout(()=>debutConfirmerFscHeritees(bh), 400);
         // v2.2.67 : refresh alertes (code 01 = pas d'ack auto, mais on refresh
@@ -6737,6 +6901,7 @@ function renderDebutModal(){
         })()),
         inp
       ),
+      renderDebutOutils(),
       renderDebutMatieres(),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
@@ -6898,6 +7063,8 @@ function finValiderCompteur(relance){
     showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
     return null;
   }
+  const plFin = plafondCompteur();
+  if(plFin && mFin > plFin.plafond){ refuserAuDelaPlafond(mFin, plFin); return null; }
   if(S.saisies.length){
     const debutRow = S.saisies.find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
     const debutCtr = debutRow ? parseFloat(debutRow.metrage_total_debut ?? debutRow.metrage_prevu) : null;
@@ -6954,10 +7121,11 @@ function renderFinModal(){
   const termine = S.finDossierOui === true;
 
   // ── Champs du compteur ────────────────────────────────────────────────────
-  const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
-    style:{textAlign:'right'}});
-  metInp.value = S.metrageFinVal||'';
-  metInp.addEventListener('input',e=>{ S.metrageFinVal=e.target.value; });
+  if(!S.releveMachinePour) chargerDernierReleve();
+  const machFin = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
+  const metInp = champCompteur({id:'fin-metrage', valeur:S.metrageFinVal,
+    reference: machFin ? machFin.dernier_metrage : null, plafond: plafondCompteur(),
+    onInput:v=>{ S.metrageFinVal = v; }});
 
   const etiqInp = h('input',{type:'number',placeholder:'Ex: 50000',step:'1',min:'0',
     style:{textAlign:'right'}});
@@ -7478,6 +7646,22 @@ function renderCompteurCalageModal(){
    de la recherche. Le formulaire s'ouvre donc derrière une saisie déjà
    enregistrée, et « Annuler » la supprime. */
 
+function opFormulaire(code){
+  const o = OPS && OPS[code];
+  return (o && o.formulaire) ? String(o.formulaire) : '';
+}
+async function ouvrirOperationMaintenance(code, label){
+  if(!(S.machines || []).length) await loadMachines();
+  MySifaMaintSaisie.modale({
+    titre: code+' - '+label,
+    machine: (S.machine && S.machine.nom) || '',
+    machines: (S.machines || []).map(m => m.nom).filter(Boolean),
+    role: (S.user && S.user.role) || '',
+    apres: info => triggerOp(code, label,
+      {commentaire: info.libelle + (info.commentaire ? ' — ' + info.commentaire : '')}),
+  });
+}
+
 function opOutilType(code){
   const o = OPS && OPS[code];
   return (o && o.outil_type) ? String(o.outil_type) : '';
@@ -7544,11 +7728,18 @@ async function enregistrerChangementOutil(){
       +' m — valeur saisie trop petite','danger');
     return;
   }
+  if(ctx.plafond && m > ctx.plafond.plafond){
+    showToast('Compteur invraisemblable : +'+Math.round(m - ctx.plafond.precedent).toLocaleString('fr-FR')
+      +' m depuis le relevé précédent. Vérifiez le nombre de chiffres.','danger');
+    return;
+  }
   if(!S.outilAvant || !S.outilApres){
     showToast('Indiquez la '+nature+' démontée et la '+nature+' montée.','danger');
     return;
   }
-  if(S.outilAvant.id === S.outilApres.id){
+  // Même référence : admise pour une nature qui le permet (un cliché porte
+  // plusieurs tapis d'encrage), refusée sinon. Le serveur contrôle pareil.
+  if(S.outilAvant.id === S.outilApres.id && !ctx.meme_reference){
     showToast('La '+nature+' montée est la même que la '+nature+' démontée.','danger');
     return;
   }
@@ -7655,7 +7846,7 @@ function champOutil(role, ctx){
   const cleQ = role==='avant' ? 'outilQAvant' : 'outilQApres';
 
   const inp = h('input',{
-    type:'search', autocomplete:'off',
+    type:'search', autocomplete:'off', id:'outil-q-'+role,
     placeholder:'Numéro, référence, libellé…',
   });
   inp.value = S[cleQ] || '';
@@ -7676,11 +7867,21 @@ function champOutil(role, ctx){
           +' posée sur cette machine. Corrigez si ce n\'est pas celle-là.'
         : 'Aucun changement de '+nature.toLowerCase()
           +' n\'a encore été saisi sur cette machine — cherchez le numéro.')
-    : 'La recherche interroge le référentiel, RVGI et les fiches techniques.';
+    : (ctx.meme_reference
+        ? 'Même référence, autre tapis : « Même '+nature.toLowerCase()+' ». Sinon, cherchez le numéro.'
+        : 'La recherche interroge le référentiel, RVGI et les fiches techniques.');
+  // Côté montée, pour une nature qui l'admet : remonter la référence démontée.
+  const memeBtn = (role==='apres' && ctx.meme_reference && S.outilAvant
+      && !(S.outilApres && S.outilApres.id === S.outilAvant.id))
+    ? h('button',{type:'button', className:'fab-btn fab-btn-ghost fab-btn-sm fab-outil-meme',
+        onClick:()=>{ S.outilApres = S.outilAvant; S.outilQApres = S.outilAvant.numero; S.outilResApres = null; render(); }},
+        svgIcon('refresh-ccw',13),' Même '+nature.toLowerCase()+' ('+S.outilAvant.numero+')')
+    : null;
 
   return h('div',{className:'fab-field'},
     h('label',null, nature+(role==='avant'?' démontée':' montée')),
     h('div',{className:'fab-field-hint'}, hint),
+    memeBtn,
     inp,
     choisi ? h('div',{className:'fab-outil-choisi'},
       svgIcon('check',13),' ', choisi.numero,
@@ -7705,20 +7906,18 @@ function renderOutilModal(){
   }
 
   const nature = String(ctx.type_label||'Outil');
-  const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
-    style:{textAlign:'right'}});
-  metInp.value = S.outilMetrage||'';
-  metInp.addEventListener('input',e=>{ S.outilMetrage=e.target.value; });
-
   const dernier = ctx.dernier_metrage;
+  const metChamp = champCompteur({id:'outil-metrage', valeur:S.outilMetrage,
+    reference:dernier, plafond:ctx.plafond, onInput:v=>{ S.outilMetrage = v; }});
+
   const metBloc = h('div',{className:'fab-field'},
-    h('label',null,'Compteur machine au changement (m)'),
+    h('label',{for:'outil-metrage'},'Compteur machine au changement'),
     h('div',{className:'fab-field-hint'},
       dernier!=null
         ? 'Dernier relevé sur '+(ctx.machine||'cette machine')+' : '
           +Math.round(dernier).toLocaleString('fr-FR')+' m.'
         : 'Aucun relevé antérieur sur cette machine.'),
-    metInp
+    metChamp
   );
 
   const modal = h('div',{className:'fab-modal-overlay'},
@@ -7806,6 +8005,209 @@ function renderOpCommentModal(){
     )
   );
   setTimeout(()=>ta.focus(),50);
+}
+
+/* Champ de relevé du compteur machine, partagé par le changement d'outil et
+   la correction de métrage. Texte numérique avec un id : le curseur survit
+   aux re-rendus (_fabRestoreUiState), et aucune flèche +/- ne recouvre le
+   chiffre. Sous le champ, la valeur relue et son écart à `reference`. */
+function champCompteur({id, valeur, reference, libelleRef, plafond, onInput}){
+  const inp = h('input',{type:'text', id, inputmode:'numeric', autocomplete:'off',
+    placeholder: reference!=null ? String(Math.round(reference)) : 'Ex : 14200'});
+  inp.value = valeur!=null ? String(valeur) : '';
+  const lu = h('div',{className:'fab-metrage-lu'});
+  const maj = ()=>{
+    const v = inp.value ? parseInt(inp.value,10) : NaN;
+    lu.className = 'fab-metrage-lu';
+    lu.textContent = '';
+    if(isNaN(v)) return;
+    lu.appendChild(h('b',null, v.toLocaleString('fr-FR')+' m'));
+    // Plafond physique fourni par le serveur (_plafond_releve) : même refus
+    // qu'à l'enregistrement, mais dès la frappe.
+    if(plafond && v > plafond.plafond){
+      lu.classList.add('ko');
+      lu.appendChild(txt(' — impossible : +'
+        +Math.round(v - plafond.precedent).toLocaleString('fr-FR')
+        +' m depuis le relevé précédent. Vérifiez le nombre de chiffres.'));
+      return;
+    }
+    if(reference==null) return;
+    const ecart = v - Math.round(reference);
+    if(libelleRef){
+      if(!ecart) return;
+      lu.appendChild(txt(' · '));
+      lu.appendChild(h('span',null,
+        (ecart>0?'+':'−')+Math.abs(ecart).toLocaleString('fr-FR')+' m '+libelleRef));
+    }else if(ecart < 0){
+      lu.classList.add('ko');
+      lu.appendChild(txt(' — inférieur au dernier relevé'));
+    }else{
+      lu.classList.add('ok');
+      lu.appendChild(txt(' · '));
+      lu.appendChild(h('span',{className:'fab-metrage-ecart'},
+        '+'+ecart.toLocaleString('fr-FR')+' m depuis le dernier relevé'));
+    }
+  };
+  inp.addEventListener('input',e=>{
+    const el = e.target;
+    const brut = el.value;
+    const net = brut.replace(/[^0-9]/g,'');
+    if(net !== brut){
+      // Retire espaces, lettres, signes sans renvoyer le curseur en fin
+      const pos = (el.selectionStart ?? brut.length);
+      const avant = brut.slice(0,pos).replace(/[^0-9]/g,'').length;
+      el.value = net;
+      try{ el.setSelectionRange(avant, avant); }catch(_){}
+    }
+    if(onInput) onInput(net);
+    maj();
+  });
+  maj();
+  return h('div',null,
+    h('div',{className:'fab-metrage-wrap'}, inp, h('span',{className:'fab-metrage-unite'},'m')),
+    lu
+  );
+}
+
+/* Relevés qu'une saisie porte et que son conducteur peut corriger.
+   Même découpage que le serveur (_champs_metrage_permis) : début au 01, fin
+   au 89, les deux au 90, le compteur ailleurs. On corrige, on n'ajoute pas :
+   un relevé vide ne se propose pas. */
+/* Dernier relevé de la machine du poste, rechargé à chaque ouverture d'un
+   formulaire de compteur. Le plafond se calcule à l'heure où l'on valide —
+   le formulaire peut rester ouvert longtemps. Même règle que le serveur
+   (_plafond_au), qui reste seul juge : sans ce relevé, l'écran laisse passer
+   et c'est lui qui refuse. */
+function chargerDernierReleve(){
+  const cle = String(S.adminMachineId||'poste')+'|'+Date.now();
+  S.releveMachinePour = cle;
+  S.releveMachine = null;
+  const q = S.adminMachineId ? '?machine_id='+encodeURIComponent(S.adminMachineId) : '';
+  apiFetch('/api/fabrication/dernier-releve'+q).then(d=>{
+    if(S.releveMachinePour !== cle) return;
+    S.releveMachine = d;
+    fabRenderPreserveUi();
+  }).catch(()=>{});
+}
+
+function plafondCompteur(){
+  const d = S.releveMachine;
+  if(!d || d.precedent==null || !d.date_operation || !d.vitesse_max) return null;
+  const minutes = Math.max(finMinutesEntre(d.date_operation, nowIsoLocal()) || 0, 30);
+  return {plafond: d.precedent + d.vitesse_max*minutes, precedent: d.precedent,
+          minutes, vitesse_max: d.vitesse_max};
+}
+
+/* Fenêtre « compteur impossible » : mêmes lignes que la confirmation, sans
+   le bouton qui passe outre. */
+function refuserAuDelaPlafond(m, pl){
+  S.confirmCompteur = {bloquant:true, titre:'Compteur impossible', lignes:[
+    ['Relevé précédent de la machine', Math.round(pl.precedent).toLocaleString('fr-FR')+' m'],
+    ['Compteur saisi', Math.round(m).toLocaleString('fr-FR')+' m'],
+    ['Écart', Math.round(m - pl.precedent).toLocaleString('fr-FR')+' m', true],
+    ['Au plus, à '+Math.round(pl.vitesse_max)+' m/min en '+finDureeTxt(Math.round(pl.minutes)),
+     Math.round(pl.plafond).toLocaleString('fr-FR')+' m'],
+  ]};
+  render();
+}
+
+function relevesCorrigeables(s){
+  if(!s || Number(s.est_annule||0)) return [];
+  const code = String(s.operation_code||'').trim();
+  const deb = s.metrage_total_debut ?? s.metrage_prevu;
+  const fin = s.metrage_total_fin   ?? s.metrage_reel;
+  const out = [];
+  if((code==='01'||code==='90') && deb!=null) out.push({champ:'debut', label:'Compteur au début', valeur:parseFloat(deb)});
+  if((code==='89'||code==='90') && fin!=null) out.push({champ:'fin', label:'Compteur à la fin', valeur:parseFloat(fin)});
+  if(!['01','89','90'].includes(code) && s.metrage_compteur!=null)
+    out.push({champ:'compteur', label:'Compteur relevé', valeur:parseFloat(s.metrage_compteur)});
+  return out;
+}
+
+function ouvrirCorrectionMetrage(s){
+  const champs = relevesCorrigeables(s);
+  if(!champs.length) return;
+  const valeurs = {};
+  champs.forEach(c=>{ valeurs[c.champ] = String(Math.round(c.valeur)); });
+  set({metrageCorr:{saisie:s, champs, valeurs, busy:false, focusPose:false}});
+}
+
+function renderMetrageCorrModal(){
+  const mc = S.metrageCorr;
+  const s = mc.saisie;
+  const code = String(s.operation_code||'').trim();
+  const op = OPS[code]||{};
+  const fermer = ()=>set({metrageCorr:null});
+  const blocs = mc.champs.map(c=>h('div',{className:'fab-field'},
+    h('label',{for:'metrage-corr-'+c.champ}, c.label),
+    h('div',{className:'fab-field-hint'},
+      'Saisi : '+Math.round(c.valeur).toLocaleString('fr-FR')+' m.'),
+    champCompteur({id:'metrage-corr-'+c.champ, valeur:mc.valeurs[c.champ],
+      reference:c.valeur, libelleRef:'par rapport à la saisie',
+      onInput:v=>{ mc.valeurs[c.champ] = v; }})
+  ));
+  // Focus posé une seule fois : ensuite c'est _fabRestoreUiState qui le garde.
+  if(!mc.focusPose){
+    mc.focusPose = true;
+    setTimeout(()=>{
+      const el = document.getElementById('metrage-corr-'+mc.champs[0].champ);
+      if(el){ el.focus(); try{ el.select(); }catch(_){} }
+    },50);
+  }
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget && !mc.busy) fermer();}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'}, svgIcon('edit',18),
+        ' Corriger le métrage — '+code+' '+(op.label||s.operation||'')),
+      h('div',{className:'fab-modal-sub'},
+        'Saisie de '+fmtTime(s.date_operation)+(s.no_dossier?' · dossier '+s.no_dossier:'')
+        +'. La valeur doit rester entre le relevé précédent et le suivant sur la machine. '
+        +'La correction est signalée dans MyProd.'),
+      ...blocs,
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted', disabled:!!mc.busy, onClick:fermer},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary', disabled:!!mc.busy, onClick:enregistrerCorrectionMetrage},
+          svgIcon('check',15),' Enregistrer')
+      )
+    )
+  );
+}
+
+async function enregistrerCorrectionMetrage(){
+  const mc = S.metrageCorr;
+  if(!mc || mc.busy) return;
+  const s = mc.saisie;
+  const code = String(s.operation_code||'').trim();
+  const changes = mc.champs.filter(c=>String(mc.valeurs[c.champ]||'') !== String(Math.round(c.valeur)));
+  if(!changes.length){ set({metrageCorr:null}); return; }
+  if(changes.some(c=>!String(mc.valeurs[c.champ]||'').trim())){
+    showToast('Métrage manquant — saisissez le compteur relevé.','danger');
+    return;
+  }
+  fabPauseAutoRefresh(10000);
+  mc.busy = true; render();
+  try{
+    for(const c of changes){
+      const v = parseInt(mc.valeurs[c.champ],10);
+      if(code==='03'){
+        // Fin de calage : sa route réécrit aussi la mention de la ligne de calage.
+        await apiFetch('/api/fabrication/saisie/'+s.id+'/compteur-fin-calage',{
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({metrage_compteur:v}),
+        });
+      }else{
+        await apiFetch('/api/fabrication/saisie/'+s.id+'/metrage',{
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({champ:c.champ, valeur:v}),
+        });
+      }
+    }
+    await loadSession({noRender:true, silent:true});
+    S.metrageCorr = null;
+    showToast('Métrage corrigé.');
+  }catch(e){
+    mc.busy = false;
+    showToast(e.message,'danger');
+  }
 }
 
 function renderCommentModal(){
@@ -9644,6 +10046,7 @@ function render(){
   if(S.confirmCompteur)   root.appendChild(renderConfirmCompteurModal());
   if(S.showCompteurCalage) root.appendChild(renderCompteurCalageModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
+  if(S.metrageCorr)       root.appendChild(renderMetrageCorrModal());
   if(S.showAnnulModal)    root.appendChild(renderAnnulModal());
   if(S.showTracaCommentModal) root.appendChild(renderTracaCommentModal());
   if(S.showRepiquageEditModal) root.appendChild(renderRepiquageEditModal());
@@ -9656,6 +10059,7 @@ function render(){
   }
 
   if(S.showOutilModal) root.appendChild(renderOutilModal());
+  if(!S.showDebutModal && !S.showFinModal) S.releveMachinePour = null;
 
   renderOfImportModal();
   renderOpCommentModal();
@@ -9674,6 +10078,7 @@ function render(){
 }
 
 function bootFabWidgets(){
+  if(window.MySifaPoidsColle) window.MySifaPoidsColle.monter();
   if(S.user){
     window.__MYSIFA_USER__={nom:S.user.nom||'',role:S.user.role||''};
   }

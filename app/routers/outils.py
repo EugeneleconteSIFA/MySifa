@@ -78,6 +78,23 @@ def fab_rechercher_outils(request: Request, type: str = "", q: str = "", limite:
             raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get("/api/fabrication/outils/demarrage")
+def fab_outils_demarrage(request: Request, no_dossier: str = "", machine_id: str = ""):
+    """Ce que l'écran « Démarrer un dossier » propose de confirmer : pour
+    chaque nature marquée `au_demarrage`, l'outil prévu par la fiche technique
+    du dossier et celui qui est en place sur la machine."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    from app.routers.fabrication import _resolve_machine
+    from app.services import outils_demarrage
+
+    with get_db() as conn:
+        machine = _resolve_machine(user, {"machine_id": machine_id or None}, conn)
+        return outils_demarrage.contexte(
+            conn, no_dossier=(no_dossier or "").strip(), machine=machine
+        )
+
+
 @router.post("/api/fabrication/outils")
 async def fab_resoudre_outil(request: Request):
     """Matérialise en outil local le résultat choisi par le conducteur, ou le

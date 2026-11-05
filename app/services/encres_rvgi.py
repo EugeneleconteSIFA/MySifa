@@ -12,6 +12,7 @@ encre.
 """
 
 import logging
+import os
 from datetime import datetime
 
 from app.services import erp_mirror as miroir
@@ -26,6 +27,29 @@ TYPE_LIGNE_ACHAT = TYPE_ARTICLE + 2
 # suit pas le stock : ce n'est pas une quantité, la reprendre ferait exploser la
 # valorisation. Aucune encre ne se compte en milliards de kilos.
 STOCK_NON_SUIVI = 1e10
+
+# Empreinte du miroir au dernier passage réussi. La synchro relit toute la
+# table des mouvements matière du miroir (~200 ms) : la refaire à chaque
+# ouverture de la valorisation alors que le miroir ne bouge qu'à l'import RVGI
+# ralentissait l'écran pour rien.
+_DERNIERE_EMPREINTE = None
+
+
+def _empreinte(conn):
+    """Ce qui, s'il change, impose de resynchroniser : le fichier du miroir
+    (et son journal WAL), et le nombre de matières encre côté MySifa."""
+    try:
+        chemin = miroir.ERP_MIRROR_DB
+        stats = tuple(
+            (os.stat(f).st_mtime_ns, os.stat(f).st_size)
+            for f in (chemin, chemin + "-wal") if os.path.exists(f)
+        )
+        n = conn.execute(
+            "SELECT COUNT(*) FROM matieres_premieres WHERE categorie=?", (CATEGORIE,)
+        ).fetchone()[0]
+    except Exception:
+        return None
+    return (stats, int(n))
 
 
 def _prix_kg(pa, pafou1) -> float:
@@ -60,8 +84,13 @@ def synchroniser(conn) -> dict:
     """Crée les matières encre manquantes et recopie leur stock RVGI.
 
     Idempotent. Ne lève pas : une synchro RVGI indisponible ne doit pas
-    empêcher d'afficher la valorisation.
+    empêcher d'afficher la valorisation. Sautée quand le miroir n'a pas bougé
+    depuis le dernier passage réussi (`_empreinte`).
     """
+    global _DERNIERE_EMPREINTE
+    empreinte = _empreinte(conn)
+    if empreinte is not None and empreinte == _DERNIERE_EMPREINTE:
+        return {"ok": True, "creees": 0, "mises_a_jour": 0, "inchange": True}
     try:
         articles = _articles_rvgi()
         stocks = erp_stock.index_stock("matiere") if articles else {}
@@ -155,4 +184,6 @@ def synchroniser(conn) -> dict:
             conn.execute("INSERT INTO mp_stock (matiere_id, quantite) VALUES (?,?)", (mid, qte))
             maj += 1
     conn.commit()
+    # Relue après coup : les encres créées à ce passage changent le décompte.
+    _DERNIERE_EMPREINTE = _empreinte(conn)
     return {"ok": True, "creees": creees, "mises_a_jour": maj, "articles": len(articles)}

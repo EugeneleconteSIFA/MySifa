@@ -1,0 +1,65 @@
+/* MySifa — couleur de l'IA : un camaïeu de violet, partout où une action
+   fait appel à une IA (Claude, DeepL). L'utilisateur qui essaie un outil doit
+   savoir, avant de cliquer, que l'IA va travailler (décision du 21/10/2026).
+
+   Classes :
+     .ia-btn     bouton qui déclenche l'IA (dégradé violet, texte blanc, étincelle)
+     .ia-zone    panneau ou fenêtre dédiée à l'IA (bordure et fond violets)
+     .ia-badge   pastille « IA »
+     .ia-travail l'IA est en cours (le bouton ou la zone pulse doucement)
+     .ia-texte   texte d'avertissement court (« Fait appel à l'IA… »)
+
+   Les tokens --iav-* sont la définition du thème IA : les hexadécimaux sont
+   légitimes ici (hex-ok), nulle part ailleurs. */
+:root, body {
+  --iav-1: #c4b5fd; /* hex-ok : texte violet sur fond sombre */
+  --iav-2: #8b5cf6; /* hex-ok */
+  --iav-3: #6d28d9; /* hex-ok */
+  --iav-bg: rgba(139, 92, 246, .14);
+  --iav-bord: rgba(167, 139, 250, .55);
+  --iav-lueur: rgba(139, 92, 246, .45);
+}
+body.light, html.light-pre body {
+  --iav-1: #6d28d9; /* hex-ok : texte violet sur fond clair */
+  --iav-2: #7c3aed; /* hex-ok */
+  --iav-3: #5b21b6; /* hex-ok */
+  --iav-bg: rgba(124, 58, 237, .08);
+  --iav-bord: rgba(124, 58, 237, .40);
+  --iav-lueur: rgba(124, 58, 237, .30);
+}
+
+.ia-btn, .ia-btn.btn, .ia-btn.fsc-btn, .ia-btn.es-btn, .ia-btn.ttr-btn {
+  background: linear-gradient(135deg, var(--iav-2), var(--iav-3)) !important;
+  border-color: var(--iav-3) !important;
+  color: white !important;
+}
+.ia-btn:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 4px 14px var(--iav-lueur); }
+.ia-btn:disabled { opacity: .75; }
+.ia-btn::before {
+  content: ""; display: inline-block; width: 13px; height: 13px; margin-right: 6px; vertical-align: -2px; flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.2 6.3L20.5 10.5 14.2 12.7 12 19l-2.2-6.3L3.5 10.5 9.8 8.3z'/%3E%3Cpath d='M19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1-2.1-.9 2.1-.9z'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.2 6.3L20.5 10.5 14.2 12.7 12 19l-2.2-6.3L3.5 10.5 9.8 8.3z'/%3E%3Cpath d='M19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1-2.1-.9 2.1-.9z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+/* Un bouton qui a déjà son icône SVG n'a pas besoin de l'étincelle. */
+.ia-btn.ia-sans-etincelle::before, .ia-btn:has(> svg)::before, .ia-btn:has(> span > svg)::before { display: none; }
+
+.ia-zone {
+  border: 1.5px solid var(--iav-bord) !important;
+  background-image: linear-gradient(var(--iav-bg), var(--iav-bg));
+}
+.ia-zone .es-panneau-titre, .ia-zone .modal-hd h3, .ia-zone .es-modale-titre { color: var(--iav-1); }
+
+.ia-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .6px;
+  color: var(--iav-1); background: var(--iav-bg); border: 1px solid var(--iav-bord);
+  vertical-align: middle; text-transform: uppercase;
+}
+.ia-texte { font-size: 12px; color: var(--iav-1); line-height: 1.45; }
+.ia-texte::before { content: "✦ "; }
+
+.ia-travail { animation: ia-pulse 1.4s ease-in-out infinite; }
+@keyframes ia-pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--iav-lueur); } 50% { box-shadow: 0 0 0 6px transparent; } }
+@media (prefers-reduced-motion: reduce) { .ia-travail { animation: none; } }
+.perf-eco .ia-travail { animation: none; }

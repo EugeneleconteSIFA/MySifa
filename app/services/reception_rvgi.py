@@ -685,22 +685,39 @@ _SQL_HISTO_ERP = """
 """
 
 
-def historique(conn, conn_erp=None, limite=300):
-    """Les receptions RVGI deja entrees en stock, la plus recente en tete."""
+def historique(conn, conn_erp=None, limite=300, validees=None):
+    """Les receptions RVGI deja entrees en stock, la plus recente en tete.
+
+    `validees` : True ne rend que les lignes relues, False que celles qui
+    attendent une validation (elles s'affichent dans la file « Depuis l'ERP »),
+    None les deux.
+    """
     # `matiere_fsc` arrive par migration : une base qui ne l'a pas encore
     # (tests, instance en retard) doit garder son historique.
     cols_mp = {r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)")}
     expr_fsc = "COALESCE(mp.matiere_fsc, 0)" if "matiere_fsc" in cols_mp else "0"
+    cols_i = {r[1] for r in conn.execute("PRAGMA table_info(erp_reception_integree)")}
+    expr_valide = ("i.valide_at, i.valide_par, " if "valide_at" in cols_i
+                   else "NULL AS valide_at, NULL AS valide_par, ")
+    # Base sans la migration : rien n'est encore a valider, l'historique reste
+    # ce qu'il etait.
+    filtre = ""
+    if validees is not None and "valide_at" in cols_i:
+        filtre = "WHERE i.valide_at IS %s NULL " % ("NOT" if validees else "")
+    elif validees is False:
+        return []
     try:
         rows = conn.execute(
             "SELECT i.lif_id, i.numero, i.ligne, i.amjl, i.qte_rvgi, i.matiere_id, "
             "       i.laize_id, i.quantite, i.unite, i.regime, i.integre_at, i.integre_par, "
+            "       " + expr_valide +
             "       i.reception_id, " + expr_fsc + " AS matiere_fsc, "
             "       mp.reference AS matiere_ref, mp.designation AS matiere_designation, "
             "       lz.label AS laize_label "
             "FROM erp_reception_integree i "
             "LEFT JOIN matieres_premieres mp ON mp.id = i.matiere_id "
             "LEFT JOIN mp_laizes lz ON lz.id = i.laize_id "
+            + filtre +
             "ORDER BY i.integre_at DESC, i.lif_id DESC LIMIT ?",
             (int(limite),),
         ).fetchall()
@@ -896,6 +913,15 @@ def integrer(conn, ligne, user, appliquer_mouvement):
         (lif_id, ligne.get("numero"), ligne.get("ligne"), ligne.get("amjl"),
          ligne.get("qte_rvgi"), matiere_id, laize_id, quantite, ligne.get("unite"),
          regime, mouvement_id, reception_id, maintenant, auteur))
+    # Une entree faite a la main l'a ete par quelqu'un qui avait la ligne sous
+    # les yeux : elle vaut validation. Celles de la synchro (utilisateur sans
+    # id) attendent qu'une personne les relise -- voir `valider`.
+    if (user or {}).get("id") is not None:
+        try:
+            conn.execute("UPDATE erp_reception_integree SET valide_at=?, valide_par=? "
+                         "WHERE lif_id=?", (maintenant, auteur, lif_id))
+        except Exception:
+            pass  # migration pas encore passee : la ligne restera a valider
 
     return {"lif_id": lif_id, "regime": regime, "quantite": quantite,
             "unite": ligne.get("unite"), "mouvement_id": mouvement_id,
@@ -960,6 +986,34 @@ def annuler(conn, lif_id, user, appliquer_mouvement):
     conn.execute("DELETE FROM erp_reception_integree WHERE lif_id=?", (lif_id,))
     return {"lif_id": lif_id, "matiere_id": i.get("matiere_id"), "quantite": q,
             "unite": i.get("unite"), "mouvement_id": mouvement_id}
+
+
+def valider(conn, lif_id, user, valide=True):
+    """Marque une reception entree en stock comme relue par `user`.
+
+    La synchro fait entrer le stock sans attendre personne ; cette validation
+    ne le bouge pas, elle dit qui a verifie la ligne (article, quantite, BL).
+    `valide=False` retire la validation -- l'erreur se corrige, elle ne
+    s'efface pas : le journal d'audit garde les deux gestes.
+
+    Ne committe pas.
+    """
+    from datetime import datetime
+
+    lif_id = int(lif_id)
+    i = conn.execute("SELECT lif_id, valide_at FROM erp_reception_integree WHERE lif_id=?",
+                     (lif_id,)).fetchone()
+    if i is None:
+        raise ValueError("Réception absente de l'historique — annulée entre-temps ?")
+    if valide:
+        auteur = (user or {}).get("nom") or (user or {}).get("email") or ""
+        maintenant = datetime.now().isoformat(timespec="seconds")
+        conn.execute("UPDATE erp_reception_integree SET valide_at=?, valide_par=? WHERE lif_id=?",
+                     (maintenant, auteur, lif_id))
+        return {"lif_id": lif_id, "valide_at": maintenant, "valide_par": auteur}
+    conn.execute("UPDATE erp_reception_integree SET valide_at=NULL, valide_par=NULL WHERE lif_id=?",
+                 (lif_id,))
+    return {"lif_id": lif_id, "valide_at": None, "valide_par": None}
 
 
 def _lier_laize(conn, matiere_id, laize_id):

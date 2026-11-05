@@ -133,7 +133,7 @@ def _prevenir_auteur(dest: dict, *, nb_nc: int) -> None:
             subtitle="Réponse à un formulaire",
             body_html=('<p style="margin:0 0 18px;font-size:14px;color:#475569;line-height:1.65">'
                        "Réponse reçue.</p>" + _email_detail_table(lignes)),
-            cta_href=f"{public_base_url()}/qualite?formulaire={dest['formulaire_id']}&onglet=suivi",
+            cta_href=f"{public_base_url()}/tools?outil=formulaires&formulaire={dest['formulaire_id']}&onglet=suivi",
             cta_label="Voir les réponses",
         )
         sujet = ("Non-conformité · " if nb_nc else "") + f"Réponse — {dest['titre']} — {qui}"

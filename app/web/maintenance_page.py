@@ -23,7 +23,9 @@ from config import (
     ROLE_ADMINISTRATION_VENTES,
     ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
+    MAINTENANCE_ANALYSE_TYPE_DEFAUT,
 )
+from html import escape as _esc_html
 
 # v2.2.46 : inclut les 2 sous-rôles administration modernes (ventes/technique)
 # qui manquaient et provoquaient un "Accès refusé" pour ces admins.
@@ -80,6 +82,7 @@ def maintenance_page(request: Request):
         MAINTENANCE_HTML
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__MAINT_ROLE__", maint_role)
+        .replace("__ANALYSE_TYPE_DEFAUT__", _esc_html(MAINTENANCE_ANALYSE_TYPE_DEFAUT, quote=True))
     )
     return HTMLResponse(
         content=html,
@@ -129,6 +132,21 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 .ctrl-row-nc td:first-child{border-left:3px solid var(--danger)}
 .ctrl-row-nc:hover td{background:rgba(248,113,113,0.11)}
 .ctrl-row-nc td:first-child::before{content:"⚠ ";color:var(--danger);font-weight:900;margin-right:4px}
+/* Saisie faite avec un questionnaire qui a changé depuis (bouton « Anciens
+   formulaires ») : ligne grisée, réponses avec leur libellé d'époque. */
+.ctrl-row-ancien td{color:var(--muted)}
+/* Colonne Réponses : chaque réponse précédée de sa question. */
+.col-comment .ctrl-rep{display:inline-block;margin:1px 14px 1px 0;white-space:nowrap}
+.col-comment .ctrl-rep-q{font-size:11px;color:var(--muted);margin-right:3px}
+.col-comment .ctrl-rep b{font-weight:600;color:var(--text)}
+.col-comment .ctrl-rep b.ctrl-rep-nc{color:var(--danger)}
+.col-comment .ctrl-rep-ancien b{font-weight:500;color:var(--muted)}
+.col-comment .ctrl-rep-com{color:var(--text2);font-style:italic;white-space:normal}
+.col-comment .ctrl-rep-fin{display:block;white-space:normal}
+.ack-ancien{margin-top:14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--bg)}
+.ack-ancien-kv{display:flex;gap:10px;font-size:12px;padding:3px 0}
+.ack-ancien-k{color:var(--muted);flex:0 0 45%}
+.ack-ancien-v{color:var(--text2)}
 .ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
 tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ctrl-dossier-empty{color:var(--muted);font-size:12px}
@@ -177,11 +195,11 @@ body.sb-open .sidebar-overlay{display:block}
 
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 @media(max-width:768px){.mobile-topbar{display:flex}}
-.mobile-menu-btn{background:none;border:none;color:var(--text2);cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center}
 .mobile-topbar-title{font-size:14px;font-weight:700;color:var(--text)}
 .mobile-topbar-sub{font-size:11px;color:var(--muted)}
-.mobile-home-btn{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:4px;border-radius:6px;transition:.15s}
-.mobile-home-btn:hover{color:var(--accent)}
+.mobile-menu-btn,.mobile-home-btn{width:40px;height:40px;flex-shrink:0;padding:0;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.mobile-menu-btn:hover,.mobile-home-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.mobile-home-btn{margin-left:auto}
 
 .content{padding:28px 32px;max-width:1280px;width:100%;flex:1;display:flex;flex-direction:column}
 @media(max-width:768px){.content{padding:16px}}
@@ -1610,6 +1628,19 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 #view-controles .date-preset-chip{background:var(--bg)}
 #view-controles .date-preset-chip:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 #view-controles .date-preset-chip.active{background:var(--accent-bg)}
+/* Filtres de l'historique des saisies (Historique et Analyse) : une grille de
+   listes de même hauteur, puis la période et ses raccourcis sur une ligne. */
+.ctrl-filtres{display:grid;grid-template-columns:minmax(240px,2fr) repeat(3,minmax(150px,1fr));gap:12px 14px;align-items:end}
+.ctrl-filtres .filter-input{width:100%;min-width:0}
+.ctrl-periode-ligne{display:flex;align-items:flex-end;gap:10px 18px;flex-wrap:wrap;margin-top:14px}
+.ctrl-periode-dates{display:flex;align-items:center;gap:8px}
+.ctrl-periode-dates .filter-input{width:150px;min-width:0}
+.ctrl-periode-dates span{color:var(--muted);font-size:14px}
+.ctrl-presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:40px}
+.ctrl-presets .date-preset-chip{margin-top:0}
+.ctrl-filtres-panel .ctrl-point-filters-row{margin-top:14px}
+@media(max-width:1000px){.ctrl-filtres{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.ctrl-filtres{grid-template-columns:1fr}.ctrl-periode-dates .filter-input{width:auto;flex:1}}
 
 /* ═══════════════════════════════════════════════════════════ */
 /* v2.2.30 : panel Codes maintenance — CSS scopé (re-extraction propre) */
@@ -1923,7 +1954,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
 </head>
-<body data-maint-role="__MAINT_ROLE__">
+<body data-maint-role="__MAINT_ROLE__" data-analyse-type-defaut="__ANALYSE_TYPE_DEFAUT__">
 <div class="app">
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 
@@ -1986,7 +2017,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div class="mobile-topbar-title">Suivi machine</div>
         <div class="mobile-topbar-sub">En cours de développement</div>
       </div>
-      <button type="button" class="mobile-home-btn" onclick="location.href='/'">⌂</button>
+      <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
+      </button>
     </div>
 
     <div class="content">
@@ -2149,13 +2182,26 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div class="page-header">
           <div>
             <div class="page-title">Alertes</div>
-            <div class="page-subtitle">Gestion des alertes maintenance et historique des saisies</div>
+            <div class="page-subtitle">Saisies des opérateurs et paramétrage des alertes</div>
           </div>
         </div>
 
-        <!-- v2.2.18 : subtabs retirés (Liste des contrôles supprimé). L'onglet Historique reste seul et sans en-tête. -->
+        <!-- Deux onglets (style des sous-onglets d'Opérations) : les saisies des
+             opérateurs (historique et analyse), puis le paramétrage des alertes.
+             Adresse : sous=gestion (static/maintenance_url.js). -->
+        <div class="ops-subtabs" role="tablist">
+          <button type="button" class="ops-subtab active" role="tab" data-ctrl-subtab="historique" onclick="setCtrlSubtab('historique')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+            Saisies des alertes
+          </button>
+          <button type="button" class="ops-subtab" role="tab" data-ctrl-subtab="gestion" onclick="setCtrlSubtab('gestion')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Gestion des alertes
+          </button>
+        </div>
 
-        <!-- v2.2.19 : panel Alertes maintenance (dup depuis settings_page) -->
+        <!-- Onglet Gestion des alertes — v2.2.19 : panel Alertes maintenance (dup depuis settings_page) -->
+        <div data-ctrl-panneau="gestion" style="display:none">
         <div class="alerts-panel-embed">
         <div id="maint-subtab-alertes" class="maint-subtab">
           <div class="card">
@@ -2172,16 +2218,30 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </div>
         </div><!-- /alerts-panel-embed -->
+        </div><!-- /onglet gestion -->
 
-        <!-- v2.2.25 : Historique dans card blanche pour équilibre visuel avec Gestion -->
-        <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
-          <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des saisies</h2>
-          <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</p>
+        <!-- Onglet Saisies des alertes (défaut) : historique et analyse, dans une carte blanche -->
+        <div data-ctrl-panneau="historique" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+          <div class="an-entete-carte">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des saisies</h2>
+              <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</p>
+            </div>
+            <!-- Bascule Historique / Analyse : mêmes filtres, deux lectures (static/maintenance_analyse.js) -->
+            <div class="an-seg an-bascule" role="group" aria-label="Affichage">
+              <button type="button" data-ctrl-affichage="analyse" class="active" aria-pressed="true" onclick="MaintAnalyse.afficher('analyse')">Analyse</button>
+              <button type="button" data-ctrl-affichage="historique" aria-pressed="false" onclick="MaintAnalyse.afficher('historique')">Historique</button>
+            </div>
+          </div>
         <div id="ctrl-subview-historique">
 
-        <!-- Filtres Historique des contrôles -->
-        <div class="filters-panel">
-          <div class="filters">
+        <!-- Filtres Historique des contrôles — partagés par Historique et Analyse.
+             Ligne 1 : les listes, sur une grille (le type plus large).
+             Ligne 2 : la période et ses raccourcis côte à côte.
+             « Conformité » et les filtres par question sont masqués en Analyse
+             (static/maintenance_analyse.css). -->
+        <div class="filters-panel ctrl-filtres-panel">
+          <div class="filters ctrl-filtres">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
               <select id="filt-controles-type" class="filter-input" onchange="ctrlAutoFilter({resetPoints:true})">
@@ -2204,7 +2264,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="Repiquage">Repiquage</option>
               </select>
             </div>
-            <div class="filter-group">
+            <div class="filter-group ctrl-filtre-conformite">
               <label for="filt-controles-conformite">Conformité</label>
               <select id="filt-controles-conformite" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Toutes les réponses</option>
@@ -2212,27 +2272,27 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="ok">Conformes uniquement</option>
               </select>
             </div>
-            <!-- v2.3.36 : Du/Au fusionnés — v2.3.37 : bouton Filtrer retiré, filtrage auto sur onchange -->
-            <div class="filter-group" style="flex:1 1 220px">
-              <label>Période</label>
-              <div style="display:flex;gap:6px;align-items:center">
-                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
-                <span style="color:var(--muted);font-size:14px">→</span>
-                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
+          </div>
+          <div class="ctrl-periode-ligne">
+            <div class="filter-group ctrl-periode">
+              <label for="filt-controles-date-from">Période</label>
+              <div class="ctrl-periode-dates">
+                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" onchange="ctrlAutoFilter()">
+                <span aria-hidden="true">→</span>
+                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" onchange="ctrlAutoFilter()">
               </div>
             </div>
-          </div>
-          <div class="filters-date-presets" id="ctrl-date-presets">
-            <span class="filters-date-presets-label">Période :</span>
-            <button type="button" class="date-preset-chip" data-preset="today" onclick="applyCtrlDatePreset('today')">Aujourd'hui</button>
-            <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyCtrlDatePreset('yesterday')">Hier</button>
-            <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyCtrlDatePreset('last7')">7 derniers jours</button>
-            <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
-            <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
-            <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+            <div class="ctrl-presets" id="ctrl-date-presets" role="group" aria-label="Raccourcis de période">
+              <button type="button" class="date-preset-chip" data-preset="today" onclick="applyCtrlDatePreset('today')">Aujourd'hui</button>
+              <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyCtrlDatePreset('yesterday')">Hier</button>
+              <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyCtrlDatePreset('last7')">7 derniers jours</button>
+              <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
+              <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
+              <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+            </div>
           </div>
           <div id="ctrl-point-filters-row" class="ctrl-point-filters-row" style="display:none">
-            <span class="filters-date-presets-label">Réponses :</span>
+            <span class="filters-date-presets-label">Réponses</span>
             <div id="ctrl-point-filters-inputs" class="ctrl-point-filters-inputs"></div>
             <button type="button" class="date-preset-chip" onclick="resetPointFilters()">Réinitialiser</button>
           </div>
@@ -2248,6 +2308,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <span class="ctrl-extra-toggle-label">Fermetures auto</span>
                 <span class="ctrl-extra-toggle-dot" id="ctrl-autoclose-toggle-dot"></span>
                 <span class="ctrl-extra-toggle-state" id="ctrl-autoclose-toggle-state">OFF</span>
+              </button>
+              <button type="button" class="ctrl-extra-toggle" id="ctrl-anciens-toggle" onclick="toggleAnciens()" title="Afficher ou masquer les saisies faites avec une version précédente du questionnaire (réponses à des questions retirées depuis).">
+                <span class="ctrl-extra-toggle-label">Anciens formulaires</span>
+                <span class="ctrl-extra-toggle-dot"></span>
+                <span class="ctrl-extra-toggle-state" id="ctrl-anciens-toggle-state">OFF</span>
               </button>
               <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (référence produit, adhésif, glassine)">
                 <span class="ctrl-extra-toggle-label">Colonnes produit</span>
@@ -2265,7 +2330,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                   <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">↕</span></th>
                   <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">Opérateur<span class="sort-ico">↕</span></th>
                   <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">↕</span></th>
-                  <th>Commentaires</th>
+                  <th>Réponses</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -2273,6 +2338,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </table>
           </div>
         </div>
+
+        <!-- Affichage Analyse : rempli par static/maintenance_analyse.js -->
+        <div id="ctrl-analyse" class="an-zone" style="display:none"></div>
 
         </div><!-- /ctrl-subview-historique -->
         </div><!-- /section historique séparée v2.2.23 -->
@@ -3044,6 +3112,10 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
+<script src="/static/mysifa_url.js?v=5"></script>
+<script src="/static/maintenance_url.js?v=8"></script>
+<link rel="stylesheet" href="/static/maintenance_analyse.css?v=7">
+<script src="/static/maintenance_analyse.js?v=6"></script>
 <script>
 'use strict';
 
@@ -3088,21 +3160,25 @@ function setOpsSubtab(name){
   // v2.2.36 : force la vue Récurrentes à chaque arrivée sur l'onglet Gestion
   if(name === 'liste' && typeof switchMaintView === 'function') switchMaintView('recurrentes');
 }
-// Sous-onglet actif dans la vue Contrôles ('historique' | 'liste').
+// Onglet actif de la vue Alertes : 'historique' (Saisies des alertes, défaut)
+// ou 'gestion' (Gestion des alertes). L'ancien 'liste' (supprimé en v2.2.18)
+// des liens existants retombe sur le défaut.
 const CTRL_SUBTAB_KEY = 'mysifa_maint_ctrl_subtab_v1';
 function _getCtrlSubtab(){
   try{ return localStorage.getItem(CTRL_SUBTAB_KEY) || 'historique'; }
   catch(e){ return 'historique'; }
 }
 function setCtrlSubtab(name){
-  if(name !== 'historique' && name !== 'liste') name = 'historique';
+  if(name !== 'historique' && name !== 'gestion') name = 'historique';
   try{ localStorage.setItem(CTRL_SUBTAB_KEY, name); }catch(e){}
   document.querySelectorAll('[data-ctrl-subtab]').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-ctrl-subtab') === name);
+    const on = btn.getAttribute('data-ctrl-subtab') === name;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  document.querySelectorAll('.ctrl-subview').forEach(div => { div.style.display = 'none'; });
-  const target = document.getElementById('ctrl-subview-' + name);
-  if(target) target.style.display = '';
+  document.querySelectorAll('[data-ctrl-panneau]').forEach(div => {
+    div.style.display = div.getAttribute('data-ctrl-panneau') === name ? '' : 'none';
+  });
 }
 
 function switchView(name){
@@ -3211,7 +3287,7 @@ function switchView(name){
   const s = document.querySelector('.mobile-topbar-sub');
   if(t) t.textContent = meta.title;
   if(s) s.textContent = meta.sub;
-  try{ history.replaceState(null, '', '#' + name); }catch(e){}
+  // L'adresse (vue, filtres, fenêtres) est tenue par static/maintenance_url.js.
   closeSidebar();
 }
 
@@ -7825,7 +7901,10 @@ function setMaintCatFilter(c){
 // Capture d'un widget : la machine et la catégorie affichées rejoignent
 // l'adresse capturée, la source du widget les relit (mysifa_blocs_sources.js).
 window.mysifaBlocsContexte = function(){
-  return { bloc_machine: getMaintMachine(), bloc_categorie: getMaintCatFilter() };
+  // + période et machine de l'Analyse des alertes (maintenance.alertes.synthese).
+  return Object.assign(
+    { bloc_machine: getMaintMachine(), bloc_categorie: getMaintCatFilter() },
+    window.MaintAnalyse ? window.MaintAnalyse.contexteBloc() : {});
 };
 // Ouverture depuis un indicateur : machine et catégorie capturées deviennent
 // celles de l'écran (même mémoire que les boutons de la page).
@@ -9263,6 +9342,7 @@ function _formatAckComment(ack){
       }
     });
   }
+  (ack.hors_formulaire || []).forEach(h => { if(h && h.valeur) parts.push(h.libelle + ' : ' + h.valeur); });
   if(ack.comment){ parts.push((parts.length ? '« ' + ack.comment + ' »' : ack.comment)); }
   return parts.join(' · ');
 }
@@ -9285,6 +9365,10 @@ async function loadCtrlAcks(){
       _alert_id: a.alert_id,
       _responses: a.responses || {},
       _raw_comment: a.comment || '',
+      // Réponses déjà rangées par le serveur sous les questions actuelles ;
+      // celles dont la question a été retirée arrivent à part.
+      _hors_formulaire: Array.isArray(a.hors_formulaire) ? a.hors_formulaire : [],
+      _ancien: !!a.ancien,
       _no_dossier: a.no_dossier || '',
       _dossier_info: a.dossier_info || null,
     }));
@@ -9413,6 +9497,59 @@ function toggleAutoClose(){
   ctrlResetPage();
   if(typeof renderCtrl === 'function') renderCtrl();
 }
+// Saisies d'un questionnaire qui a changé depuis (réponses à des questions
+// retirées) : masquées par défaut, elles ne servent plus qu'en consultation.
+const CTRL_SHOW_ANCIENS_KEY = 'mysifa_ctrl_show_anciens';
+function ctrlLoadShowAnciens(){
+  try { return localStorage.getItem(CTRL_SHOW_ANCIENS_KEY) === '1'; }
+  catch(_) { return false; }
+}
+function ctrlSaveShowAnciens(v){
+  try { localStorage.setItem(CTRL_SHOW_ANCIENS_KEY, v ? '1' : '0'); } catch(_) {}
+}
+function updateAnciensToggleUI(){
+  const on = ctrlLoadShowAnciens();
+  const state = document.getElementById('ctrl-anciens-toggle-state');
+  const btn = document.getElementById('ctrl-anciens-toggle');
+  if(state) state.textContent = on ? 'ON' : 'OFF';
+  if(btn) btn.classList.toggle('ctrl-extra-toggle-on', on);
+}
+function toggleAnciens(){
+  ctrlSaveShowAnciens(!ctrlLoadShowAnciens());
+  updateAnciensToggleUI();
+  ctrlResetPage();
+  if(typeof renderCtrl === 'function') renderCtrl();
+}
+// Réponses d'une alerte, chacune précédée de sa question (colonne Réponses
+// de l'historique). Les réponses non conformes ressortent en rouge.
+function _ackReponsesHtml(c){
+  const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)] || {};
+  const items = Array.isArray(meta.checklist_items) ? meta.checklist_items : [];
+  const resp = c._responses || {};
+  const parts = [];
+  items.forEach((it, i) => {
+    const r = resp[String(i)];
+    const vals = Array.isArray(r) ? r : ((r == null || r === '') ? [] : [r]);
+    const autre = resp[String(i) + '_other'];
+    const com = String(resp[String(i) + '_comment'] == null ? '' : resp[String(i) + '_comment']).trim();
+    if(!vals.length && (autre == null || autre === '') && !com) return;
+    const ncSet = (it.type === 'value') ? [] : (Array.isArray(it.nc_responses) ? it.nc_responses.map(String) : []);
+    const nc = vals.some(v => ncSet.indexOf(String(v)) !== -1 || (it.other_is_nc && String(v) === 'Autre'));
+    let txt = vals.join(it.type === 'value' ? ' / ' : ', ');
+    if(txt && it.type === 'value' && it.unit) txt += ' ' + it.unit;
+    if(autre != null && autre !== '') txt = txt ? txt + ' — ' + autre : String(autre);
+    parts.push('<span class="ctrl-rep"><span class="ctrl-rep-q">' + escHtml(it.label || ('Question ' + (i + 1))) + '</span> '
+      + '<b' + (nc ? ' class="ctrl-rep-nc"' : '') + '>' + escHtml(txt) + '</b>'
+      + (com ? ' <span class="ctrl-rep-com">« ' + escHtml(com) + ' »</span>' : '') + '</span>');
+  });
+  (c._hors_formulaire || []).forEach(h => {
+    parts.push('<span class="ctrl-rep ctrl-rep-ancien"><span class="ctrl-rep-q">' + escHtml(h.libelle || '') + '</span> <b>' + escHtml(h.valeur || '') + '</b></span>');
+  });
+  // Commentaire de fin de questionnaire, sur sa propre ligne : c'est une
+  // phrase, pas une valeur courte.
+  if(c._raw_comment) parts.push('<span class="ctrl-rep ctrl-rep-fin"><span class="ctrl-rep-q">Commentaire</span> <span class="ctrl-rep-com">« ' + escHtml(c._raw_comment) + ' »</span></span>');
+  return parts.join('');
+}
 function ctrlIsAutoClose(c){
   const raw = (c && c._raw_comment) || '';
   // Match tolérant : "Fermée auto" avec ou sans accents / espaces autour
@@ -9441,6 +9578,7 @@ function getCtrlFilters(){
     conformite:v('filt-controles-conformite'),
     // v2.3.35 : lu directement depuis localStorage (plus de checkbox DOM)
     showAuto:  ctrlLoadShowAutoClose(),
+    showAnciens: ctrlLoadShowAnciens(),
   };
 }
 function resetCtrlFilters(){
@@ -9639,6 +9777,15 @@ function openAckDetail(prefixedId){
   if(items.length && window.MysifaAckViewer){
     checklistHtml = window.MysifaAckViewer.checklist(items, responses);
   }
+  // Réponses à des questions retirées depuis la saisie : affichées avec leur
+  // libellé d'époque, sous les points de contrôle actuels.
+  const hors = ack._hors_formulaire || [];
+  if(hors.length){
+    checklistHtml += '<div class="ack-ancien"><span class="mav-lbl">Ancien formulaire</span>'
+      + hors.map(h => '<div class="ack-ancien-kv"><span class="ack-ancien-k">' + escHtml(h.libelle || '')
+        + '</span><span class="ack-ancien-v">' + escHtml(h.valeur || '') + '</span></div>').join('')
+      + '</div>';
+  }
 
   // Contexte : date, machine, opérateur
   const dt = fmtDate(ack.date_saisie);
@@ -9811,6 +9958,7 @@ function renderCtrl(){
   renderPointFilters();
   // v2.2.18 : legacy CTRL_STATE.list dropped — historique = acks DB uniquement
   const merged = (CTRL_STATE.acks || []).slice();
+  let anciensMasques = 0;
   let filtered = merged.filter(c => {
     if(f.type && _displayType(c) !== f.type) return false;
     if(f.operateur && c.operateur !== f.operateur) return false;
@@ -9827,6 +9975,7 @@ function renderCtrl(){
     }
     // v2.3.29 : masque les fermetures automatiques par défaut
     if(!f.showAuto && ctrlIsAutoClose(c)) return false;
+    if(!f.showAnciens && c._ancien){ anciensMasques++; return false; }
     if(!_matchPointFilters(c)) return false;
     return true;
   });
@@ -9840,20 +9989,16 @@ function renderCtrl(){
     if(av > bv) return  1 * dir;
     return 0;
   });
-  // Colonnes adaptatives : si un seul type est sélectionné et qu'il correspond
-  // à une alerte ayant une checklist, on affiche une colonne par point.
-  let extraCols = [];
-  const singleType = f.type || '';
-  if(singleType){
-    const ackMatch = merged.find(c => c._source === 'alert' && _displayType(c) === singleType);
-    if(ackMatch && ackMatch._alert_id != null && CTRL_STATE.alerts_meta){
-      const meta = CTRL_STATE.alerts_meta[String(ackMatch._alert_id)];
-      if(meta && Array.isArray(meta.checklist_items)){
-        extraCols = meta.checklist_items;
-      }
-    }
+  // Les réponses d'une alerte vont toutes dans la colonne Réponses, chacune
+  // précédée de sa question (_ackReponsesHtml), quel que soit le filtre : une
+  // ligne se lit d'un coup d'œil sans faire défiler une colonne par question.
+  // Un seul type affiché (filtre, ou toutes les lignes de la même alerte) :
+  // la colonne Type est masquée.
+  let singleType = f.type || '';
+  if(!singleType && filtered.length){
+    const t0 = _displayType(filtered[0]);
+    if(t0 && filtered.every(c => c._source === 'alert' && _displayType(c) === t0)) singleType = t0;
   }
-
   // Reconstruire le thead
   const showExtra = getShowExtraCols();
   const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
@@ -9870,26 +10015,18 @@ function renderCtrl(){
     if(!singleType){
       h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
     }
-    for(const col of extraCols){
-      const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
-      const ptsSuffix = (col.type === 'value' && col.points_libres)
-        ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml((col.libelle_point || 'Mesure') + ' 1 / 2 / …') + '</div>'
-        : (col.type === 'value' && Array.isArray(col.points) && col.points.length > 1)
-        ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml(col.points.join(' / ')) + '</div>' : '';
-      h += '<th>' + escHtml(col.label || '') + unitSuffix + ptsSuffix + '</th>';
-    }
     if(showExtra){
       h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
       h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
       h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
       h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
     }
-    h += '<th>Commentaires</th>';
+    h += '<th>Réponses</th>';
     h += '<th aria-label="Actions"></th>';
     thead.innerHTML = h;
   }
 
-  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
+  const totalCols = 3 + (singleType ? 0 : 1) + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
   // v2.2.27 : pagination 50/page (pattern MyProd)
   const _totalFiltered = filtered.length;
@@ -9915,24 +10052,6 @@ function renderCtrl(){
       if(!singleType){
         cells += '<td>' + escHtml(_displayType(c)) + '</td>';
       }
-      for(let i = 0; i < extraCols.length; i++){
-        let val = '';
-        if(c._source === 'alert' && c._responses){
-          const r = c._responses[String(i)];
-          if(Array.isArray(r)){
-            val = (extraCols[i] && extraCols[i].type === 'value')
-              ? r.map(x => (x == null || x === '') ? '—' : String(x)).join(' / ')
-              : r.join(', ');
-          }
-          else if(r != null && r !== ''){ val = String(r); }
-          // Si "Autre" a été coché avec une précision, on l'ajoute au texte du cell.
-          const otherTxt = c._responses[String(i) + '_other'];
-          if(otherTxt != null && String(otherTxt).trim() !== ''){
-            val = val ? val + ' — ' + String(otherTxt) : String(otherTxt);
-          }
-        }
-        cells += '<td>' + escHtml(val) + '</td>';
-      }
       if(showExtra){
         // Dossier (no_dossier) : pill accent si renseigné, tiret sinon.
         const _nd = c._no_dossier || '';
@@ -9954,10 +10073,8 @@ function renderCtrl(){
       }
       // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
       // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
-      const commentText = singleType
-        ? (c._source === 'alert' ? (c._raw_comment || '') : (c.commentaire || ''))
-        : (c.commentaire || '');
-      cells += '<td class="col-comment">' + escHtml(commentText) + '</td>';
+      cells += '<td class="col-comment">'
+        + (c._source === 'alert' ? _ackReponsesHtml(c) : escHtml(c.commentaire || '')) + '</td>';
       // Actions
       let actionHtml = '';
       if(c._source === 'alert'){
@@ -9971,7 +10088,8 @@ function renderCtrl(){
       }
       cells += '<td class="col-actions">' + actionHtml + '</td>';
       const isNc = _ackHasNonConformite(c);
-      const trClass = isNc ? ' class="ctrl-row-nc"' : '';
+      const trCls = [isNc ? 'ctrl-row-nc' : '', c._ancien ? 'ctrl-row-ancien' : ''].filter(Boolean).join(' ');
+      const trClass = trCls ? ' class="' + trCls + '"' : '';
       const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
       // v2.3.44 : simple clic (au lieu du double-clic) pour ouvrir le détail
       // d'une ack. La ligne reste sélectionnable via les cellules qui ont
@@ -9989,9 +10107,10 @@ function renderCtrl(){
     const visible = _totalFiltered;
     const from = visible === 0 ? 0 : _pageStart + 1;
     const to = _pageEnd;
-    const label = visible !== n
+    let label = visible !== n
       ? (from + '-' + to + ' / ' + visible + ' filtrés (' + n + ' total)')
       : (from + '-' + to + ' / ' + n + ' contrôle' + (n > 1 ? 's' : ''));
+    if(anciensMasques) label += ' · ' + anciensMasques + ' ancien' + (anciensMasques > 1 ? 's' : '') + ' formulaire' + (anciensMasques > 1 ? 's' : '') + ' masqué' + (anciensMasques > 1 ? 's' : '');
     const prevD = CTRL_STATE.page <= 0;
     const nextD = CTRL_STATE.page >= _maxPage;
     const btnStyle = 'border:1px solid var(--border);background:var(--card);color:var(--text2);padding:3px 9px;border-radius:6px;font-size:13px;line-height:1;font-family:inherit;transition:border-color .12s,color .12s';
@@ -10001,6 +10120,8 @@ function renderCtrl(){
       '<button type="button" ' + (nextD ? 'disabled' : '') + ' onclick="ctrlPageGo(1)" title="Page suivante" style="' + btnStyle + ';cursor:' + (nextD ? 'not-allowed' : 'pointer') + (nextD ? ';opacity:.35' : '') + '">›</button>' +
       '</div>';
   }
+  // L'affichage Analyse suit les mêmes filtres (static/maintenance_analyse.js).
+  if(window.MaintAnalyse) window.MaintAnalyse.surFiltres();
 }
 
 // =========================================================================
@@ -10291,6 +10412,7 @@ async function loadMe(){
   updateExtraToggleUI();
   // v2.3.35 : init du toggle "Fermetures auto" (relocalisé dans le header historique)
   updateAutoCloseToggleUI();
+  updateAnciensToggleUI();
   loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
@@ -10312,6 +10434,8 @@ async function loadMe(){
       }
     }
   }catch(e){}
+  // Adresse : vue, sous-onglets, filtres, tris et fenêtres (?vue=…).
+  if(typeof maintenanceDemarrerUrl === 'function') maintenanceDemarrerUrl(_initMePromise);
 })();
 
 // ═══════════════════════════════════════════════════════════════════
@@ -10974,7 +11098,7 @@ async function deleteUpdate(id) {
 
 </script>
 <script>window.__MYSIFA_APP__='maintenance';</script>
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script>
 if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
@@ -10986,8 +11110,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.21"></script>
-<script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.22"></script>
+<script src="/static/mysifa_confirm.js?v=1"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.5-confirm"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.21"></script>
 <!-- Chassis partage de la fenetre de detail d'un ack (openAckDetail). Le
      meme que dans MyProd : une alerte validee se relit comme une saisie.
@@ -10995,7 +11120,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
      d'alerte — c'est une interruption, pas une consultation. -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack5"></script>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 
 <!-- Modal saisie créneau (opérateur : ouvre au clic sur une carte).
      Liste toutes les ops du créneau, chacune avec son propre bouton

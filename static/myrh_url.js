@@ -8,8 +8,13 @@
  *
  * Inventaire du 18/10/2026, par nom d'état : filtres du tableau (dossier
  * complet / incomplet, service, contrat) ; fenêtres : nouvel employé,
- * contrat d'un employé, pièces d'un élément, catalogue d'une liste,
- * catégories de formations, justificatifs d'une formation, « exigé pour ».
+ * contrat d'un employé (`nouvel_employe=existant|nouveau` : suivre un compte
+ * ou en créer un), pièces d'un élément, catégories de formations,
+ * justificatifs d'une formation, « exigé pour ».
+ * 31/10/2026 : onglet Catalogues (`onglet=catalogues`, `liste=formations|postes` ;
+ * documents administratifs par défaut, premier sous-onglet), qui remplace la fenêtre du catalogue. L'ancien
+ * `catalogue=<liste>` mène à l'onglet. Fenêtre `postes=<membre>` : postes
+ * occupés par un employé.
  * Hors adresse : les confirmations et le petit sélecteur d'ajout (sous-étape
  * d'un geste).
  *
@@ -26,6 +31,12 @@ function myrhFenetreOuverte(cle, id) {
   _myrhPile.push({ cle, id: String(id), el: null, essais: 0, avant: new Set(document.querySelectorAll('.rho-ov')) });
   myrhSyncUrl();
 }
+// Une fenêtre change d'état sans se fermer (Ajouter un employé : compte
+// existant / nouveau compte) : l'entrée du dessus suit.
+function myrhFenetreChange(cle, id) {
+  const f = [..._myrhPile].reverse().find(x => x.cle === cle);
+  if (f) { f.id = String(id); myrhSyncUrl(); }
+}
 function _myrhDessus() {
   // Repère l'élément des fenêtres qui viennent de s'ouvrir, oublie les fermées.
   _myrhPile.forEach(f => {
@@ -39,10 +50,10 @@ function _myrhDessus() {
 }
 
 const _MYRH_OUVREURS = [
-  ['rhOutilNouvelEmploye',   'nouvel_employe', () => 'formulaire'],
+  ['rhOutilNouvelEmploye',   'nouvel_employe', a => (a[0] === 'nouveau' && S.rhOutilPeutCreer) ? 'nouveau' : 'existant'],
   ['rhOutilModifierContrat', 'contrat',        a => a[0] && a[0].id],
+  ['rhOutilPostesEmploye',   'postes',         a => a[0] && a[0].id],
   ['rhOutilPieces',          'pieces',         a => (a[0] && a[1] && a[2]) ? a[0].cle + ':' + a[1].id + ':' + a[2].id : null],
-  ['rhOutilCatalogue',       'catalogue',      a => a[0] && a[0].cle],
   ['rhOutilGererCategories', 'categories',     () => 'formations'],
   ['rhOutilJustificatifs',   'justificatifs',  a => a[0] && a[0].id],
   ['rhOutilExigePour',       'exigee_pour',    a => (a[0] && a[1]) ? a[0].cle + ':' + a[1].id : null],
@@ -62,12 +73,25 @@ function myrhEnvelopper() {
   });
 }
 
+const _MYRH_ONGLETS = ['employes', 'catalogues'];
+// Sous-onglets de Catalogues, dans l'ordre de l'écran (RHO_CATALOGUES_ORDRE) :
+// le premier est le défaut, jamais écrit dans l'adresse.
+const _myrhListes = () => (typeof RHO_CATALOGUES_ORDRE !== 'undefined' ? RHO_CATALOGUES_ORDRE : ['documents', 'formations', 'postes']);
+
 function myrhParams() {
   const p = {};
-  if (S.rhOutilFiltre && S.rhOutilFiltre !== 'tous') p.dossier = S.rhOutilFiltre;
-  if (S.rhOutilFiltreService) p.service = S.rhOutilFiltreService;
-  if (S.rhOutilFiltreContrat) p.contrat_type = S.rhOutilFiltreContrat;
   let nav = 'tableau';
+  if (S.rhOnglet === 'catalogues') {
+    // Filtres du tableau : propres à l'onglet Employés.
+    p.onglet = 'catalogues';
+    const liste = S.rhCatalogue || _myrhListes()[0];
+    if (liste !== _myrhListes()[0]) p.liste = liste;
+    nav = 'catalogues:' + liste;
+  } else {
+    if (S.rhOutilFiltre && S.rhOutilFiltre !== 'tous') p.dossier = S.rhOutilFiltre;
+    if (S.rhOutilFiltreService) p.service = S.rhOutilFiltreService;
+    if (S.rhOutilFiltreContrat) p.contrat_type = S.rhOutilFiltreContrat;
+  }
   const f = _myrhDessus();
   if (f) { p[f.cle] = f.id; nav += '/' + f.cle + ':' + f.id; }
   return { params: p, nav };
@@ -95,17 +119,21 @@ async function _myrhElementCatalogue(L, id) {
   try { const d = await api('/api/rh-outil/' + L.cle + '/catalogue'); return (d.elements || []).find(x => String(x.id) === String(id)) || null; }
   catch (e) { return null; }
 }
-const _myrhRafraichir = () => { if (typeof rhOutilLoad === 'function') rhOutilLoad(); };
+const _myrhRafraichir = () => {
+  if (typeof rhOutilLoad === 'function') rhOutilLoad();
+  if (typeof rhOutilCataloguesRafraichir === 'function') rhOutilCataloguesRafraichir();
+};
 
 const _MYRH_REOUVRIR = {
-  nouvel_employe: () => rhOutilNouvelEmploye(),
+  // `formulaire` : lien d'avant le 31/10/2026, quand la fenêtre ne faisait que créer.
+  nouvel_employe: v => rhOutilNouvelEmploye(v === 'nouveau' || v === 'formulaire' ? 'nouveau' : 'existant'),
   contrat: v => { const m = _myrhMembre(v); if (m) rhOutilModifierContrat(m); },
+  postes: v => { const m = _myrhMembre(v); if (m) rhOutilPostesEmploye(m); },
   pieces: v => {
     const [cle, mid, xid] = v.split(':'); const L = _myrhListe(cle), m = _myrhMembre(mid);
     const x = m && (m[cle] || []).find(i => String(i.id) === xid);
     if (L && m && x) rhOutilPieces(L, m, x);
   },
-  catalogue: v => { const L = _myrhListe(v); if (L) rhOutilCatalogue(L); },
   categories: () => rhOutilGererCategories(_myrhRafraichir),
   justificatifs: async v => { const L = _myrhListe('formations'); const x = L && await _myrhElementCatalogue(L, v); if (x) rhOutilJustificatifs(x, _myrhRafraichir); },
   exigee_pour: async v => {
@@ -118,10 +146,20 @@ async function myrhAllerUrl(complet) {
   const u = MySifaUrl.lire();
   const ou = (k, def) => (u.a(k) ? u.get(k, def) : (complet ? def : undefined));
   const patch = {};
-  const d = ou('dossier', 'tous'); if (d !== undefined && ['tous', 'complet', 'incomplet'].indexOf(d) !== -1 && d !== (S.rhOutilFiltre || 'tous')) patch.rhOutilFiltre = d;
-  const s = ou('service', ''); if (s !== undefined && s !== (S.rhOutilFiltreService || '')) patch.rhOutilFiltreService = s;
-  const c = ou('contrat_type', ''); if (c !== undefined && c !== (S.rhOutilFiltreContrat || '')) patch.rhOutilFiltreContrat = c;
+  // Onglet et liste. Ancien lien `catalogue=<liste>` (fenêtre) : l'onglet.
+  const ancien = u.get('catalogue', null, _myrhListes());
+  let onglet = ancien ? 'catalogues' : ou('onglet', 'employes');
+  if (onglet !== undefined && _MYRH_ONGLETS.indexOf(onglet) === -1) onglet = 'employes';
+  if (onglet !== undefined && onglet !== (S.rhOnglet || 'employes')) patch.rhOnglet = onglet;
+  const liste = ancien || ou('liste', _myrhListes()[0]);
+  if (liste !== undefined && _myrhListes().indexOf(liste) !== -1 && liste !== (S.rhCatalogue || _myrhListes()[0])) patch.rhCatalogue = liste;
+  if ((onglet || S.rhOnglet) !== 'catalogues') {
+    const d = ou('dossier', 'tous'); if (d !== undefined && ['tous', 'complet', 'incomplet'].indexOf(d) !== -1 && d !== (S.rhOutilFiltre || 'tous')) patch.rhOutilFiltre = d;
+    const s = ou('service', ''); if (s !== undefined && s !== (S.rhOutilFiltreService || '')) patch.rhOutilFiltreService = s;
+    const c = ou('contrat_type', ''); if (c !== undefined && c !== (S.rhOutilFiltreContrat || '')) patch.rhOutilFiltreContrat = c;
+  }
   if (Object.keys(patch).length) set(patch);
+  if (patch.rhOnglet === 'catalogues' && typeof rhOutilCataloguesRafraichir === 'function') rhOutilCataloguesRafraichir();
   // Fenêtre : celle du dessus seulement.
   let voulue = null;
   Object.keys(_MYRH_REOUVRIR).forEach(k => { const v = u.get(k, null); if (v && v.length <= 120) voulue = { cle: k, id: v }; });

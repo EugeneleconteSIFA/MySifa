@@ -44,6 +44,13 @@ _ADMIN_LARGE = ("superadmin", "direction", "administration",
 # Le volet ERP est ouvert plus large que les autres : l'expédition lit le
 # miroir pour retrouver ses BL et ses commandes (`ROLES_ERP` dans config.py).
 _ERP_LARGE = _ADMIN_LARGE + ("expedition",)
+# MyTools : chaque outil a ses droits (app/web/tools_page.py, droits_outils).
+# Étiquettes = ROLES_MYPRINT de config.py ; Formulaires = rôles qualité en
+# lecture (ROLES_QUALITE_VIEW de app/routers/qualite.py, recopiés ici pour ne
+# pas importer un router depuis un service).
+from config import ROLES_MYPRINT as _ROLES_MYPRINT  # noqa: E402
+_ROLES_ETIQUETTES = tuple(sorted(_ROLES_MYPRINT))
+_ROLES_FORMULAIRES = _ADMIN_LARGE + ("commercial",)
 
 
 def _entree(cle, label, url, icone, resume="", roles=None, compteur=None):
@@ -193,27 +200,48 @@ VOLETS_TUILES = {
         "pied": {"label": "Ouvrir MyExpé", "url": "/expe"},
     },
     "print": {
+        # Tuile « print » devenue MyTools le 21/10/2026 : la clé reste, elle
+        # porte l'ordre des tuiles enregistré par chaque utilisateur.
         # Un poste par entrée : personne n'imprime « des étiquettes », on
         # imprime celles de Cohésio 1 ou de la logistique. Les identifiants
-        # viennent de TRACA_POSTES (app/web/stock_page.py) — le test vérifie
-        # qu'ils existent toujours.
-        "titre": "MyPrint",
+        # viennent de TRACA_POSTES (static/mysifa_tools_etiquettes.js) — le
+        # test vérifie qu'ils existent toujours.
+        "titre": "MyTools",
         "groupes": [
             _groupe("Postes d'étiquetage", [
-                _entree("print_cohesio1", "Cohésio 1", "/stock?tab=traca&poste=cohesio1", "printer"),
-                _entree("print_cohesio2", "Cohésio 2", "/stock?tab=traca&poste=cohesio2", "printer"),
-                _entree("print_logistique", "Logistique", "/stock?tab=traca&poste=logistique", "truck"),
-                _entree("print_bureaux", "Bureaux", "/stock?tab=traca&poste=bureaux", "printer"),
+                _entree("print_cohesio1", "Cohésio 1", "/tools?outil=etiquettes&poste=cohesio1", "printer",
+                        roles=_ROLES_ETIQUETTES),
+                _entree("print_cohesio2", "Cohésio 2", "/tools?outil=etiquettes&poste=cohesio2", "printer",
+                        roles=_ROLES_ETIQUETTES),
+                _entree("print_logistique", "Logistique", "/tools?outil=etiquettes&poste=logistique", "truck",
+                        roles=_ROLES_ETIQUETTES),
+                _entree("print_bureaux", "Bureaux", "/tools?outil=etiquettes&poste=bureaux", "printer",
+                        roles=_ROLES_ETIQUETTES),
             ]),
-            _groupe("Outils", [
-                _entree("print_specifiques", "Étiquettes spécifiques", "/stock?tab=traca&poste=specifiques", "tag"),
+            # Mêmes sections que le menu de MyTools (app/web/tools_page.py) ;
+            # libellés courts : le volet doit rester compact (retour du 23/10).
+            # Parapheur et Scanner sont des onglets de l'Éditeur PDF.
+            _groupe("Technique", [
+                _entree("tools_calculs", "Calculs bobine", "/tools?outil=calculs", "layers"),
+                _entree("print_specifiques", "Étiquettes spécifiques", "/tools?outil=etiquettes&poste=specifiques", "tag",
+                        roles=_ROLES_ETIQUETTES),
+            ]),
+            _groupe("Imagerie", [
+                _entree("tools_image", "Image et BAT", "/tools?outil=image", "layers"),
+                _entree("tools_convertir", "Convertir", "/tools?outil=convertir", "file-text"),
+            ]),
+            _groupe("Documents", [
+                _entree("tools_pdf", "Éditeur PDF", "/tools?outil=pdf", "file-text"),
+                _entree("tools_formulaires", "Formulaires", "/tools?outil=formulaires", "file-text",
+                        roles=_ROLES_FORMULAIRES),
+                _entree("tools_traduction", "Traducteur", "/tools?outil=traduction", "globe"),
             ]),
             _groupe("Configuration", [
                 _entree("print_imprimantes", "Imprimantes", "/settings#printers", "sliders",
                         roles=_ADMIN_LARGE),
             ]),
         ],
-        "pied": {"label": "Tous les postes", "url": "/stock?tab=traca"},
+        "pied": {"label": "Ouvrir MyTools", "url": "/tools"},
     },
     "pricing": {
         "titre": "Coûts matières",
@@ -237,17 +265,17 @@ VOLETS_TUILES = {
     "coffre": {
         "titre": "Mon coffre",
         "groupes": [_groupe("Aller à", [
-            _entree("cof_bul", "Mes bulletins de paie", "/coffre#bulletins", "lock"),
-            _entree("cof_doc", "Mes documents", "/coffre#documents", "folder"),
-            _entree("cof_ndf", "Mes notes de frais", "/coffre#ndf", "calculator"),
+            _entree("cof_bul", "Mes bulletins de paie", "/coffre?onglet=bulletins", "lock"),
+            _entree("cof_doc", "Mes documents", "/coffre?onglet=documents", "folder"),
+            _entree("cof_ndf", "Mes notes de frais", "/coffre", "calculator"),
         ])],
         "pied": {"label": "Ouvrir Mon coffre", "url": "/coffre"},
     },
     "rh_coffre": {
         "titre": "Coffre RH",
         "groupes": [_groupe("Aller à", [
-            _entree("rhc_bul", "Dépôt des bulletins", "/rh/coffre#bulletins", "folder"),
-            _entree("rhc_ndf", "Notes de frais à valider", "/rh/coffre#ndf", "calculator",
+            _entree("rhc_bul", "Dépôt des bulletins", "/rh/coffre", "folder"),
+            _entree("rhc_ndf", "Notes de frais à valider", "/rh/coffre?onglet=ndf", "calculator",
                     compteur="rh_coffre"),
         ])],
         "pied": {"label": "Ouvrir Coffre RH", "url": "/rh/coffre"},

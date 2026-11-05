@@ -196,6 +196,7 @@ def proposer(consigne: str, *, titre: str = "", description: str = "", schema: O
     except Exception as e:
         raise FormulaireIaErreur(f"Appel à l'assistant en échec : {e}")
     ia_usage.noter(reponse, "formulaires")
+    ia_usage.preciser(modele_demande=choix["id"], fichiers=len(pieces or []))
 
     if getattr(reponse, "stop_reason", "") == "refusal":
         raise FormulaireIaErreur("L'assistant a refusé cette demande. Reformuler la consigne.")

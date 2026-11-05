@@ -168,12 +168,18 @@ def _eudr(conn, email: str) -> list[dict]:
     } for r in rows]
 
 
+def _signatures(conn, email: str) -> list[dict]:
+    """Documents à signer (MyTools › Parapheur), signés dans l'Espace."""
+    from app.services import parapheur
+    return parapheur.elements_espace(conn, email)
+
+
 def contenu(conn, email: str) -> dict:
     """Tout ce qui attend cette adresse : formulaires et cartes des autres
     modules, chacun avec `a_traiter`."""
     mail = normaliser_email(email)
     elements: list[dict] = []
-    for lecteur in (_formulaires, _appels_offres, _devis_transport, _eudr):
+    for lecteur in (_formulaires, _signatures, _appels_offres, _devis_transport, _eudr):
         try:
             elements.extend(lecteur(conn, mail))
         except Exception:

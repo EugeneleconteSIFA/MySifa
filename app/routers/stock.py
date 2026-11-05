@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
 from app.services import encres_rvgi as _encres_rvgi
+from app.services import pf_prix_achat as _pf_prix_achat
 from app.services import valo_cloture as _valo_cloture
 from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
@@ -42,6 +43,8 @@ from config import (
     STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
     ROLES_SETTINGS_LOGISTIQUE,
     ROLES_TRACA_VIEWER,
+    PF_TRANSPORT_IMPORT_DIVISEUR,
+    categorie_prix_direct,
     unites_comptage,
 )
 from database import get_db, parse_file
@@ -542,6 +545,7 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "abbreviation": (r["abbreviation"] or "").strip() or None
             if "abbreviation" in keys and r["abbreviation"] else None,
         "avec_conditionnement": _mp_a_conditionnement(cat),
+        "prix_direct": categorie_prix_direct(cat),
         "unites_par_palette": unites_par_palette,
         "longueur_tube_mm": longueur_tube_mm,
         "est_mandrin": _mp_est_mandrin(cat),
@@ -1720,8 +1724,16 @@ def deplacer_lot_fifo(
 
 # ── Recherche instantanée ─────────────────────────────────────────
 @router.get("/api/stock/search")
-def search(request: Request, q: str = "", limit: int = 12):
-    """Recherche unifiée : produits + emplacements. 'text contains'."""
+def search(request: Request, q: str = "", limit: int = 12, tout: int = 0):
+    """Recherche unifiée : produits + emplacements. 'text contains'.
+
+    `tout=1` (barre de recherche globale de MyStock) ajoute les matières
+    premières — trouvées par référence, désignation, abréviation, référence
+    fournisseur ou article RVGI d'une variante, ou par l'emplacement où elles
+    sont rangées — et les bobines, par code-barres ou lot fournisseur. Les
+    autres appelants (suggestions de référence produit) n'en ont pas besoin et
+    ne paient pas ces requêtes.
+    """
     require_stock(request)
     q = q.strip()
     if not q:
@@ -1778,10 +1790,91 @@ def search(request: Request, q: str = "", limit: int = 12):
             by_code[code] = d
     merged_empl = sorted(by_code.values(), key=lambda x: x["emplacement"])[:limit]
 
-    return {
+    res = {
         "produits": [dict(r) for r in produits],
         "emplacements": merged_empl,
     }
+    if tout:
+        with get_db() as conn:
+            res["matieres"] = _search_matieres(conn, q, limit)
+            res["bobines"] = _search_bobines(conn, q, limit)
+    return res
+
+
+def _search_matieres(conn: sqlite3.Connection, q: str, limit: int) -> list[dict]:
+    """Matières actives dont un identifiant contient `q`.
+
+    `emplacement` est renseigné quand c'est l'emplacement qui a répondu : la
+    barre de recherche dit alors où la matière est rangée plutôt que de laisser
+    deviner pourquoi elle est sortie.
+    """
+    motif = f"%{q.upper()}%"
+    try:
+        rows = conn.execute(
+            """SELECT mp.id, mp.reference, mp.designation, mp.categorie,
+                      mp.abbreviation,
+                      (SELECT e.emplacement FROM mp_emplacements e
+                        WHERE e.matiere_id = mp.id AND e.quantite > 0
+                          AND UPPER(e.emplacement) LIKE ?
+                        ORDER BY e.emplacement LIMIT 1) AS emplacement
+                 FROM matieres_premieres mp
+                WHERE mp.actif = 1
+                  AND (UPPER(IFNULL(mp.reference,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.designation,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.abbreviation,'')) LIKE ?
+                       OR mp.id IN (SELECT v.matiere_id FROM mp_variantes v
+                                     WHERE v.actif = 1
+                                       AND (UPPER(IFNULL(v.ref_fournisseur,'')) LIKE ?
+                                            OR UPPER(IFNULL(v.libelle_technique,'')) LIKE ?
+                                            OR UPPER(IFNULL(v.rvgi_code1,'') || '/' || IFNULL(v.rvgi_code2,'')) LIKE ?))
+                       OR mp.id IN (SELECT e.matiere_id FROM mp_emplacements e
+                                     WHERE e.quantite > 0 AND UPPER(e.emplacement) LIKE ?))
+                ORDER BY mp.reference
+                LIMIT ?""",
+            (motif, motif, motif, motif, motif, motif, motif, motif, limit),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # Base sans mp_variantes / mp_emplacements : on retombe sur la fiche seule.
+        rows = conn.execute(
+            """SELECT mp.id, mp.reference, mp.designation, mp.categorie,
+                      mp.abbreviation, NULL AS emplacement
+                 FROM matieres_premieres mp
+                WHERE mp.actif = 1
+                  AND (UPPER(IFNULL(mp.reference,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.designation,'')) LIKE ?
+                       OR UPPER(IFNULL(mp.abbreviation,'')) LIKE ?)
+                ORDER BY mp.reference
+                LIMIT ?""",
+            (motif, motif, motif, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _search_bobines(conn: sqlite3.Connection, q: str, limit: int) -> list[dict]:
+    """Bobines (unités de stock matière) par code-barres ou lot fournisseur.
+
+    La matière n'entre pas dans le filtre : chercher « 2028Y » rendrait toutes
+    ses bobines, que la ligne de la matière couvre déjà.
+    """
+    motif = f"%{q.upper()}%"
+    try:
+        rows = conn.execute(
+            """SELECT b.id, b.code_barre, b.lot_fournisseur, b.etat,
+                      b.metrage_restant, b.matiere_id,
+                      mp.reference AS matiere_reference,
+                      mp.designation AS matiere_designation
+                 FROM stock_bobines b
+                 LEFT JOIN matieres_premieres mp ON mp.id = b.matiere_id
+                WHERE b.etat <> ?
+                  AND (UPPER(b.code_barre) LIKE ?
+                       OR UPPER(IFNULL(b.lot_fournisseur,'')) LIKE ?)
+                ORDER BY b.etat = 'stock' DESC, b.created_at DESC
+                LIMIT ?""",
+            (_sb.ETAT_ANNULEE, motif, motif, limit),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(r) for r in rows]
 
 
 # ── Vue tableau de bord (grille) ──────────────────────────────────
@@ -4278,11 +4371,11 @@ def retirer_document_ligne_rvgi(lif_id: int, doc_id: int, request: Request):
 @router.get("/api/stock/traca/bobines-recentes")
 def traca_bobines_recentes(request: Request, limit: int = 40):
     """Lots de reception recents, reduits aux seuls champs qui figurent sur
-    l'etiquette d'identification bobine de MyPrint.
+    l'etiquette d'identification bobine de MyTools > Etiquettes.
 
     Volontairement ouvert a tout utilisateur connecte, la ou le reste de
-    /api/stock passe par `require_stock` : MyPrint est accessible au role
-    `fabrication` via /stock?tab=traca, et c'est justement au poste que l'on
+    /api/stock passe par `require_stock` : les etiquettes sont accessibles au
+    role `fabrication` via /tools?outil=etiquettes, et c'est justement au poste que l'on
     reimprime l'etiquette d'une bobine entamee ou abimee. Rien n'est expose
     de plus que ce qui est deja colle sur la bobine physique — ni prix, ni
     quantite en stock, ni emplacement.
@@ -6541,70 +6634,135 @@ def list_sous_sections(request: Request, categorie: Optional[str] = None):
     return [r["sous_section"] for r in rows]
 
 
-# ── Métrage bobine : épaisseurs types ──────────────────────────────────
+# ── Référentiel épaisseurs matière : épaisseurs et grammages ───────────
 #
-# Référentiel du widget « Métrage bobine ». Le calcul lui-même se fait côté
-# navigateur (π × (R² − r²) / épaisseur) : il n'y a rien à stocker, seulement
-# les épaisseurs proposées.
+# Deux widgets lisent cette table. « Métrage bobine » prend les épaisseurs
+# (π × (R² − r²) / épaisseur), « Poids de colle » de la saisie prod les
+# grammages (frontal, glassine, dépôt d'encre par anilox). Une ligne porte
+# l'une, l'autre ou les deux. Les calculs se font dans le navigateur : il n'y
+# a rien à stocker, seulement les valeurs proposées.
+
+_PERIMETRES = {"epaisseur": ("microns", 1, 5000, "µm"), "grammage": ("grammage_gsm", 0.1, 1000, "g/m²")}
+
 
 def _metrage_epaisseurs(conn) -> list[dict]:
-    try:
-        rows = conn.execute(
-            "SELECT id, libelle, microns, ordre FROM mp_metrage_epaisseurs "
-            "ORDER BY ordre, libelle COLLATE NOCASE"
-        ).fetchall()
-    except sqlite3.Error:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(mp_metrage_epaisseurs)").fetchall()}
+    if not cols:
         return []
+    gsm = "grammage_gsm" if "grammage_gsm" in cols else "NULL AS grammage_gsm"
+    fam = "famille" if "famille" in cols else "NULL AS famille"
+    rows = conn.execute(
+        f"SELECT id, libelle, microns, {gsm}, {fam}, ordre FROM mp_metrage_epaisseurs "
+        "ORDER BY ordre, libelle COLLATE NOCASE"
+    ).fetchall()
     return [{"id": int(r["id"]), "libelle": r["libelle"],
-             "microns": float(r["microns"]), "ordre": int(r["ordre"] or 0)} for r in rows]
+             "microns": float(r["microns"]) if r["microns"] is not None else None,
+             "grammage_gsm": float(r["grammage_gsm"]) if r["grammage_gsm"] is not None else None,
+             "famille": r["famille"] or None, "ordre": int(r["ordre"] or 0)} for r in rows]
 
 
 @router.get("/api/stock/metrage-epaisseurs")
 def list_metrage_epaisseurs(request: Request):
-    require_stock(request)
+    # Lecture ouverte à tout utilisateur connecté : MyTools › Calculs bobine
+    # et la saisie prod s'en servent, et ce ne sont que des valeurs types de
+    # matière. La modification (PUT) reste aux administrateurs matières.
+    get_current_user(request)
     with get_db() as conn:
         return _metrage_epaisseurs(conn)
 
 
+def _nombre_borne(v, mini, maxi, libelle, unite):
+    try:
+        x = float(str(v if v is not None else "").replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"Valeur invalide pour {libelle}.") from None
+    if not (mini <= x <= maxi):
+        raise HTTPException(400, f"Valeur invalide pour {libelle} — entre {mini:g} et {maxi:g} {unite}.")
+    return x
+
+
 @router.put("/api/stock/metrage-epaisseurs")
 async def save_metrage_epaisseurs(request: Request):
-    """Remplace la liste. Body : { items: [{ libelle, microns }] }, dans l'ordre voulu."""
+    """Remplace la liste d'un périmètre, sans toucher à l'autre.
+
+    Body : { perimetre: "epaisseur" | "grammage", items: [{ id?, libelle,
+    microns | grammage_gsm, famille? }] }, dans l'ordre voulu. Une ligne
+    retirée de la liste perd la valeur du périmètre ; elle n'est supprimée que
+    si elle n'a plus ni épaisseur ni grammage. Sans `perimetre` : épaisseurs
+    (le widget Métrage bobine d'avant le grammage).
+    """
+    from config import MATIERE_FAMILLES
+
     user = require_stock_matieres_admin(request)
     body = await request.json() or {}
+    perimetre = body.get("perimetre") or "epaisseur"
+    if perimetre not in _PERIMETRES:
+        raise HTTPException(400, "Périmètre inconnu.")
+    champ, mini, maxi, unite = _PERIMETRES[perimetre]
+    familles = {c for c, _ in MATIERE_FAMILLES}
     items = body.get("items")
     if not isinstance(items, list):
         raise HTTPException(400, "Liste attendue.")
     propres, vus = [], set()
     for it in items:
-        libelle = str((it or {}).get("libelle") or "").strip()
+        it = it or {}
+        libelle = str(it.get("libelle") or "").strip()
         if not libelle:
             raise HTTPException(400, "Libellé manquant sur une ligne.")
         if len(libelle) > 80:
             raise HTTPException(400, f"Libellé trop long : {libelle[:30]}…")
-        try:
-            microns = float(str((it or {}).get("microns", "")).replace(",", "."))
-        except (TypeError, ValueError):
-            raise HTTPException(400, f"Épaisseur invalide pour {libelle}.") from None
-        if not (1 <= microns <= 5000):
-            raise HTTPException(400, f"Épaisseur invalide pour {libelle} — valeur entre 1 et 5000 µm.")
         if libelle.lower() in vus:
             raise HTTPException(400, f"Libellé en double : {libelle}.")
         vus.add(libelle.lower())
-        propres.append((libelle, microns))
+        valeur = _nombre_borne(it.get(champ), mini, maxi, libelle, unite)
+        famille = it.get("famille") or None
+        if famille is not None and famille not in familles:
+            raise HTTPException(400, f"Famille inconnue pour {libelle}.")
+        try:
+            rid = int(it["id"]) if it.get("id") not in (None, "") else None
+        except (TypeError, ValueError):
+            rid = None
+        propres.append((rid, libelle, valeur, famille, "famille" in it))
+
     now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
-        conn.execute("DELETE FROM mp_metrage_epaisseurs")
-        for i, (libelle, microns) in enumerate(propres):
-            conn.execute(
-                "INSERT INTO mp_metrage_epaisseurs (libelle, microns, ordre, updated_at) "
-                "VALUES (?,?,?,?)",
-                (libelle, microns, (i + 1) * 10, now),
-            )
+        existants = {r["id"]: r for r in _metrage_epaisseurs(conn)}
+        par_libelle = {r["libelle"].lower(): r["id"] for r in existants.values()}
+        gardes = set()
+        for i, (rid, libelle, valeur, famille, avec_famille) in enumerate(propres):
+            if rid not in existants:
+                rid = par_libelle.get(libelle.lower())
+            autre = par_libelle.get(libelle.lower())
+            if autre is not None and autre != rid:
+                raise HTTPException(400, f"Libellé déjà utilisé : {libelle}.")
+            ordre = (i + 1) * 10
+            if rid is None:
+                cur = conn.execute(
+                    f"INSERT INTO mp_metrage_epaisseurs (libelle, {champ}, famille, ordre, updated_at) "
+                    "VALUES (?,?,?,?,?)",
+                    (libelle, valeur, famille, ordre, now),
+                )
+                rid = cur.lastrowid
+            else:
+                fam = famille if avec_famille else existants[rid]["famille"]
+                conn.execute(
+                    f"UPDATE mp_metrage_epaisseurs SET libelle = ?, {champ} = ?, famille = ?, "
+                    "ordre = ?, updated_at = ? WHERE id = ?",
+                    (libelle, valeur, fam, ordre, now, rid),
+                )
+            par_libelle[libelle.lower()] = rid
+            gardes.add(rid)
+        for rid, r in existants.items():
+            if rid in gardes or r[champ] is None:
+                continue
+            conn.execute(f"UPDATE mp_metrage_epaisseurs SET {champ} = NULL, updated_at = ? WHERE id = ?",
+                         (now, rid))
+        conn.execute("DELETE FROM mp_metrage_epaisseurs WHERE microns IS NULL AND grammage_gsm IS NULL")
         conn.commit()
         out = _metrage_epaisseurs(conn)
     log_action(user=user, request=request, module="stock", action="UPDATE",
-               objet="metrage_epaisseurs",
-               detail=" · ".join(f"{l} {m:g} µm" for l, m in propres))
+               objet="metrage_epaisseurs" if perimetre == "epaisseur" else "grammages_matiere",
+               detail=" · ".join(f"{l} {v:g} {unite}" for _, l, v, _, _ in propres))
     return out
 
 
@@ -6755,6 +6913,98 @@ async def set_matiere_emplacement(matiere_id: int, request: Request):
     return {"ok": True, "emplacements": emplacements}
 
 
+@router.get("/api/stock/mp-emplacements-connus")
+def mp_emplacements_connus(request: Request):
+    """Emplacements déjà utilisés par les matières (noms du terrain compris), et le plan.
+
+    Sert au champ emplacement de la fiche matière : on choisit dans la liste,
+    ou on tape un nom nouveau.
+    """
+    require_stock(request)
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                """SELECT emplacement, COUNT(DISTINCT matiere_id) AS n
+                     FROM mp_emplacements WHERE quantite > 0
+                    GROUP BY emplacement ORDER BY emplacement"""
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+        plan = conn.execute("SELECT code FROM emplacements_plan ORDER BY code").fetchall()
+    utilises = [{"code": r["emplacement"], "matieres": int(r["n"] or 0)} for r in rows]
+    vus = {u["code"] for u in utilises}
+    return {"utilises": utilises, "plan": [r["code"] for r in plan if r["code"] not in vus]}
+
+
+@router.put("/api/stock/matieres/{matiere_id}/emplacements/{empl_id}")
+async def update_matiere_emplacement(matiere_id: int, empl_id: int, request: Request):
+    """Modifie une ligne d'emplacement : code, laize, quantité.
+
+    Si la cible (même code, même laize) existe déjà, les quantités s'additionnent
+    et la ligne d'origine disparaît : on a déplacé des bobines vers un endroit
+    qui en contenait déjà. Le stock total n'est pas modifié.
+    """
+    user = require_stock_write(request)
+    body = await request.json() or {}
+    code = str(body.get("emplacement") or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "Emplacement obligatoire.")
+    if len(code) > 20 or not _MP_EMPL_RE.match(code):
+        raise HTTPException(400, "Emplacement invalide — code de grille (ex. A121) ou nom du terrain, 20 caractères au plus.")
+    try:
+        quantite = float(str(body.get("quantite", "")).replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantité invalide.") from None
+    if quantite <= 0:
+        raise HTTPException(400, "Quantité invalide — valeur positive attendue.")
+    auteur = (user.get("nom") or "").strip() or None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM mp_emplacements WHERE id=? AND matiere_id=?", (empl_id, matiere_id)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Emplacement non trouvé.")
+        mp = conn.execute(
+            "SELECT id, categorie, reference FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        laize_id = int(row["laize_id"] or 0)
+        if _mp_is_laizee(mp["categorie"]) and body.get("laize_id") not in (None, ""):
+            try:
+                laize_id = int(body.get("laize_id"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "laize_id invalide.") from None
+            if not conn.execute(
+                "SELECT 1 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, laize_id),
+            ).fetchone():
+                raise HTTPException(400, "Cette laize n'est pas associée à cette matière.")
+        now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
+        cible = conn.execute(
+            "SELECT id, quantite FROM mp_emplacements WHERE matiere_id=? AND laize_id=? AND emplacement=? AND id<>?",
+            (matiere_id, laize_id, code, empl_id),
+        ).fetchone()
+        fusion = bool(cible)
+        if cible:
+            conn.execute(
+                "UPDATE mp_emplacements SET quantite=?, updated_at=?, updated_by_name=? WHERE id=?",
+                (float(cible["quantite"] or 0) + quantite, now, auteur, cible["id"]),
+            )
+            conn.execute("DELETE FROM mp_emplacements WHERE id=?", (empl_id,))
+        else:
+            conn.execute(
+                """UPDATE mp_emplacements SET emplacement=?, laize_id=?, quantite=?,
+                          updated_at=?, updated_by_name=? WHERE id=?""",
+                (code, laize_id, quantite, now, auteur, empl_id),
+            )
+        conn.commit()
+        emplacements = _mp_emplacements_par_matiere(conn).get(int(matiere_id), [])
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet=f"matiere:{matiere_id}:emplacement:{code}",
+               detail=f"{mp['reference']} · {row['emplacement']} → {code} = {quantite:g}"
+                      + (" (regroupé)" if fusion else ""))
+    return {"ok": True, "fusion": fusion, "emplacements": emplacements}
+
+
 @router.delete("/api/stock/matieres/{matiere_id}/emplacements/{empl_id}")
 def delete_matiere_emplacement(matiere_id: int, empl_id: int, request: Request):
     user = require_stock_write(request)
@@ -6890,10 +7140,13 @@ async def create_matiere_premiere(request: Request):
 
 @router.put("/api/stock/matieres/{matiere_id}")
 async def update_matiere_premiere(matiere_id: int, request: Request):
-    require_stock_matieres_admin(request)
+    user = require_stock_matieres_admin(request)
     body = await request.json()
     sets = []
     params: list[Any] = []
+    # Prix unitaire d'un consommable (bague, carton, palette…), saisi par
+    # l'administration sur la fiche ou depuis la valorisation.
+    prix_unitaire = _lire_prix_unitaire(body.get("prix_unitaire")) if "prix_unitaire" in body else None
 
     if "reference" in body:
         reference = (body.get("reference") or "").strip()
@@ -7085,8 +7338,11 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             sets.append("epaisseur_um=?")
             params.append(v_f)
 
-        if not sets and bascule is None:
+        if not sets and bascule is None and prix_unitaire is None:
             raise HTTPException(400, "Aucun champ à mettre à jour.")
+        if prix_unitaire is not None and not categorie_prix_direct(row["categorie"]):
+            raise HTTPException(
+                400, "Prix de cette catégorie : à saisir dans Coûts matières.")
 
         sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
         params.append(matiere_id)
@@ -7122,6 +7378,13 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                 passer_a_l_unite(conn, matiere_id)
             elif bascule == 0:
                 repasser_a_la_palette(conn, matiere_id, upp_body)
+            prix_change = False
+            if prix_unitaire is not None:
+                prix_change = _ecrire_prix_unitaire(
+                    conn, matiere_id, prix_unitaire, "Saisi sur la fiche matière",
+                    _now_paris().strftime("%Y-%m-%dT%H:%M:%S"), user.get("id"),
+                    (user.get("nom") or user.get("email") or "").strip() or None,
+                )
             conn.commit()
         except sqlite3.IntegrityError:
             conn.rollback()
@@ -7129,6 +7392,14 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                 400,
                 "Cette référence existe déjà dans cette catégorie.",
             ) from None
+        if prix_change:
+            # Même sens retour que la valorisation : Coûts matières suit.
+            _mystock_prix.resync_depuis_mystock(
+                conn, matiere_id, user_id=user.get("id"),
+                user_name=(user.get("nom") or user.get("email") or "").strip() or None,
+                origine="MyStock — fiche matière",
+            )
+            conn.commit()
     return {"ok": True}
 
 
@@ -8902,6 +9173,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
         """
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
                mp.unites_par_palette, mp.sous_section,
+               COALESCE(mp.stock_a_l_unite, 0) AS stock_a_l_unite, mp.unite_comptage,
                MAX(COALESCE(s.quantite, 0), 0) AS quantite,
                COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
@@ -8989,6 +9261,15 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             transport_state = int(r["cout_transport_inclus"] or 0)
         except (TypeError, ValueError):
             transport_state = 0
+        # Matière tenue à l'unité (bagues, cartons au lot) : la quantité se
+        # compte en bagues ou en cartons, pas en palettes.
+        a_l_unite = avec_cond and bool(int(r["stock_a_l_unite"] or 0))
+        unite = _mp_unite_gestion(cat)
+        if a_l_unite:
+            choix_cpt = unites_comptage(cat)
+            unite = (r["unite_comptage"] or "").strip()
+            if unite not in choix_cpt:
+                unite = choix_cpt[0] if choix_cpt else _mp_unite_achat(cat)
         out.append({
             "id": r["id"],
             "row_key": f"m{r['id']}",
@@ -9002,7 +9283,9 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             "designation": r["designation"],
             "libelle_commercial": r["designation"],
             "quantite": qte,
-            "unite": _mp_unite_gestion(cat),
+            "unite": unite,
+            "stock_a_l_unite": a_l_unite,
+            "prix_direct": categorie_prix_direct(cat),
             "prix_unitaire": prix,
             "valorisation": valorisation,
             "laizee": False,
@@ -9148,7 +9431,7 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
     # matières, lui, est celui du jour.
     items = _valorisation_query(conn, couts_matieres=not snapshot_date)
     if not snapshot_date:
-        return items
+        return _appliquer_devalorisation(conn, items)
     stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
     # Clôture d'inventaire : corrections saisies après la date mais rattachées
     # à elle, et prix lus jusqu'à la date limite. Copies : le snapshot est en cache.
@@ -9217,6 +9500,51 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
                 it["prix_palette"] = round(prix, 4)
                 it["valorisation"] = round(new_qte * prix, 2)
                 it["incomplete"] = False
+    return _appliquer_devalorisation(conn, items)
+
+
+def _pf_transport_empreinte(conn) -> tuple:
+    """Change dès qu'un transport import est posé ou retiré (clé de cache)."""
+    try:
+        r = conn.execute(
+            "SELECT COALESCE(SUM(transport_import), 0), COALESCE(MAX(transport_maj_le), '') FROM pf_valorisation"
+        ).fetchone()
+        return (int(r[0]), r[1])
+    except sqlite3.OperationalError:
+        return (0, "")
+
+
+def _devalorisations(conn) -> set[tuple[int, int]]:
+    """Lignes marquées « à jeter » : {(matiere_id, laize_id ou 0)}."""
+    try:
+        rows = conn.execute(
+            "SELECT matiere_id, laize_id FROM mp_devalorisation WHERE actif = 1"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return set()
+    return {(int(r[0]), int(r[1] or 0)) for r in rows}
+
+
+def _appliquer_devalorisation(conn, items: list[dict]) -> list[dict]:
+    """Stock à jeter : la ligne compte pour (-1) × sa valorisation.
+
+    Posé en dernier, sur les valorisations déjà calculées : les totaux,
+    l'export, le PDF et la tendance additionnent alors le négatif sans
+    rien savoir du marquage. La valorisation réelle des lignes hors Coûts
+    matières est recalculée ensuite depuis `valorisation`, qui est déjà
+    négative."""
+    marques = _devalorisations(conn)
+    for it in items:
+        try:
+            cle = (int(it.get("matiere_id")), int(it.get("laize_id") or 0))
+        except (TypeError, ValueError):
+            cle = None
+        it["devalorise"] = cle in marques
+        if not it["devalorise"]:
+            continue
+        for champ in ("valorisation", "valorisation_reelle", "valorisation_vente"):
+            if it.get(champ) is not None:
+                it[champ] = -abs(float(it[champ]))
     return items
 
 
@@ -9605,6 +9933,8 @@ def get_valorisation_trend(request: Request, days: int = 30):
             _table_max_id(conn, "mouvements_stock"),
             _table_max_id(conn, "mp_valorisation_historique"),
             _table_max_id(conn, "pf_valorisation_historique"),
+            tuple(sorted(_devalorisations(conn))),
+            _pf_transport_empreinte(conn),
             round(_get_taux_eur_usd(conn), 6),
             round(_get_import_tax_pct(conn), 4),
             round(_get_charge_production_pct(conn), 4),
@@ -9689,9 +10019,27 @@ def get_valorisation_cloture(request: Request, date: str | None = None):
     if not snapshot_date:
         raise HTTPException(400, "Date de clôture obligatoire (AAAA-MM-JJ, passée).")
     with get_db() as conn:
+        mouvements = _valo_cloture.candidats(conn, snapshot_date)
+        # Stock reconstitué au soir de la clôture, SANS les rattachements : une
+        # correction dont l'écart le dépasse porte sur du stock entré après la
+        # date, et l'écran le signale avant qu'on la rattache.
+        stock_pf = _pf_stock_snapshot_at_date(conn, snapshot_date)
+        stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
+        for m in mouvements:
+            parts = (m.get("cle_stock") or "").split(":")
+            try:
+                if parts[0] == "pf":
+                    q = stock_pf.get(int(parts[1]), 0.0)
+                elif parts[0] == "mp" and parts[2]:
+                    q = stock_l.get((int(parts[1]), int(parts[2])), 0.0)
+                else:
+                    q = stock_nl.get(int(parts[1]), 0.0)
+            except (IndexError, ValueError):
+                q = None
+            m["stock_soir"] = round(float(q), 4) if q is not None else None
         return {
             "cloture": _valo_cloture.lire(conn, snapshot_date),
-            "mouvements": _valo_cloture.candidats(conn, snapshot_date),
+            "mouvements": mouvements,
         }
 
 
@@ -9770,6 +10118,98 @@ async def update_valorisation_conteneur(declinaison_id: int, request: Request):
     return {"ok": True, "transport_cout": cout}
 
 
+def _lire_prix_unitaire(brut) -> float:
+    """Prix unitaire saisi (virgule acceptée), borné. Vide = 0, « non renseigné »."""
+    try:
+        prix = float(str(brut).replace(",", ".")) if brut not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Prix unitaire invalide.") from None
+    if prix < 0:
+        raise HTTPException(400, "Prix unitaire négatif interdit.")
+    if prix > 1_000_000:
+        raise HTTPException(400, "Prix unitaire hors limites (max 1 000 000).")
+    return prix
+
+
+def _ecrire_prix_unitaire(conn, matiere_id: int, prix: float, note, now: str,
+                          user_id, user_name) -> bool:
+    """Prix unitaire d'une matière non laizée, avec sa ligne d'historique.
+
+    Seul point d'écriture de `mp_valorisation.prix_unitaire` : la valorisation
+    et la fiche matière passent toutes deux par ici. Ne commite pas ; à
+    l'appelant de faire suivre Coûts matières (`resync_depuis_mystock`).
+    Renvoie True si le prix a changé.
+    """
+    prev = conn.execute(
+        "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (matiere_id,)
+    ).fetchone()
+    prix_avant = float(prev["prix_unitaire"]) if prev and prev["prix_unitaire"] is not None else None
+    if prev:
+        conn.execute(
+            """UPDATE mp_valorisation
+               SET prix_unitaire=?, updated_at=?, updated_by_name=?
+               WHERE matiere_id=?""",
+            (prix, now, user_name, matiere_id),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
+               VALUES (?,?,?,?)""",
+            (matiere_id, prix, now, user_name),
+        )
+    if prix_avant == prix:
+        return False
+    conn.execute(
+        """INSERT INTO mp_valorisation_historique
+           (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
+           VALUES (?,?,?,?,?,?,?)""",
+        (matiere_id, prix_avant, prix, note, now, user_id, user_name),
+    )
+    return True
+
+
+@router.put("/api/stock/valorisation/devalorisation/{matiere_id}")
+async def update_valorisation_devalorisation(matiere_id: int, request: Request):
+    """Marque une ligne de valorisation comme stock à jeter (ou retire la marque).
+
+    Body : {"laize_id": 12 | null, "devalorise": true | false}. La ligne
+    compte alors pour (-1) × sa valorisation (cf. _appliquer_devalorisation).
+    """
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    try:
+        laize_id = int(body.get("laize_id") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Laize invalide.") from None
+    actif = 1 if body.get("devalorise") else 0
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT reference, designation FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        conn.execute(
+            """INSERT INTO mp_devalorisation (matiere_id, laize_id, actif, updated_at, updated_by_name)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                 actif = excluded.actif, updated_at = excluded.updated_at,
+                 updated_by_name = excluded.updated_by_name""",
+            (matiere_id, laize_id, actif, now, user_name),
+        )
+        conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Dévalorisation {mat['reference'] or mat['designation'] or matiere_id}",
+        detail={"matiere_id": matiere_id, "laize_id": laize_id or None, "devalorise": bool(actif)},
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, "devalorise": bool(actif)}
+
+
 @router.put("/api/stock/valorisation/{matiere_id}")
 async def update_valorisation(matiere_id: int, request: Request):
     user = require_stock_matieres_admin(request)
@@ -9843,39 +10283,9 @@ async def update_valorisation(matiere_id: int, request: Request):
             conn.commit()
         else:
             # Matière non laizée → comportement classique avec prix_unitaire
-            try:
-                prix = float(body.get("prix_unitaire") or 0)
-            except (TypeError, ValueError):
-                raise HTTPException(400, "Prix unitaire invalide.") from None
-            if prix < 0:
-                raise HTTPException(400, "Prix unitaire négatif interdit.")
-            if prix > 1_000_000:
-                raise HTTPException(400, "Prix unitaire hors limites (max 1 000 000).")
+            prix = _lire_prix_unitaire(body.get("prix_unitaire"))
             note = (body.get("note") or "").strip() or None
-            prev = conn.execute(
-                "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (matiere_id,)
-            ).fetchone()
-            prix_avant = float(prev["prix_unitaire"]) if prev else None
-            if prev:
-                conn.execute(
-                    """UPDATE mp_valorisation
-                       SET prix_unitaire=?, updated_at=?, updated_by_name=?
-                       WHERE matiere_id=?""",
-                    (prix, now, user_name, matiere_id),
-                )
-            else:
-                conn.execute(
-                    """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
-                       VALUES (?,?,?,?)""",
-                    (matiere_id, prix, now, user_name),
-                )
-            if prix_avant != prix:
-                conn.execute(
-                    """INSERT INTO mp_valorisation_historique
-                       (matiere_id, prix_avant, prix_apres, note, created_at, created_by, created_by_name)
-                       VALUES (?,?,?,?,?,?,?)""",
-                    (matiere_id, prix_avant, prix, note, now, user_id, user_name),
-                )
+            _ecrire_prix_unitaire(conn, matiere_id, prix, note, now, user_id, user_name)
             conn.commit()
         # Coûts matières lit le prix dans la ligne principale de mp_matiere_prix :
         # un prix corrigé ici doit y redescendre, sinon le devis continue de
@@ -10305,19 +10715,24 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
     Pour les produits facturés au mille (unité = étiquette[s]), le prix HT stocké
     correspond au prix pour 1000 unités. La valorisation = qte * prix / 1000.
     """
+    cols_v = {r[1] for r in conn.execute("PRAGMA table_info(pf_valorisation)").fetchall()}
+    transport_sql = "COALESCE(v.transport_import, 0)" if "transport_import" in cols_v else "0"
     rows = conn.execute(
         """
         SELECT p.id, p.reference, p.designation, p.unite,
                COALESCE(p.type, 'fabrique') AS type,
                v.prix_unitaire_ht, v.source_prix, v.statut, v.date_derniere_cmd,
-               v.updated_at, v.updated_by_name
+               v.updated_at, v.updated_by_name, %s AS transport_import
         FROM produits p
         LEFT JOIN pf_valorisation v ON v.produit_id = p.id
         ORDER BY p.reference ASC
-        """
+        """ % transport_sql
     ).fetchall()
     stock_fab = _pf_valo_pick_stock(conn, "fabrique")
     stock_neg = _pf_valo_pick_stock(conn, "negoce")
+    # Sans prix importé : dernière commande d'achat RVGI (sous-traitance), à
+    # défaut dernière commande client (cf. app/services/pf_prix_achat.py).
+    taux_usd = _get_taux_eur_usd(conn)
     out: list[dict] = []
     for r in rows:
         ptype = r["type"]
@@ -10327,7 +10742,16 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
         unite = r["unite"] or ""
         par_mille = _pf_is_unite_par_mille(unite)
         divisor = 1000.0 if par_mille else 1.0
-        valorisation = round(stock * prix / divisor, 2)
+        source_prix = r["source_prix"]
+        achat = None
+        if prix <= 0:
+            achat = _pf_prix_achat.prix_rvgi(r["reference"], par_mille, taux_usd, unite, stock)
+            if achat:
+                prix = achat["prix"]
+                source_prix = achat["source"]
+        transport = bool(r["transport_import"]) and prix > 0
+        prix_effectif = _pf_prix_avec_transport(prix, transport)
+        valorisation = round(stock * prix_effectif / divisor, 2)
         out.append({
             "id": pid,
             "reference": r["reference"],
@@ -10339,7 +10763,14 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
             "quantite": round(stock, 4),
             "prix_unitaire_ht": prix,
             "valorisation": valorisation,
-            "source_prix": r["source_prix"],
+            "source_prix": source_prix,
+            "prix_origine": achat["origine"] if achat else ("valorisation" if prix > 0 else None),
+            "achat_fournisseur": achat["fournisseur"] if achat else None,
+            "achat_detail": achat["detail"] if achat else None,
+            "transport_import": transport,
+            "transport_part": "1/%g" % PF_TRANSPORT_IMPORT_DIVISEUR,
+            "transport_ht": round(prix_effectif - prix, 6),
+            "prix_avec_transport": round(prix_effectif, 6),
             "statut": r["statut"],
             "date_derniere_cmd": r["date_derniere_cmd"],
             "updated_at": r["updated_at"],
@@ -10347,6 +10778,13 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
             "has_price": prix > 0,
         })
     return out
+
+
+def _pf_prix_avec_transport(prix: float, transport: bool) -> float:
+    """Prix HT augmenté du transport d'un produit importé (prix / diviseur)."""
+    if not transport or prix <= 0 or PF_TRANSPORT_IMPORT_DIVISEUR <= 0:
+        return prix
+    return prix + prix / PF_TRANSPORT_IMPORT_DIVISEUR
 
 
 def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) -> list[dict]:
@@ -10368,11 +10806,23 @@ def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) 
         except (TypeError, ValueError, KeyError):
             continue
         new_qte = float(stock_pf.get(pid, it.get("quantite") or 0))
-        new_prix = float(prix_map[pid]) if pid in prix_map else float(it.get("prix_unitaire_ht") or 0)
+        # Même plancher que les matières : une correction rattachée à la
+        # clôture qui dépasse le stock du soir (stock entré après la date)
+        # amène la ligne à zéro, elle ne retranche rien de la valeur.
+        new_qte = max(0.0, new_qte)
+        # Un prix historisé à 0 veut dire « pas renseigné » (un import a remis
+        # 1077/0035 à zéro le 19/06) : il ne masque pas le prix courant, qui
+        # vient alors de RVGI ou d'une saisie à la main.
+        hist = float(prix_map.get(pid) or 0)
+        new_prix = hist if hist > 0 else float(it.get("prix_unitaire_ht") or 0)
         divisor = 1000.0 if it.get("par_mille") else 1.0
+        transport = bool(it.get("transport_import")) and new_prix > 0
+        prix_effectif = _pf_prix_avec_transport(new_prix, transport)
         it["quantite"] = round(new_qte, 4)
         it["prix_unitaire_ht"] = new_prix
-        it["valorisation"] = round(new_qte * new_prix / divisor, 2)
+        it["transport_ht"] = round(prix_effectif - new_prix, 6)
+        it["prix_avec_transport"] = round(prix_effectif, 6)
+        it["valorisation"] = round(new_qte * prix_effectif / divisor, 2)
         it["has_price"] = new_prix > 0
     return items
 
@@ -10500,10 +10950,11 @@ async def update_valorisation_pf(produit_id: int, request: Request):
         else:
             conn.execute(
                 """
-                INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, updated_at, updated_by, updated_by_name)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, source_prix, updated_at, updated_by, updated_by_name)
+                VALUES (?, ?, 'Saisi à la main', ?, ?, ?)
                 ON CONFLICT(produit_id) DO UPDATE SET
                     prix_unitaire_ht = excluded.prix_unitaire_ht,
+                    source_prix = excluded.source_prix,
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by,
                     updated_by_name = excluded.updated_by_name
@@ -10530,6 +10981,45 @@ async def update_valorisation_pf(produit_id: int, request: Request):
             items, charge_prod_pct=charge, storage_fees_pct=storage
         ),
     }
+
+
+@router.put("/api/stock/valorisation/pf/{produit_id}/transport")
+async def update_valorisation_pf_transport(produit_id: int, request: Request):
+    """Ajoute (ou retire) le transport d'un produit importé à son prix de
+    valorisation. Body : {"transport": true | false}."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    actif = 1 if body.get("transport") else 0
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        prod = conn.execute("SELECT reference FROM produits WHERE id=?", (produit_id,)).fetchone()
+        if not prod:
+            raise HTTPException(404, "Produit introuvable.")
+        conn.execute(
+            """INSERT INTO pf_valorisation (produit_id, prix_unitaire_ht, transport_import,
+                                            transport_maj_le, transport_maj_par)
+               VALUES (?, 0, ?, ?, ?)
+               ON CONFLICT(produit_id) DO UPDATE SET
+                 transport_import = excluded.transport_import,
+                 transport_maj_le = excluded.transport_maj_le,
+                 transport_maj_par = excluded.transport_maj_par""",
+            (produit_id, actif, now, user_name),
+        )
+        conn.commit()
+        items = _pf_valo_query(conn)
+        charge = _get_charge_production_pct(conn)
+        storage = _get_storage_fees_pct(conn)
+    log_action(
+        user=user, action="UPDATE", module="stock",
+        objet=f"Transport import {prod['reference']}",
+        detail={"produit_id": produit_id, "transport": bool(actif),
+                "part": f"1/{PF_TRANSPORT_IMPORT_DIVISEUR:g}"},
+        ip=request.client.host if request.client else None,
+    )
+    _pf_enrich_charges(items, charge_prod_pct=charge, storage_fees_pct=storage)
+    item = next((x for x in items if x["id"] == produit_id), None)
+    return {"ok": True, "item": item}
 
 
 @router.get("/api/stock/valorisation/pf/{produit_id}/historique")
@@ -11542,6 +12032,11 @@ def reception_rvgi_file(request: Request, limite: int = 300):
             par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes if l.get("lif_id")])
             for l in lignes:
                 l["documents"] = par_lif.get(l.get("lif_id"), [])
+            # Entrées en stock que personne n'a encore relues : elles restent
+            # dans la file tant qu'elles ne sont pas validées.
+            a_valider = _rr.historique(conn, erp, limite=1000, validees=False)
+            _joindre_documents(conn, a_valider)
+            res["a_valider"] = a_valider
     except FileNotFoundError as e:
         raise HTTPException(503, str(e)) from None
     res["familles"] = {str(t): v[0] for t, v in _rr.PERIMETRE.items()}
@@ -11550,7 +12045,8 @@ def reception_rvgi_file(request: Request, limite: int = 300):
 
 @router.get("/api/stock/reception-rvgi/historique")
 def reception_rvgi_historique(request: Request, limite: int = 300):
-    """Les réceptions RVGI déjà entrées en stock : saisie ERP et entrée MySifa."""
+    """Les réceptions RVGI entrées en stock ET validées : saisie ERP, entrée
+    MySifa, validation. Celles qui attendent une validation sont dans la file."""
     require_stock(request)
     from app.services import erp_mirror as _miroir
     from app.services import reception_rvgi as _rr
@@ -11560,19 +12056,23 @@ def reception_rvgi_historique(request: Request, limite: int = 300):
         if _miroir.miroir_present():
             try:
                 with _miroir.get_erp_db() as erp:
-                    lignes = _rr.historique(conn, erp, limite=limite)
+                    lignes = _rr.historique(conn, erp, limite=limite, validees=True)
             except FileNotFoundError:
-                lignes = _rr.historique(conn, None, limite=limite)
+                lignes = _rr.historique(conn, None, limite=limite, validees=True)
         else:
-            lignes = _rr.historique(conn, None, limite=limite)
-        # Pièces fournisseur : celles de la ligne ERP, et celles déposées sur
-        # la réception scannée qui en est issue.
-        par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes])
-        par_rec = _documents_par(conn, "reception_id",
-                                 [l["reception_id"] for l in lignes if l.get("reception_id")])
-        for l in lignes:
-            l["documents"] = par_lif.get(l["lif_id"], []) + par_rec.get(l.get("reception_id"), [])
+            lignes = _rr.historique(conn, None, limite=limite, validees=True)
+        _joindre_documents(conn, lignes)
     return {"lignes": lignes, "total": len(lignes)}
+
+
+def _joindre_documents(conn, lignes):
+    """Pièces fournisseur d'une réception entrée : celles de la ligne ERP, et
+    celles déposées sur la réception scannée qui en est issue."""
+    par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes])
+    par_rec = _documents_par(conn, "reception_id",
+                             [l["reception_id"] for l in lignes if l.get("reception_id")])
+    for l in lignes:
+        l["documents"] = par_lif.get(l["lif_id"], []) + par_rec.get(l.get("reception_id"), [])
 
 
 @router.put("/api/stock/reception-rvgi/mise-en-service")
@@ -11681,6 +12181,31 @@ async def reception_rvgi_integrer(request: Request):
                    objet="reception_rvgi:integration",
                    detail="%d ligne(s) intégrée(s), %d refusée(s)" % (len(faits), len(refuses)))
     return {"integrees": faits, "refusees": refuses}
+
+
+@router.post("/api/stock/reception-rvgi/{lif_id}/valider")
+async def reception_rvgi_valider(lif_id: int, request: Request):
+    """Valide (ou dévalide) une réception RVGI entrée en stock.
+
+    Body : { valide: true|false }. Le stock ne bouge pas : la validation dit
+    qui a relu la ligne. La synchro fait entrer seule ; personne ne valide à
+    sa place.
+    """
+    user = require_stock_write(request)
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json() or {}
+    valide = bool(body.get("valide", True))
+    with get_db() as conn:
+        try:
+            res = _rr.valider(conn, lif_id, user, valide=valide)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        conn.commit()
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet="reception_rvgi:%s" % lif_id,
+               detail="réception validée" if valide else "validation retirée")
+    return res
 
 
 @router.post("/api/stock/reception-rvgi/{lif_id}/annuler")

@@ -169,6 +169,43 @@ class TestMpEmplacements(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["emplacements"][0]["laize_id"], self.laize_ok)
 
+    def test_modifier_renommer_et_regrouper(self):
+        a = self._poser(self.mandrin_id, emplacement="DROITE 3", quantite=2).json()["emplacements"]
+        b = self._poser(self.mandrin_id, emplacement="A FOND", quantite=1).json()["emplacements"]
+        id_a = next(e["id"] for e in a if e["emplacement"] == "DROITE 3")
+        # Renommer : la ligne change de code, le stock total ne bouge pas.
+        r = self.client.put(f"/api/stock/matieres/{self.mandrin_id}/emplacements/{id_a}",
+                            json={"emplacement": "droite 4", "quantite": 2})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertFalse(r.json()["fusion"])
+        codes = {e["emplacement"]: e["quantite"] for e in r.json()["emplacements"]}
+        self.assertEqual(codes.get("DROITE 4"), 2.0)
+        self.assertNotIn("DROITE 3", codes)
+        # Vers un emplacement déjà posé : les quantités s'additionnent.
+        r = self.client.put(f"/api/stock/matieres/{self.mandrin_id}/emplacements/{id_a}",
+                            json={"emplacement": "A FOND", "quantite": 2})
+        self.assertTrue(r.json()["fusion"])
+        codes = {e["emplacement"]: e["quantite"] for e in r.json()["emplacements"]}
+        self.assertEqual(codes.get("A FOND"), 3.0)
+        self.assertNotIn("DROITE 4", codes)
+        self.assertEqual(self._stock(self.mandrin_id), 7)
+        connus = self.client.get("/api/stock/mp-emplacements-connus").json()
+        self.assertIn("A FOND", [u["code"] for u in connus["utilises"]])
+        for e in r.json()["emplacements"]:
+            self.client.delete(f"/api/stock/matieres/{self.mandrin_id}/emplacements/{e['id']}")
+
+    def test_modifier_refuse(self):
+        e = self._poser(self.frontal_id, emplacement="C3", quantite=1,
+                        laize_id=self.laize_ok).json()["emplacements"][0]
+        url = f"/api/stock/matieres/{self.frontal_id}/emplacements/{e['id']}"
+        self.assertEqual(self.client.put(url, json={"emplacement": "C3", "quantite": 0}).status_code, 400)
+        self.assertEqual(self.client.put(url, json={"emplacement": "A-1", "quantite": 1}).status_code, 400)
+        self.assertEqual(self.client.put(url, json={"emplacement": "C3", "quantite": 1,
+                                                    "laize_id": self.laize_autre}).status_code, 400)
+        self.assertEqual(self.client.put(f"/api/stock/matieres/{self.frontal_id}/emplacements/999999",
+                                         json={"emplacement": "C3", "quantite": 1}).status_code, 404)
+        self.client.delete(url)
+
     def test_recherche_rvgi(self):
         r = self.client.get("/api/stock/matieres/rvgi-recherche", params={"q": "velin"})
         arts = r.json()["articles"]
@@ -327,7 +364,11 @@ class TestMetrageEpaisseurs(unittest.TestCase):
 
     def test_seed_puis_remplacement(self):
         self._patch("direction")
-        seed = self.client.get("/api/stock/metrage-epaisseurs").json()
+        # Le référentiel porte aussi les grammages du widget Poids de colle
+        # (migration epaisseurs_grammages_matiere) : on ne compte que les
+        # lignes qui ont une épaisseur.
+        tout = self.client.get("/api/stock/metrage-epaisseurs").json()
+        seed = [x for x in tout if x["microns"] is not None]
         self.assertEqual(seed[0]["libelle"], "Matière enduite (frontal + colle + glassine)")
         self.assertEqual(seed[0]["microns"], 145)
         self.assertEqual(len(seed), 6)
@@ -335,8 +376,15 @@ class TestMetrageEpaisseurs(unittest.TestCase):
         r = self.client.put("/api/stock/metrage-epaisseurs", json={"items": [
             {"libelle": "PP blanc", "microns": "60,5"}, {"libelle": "Vélin", "microns": 66}]})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual([(x["libelle"], x["microns"]) for x in r.json()],
+        self.assertEqual([(x["libelle"], x["microns"]) for x in r.json() if x["microns"] is not None],
                          [("PP blanc", 60.5), ("Vélin", 66.0)])
+        # Les grammages ne sont pas touchés : Couché perd son épaisseur mais
+        # garde son grammage ; une ligne retirée sans grammage disparaît.
+        apres = {x["libelle"]: x for x in r.json()}
+        self.assertEqual((apres["Couché"]["microns"], apres["Couché"]["grammage_gsm"]), (None, 70.0))
+        self.assertNotIn("Glassine", apres)
+        self.assertEqual(len([x for x in r.json() if x["microns"] is None]),
+                         len([x for x in tout if x["microns"] is None]) + 1)
         # Restaure la liste d'origine pour les autres tests.
         self.client.put("/api/stock/metrage-epaisseurs", json={"items": [
             {"libelle": s["libelle"], "microns": s["microns"]} for s in seed]})

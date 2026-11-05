@@ -207,6 +207,20 @@ def _compter_ecarts_prod(conn):
     return compter_ouverts(conn, "prod", exclure=regles_hors_compteur(conn))
 
 
+def _compter_impressions_auto(conn):
+    """Impressions automatiques (règles par machine, MyTools › Étiquettes) en
+    échec depuis 7 jours et pas encore relancées depuis le journal."""
+    if not _tables(conn) & {"etiq_journal_impression"}:
+        return 0, None
+    r = conn.execute(
+        "SELECT COUNT(*) AS n, MAX(j.id) AS m FROM etiq_journal_impression j "
+        "WHERE j.source='auto' AND j.statut='erreur' AND j.created_at >= ? "
+        "AND NOT EXISTS (SELECT 1 FROM etiq_journal_impression r WHERE r.reimpression_de=j.id "
+        "AND r.statut IN ('envoye','en_file','imprime'))",
+        ((datetime.now(_PARIS) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S"),)).fetchone()
+    return int(r["n"] or 0), (str(r["m"]) if r["m"] else None)
+
+
 DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
     Detecteur(
         code="stock.receptions_rvgi",
@@ -275,6 +289,17 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         lien="/prod#erreurs",
         compter=_compter_ecarts_prod,
         roles_suggeres=("direction",),
+    ),
+    Detecteur(
+        code="tools.impressions_auto",
+        app="prod", app_label="MyProd",
+        titre="Étiquettes automatiques en échec",
+        description="Étiquettes qu'une saisie de production devait imprimer automatiquement et qui ne sont "
+                    "pas sorties (imprimante injoignable, modèle non approuvé…). À relancer depuis le "
+                    "journal d'impression de MyTools › Étiquettes.",
+        lien="/tools?outil=etiquettes&journal_impression=liste&journal_statut=erreur",
+        compter=_compter_impressions_auto,
+        roles_suggeres=("fabrication", "direction"),
     ),
 )}
 

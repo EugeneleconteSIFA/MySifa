@@ -442,6 +442,9 @@ body.light .cal-allday-row{background:#f8fafc}
   .cal-week-num,.cal-mini-wrap,.cal-toggle,.cal-gear-btn{display:none!important}
 }
 @media(max-width:900px){
+  /* Le mois tient dans la largeur du téléphone, un seul jour aussi. La semaine et
+     ses sept colonnes restent plus larges : elles défilent dans .cal-body. */
+  .cal-month,.cal-time-wrap.cal-day-single{min-width:0}
   .cal-mobile-view-sel{display:block}
   .mobile-topbar-sub{display:none}
   .cal-view-tabs,.cal-shortcuts-wrap{display:none!important}
@@ -532,7 +535,7 @@ body.cal-dragging{user-select:none}
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
@@ -3446,7 +3449,7 @@ window.addEventListener('resize',()=>{
   }
 })();
 </script>
-<script src="/static/mysifa_impersonate.js?v=2"></script>
+<script src="/static/mysifa_impersonate.js?v=3"></script>
 </body>
 </html>
 """

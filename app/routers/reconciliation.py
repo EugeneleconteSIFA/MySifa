@@ -862,10 +862,14 @@ def flux_production(request: Request, du: Optional[str] = Query(None), au: Optio
     """Dossiers produits (planning + saisies) contre les entrées et déplacements MyStock."""
     require_monitoring(request)
     from app.services.monitoring_flux_pf import flux_production as calcul
+    from app.services import erp_mirror
 
     debut, fin = _periode_flux(du, au)
     with get_db() as conn:
-        return calcul(conn, debut, fin)
+        if not erp_mirror.miroir_present():
+            return calcul(conn, debut, fin)
+        with erp_mirror.get_erp_db() as erp:
+            return calcul(conn, debut, fin, erp)
 
 
 @router.get("/api/reconciliation/flux/expedition")

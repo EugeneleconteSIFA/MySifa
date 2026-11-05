@@ -108,6 +108,7 @@ const _STOCK_OUVREURS = [
   ['openMatiereCopyFromCard',  'copier_matiere', a => a[0] && a[0].id],
   ['openCondAjustModal',       'conditionnements', () => 'tous'],
   ['openMatiereCreateModal',   'nouvelle_matiere', () => 'oui'],
+  ['openCreerRefProduitModal', 'nouvelle_ref',   a => a[0] || 'oui'],
   ['openMpDeplacerModal',      'deplacer_variante', a => a[1] && a[1].id],
   ['openMpVarianteModal',      'variante',       a => (a[1] && a[1].id) || 'nouvelle'],
   ['openMpEmplacementModal',   'emplacement_matiere', a => (a[1] && (a[1].id || a[1].emplacement)) || 'nouveau'],
@@ -115,7 +116,6 @@ const _STOCK_OUVREURS = [
   ['openReceptionMatiereModal','reception_matiere', a => a[0] && a[0].id],
   ['openProductionEdit',       'production_modifier', a => a[0] && a[0].reference],
   ['openProductionAddTo',      'production_ajouter',  a => a[0] && a[0].reference],
-  ['openTracaPrint',           'impression',     a => a[0] && a[0].id],
   ['openBesoinDocApercu',      'apercu_doc',     a => a[0] + ':' + (a[1] || '')],
   ['openDocEtatModal',         'etat_doc',       a => a[0] + ':' + a[1]],
   ['openBesoinAssocierModal',  'associer',       a => a[0] + ':' + a[1]],
@@ -163,6 +163,7 @@ const _STOCK_REOUVRIR = {
   copier_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openMatiereCopyFromCard(m); },
   conditionnements: () => openCondAjustModal(),
   nouvelle_matiere: () => openMatiereCreateModal(),
+  nouvelle_ref: v => openCreerRefProduitModal(v === 'oui' ? '' : v, prod => loadProduit(prod.id)),
   deplacer_variante: v => {
     const m = S.selMatiere && S.selMatiere.matiere;
     const vs = (S.selMatiere && S.selMatiere.variantes && S.selMatiere.variantes.variantes) || [];
@@ -183,7 +184,6 @@ const _STOCK_REOUVRIR = {
   reception_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openReceptionMatiereModal(m); },
   production_modifier: v => { const r = ((S.productionZ1 && S.productionZ1.refs) || []).find(x => x.reference === v); if (r) openProductionEdit(r); },
   production_ajouter: v => { const r = ((S.productionZ1 && S.productionZ1.refs) || []).find(x => x.reference === v); if (r) openProductionAddTo(r); },
-  impression: v => { const e = (typeof TRACA_ETIQUETTES !== 'undefined' ? TRACA_ETIQUETTES : []).find(x => String(x.id) === String(v)); if (e) openTracaPrint(e); },
   apercu_doc: v => { const [d, t] = _deux(v); openBesoinDocApercu(d, t); },
   etat_doc: v => { const [t, id] = _deux(v); openDocEtatModal(t, id, ''); },
   associer: v => { const [k, x] = _deux(v); openBesoinAssocierModal(k, x); },
@@ -296,6 +296,8 @@ function _stockParamsBase() {
     if (S.mpVarGrain && S.mpVarGrain !== 'fournisseur') p.var_grain = S.mpVarGrain;
     if (S.mpVarFiltreFourn) p.var_fournisseur = S.mpVarFiltreFourn;
     if (S.mpVarFiltreLaize) p.var_laize = S.mpVarFiltreLaize;
+    // Ligne dépliée de la fiche (laize de l'onglet Stock, article fournisseur).
+    if (S.selMatiere.ouvert) p.detail = S.selMatiere.ouvert;
     return { params: p, nav: nav + '/matiere:' + p.matiere + '/' + (p.fiche || '') };
   }
   // loadProduit() range la réponse de l'API telle quelle : l'id est dans
@@ -391,18 +393,6 @@ function _stockParamsBase() {
   } else if (tab === 'plan-entrepot') {
     if (S.planBat != null) { p.batiment = String(S.planBat); nav += '/bat:' + S.planBat; }
     if (S.planSel != null) p.element = String(S.planSel);
-  } else if (tab === 'traca') {
-    if (S.tracaPoste) { p.poste = S.tracaPoste; nav += '/poste:' + S.tracaPoste; }
-    // Étiquettes spécifiques : le module dit ce qu'il montre (vue, dossier,
-    // étiquette ouverte dans l'éditeur, demande, fenêtre).
-    const ad = S.tracaPoste === 'specifiques' && window.EtiqSpec && window.EtiqSpec.adresse;
-    if (ad) {
-      const e = ad.etat();
-      if (e.dossier != null) p.dossier = String(e.dossier);
-      if (e.modele) { p.modele = String(e.modele); nav += '/modele:' + e.modele; }
-      else if (e.vue === 'demandes') { p.vue = 'demandes'; nav += '/demandes'; if (e.demande != null) p.demande = String(e.demande); }
-      if (e.modale && e.modale.cle) { p[e.modale.cle] = String(e.modale.id); nav += '/' + e.modale.cle; }
-    }
   }
   return { params: p, nav: nav };
 }
@@ -574,19 +564,8 @@ async function stockOuvrirObjetsUrl(u, complet) {
     else if (complet && S.planBat != null) { S.planBat = null; S.planSel = null; buildPlanEntrepot(); }
     if (elt && _STOCK_CLE.test(elt)) { try { selectionnerPlanElement(num(elt), true); } catch (e) {} }
   }
-  if (tab === 'traca') {
-    const poste = u.get('poste', null);
-    const ok = poste && (TRACA_OUTILS.some(o => o.id === poste) || TRACA_POSTES.some(x => x.id === poste));
-    const voulu = ok ? poste : null;
-    if (voulu !== (S.tracaPoste || null) && (voulu || complet)) { S.tracaPoste = voulu; renderContent(); }
-    const ad = voulu === 'specifiques' && window.EtiqSpec && window.EtiqSpec.adresse;
-    if (ad) {
-      const a = { vue: u.get('vue', null), dossier: u.get('dossier', null), demande: u.get('demande', null),
-                  modele: u.get('modele', null), modale: null };
-      (ad.cles || []).forEach(k => { const v = u.get(k, null); if (v && v.length <= 60) a.modale = { cle: k, id: v }; });
-      try { await ad.aller(a); } catch (e) {}
-    }
-  }
+  // Étiquettes traça : parties dans MyTools (21/10/2026).
+  if (tab === 'traca') { tracaVersMyTools(u.get('poste', null)); return; }
   await stockModaleUrl(u);
 }
 
@@ -622,6 +601,9 @@ async function stockAllerUrl() {
     if (!(S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === matiere)) { try { await loadMatiere(matiere); } catch (e) {} }
     const fiche = u.get('fiche', 'stock', ['stock', 'fournisseurs', 'mouvements']);
     if (S.selMatiere && S.selMatiere.vue !== fiche) { S.selMatiere.vue = fiche; renderContent(); }
+    const det = u.get('detail', null);
+    const detOk = (det && /^(laize|article):\d+$/.test(det)) ? det : null;
+    if (S.selMatiere && (S.selMatiere.ouvert || null) !== detOk) { S.selMatiere.ouvert = detOk; renderContent(); }
   } else if (produit > 0) {
     try { await loadProduit(produit); } catch (e) {}
   } else if (ref) {

@@ -741,8 +741,9 @@
   }
 
   function mpStockLine(qty, catOrMatiere) {
-    const ctx = mpCtx(catOrMatiere);
-    return fN(qty) + ' ' + mpUniteShort(ctx);
+    // La matière elle-même, pas son mpCtx : relu par mpUniteNom, le contexte
+    // perdait `stock_a_l_unite` et une bague tenue à l'unité sortait en « pal. ».
+    return fN(qty) + ' ' + mpUniteShort(catOrMatiere);
   }
 
   // ── Unités de saisie des adhésifs ───────────────────────────────────────

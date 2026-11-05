@@ -85,9 +85,11 @@
     if (cle === "dates" && ctx.params.get("bloc_du")) {
       return Promise.resolve({ from: ctx.params.get("bloc_du"), to: ctx.params.get("bloc_au") || ctx.params.get("bloc_du") });
     }
+    // « deux_jours » : la dernière journée travaillée jusqu'à aujourd'hui.
+    var fin = cle === "deux_jours" ? iso(now) : null;
     return ctx.json("/api/production/dernier-jour-saisi?avant=" + encodeURIComponent(iso(hier)))
-      .then(function (d) { var j = (d && d.jour) || iso(hier); return { from: j, to: j }; })
-      .catch(function () { return { from: iso(hier), to: iso(hier) }; });
+      .then(function (d) { var j = (d && d.jour) || iso(hier); return { from: j, to: fin || j }; })
+      .catch(function () { return { from: iso(hier), to: fin || iso(hier) }; });
   }
 
   function paramsProd(ctx) {
@@ -503,6 +505,29 @@
         // Machine supprimée ou désactivée : l'indicateur suit son objet.
         if (e && e.status === 404) return { introuvable: true };
         throw e;
+      });
+    },
+
+    /* Analyse des alertes (static/maintenance_analyse.js) : le bandeau d'une
+       alerte, calculé par le serveur sur la période capturée. */
+    "maintenance.alertes.synthese": function (ctx) {
+      var q = new URLSearchParams();
+      q.set("alerte", ctx.objet);
+      var per = ctx.params.get("bloc_periode") || "last30";
+      if (per === "dates" && ctx.params.get("bloc_du")) {
+        q.set("du", ctx.params.get("bloc_du"));
+        q.set("au", ctx.params.get("bloc_au") || ctx.params.get("bloc_du"));
+      } else {
+        q.set("periode", per);
+      }
+      if (ctx.params.get("bloc_ctrl_machine")) q.set("machine", ctx.params.get("bloc_ctrl_machine"));
+      return ctx.json("/api/maintenance/alertes/stats?" + q.toString()).then(function (d) {
+        var a = ((d && d.alertes) || [])[0];
+        if (!a) return { introuvable: true };
+        var s = a.synthese || {};
+        function p(v) { return v == null ? "—" : Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " %"; }
+        return r({ "validations": fNb0(s.validations), "taux-nc": p(s.taux_nc), "remplissage": p(s.remplissage) },
+                 { "validations": s.validations || 0, "taux-nc": s.taux_nc || 0, "remplissage": s.remplissage || 0 });
       });
     },
 

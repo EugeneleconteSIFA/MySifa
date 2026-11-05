@@ -109,6 +109,7 @@
     const t = (it && it.type) || 'choice';
     if (t === 'value') {
       return {
+        id: (it && it.id) || '',
         type: 'value',
         label: (it && it.label) || '',
         unit: (it && it.unit) || '',
@@ -141,6 +142,7 @@
       ? it.comment_responses.filter(r => typeof r === 'string' && r.trim())
       : [];
     return {
+      id: (it && it.id) || '',
       type: 'choice',
       label: (it && it.label) || '',
       responses: responses.length ? responses : ['Conforme'],
@@ -421,7 +423,10 @@
   const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
-  return '<div class="af-cl-card" ondragstart="_afDragStart(event)" ondragend="_afDragEnd(event)" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
+  // Identifiant stable de la question : renvoyé tel quel au serveur, il relie
+  // les réponses passées à leur question quand le questionnaire change.
+  const qid = String((item && item.id) || '').replace(/[^a-z0-9_-]/gi, '');
+  return '<div class="af-cl-card"' + (qid ? ' data-qid="' + qid + '"' : '') + ' ondragstart="_afDragStart(event)" ondragend="_afDragEnd(event)" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
     + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
     +   '<span class="af-cl-poignee" title="Glisser pour réordonner" onmousedown="_afArmDrag(this)" onmouseup="_afDisarmDrag(this)" ontouchstart="_afArmDrag(this)">'
     +     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>'
@@ -1123,7 +1128,10 @@
   if (clEnabled) {
     document.querySelectorAll('.af-cl-card').forEach(card => {
       const it = _afReadCard(card);
-      if (it) items.push(it);
+      if (it) {
+        if (card.dataset.qid) it.id = card.dataset.qid;
+        items.push(it);
+      }
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)

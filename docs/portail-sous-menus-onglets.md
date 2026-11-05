@@ -70,7 +70,7 @@ mouvements, Matières premières, Réception matière, Besoins matières.
 | Monitoring (admin) | `/stock?tab=monitoring` |
 | Valorisation (admin) | `/stock?tab=valorisation` |
 | Historique mouvements | `/stock?tab=historique` |
-| Étiquettes traça | `/stock?tab=traca` |
+| Étiquettes (MyTools) | `/tools?outil=etiquettes` |
 | Plan entrepôt | `/stock?tab=plan-entrepot` |
 | Production (rôle fabrication) | `/stock?tab=production` |
 
@@ -166,15 +166,32 @@ faut d'abord donner une vue de liste à cette route.
 | Dépôt des bulletins | `/rh/coffre#bulletins` |
 | Notes de frais à valider | `/rh/coffre#ndf` |
 
-## MyPrint — `/stock?tab=traca`
+## MyTools — `/tools` (ex-MyPrint, depuis le 21/10/2026)
 
-L'écran d'étiquettes est organisé par **poste de travail** (`TRACA_POSTES`,
-`app/web/stock_page.py`). Le poste est devenu adressable par URL le 28 août :
-le menu propose donc un poste par entrée, et l'URL suit quand on change de
-poste dans la page — un lien vers Cohésio 1 rouvre bien Cohésio 1.
+MyTools regroupe les outils transverses : `?outil=etiquettes`, `formulaires`,
+`pdf`, `traduction` (`TOOLS_OUTILS`, `static/mysifa_tools.js`). La tuile garde
+la clé `print` : c'est elle qui porte l'ordre des tuiles enregistré.
+
+Les étiquettes sont organisées par **poste de travail** (`TRACA_POSTES`,
+`static/mysifa_tools_etiquettes.js`). L'ancien `/stock?tab=traca&poste=…`
+redirige vers `/tools?outil=etiquettes&poste=…` avec tous ses paramètres.
 
 | Disponible | URL |
 |---|---|
+| Cohésio 1 | `/tools?outil=etiquettes&poste=cohesio1` |
+| Cohésio 2 | `/tools?outil=etiquettes&poste=cohesio2` |
+| Logistique | `/tools?outil=etiquettes&poste=logistique` |
+| Bureaux | `/tools?outil=etiquettes&poste=bureaux` |
+| Étiquettes spécifiques | `/tools?outil=etiquettes&poste=specifiques` |
+| Formulaires | `/tools?outil=formulaires` |
+| Éditeur PDF | `/tools?outil=pdf` |
+| Traducteur | `/tools?outil=traduction` |
+| Imprimantes (admin) | `/settings#printers` |
+
+Ajouter un poste se fait dans `TRACA_POSTES` puis dans le catalogue — le test
+refuse un `poste=` ou un `outil=` absent du JS.
+
+---|---|
 | Cohésio 1 | `/stock?tab=traca&poste=cohesio1` |
 | Cohésio 2 | `/stock?tab=traca&poste=cohesio2` |
 | Logistique | `/stock?tab=traca&poste=logistique` |

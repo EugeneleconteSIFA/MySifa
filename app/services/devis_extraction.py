@@ -343,6 +343,7 @@ def _appel_modele(blocs: list[dict]) -> tuple[Optional[dict], Optional[str], str
     except Exception as e:
         return None, f"Appel au modèle en échec : {e}", modele
     ia_usage.noter(reponse, "devis")
+    ia_usage.preciser(modele_demande=modele, fichiers=1)
 
     for bloc in reponse.content:
         if getattr(bloc, "type", "") == "tool_use":

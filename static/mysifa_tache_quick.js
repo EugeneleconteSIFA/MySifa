@@ -78,6 +78,7 @@
     ['/ao',          'ao'],
     ['/bat',         'bat'],
     ['/print',       'print'],
+    ['/tools',       'print'],
     ['/pricing',     'pricing'],
     ['/paie',        'compta'],
     ['/coffre',      'coffre'],
