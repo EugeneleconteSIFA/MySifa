@@ -422,6 +422,11 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
 
 /* ── Téléphone : listes et fenêtres de MyProd ── */
 @media (max-width:900px){
+  /* Tous les tableaux de MyProd : pas de ligne colorée par un simple toucher. */
+  table tbody tr:hover td,table.table-std tr:hover td{background:transparent}
+  .pmem-tbl tbody tr:not(.is-sel):hover td{background:transparent!important}
+  .pmem-tbl-sobre td{white-space:normal}
+  .pmem-file-n{overflow-wrap:anywhere}
   /* Sous-onglets et bascules à la ligne : en bande, « Retour de prod » et « Actions » restaient
      hors de l'écran sans que rien ne le dise. Non collés : sur deux lignes, ils mangeraient l'écran. */
   .nav-tabs{position:static;flex-wrap:wrap;overflow:visible!important;row-gap:2px}
@@ -437,6 +442,8 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
     position:relative;padding:12px;margin-bottom:8px;background:var(--card);border:1px solid var(--border);border-radius:10px}
   .prod-liste-of td,.prod-liste-fiche td,.prod-liste-orph td{display:block;padding:0!important;border:0!important;width:auto!important;
     overflow:visible;white-space:normal;overflow-wrap:anywhere;font-size:13px}
+  /* Au doigt, :hover reste allumé après un toucher : la fiche se colorait sans raison. */
+  .prod-liste-of tr:hover td,.prod-liste-fiche tr:hover td,.prod-liste-orph tr:hover td{background:none!important}
   .prod-liste-of td[colspan],.prod-liste-fiche td[colspan],.prod-liste-orph td[colspan]{grid-column:1/-1}
   /* Case de sélection dans le coin, identifiant en titre. */
   .prod-liste-of tr>td:first-child,.prod-liste-fiche tr>td:first-child{position:absolute;top:12px;right:12px}
