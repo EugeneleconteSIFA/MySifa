@@ -3815,7 +3815,7 @@ function infosDossierSections(s){
     }else{
       const d=l.devis||{};
       const rows=[];
-      if(d.vitesse) rows.push(L("Vitesse devisée",fmtQty(d.vitesse)+" m/mn","fort"));
+      if(d.vitesse) rows.push(L("Vitesse théorique",fmtQty(d.vitesse)+" m/mn","fort"));
       if(d.calage_mn) rows.push(L("Calage devisé",fmtDur(Number(d.calage_mn)/60)));
       const etat=(l.origine==="auto"&&!l.valide_at)?"orange":"vert";
       devis={rows,etat,client:d.client||"",

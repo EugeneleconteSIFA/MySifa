@@ -6155,7 +6155,7 @@ function renderFooter(){
         h('div',{className:'fab-objectifs-titre'},'Objectifs devis'),
         h('div',{className:'fab-objectifs-tuiles'},
           dv.vitesse ? h('div',{className:'fab-objectif'},
-            h('div',{className:'fab-objectif-lbl'},'Vitesse'),
+            h('div',{className:'fab-objectif-lbl'},'Vitesse cible'),
             h('div',{className:'fab-objectif-val'}, fN(dv.vitesse), h('small',null,'m/min'))) : null,
           dv.calage_mn ? h('div',{className:'fab-objectif'},
             h('div',{className:'fab-objectif-lbl'},'Calage'),

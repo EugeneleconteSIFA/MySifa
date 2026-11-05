@@ -235,7 +235,7 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
     # Gâche de calage relevée au compteur en fin de calage. Les dossiers sans
     # relevé n'entrent pas dans la somme ; sans aucun relevé, la case reste
     # vide plutôt que d'afficher un zéro qui se lirait comme « pas de gâche ».
-    from app.services.calage_cloture import gache_calage
+    from app.services.calage_cloture import gache_calage, vitesse_conducteur
     gaches = [gache_calage(conn, dos)["metres"] for dos in no_dossiers]
     gaches = [g for g in gaches if g is not None]
     gache_reel = round(sum(gaches), 1) if gaches else None
@@ -262,7 +262,10 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
         "temps_production_mn":  d["temps_production_mn"],
         "metrage_ml":           d["metrage_production_ml"],
         "qte_etiquettes":       d["qte_etiquettes"],
-        "vitesse":              d["vitesse_theorique"],
+        # Vitesse conducteur, pas celle du classeur : le devis chiffre une
+        # vitesse moyenne (voir `DEVIS_VITESSE_PART_CONDUCTEUR`).
+        "vitesse":              vitesse_conducteur(d["vitesse_theorique"]),
+        "vitesse_devis":        d["vitesse_theorique"],
         "vitesse_avec_calage":  round(vitesse_theo_avec_calage, 2),
     }
 
@@ -481,7 +484,8 @@ def list_links(request: Request):
     for d in devis_lies:
         par_devis[int(d["id"])] = {
             "client": _texte(d, "client", ""),
-            "vitesse": _colonne(d, "vitesse_theorique"),
+            "vitesse": vitesse_conducteur(_colonne(d, "vitesse_theorique")),
+            "vitesse_devis": _colonne(d, "vitesse_theorique"),
             # Même règle que partout ailleurs dans cet écran : le calage
             # devisé additionne outil et impression, parce que le calage saisi
             # en atelier couvre les deux.

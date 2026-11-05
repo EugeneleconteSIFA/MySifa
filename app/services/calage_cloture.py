@@ -40,7 +40,7 @@ from typing import Any, Dict, List, Optional
 
 from config import (
     CODE_ANNUL_DOS, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_PRODUCTION, CALAGE_ALERTE_FACTEUR,
-    classify_operation,
+    DEVIS_VITESSE_PART_CONDUCTEUR, classify_operation,
 )
 from database import parse_datetime
 
@@ -572,9 +572,21 @@ def prevu_devis(conn, no_dossier: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def vitesse_conducteur(vitesse_devis) -> float:
+    """Vitesse theorique a comparer au reel : celle du devis ramenee a la
+    vitesse que regle le conducteur (`DEVIS_VITESSE_PART_CONDUCTEUR`). 0 quand
+    le devis ne chiffre pas de vitesse."""
+    try:
+        v = float(vitesse_devis or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    part = DEVIS_VITESSE_PART_CONDUCTEUR if DEVIS_VITESSE_PART_CONDUCTEUR > 0 else 1.0
+    return round(v / part, 1) if v > 0 else 0.0
+
+
 def devis_saisie(conn, planning_entry_id, no_dossier: str = "") -> Optional[Dict[str, Any]]:
     """Ce que le devis rattaché annonce, pour le conducteur au lancement :
-    vitesse devisée (m/min) et calage devisé (outil + impression, comme
+    vitesse théorique (devis ramené à la vitesse conducteur, m/min) et calage devisé (outil + impression, comme
     partout ailleurs). Le devis se trouve par le dossier du planning
     (`rent_links`), sinon par la référence saisie (`rent_prod_links`).
     None quand aucun devis n'est rattaché ou qu'il ne chiffre ni l'un ni
@@ -603,7 +615,7 @@ def devis_saisie(conn, planning_entry_id, no_dossier: str = "") -> Optional[Dict
         except (TypeError, ValueError):
             return 0.0
 
-    vitesse = v("vitesse_theorique")
+    vitesse = vitesse_conducteur(v("vitesse_theorique"))
     calage = v("temps_calage_mn") + v("temps_calage_impression_mn")
     if vitesse <= 0 and calage <= 0:
         return None

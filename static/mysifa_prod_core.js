@@ -5805,7 +5805,8 @@ function rentTipContenu(head, lien, etat){
     ]),
     devis ? rentTipSection('Devis', [
       ['Fichier', devis.fichier || ''],
-      ['Vitesse devisée', (Number(devis.vitesse) > 0 ? devis.vitesse + ' m/min' : '')],
+      ['Vitesse théorique', (Number(devis.vitesse) > 0 ? devis.vitesse + ' m/min' : '')],
+      ['Vitesse devisée', (Number(devis.vitesse_devis) > 0 ? devis.vitesse_devis + ' m/min' : '')],
       ['Calage devisé', (Number(devis.calage_mn) > 0
         ? Math.round(devis.calage_mn) + ' mn (outil + impression)' : '')],
       ['Quantité devisée', rentQte(devis.qte)],

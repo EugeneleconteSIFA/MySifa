@@ -464,9 +464,10 @@ class TestCalageCloture(unittest.TestCase):
                 "temps_calage_impression_mn) VALUES ('t.pdf', '2026-10-16T08:00:00', 120, 30, 15)").lastrowid
             conn.execute("INSERT INTO rent_links (planning_entry_id, devis_id, updated_at) "
                          "VALUES (?, ?, '2026-10-16T08:00:00')", (pe, did))
-            # Calage = outil + impression, comme la Rentabilité.
+            # Calage = outil + impression, comme la Rentabilité. Vitesse =
+            # devis ramené à la vitesse conducteur (120 / 0.8).
             self.assertEqual(devis_saisie(conn, pe, "CAL-DEVIS"),
-                             {"devis_id": did, "vitesse": 120.0, "calage_mn": 45})
+                             {"devis_id": did, "vitesse": 150.0, "calage_mn": 45})
             conn.execute("DELETE FROM rent_links WHERE planning_entry_id=?", (pe,))
             conn.execute("DELETE FROM devis WHERE id=?", (did,))
             conn.execute("DELETE FROM planning_entries WHERE id=?", (pe,))
