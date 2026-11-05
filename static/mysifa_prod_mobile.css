@@ -419,3 +419,68 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
    Voir .claude/rules/frontend-comportement.md et le chantier de refonte
    mobile — le portrait a ses propres composants, le paysage garde la vue
    dense. */
+
+/* ── Téléphone : listes et fenêtres de MyProd ── */
+@media (max-width:900px){
+  /* Sous-onglets et bascules à la ligne : en bande, « Retour de prod » et « Actions » restaient
+     hors de l'écran sans que rien ne le dise. Non collés : sur deux lignes, ils mangeraient l'écran. */
+  .nav-tabs{position:static;flex-wrap:wrap;overflow:visible!important;row-gap:2px}
+  .nav-tab{height:36px;padding:0 8px;font-size:12.5px;gap:4px}
+  .mpm-outils-g{flex-wrap:wrap;overflow:visible}
+
+  /* OF, fiches techniques, fiches non reliées : une fiche par ligne. En tableau à largeur fixe,
+     les 260 px d'actions écrasaient les colonnes de données à 2 px : on ne voyait que les boutons. */
+  .prod-liste-of,.prod-liste-fiche,.prod-liste-orph,
+  .prod-liste-of tbody,.prod-liste-fiche tbody,.prod-liste-orph tbody{display:block;width:100%;table-layout:auto}
+  .prod-liste-of thead,.prod-liste-fiche thead,.prod-liste-orph thead{display:none}
+  .prod-liste-of tr,.prod-liste-fiche tr,.prod-liste-orph tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;
+    position:relative;padding:12px;margin-bottom:8px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+  .prod-liste-of td,.prod-liste-fiche td,.prod-liste-orph td{display:block;padding:0!important;border:0!important;width:auto!important;
+    overflow:visible;white-space:normal;overflow-wrap:anywhere;font-size:13px}
+  .prod-liste-of td[colspan],.prod-liste-fiche td[colspan],.prod-liste-orph td[colspan]{grid-column:1/-1}
+  /* Case de sélection dans le coin, identifiant en titre. */
+  .prod-liste-of tr>td:first-child,.prod-liste-fiche tr>td:first-child{position:absolute;top:12px;right:12px}
+  .prod-liste-of tr>td:first-child[colspan],.prod-liste-fiche tr>td:first-child[colspan]{position:static}
+  .prod-liste-of tr>td:nth-child(2),.prod-liste-fiche tr>td:nth-child(2),.prod-liste-orph tr>td:first-child{
+    grid-column:1/-1;padding-right:30px!important;font-size:15px;font-weight:700}
+  .prod-liste-of td:not(:nth-child(2)):not(.td-actions)::before,
+  .prod-liste-fiche td:not(:nth-child(2)):not(.td-actions)::before,
+  .prod-liste-orph td:not(:first-child):not(.td-actions)::before{display:block;margin-bottom:2px;
+    font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+  .prod-liste-of tr>td:first-child::before,.prod-liste-fiche tr>td:first-child::before{content:none!important}
+  .prod-liste-of td:nth-child(3)::before{content:'Référence'}
+  .prod-liste-of td:nth-child(4)::before{content:'Machine'}
+  .prod-liste-of td:nth-child(5)::before{content:'Délai client'}
+  .prod-liste-of td:nth-child(6)::before{content:'Qté étiquettes'}
+  .prod-liste-of td:nth-child(7)::before{content:'Date création'}
+  .prod-liste-fiche td:nth-child(3)::before{content:'Format'}
+  .prod-liste-fiche td:nth-child(4)::before{content:'Laize éti.'}
+  .prod-liste-fiche td:nth-child(5)::before{content:'Support'}
+  .prod-liste-fiche td:nth-child(6)::before{content:'Machine'}
+  .prod-liste-fiche td:nth-child(7)::before{content:'Nb coul.'}
+  .prod-liste-fiche td:nth-child(8)::before{content:'Source'}
+  .prod-liste-orph td:nth-child(2)::before{content:'Désignation'}
+  .prod-liste-orph td:nth-child(3)::before{content:'Motif'}
+  .prod-liste-orph td:nth-child(4)::before{content:'Machine'}
+  .prod-liste-orph td:nth-child(5)::before{content:'Format'}
+  .prod-liste-orph td:nth-child(6)::before{content:'Source'}
+  .prod-liste-of td.td-actions,.prod-liste-fiche td.td-actions,.prod-liste-orph td.td-actions{grid-column:1/-1;
+    width:auto!important;min-width:0!important;max-width:none!important;white-space:normal!important;
+    padding-top:10px!important;border-top:1px solid var(--border)!important}
+  .prod-liste-of td.td-actions>div,.prod-liste-fiche td.td-actions>div,.prod-liste-orph td.td-actions>div{flex-wrap:wrap;gap:6px!important}
+  .prod-liste-of td.td-actions button,.prod-liste-fiche td.td-actions button,.prod-liste-orph td.td-actions button{min-width:40px;min-height:40px}
+
+  /* Saisie de production : une colonne à la fois quand deux ne tiennent pas. Côte à côte,
+     la date et l'heure poussaient la machine hors de la fenêtre. */
+  .add-row-modal:not(.prod-synth-modal--compact){padding:12px}
+  .add-row-form{padding:16px 14px;max-width:100%;max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden}
+  .add-row-form .form-row{grid-template-columns:minmax(0,1fr)!important}
+  .add-row-form .form-row>*{min-width:0}
+  .add-row-form select{text-overflow:ellipsis}
+  /* Formulaires OF et fiche : deux colonnes (à trois, les valeurs étaient coupées), validation à portée. */
+  #of-edit-overlay,#fiche-edit-overlay{padding:12px!important}
+  #of-edit-overlay>div,#fiche-edit-overlay>div{padding:16px 14px 14px!important;max-height:calc(100dvh - 24px)!important}
+  .ofe-sec-body{grid-template-columns:repeat(2,minmax(0,1fr))!important;padding:12px!important}
+  #of-edit-overlay>div>div:last-child,#fiche-edit-overlay>div>div:last-child{position:sticky;bottom:-14px;z-index:4;background:var(--card);
+    margin-bottom:-14px;padding:10px 0 max(14px,env(safe-area-inset-bottom,0px))}
+}
