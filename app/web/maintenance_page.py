@@ -583,6 +583,25 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .cal-week-view.cal-wv-mode-day .cal-wv-allday,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:70px 1fr}
 .cal-week-view.cal-wv-mode-day .cal-event{font-size:14.5px;padding:10px 14px}
+/* Téléphone : la semaine tient dans la largeur, sans défilement de côté. Les colonnes
+   de l'en-tête et de la grille sont les mêmes : elles ne se décalent plus. */
+@media(max-width:900px){
+  .cal-week-view{overflow-x:visible}
+  .cal-week-view.cal-wv-mode-week .cal-wv-header,
+  .cal-week-view.cal-wv-mode-week .cal-wv-allday,
+  .cal-week-view.cal-wv-mode-week .cal-wv-body{grid-template-columns:36px repeat(7,minmax(0,1fr))}
+  body .cal-week-view.cal-wv-mode-day .cal-wv-header,
+  body .cal-week-view.cal-wv-mode-day .cal-wv-allday,
+  body .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:44px minmax(0,1fr)}
+  .cal-wv-body{overflow-x:hidden}
+  .cal-wv-dayhead{padding:6px 0;min-width:0;gap:1px}
+  .cal-wv-dayname{font-size:10px;letter-spacing:0}
+  .cal-wv-daydate{font-size:11px;letter-spacing:-.3px}
+  .cal-wv-time{padding:2px 4px 0 0;font-size:10px;letter-spacing:-.3px}
+  .cal-wv-allday-corner{padding:4px 2px;min-width:0;overflow:hidden}
+  .cal-wv-mode-day .cal-wv-dayname{font-size:12px}
+  .cal-wv-mode-day .cal-wv-daydate{font-size:14px}
+}
 .cal-week-view.cal-wv-mode-day .cal-event-title{font-size:16px}
 .cal-week-view.cal-wv-mode-day .cal-event-machine{font-size:13.5px}
 .cal-week-view.cal-wv-mode-day .cal-event-time{font-size:13.5px}
@@ -3241,11 +3260,11 @@ function switchView(name){
       setTimeout(function(){ try{ if(typeof setPlanSubtab === 'function') setPlanSubtab('historique'); }catch(e){} }, 0);
       return;
     }
-    // Bascule sur la vue Semaine. setCalView appelle desormais
+    // Bascule sur la vue Semaine (Jour sur téléphone). setCalView appelle desormais
     // renderCalFromCacheThenRefresh : rendu immediat depuis le cache (aucune
     // frame vide en revenant sur l'onglet), refetch uniquement si la plage
     // affichee n'est pas couverte par le dernier chargement.
-    if(typeof setCalView === 'function') setCalView('week');
+    if(typeof setCalView === 'function') setCalView(window.matchMedia('(max-width:900px)').matches ? 'day' : 'week');
     else renderCal();
     // v2.5.9 / v2.6.0 : le setTimeout(0) reste necessaire au boot -- refreshPlanning
     // utilise _fmtDateISO, declare dans un <script> SUIVANT. Tant que script1
@@ -3329,7 +3348,8 @@ function _calWeekMondayOf(d){
   return r;
 }
 const CAL_STATE = {
-  view: 'week',
+  // Téléphone : sept colonnes étroites se lisent mal, le jour est le bon point de départ.
+  view: window.matchMedia('(max-width:900px)').matches ? 'day' : 'week',
   year:  new Date().getFullYear(),
   month: new Date().getMonth(),
   weekStart: _calWeekMondayOf(new Date()),
@@ -14425,7 +14445,7 @@ function renderTmplOpsList(){
       '<div class="case-ops-row-top">' +
         '<select class="ops-select" onchange="updateTmplOp(' + idx + ', this.value)">' + options + '</select>' +
         '<button type="button" class="case-ops-row-del" onclick="removeTmplOp(' + idx + ')" title="Retirer" aria-label="Retirer">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>' +
         '</button>' +
       '</div>' +
       '<div class="case-ops-machines">' +

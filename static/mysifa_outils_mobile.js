@@ -58,7 +58,10 @@
     '#msf-outils-poignee::before{content:"";position:absolute;inset:-6px 0 -6px -10px}' +
     '#msf-outils-poignee.glisse{color:var(--accent);border-color:var(--accent)}' +
     '#msf-outils-haut{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;' +
-    'padding:0;margin:0 0 0 auto;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+    'padding:0;margin:0 0 0 auto;cursor:pointer;-webkit-tap-highlight-color:transparent;' +
+    // Couleurs du thème, pas celles lues sur le bouton Accueil : lues avant la pose du
+    // thème clair, elles restaient sombres.
+    'background:var(--card);border:1px solid var(--border);color:var(--text2)}' +
     '#msf-outils-haut + .mobile-home-btn{margin-left:0}' +
     '#msf-outils-haut[hidden]{display:none}' +
     '#msf-outils-pastille,#msf-outils-haut-pastille{position:absolute;top:-5px;left:-5px;min-width:16px;height:16px;padding:0 4px;' +
@@ -237,9 +240,6 @@
       boutonHaut.style.width = cs.width;
       boutonHaut.style.height = cs.height;
       boutonHaut.style.borderRadius = cs.borderRadius;
-      boutonHaut.style.border = cs.border;
-      boutonHaut.style.background = cs.background;
-      boutonHaut.style.color = cs.color;
       home.parentNode.insertBefore(boutonHaut, home);
     }
     return true;
