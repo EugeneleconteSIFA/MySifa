@@ -2633,6 +2633,33 @@ body.stock-embed .app-layout { grid-template-columns: 1fr !important; }
 body.stock-embed .main-area { width:100% !important; }
 body.stock-embed { background: var(--bg, transparent) !important; }
 
+/* ── Téléphone : fenêtres et fiches de MyStock ── */
+@media(max-width:900px){
+  /* Bouton au libellé long (« Voir zone En attente - sortie de prod ») : à la ligne, pas coupé. */
+  .modal-actions{flex-wrap:wrap}
+  .modal-actions .btn{white-space:normal;height:auto;min-width:0;flex:1 1 auto;text-align:center}
+  /* Validation toujours à portée, hauteur de l'écran réellement visible. */
+  .mp-modal{max-height:calc(100dvh - 36px)}
+  .mp-modal .mp-modal-actions{position:sticky;bottom:-20px;z-index:3;background:var(--card);
+    margin-bottom:-20px;padding:10px 0 max(16px,env(safe-area-inset-bottom,0px))}
+  .mp-modal .mp-search{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;text-align:left;width:100%}
+  /* Onglets d'une fiche matière à la ligne : le dernier sortait de l'écran sans le dire. */
+  .mp-tabs{flex-wrap:wrap;overflow:visible}
+  /* Saisie d'un code-barres : le champ sur sa ligne, assez large pour lire ce qu'on tape. */
+  .recep-manual-wrap{flex-wrap:wrap}
+  .recep-manual-wrap .recep-manual-inp,.recep-add-row .recep-manual-inp{flex:1 1 100%;min-width:0}
+  .recep-manual-wrap .btn-recep,.recep-add-row .btn-recep{flex:1 1 0;justify-content:center}
+  /* Carte matière en liste : le stock ne passe plus sur le nom. */
+  .mp-card .mp-card-top{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px}
+  .mp-card .mp-card-badges{flex:1 1 100%;width:auto;flex-direction:row;flex-wrap:wrap}
+  .mp-card .mp-card-ref{flex:1 1 0;min-width:0;width:auto;max-width:none;white-space:normal;overflow-wrap:anywhere}
+  .mp-card .mp-card-top-end{flex:0 0 auto}
+  /* Valeurs à associer : la valeur et son compte, puis les deux actions dessous. */
+  .bes-map-row{flex-wrap:wrap;gap:6px 10px}
+  .bes-map-source{flex:1 1 40%;min-width:0;overflow-wrap:anywhere}
+  .bes-map-row .bes-btn-associate,.bes-map-row .bes-btn-creer{flex:1 1 40%;min-height:38px;white-space:normal}
+  .bes-map-row:has(.bes-btn-associate) .bes-map-count{white-space:nowrap}
+}
 </style>
 </head>
 <body>
@@ -2647,7 +2674,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=unite3"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite4"></script>
 <script src="/static/mysifa_scanner.js?v=1"></script>
 <script src="/static/mysifa_donnees_prod.js?v=18"></script>
 <script src="/static/mysifa_destockage.js?v=11"></script>
@@ -2940,6 +2967,7 @@ function configureStockModals() {
     getStockEmplacements: allPageEmplacementChoices,
     stockAtEmpl: fetchPfStockAtEmpl,
     emplacements: () => _emplListFromDB,
+    emplCustom: loadPageEmplCustom,
     uniteVenteDefaut: STOCK_UNITE_VENTE_DEFAUT,
     emplAuSol: STOCK_EMPL_AU_SOL, emplAuSolLabel: STOCK_EMPL_AU_SOL_LABEL,
     emplSortieProd: STOCK_EMPL_SORTIE_PROD,
@@ -21699,7 +21727,9 @@ function renderReceptionMiniModal() {
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   // Focus l'input codebarre pour saisie immédiate
-  setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50);
+  // Pas de focus d'office au téléphone : il sortait le clavier et faisait défiler la fenêtre
+  // jusqu'au champ, titre et catégorie hors de vue.
+  if (innerWidth > 900) setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50);
 }
 
 // Wrapper : quand on est en mode modal, on re-render la modal après chaque renderContent
