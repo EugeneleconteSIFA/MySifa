@@ -172,6 +172,16 @@ EXPE_PILOTAGE_CSS = r"""
     padding-top:9px;border-top:1px solid var(--border)}
   .expe-pil-tuiles{gap:16px}
 }
+/* Téléphone : hauteur de l'écran réellement visible, validation toujours à portée. */
+@media (max-width:900px){
+  .expe-pil-modal{max-height:calc(100dvh - 32px)}
+  .expe-pil-modal-head{padding:14px}
+  .expe-pil-modal-corps{padding:14px}
+  .expe-pil-modal-x{width:40px;height:40px}
+  .expe-pil-modal-grid{grid-template-columns:minmax(0,1fr)}
+  .expe-pil-modal-foot{position:sticky;bottom:0;z-index:4;background:var(--card);
+    padding:10px 14px max(12px,env(safe-area-inset-bottom,0px))}
+}
 """
 
 

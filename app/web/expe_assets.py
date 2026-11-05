@@ -3588,6 +3588,58 @@ EXPE_DEVIS_CSS = r"""
   background:color-mix(in srgb,var(--accent-bg) 100%,var(--card))}
 .expe-devis-comp td:last-child .btn-ghost{padding:4px 7px}
 .expe-devis-comp td:last-child>*{margin-left:3px}
+/* Téléphone : le comparatif devient une liste de fiches. En tableau, sept colonnes dans
+   360 px coupaient le statut (« Envc ») et cachaient prix et délai sous les colonnes figées. */
+@media(max-width:900px){
+  .expe-devis-modal{padding:14px 12px}
+  .expe-devis-comp-wrap{overflow:visible!important;border:0!important;background:none!important}
+  .expe-devis-comp,.expe-devis-comp tbody{display:block;width:100%;min-width:0!important}
+  .expe-devis-comp thead{display:none}
+  .expe-devis-comp tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;margin-bottom:8px;
+    background:var(--card);border:1px solid var(--border);border-radius:10px}
+  .expe-devis-comp td,.expe-devis-comp td:first-child,.expe-devis-comp td:last-child,
+  .expe-devis-comp tr:hover td,.expe-devis-comp tr:hover td:first-child,.expe-devis-comp tr:hover td:last-child{
+    display:block;position:static;width:auto;min-width:0;max-width:none;padding:0!important;border:0!important;
+    white-space:normal;text-align:left;background:none!important;overflow-wrap:anywhere}
+  .expe-devis-comp td:first-child::after,.expe-devis-comp td:last-child::before{content:none}
+  .expe-devis-comp td:first-child{font-size:14px}
+  .expe-devis-comp td[colspan]{grid-column:1/-1}
+  .expe-devis-comp td:nth-child(2){text-align:right;font-size:12px}
+  .expe-devis-comp td:nth-child(3),.expe-devis-comp td:nth-child(6),.expe-devis-comp td:nth-child(7){grid-column:1/-1}
+  .expe-devis-comp td:empty{display:none}
+  .expe-devis-comp td:nth-child(4)::before,.expe-devis-comp td:nth-child(5)::before{display:block;margin-bottom:2px;
+    font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .expe-devis-comp td:nth-child(4)::before{content:'Prix HT'}
+  .expe-devis-comp td:nth-child(5)::before{content:'Délai'}
+  .expe-devis-comp td:last-child{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:10px!important;
+    border-top:1px solid var(--border)!important}
+  .expe-devis-comp td:last-child>*{margin-left:0}
+  .expe-devis-comp td:last-child .btn-ghost{min-width:40px;min-height:40px;padding:6px 10px;background:var(--bg)}
+  /* Fenêtres : hauteur de l'écran réellement visible, et validation toujours à portée
+     (vh compte aussi la barre de Safari, qui cachait le bas). */
+  .expe-devis-modal,.expe-trp-modal{max-height:calc(100dvh - 32px)}
+  .expe-devis-modal>.expe-devis-modal-foot{position:sticky;bottom:-14px;z-index:4;flex-wrap:wrap;background:var(--card);
+    margin:14px 0 -14px;padding:10px 0 max(14px,env(safe-area-inset-bottom,0px))}
+  .expe-trp-modal>.expe-trp-modal-actions{position:sticky;bottom:-16px;z-index:4;flex-wrap:wrap;background:var(--card);
+    margin:14px 0 -16px;padding:10px 0 max(16px,env(safe-area-inset-bottom,0px))}
+  /* Envoi : le nom puis l'adresse, l'un sous l'autre. Côte à côte, l'adresse sortait à droite. */
+  .expe-devis-envoi-list{overflow-x:hidden}
+  .expe-devis-envoi-list .expe-devis-envoi-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:1px 10px}
+  .expe-devis-envoi-list .expe-devis-envoi-row>input{grid-row:span 2}
+  .expe-devis-envoi-list .expe-devis-envoi-row>span{grid-column:2;min-width:0;overflow-wrap:anywhere}
+  .expe-devis-envoi-row[style*="accent-bg"]{padding-left:10px;padding-right:10px}
+  /* Sous-onglets à la ligne : en bande défilante, les derniers n'étaient pas devinables. */
+  .expe-subnav{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;overflow:visible!important}
+  .expe-subnav .nav-tab{justify-content:center;min-width:0;white-space:normal;text-align:center}
+  /* Calcul de poids : les cinq colonnes tiennent, le poids de la ligne reste visible. */
+  .expe-poids-table{table-layout:fixed}
+  .expe-poids-table th{white-space:normal;font-size:9.5px!important;letter-spacing:0;padding:4px 2px!important;overflow-wrap:anywhere}
+  .expe-poids-table th:first-child{width:20px}
+  .expe-poids-table td{padding:3px 2px!important}
+  .expe-poids-table input{padding:8px 5px!important;min-width:0}
+  .expe-pal-statut{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+    color:var(--text);font-size:14px;font-family:inherit}
+}
 .expe-devis-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px}
 .expe-devis-close{padding:6px 8px}
 .expe-devis-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
@@ -4898,7 +4950,7 @@ function renderExpePoids(){
       h('div',null,resetBtn,addBtn,delBtn||null)
     ),
     h('div',{style:{overflowX:'auto',padding:'0.25rem 0.75rem 0.75rem'}},
-      h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}},thead,tbody)
+      h('table',{className:'expe-poids-table',style:{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}},thead,tbody)
     ),
     (()=>{
       etiqTotalEl=h('strong',null,'—');
@@ -6620,7 +6672,7 @@ function renderExpePalettesEurope(){
     {key:'contest', label:'Contestations', icon:'alert-circle'},
     {key:'recap', label:'Récap clients', icon:'users'},
   ];
-  const subNav = h('div',{className:'nav-tabs',style:{marginBottom:'16px'}},
+  const subNav = h('div',{className:'nav-tabs expe-subnav',style:{marginBottom:'16px'}},
     ...subTabs.map(t=>h('button',{
       type:'button',
       className:'nav-tab'+(subTab===t.key?' active':''),
@@ -6737,6 +6789,7 @@ function renderExpePalettesEurope(){
   const cData = S.expePalContestations || {contestations:[], totaux:{}};
   const cRows = (cData.contestations||[]);
   const contestFiltre = h('select',{
+    className:'expe-pal-statut',
     value:S.expePalContestStatut||'ouverte',
     onChange:e=>{ S.expePalContestStatut=e.target.value; void loadExpePalContestations(); }
   });
@@ -6784,6 +6837,7 @@ function renderExpePalettesEurope(){
 
   // Filtres
   const statutSel = h('select',{
+    className:'expe-pal-statut',
     value:S.expePalettesEuropeStatutFilter||'',
     onChange:e=>{
       S.expePalettesEuropeStatutFilter = e.target.value;

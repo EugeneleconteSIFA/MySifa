@@ -40,6 +40,27 @@ EXPE_CARBURANT_CSS = r"""
   color:var(--muted);text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
 .expe-carb-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
 .expe-carb-table tr:last-child td{border-bottom:none}
+/* Téléphone : une fiche par transporteur. En tableau, Modifier et Historique restaient
+   cachés au bout de 930 px de défilement. */
+@media(max-width:900px){
+  .expe-carb-wrap{overflow:visible}
+  .expe-carb-table,.expe-carb-table tbody{display:block}
+  .expe-carb-table thead{display:none}
+  .expe-carb-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px 2px;
+    border-bottom:1px solid var(--border)}
+  .expe-carb-table td{display:block;padding:0;border:0;min-width:0;white-space:normal;overflow-wrap:anywhere}
+  .expe-carb-table td:nth-child(2){text-align:right}
+  .expe-carb-table td:nth-child(3)::before,.expe-carb-table td:nth-child(4)::before{display:block;margin-bottom:2px;
+    font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  .expe-carb-table td:nth-child(3)::before{content:'Mise à jour'}
+  .expe-carb-table td:nth-child(4)::before{content:'Dernière demande'}
+  .expe-carb-table td:nth-child(5),.expe-carb-table td:nth-child(6),.expe-carb-table td[colspan]{grid-column:1/-1}
+  .expe-carb-table td:nth-child(6){text-align:left!important;white-space:normal!important}
+  .expe-carb-table td:nth-child(6) .expe-carb-btn2{min-height:38px}
+  .expe-carb-table td[colspan]::before{content:none}
+  .expe-carb-table td:has(.expe-carb-edit){grid-column:1/-1;text-align:left}
+  .expe-carb-edit{flex-wrap:wrap}
+}
 .expe-carb-row--attente td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 .expe-carb-nom{font-weight:700;color:var(--text)}
 .expe-carb-sub{font-size:11px;color:var(--muted);margin-top:1px}
