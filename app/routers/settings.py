@@ -7449,6 +7449,77 @@ def maintenance_alerts_active(request: Request):
     return resp
 
 
+@router.get("/api/maintenance/alerts/a-la-demande")
+def maintenance_alerts_a_la_demande(request: Request, machine: str = ""):
+    """Tests qualité lançables à la demande (saisie prod, onglet Qualité).
+
+    Les alertes actives qui visent la machine et comportent au moins une
+    mesure (question « valeur ») : l'opérateur les remplit au moment qu'il
+    choisit, sans attendre leur déclenchement. La validation passe par
+    /ack comme une alerte poussée : elle entre dans l'historique et les
+    inspections, et remet à zéro le compteur d'une alerte périodique.
+    Mêmes droits que /alerts/active (fabrication et superadmin)."""
+    from database import get_db
+    from app.services.alertes_questionnaire import items_de_params
+    user = get_current_user(request)
+    user_role = user.get("role") or ""
+    cible = (machine or "").strip()
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+    items = []
+    with get_db() as conn:
+        if cible:
+            if not conn.execute("SELECT 1 FROM machines WHERE nom=? LIMIT 1", (cible,)).fetchone():
+                raise HTTPException(400, "Machine inconnue.")
+        else:
+            cible = _machine_name_from_user(conn, user) or ""
+        if not cible:
+            return {"items": [], "machine": ""}
+        rows = conn.execute(
+            "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts "
+            "WHERE active=1 ORDER BY nom COLLATE NOCASE"
+        ).fetchall()
+        no_dossier = ""
+        dernier = conn.execute(
+            """SELECT no_dossier FROM production_data
+               WHERE machine=? AND date_operation >= ?
+                 AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+               ORDER BY date_operation DESC LIMIT 1""",
+            (cible, now_paris.strftime("%Y-%m-%dT00:00:00")),
+        ).fetchone()
+        if dernier and dernier["no_dossier"]:
+            no_dossier = str(dernier["no_dossier"]).strip()
+        for r in rows:
+            try:
+                params = _json_alerts.loads(r["params"] or "{}")
+            except (ValueError, TypeError):
+                params = {}
+            if not isinstance(params, dict):
+                continue
+            target = params.get("target") or {}
+            if not operator_should_see_alert(user_role, cible, target):
+                continue
+            machines = target.get("machines")
+            if not isinstance(machines, list) or not machines:
+                legacy = target.get("machine")
+                machines = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+            if "*" not in machines and cible not in machines:
+                continue
+            questions = items_de_params(params)
+            nb_mesures = sum(1 for it in questions if it.get("type") == "value")
+            if not nb_mesures:
+                continue
+            items.append({
+                "id": int(r["id"]),
+                "nom": r["nom"],
+                "params": params,
+                "linked_maint_code": r["linked_maint_code"] or "",
+                "no_dossier": no_dossier,
+                "nb_questions": len(questions),
+                "nb_mesures": nb_mesures,
+            })
+    return {"items": items, "machine": cible}
+
+
 @router.get("/api/maintenance/alert-acks")
 def maintenance_alert_acks_list(request: Request):
     """Historique des acquittements d'alertes maintenance pour l'app /maintenance.
@@ -7911,8 +7982,18 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
             except (ValueError, TypeError, AttributeError):
                 pass
         questionnaire_json = photo(_items)
-        # Machine de l'opérateur (ou vide pour superadmin sans machine)
-        machine = _machine_name_from_user(conn, user) or ""
+        # Machine de l'opérateur (ou vide pour superadmin sans machine).
+        # Un test lancé à la demande depuis la saisie prod transmet la
+        # machine affichée (celle choisie par l'admin) : elle prime si elle
+        # existe.
+        machine = ""
+        _machine_demandee = (body.get("machine") or "").strip() if isinstance(body.get("machine"), str) else ""
+        if _machine_demandee and conn.execute(
+            "SELECT 1 FROM machines WHERE nom=? LIMIT 1", (_machine_demandee,)
+        ).fetchone():
+            machine = _machine_demandee
+        if not machine:
+            machine = _machine_name_from_user(conn, user) or ""
         # v163+ : fallback serveur robuste — si le client n'a pas transmis de
         # no_dossier (super admin sans opérateur lié, opérateur qui n'a pas
         # /prod ouvert, etc.), on cherche le dernier dossier touché sur cette

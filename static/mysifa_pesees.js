@@ -603,6 +603,9 @@
     ouvrir: ouvrir, fermer: fermer, vue: vue, allerVue: allerVue, retablir: retablir, dossier: dossier,
     adresse: adresse, lireAdresse: lireAdresse,
     etat: etat,
+    // Relit les mesures avec les filtres en cours (un test qualité vient
+    // d'être validé depuis la saisie prod).
+    recharger: function () { if (P.filtres) return charger(); },
     ouverte: function () { return !!document.getElementById("pf-overlay"); },
     surAdresse: function (fn) { if (typeof fn === "function") P.abonnes.push(fn); },
     CLES: ["pesees", "pesees_dossier", "pesees_periode", "pesees_champs"],

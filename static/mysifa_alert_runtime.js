@@ -80,7 +80,10 @@
       '.ta-cl-ecart{font-size:11px;font-weight:600;color:var(--muted);min-width:52px;text-align:right;font-variant-numeric:tabular-nums}',
       /* Bouton "Quitter le test" du simulateur — fixed indépendant */
       '.ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}',
-      '.ta-sim-exit:hover{background:rgba(0,0,0,.9)}'
+      '.ta-sim-exit:hover{background:rgba(0,0,0,.9)}',
+      /* Test lancé à la demande : « Fermer » sans rien enregistrer */
+      '.ta-sim-btn.ta-fermer-demande{flex:0 0 auto;padding:9px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border)}',
+      '.ta-sim-btn.ta-fermer-demande.ta-confirmer{background:var(--danger);color:white;border-color:var(--danger)}'
     ].join('\n');
     document.head.appendChild(style);
   })();
@@ -600,7 +603,10 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ responses, comment, no_dossier }),
+        // Test lancé à la demande : la machine affichée par la saisie prod
+        // (celle choisie par l'admin) — le serveur la vérifie.
+        body: JSON.stringify({ responses, comment, no_dossier,
+                               machine: (alert && alert.machine) || undefined }),
       });
       if (!r.ok) {
         let msg = 'Erreur lors de la validation';
@@ -960,6 +966,8 @@
         // "Saisie enregistrée" de fabrication_page.py via showToast).
         _toast('Merci pour votre réponse au questionnaire.');
         closeWithSuccess();
+        // La page peut relire ses mesures (onglet Qualité de la saisie prod).
+        try { window.dispatchEvent(new CustomEvent('mysifa-alerte-validee', { detail: { id: alert.id } })); } catch (e) {}
       }
     };
     wrap.querySelector('.ta-validate').addEventListener('click', onValidate);
@@ -1094,6 +1102,55 @@
     return results;
   }
 
+  async function _ouvrirDemande(rawAlert, opts) {
+    if (!rawAlert || rawAlert.id == null) return null;
+    if (!_started) {
+      try { await _loadSettings(); } catch (e) {}
+    }
+    const deja = _displayed.get(rawAlert.id);
+    if (deja && deja.isConnected) {
+      const el = deja.querySelector('.ta-sim-alert');
+      if (el && el.classList.contains('ta-minimized')) _restoreAlert(el);
+      return deja;
+    }
+    const alert = _normalizeAlert(rawAlert);
+    alert.block_production = false;
+    alert.dismiss_button = Object.assign({}, alert.dismiss_button, { enabled: false });
+    alert.no_dossier = typeof rawAlert.no_dossier === 'string' ? rawAlert.no_dossier : '';
+    alert.machine = typeof opts.machine === 'string' ? opts.machine : '';
+    const wrap = _renderAlert(alert);
+    wrap.classList.remove('ta-blocking');
+    wrap.setAttribute('data-demande', '1');
+    _displayed.set(alert.id, wrap);
+    _displayedBlocking.add(alert.id);  // le poll ne la retire pas
+    const actions = wrap.querySelector('.ta-sim-actions');
+    if (actions) {
+      const fermer = document.createElement('button');
+      fermer.type = 'button';
+      fermer.className = 'ta-sim-btn ta-fermer-demande';
+      fermer.textContent = 'Fermer';
+      let armeJusqua = 0;
+      fermer.addEventListener('click', () => {
+        if (_hasUserInput(wrap) && Date.now() > armeJusqua) {
+          armeJusqua = Date.now() + 4000;
+          fermer.textContent = 'Fermer sans enregistrer';
+          fermer.classList.add('ta-confirmer');
+          setTimeout(() => {
+            if (!fermer.isConnected || Date.now() < armeJusqua) return;
+            fermer.textContent = 'Fermer';
+            fermer.classList.remove('ta-confirmer');
+          }, 4100);
+          return;
+        }
+        try { wrap.remove(); } catch (e) {}
+        _displayed.delete(alert.id);
+        _displayedBlocking.delete(alert.id);
+      });
+      actions.appendChild(fermer);
+    }
+    return wrap;
+  }
+
   // Aperçu dans le formulaire d'administration : la carte réelle, posée dans
   // `container`, interactive (Valider se débloque comme chez l'opérateur)
   // mais sans aucun envoi.
@@ -1128,6 +1185,12 @@
     },
     refresh: function() { return _poll(); },
     showBlockingAlerts: function(items) { return _showBlockingAlerts(items); },
+    // Test qualité lancé à la demande (saisie prod, onglet Qualité) : la
+    // vraie carte, validée par /ack comme une alerte poussée. Jamais
+    // bloquante, le poll ne la retire pas, et « Fermer » la referme sans
+    // rien enregistrer (deuxième clic demandé si une réponse est saisie).
+    // opts.machine : machine affichée par la page, transmise à l'ack.
+    ouvrir: function(rawAlert, opts) { return _ouvrirDemande(rawAlert, opts || {}); },
     // v2.3.29 : à appeler côté client avant toute saisie non-productive
     // pour préserver les données que l'op a déjà saisies dans une alerte
     // (sinon l'auto-close backend écrit un ack vide "Fermée auto : XX").
