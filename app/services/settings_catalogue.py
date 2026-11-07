@@ -109,6 +109,43 @@ SYSTEME = {"cle": "systeme", "libelle": "Système", "onglets": [
 ]}
 
 
+# Volet « Paramètres » du portail (app/services/portail_volets.py) : deux
+# réglages par famille, dans l'ordre de l'accueil. Les libellés, les familles
+# et les droits viennent de ce catalogue : le volet ne peut plus diverger de
+# la page (il gardait l'ancien rangement jusqu'au 07/11/2026).
+VOLET_PORTAIL = [
+    ("systeme", ["promote", "audit"]),
+    ("equipe", ["users", "matrix"]),
+    ("atelier", ["machines", "operations"]),
+    ("matieres", ["emplacements", "bridge"]),
+    ("partenaires", ["clients", "fournisseurs"]),
+    ("qualite", ["coherence", "fsc"]),
+    ("communication", ["updates", "printers"]),
+]
+
+
+def onglet(tab):
+    """(famille, onglet) du catalogue, ou (None, None)."""
+    for fam in toutes_familles():
+        for o in fam["onglets"]:
+            if o["tab"] == tab:
+                return fam, o
+    return None, None
+
+
+def roles_onglet(tab):
+    """Rôles qui peuvent ouvrir cet onglet, d'après les mêmes règles que la
+    page (settings_sections_visibility). Calculé à l'appel : rien n'est
+    recopié."""
+    from config import ROLE_LABELS
+    from app.services.auth_service import settings_sections_visibility
+    _fam, o = onglet(tab)
+    if not o:
+        return ()
+    return tuple(r for r in ROLE_LABELS
+                 if settings_sections_visibility({"role": r}).get(o["section"]))
+
+
 def toutes_familles():
     return FAMILLES + [SYSTEME]
 

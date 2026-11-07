@@ -51,6 +51,10 @@ _ERP_LARGE = _ADMIN_LARGE + ("expedition",)
 from config import ROLES_MYPRINT as _ROLES_MYPRINT  # noqa: E402
 _ROLES_ETIQUETTES = tuple(sorted(_ROLES_MYPRINT))
 _ROLES_FORMULAIRES = _ADMIN_LARGE + ("commercial",)
+# Volet Paramètres : ouvert à tout rôle qui a au moins une section des
+# Paramètres (ROLES_SETTINGS de config.py), comme la page elle-même.
+from config import ROLES_SETTINGS as _ROLES_SETTINGS  # noqa: E402
+_ROLES_PARAMETRES = tuple(sorted(_ROLES_SETTINGS))
 
 
 def _entree(cle, label, url, icone, resume="", roles=None, compteur=None):
@@ -91,28 +95,12 @@ VOLETS_RAIL = [
         "titre": "Paramètres",
         "resume": "Administration de l'instance",
         "icone": "sliders",
-        "roles": _ADMIN_LARGE,
-        "groupes": [
-            _groupe("Utilisateurs", [
-                _entree("set_users", "Comptes & rôles", "/settings#users", "users"),
-                _entree("set_matrix", "Matrice d'accès", "/settings#matrix", "shield-check", roles=_ADMIN),
-                _entree("set_defaults", "Accès par défaut", "/settings#defaults", "shield-check", roles=_ADMIN),
-            ]),
-            _groupe("Référentiels atelier", [
-                _entree("set_machines", "Machines", "/settings#machines", "tool"),
-                _entree("set_ops", "Codes opérations", "/settings#operations", "grid"),
-                _entree("set_empl", "Emplacements", "/settings#emplacements", "package"),
-            ]),
-            _groupe("Contacts", [
-                _entree("set_clients", "Clients", "/settings#clients", "users"),
-                _entree("set_fourn", "Fournisseurs", "/settings#fournisseurs", "truck"),
-            ]),
-            _groupe("Déploiement & audit", [
-                _entree("set_updates", "Annonces de mise à jour", "/settings#updates", "alert-circle", roles=_ADMIN),
-                _entree("set_promote", "Promouvoir & santé du dépôt", "/settings#promote", "cloud-upload", roles=_ADMIN),
-                _entree("set_audit", "Journal d'audit", "/settings#audit", "file-text", roles=_ADMIN),
-            ]),
-        ],
+        "roles": _ROLES_PARAMETRES,
+        # Groupes générés depuis le catalogue des Paramètres
+        # (app/services/settings_catalogue.py, VOLET_PORTAIL) : mêmes familles,
+        # mêmes libellés et mêmes droits que la page.
+        "groupes": [],
+        "generer": "parametres",
         "pied": {"label": "Ouvrir les paramètres", "url": "/settings"},
     },
     {
@@ -237,7 +225,7 @@ VOLETS_TUILES = {
                 _entree("tools_traduction", "Traducteur", "/tools?outil=traduction", "globe"),
             ]),
             _groupe("Configuration", [
-                _entree("print_imprimantes", "Imprimantes", "/settings#printers", "sliders",
+                _entree("print_imprimantes", "Imprimantes", "/settings?onglet=printers", "printer",
                         roles=_ADMIN_LARGE),
             ]),
         ],
@@ -301,6 +289,47 @@ VOLETS_TUILES = {
 }
 
 
+# ── Volet Paramètres, généré ─────────────────────────────────────────────────
+
+# Icône du portail (jeu SVG de app/web/html.py) pour chaque onglet du volet.
+_ICONES_PARAMETRES = {
+    "promote": "cloud-upload", "audit": "file-text", "users": "users",
+    "matrix": "shield-check", "machines": "tool", "operations": "grid",
+    "emplacements": "map-pin", "bridge": "link", "clients": "users",
+    "fournisseurs": "truck", "coherence": "check-circle", "fsc": "shield-check",
+    "updates": "send", "printers": "printer",
+}
+# Clés d'entrée déjà en usage (favoris et récents du portail les retiennent) :
+# conservées pour les onglets qui existaient dans l'ancien volet.
+_CLES_PARAMETRES = {
+    "users": "set_users", "matrix": "set_matrix", "machines": "set_machines",
+    "operations": "set_ops", "emplacements": "set_empl", "clients": "set_clients",
+    "fournisseurs": "set_fourn", "updates": "set_updates",
+    "promote": "set_promote", "audit": "set_audit",
+}
+
+
+def _groupes_parametres() -> list:
+    from app.services.settings_catalogue import VOLET_PORTAIL, onglet, roles_onglet
+    groupes = []
+    for _cle_famille, tabs in VOLET_PORTAIL:
+        entrees, titre = [], None
+        for tab in tabs:
+            fam, o = onglet(tab)
+            if not o:
+                continue
+            titre = fam["libelle"]
+            entrees.append(_entree(_CLES_PARAMETRES.get(tab, "set_" + tab), o["libelle"],
+                                   "/settings?onglet=" + tab, _ICONES_PARAMETRES.get(tab, "sliders"),
+                                   roles=roles_onglet(tab)))
+        if entrees:
+            groupes.append(_groupe(titre, entrees))
+    return groupes
+
+
+_GENERATEURS = {"parametres": _groupes_parametres}
+
+
 # ── Filtrage ─────────────────────────────────────────────────────────────────
 
 def _visible(roles: Optional[tuple], role: str) -> bool:
@@ -312,7 +341,10 @@ def _volet_filtre(volet: dict, role: str) -> Optional[dict]:
     if not _visible(volet.get("roles"), role):
         return None
     groupes = []
-    for g in volet.get("groupes", []):
+    source_groupes = volet.get("groupes", [])
+    if volet.get("generer") in _GENERATEURS:
+        source_groupes = _GENERATEURS[volet["generer"]]()
+    for g in source_groupes:
         entrees = [e for e in g["entrees"] if _visible(e.get("roles"), role)]
         if entrees:
             groupes.append({"titre": g["titre"],
@@ -321,7 +353,7 @@ def _volet_filtre(volet: dict, role: str) -> Optional[dict]:
     # Un volet sans entrée n'a d'intérêt que s'il est rempli ailleurs (ERP).
     if not groupes and volet.get("source") is None:
         return None
-    out = {k: v for k, v in volet.items() if k not in ("roles", "groupes")}
+    out = {k: v for k, v in volet.items() if k not in ("roles", "groupes", "generer")}
     out["groupes"] = groupes
     return out
 
