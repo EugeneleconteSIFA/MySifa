@@ -15,7 +15,7 @@ from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
 from app.services.settings_catalogue import (
-    onglets_visibles, rendre_barre_laterale, rendre_familles, rendre_systeme,
+    onglets_visibles, rendre_barre_laterale, rendre_familles,
 )
 
 router = APIRouter()
@@ -42,7 +42,6 @@ def settings_page(request: Request):
         content=SETTINGS_HTML
             .replace("__SETTINGS_SIDEBAR__", rendre_barre_laterale(visibility))
             .replace("__SETTINGS_FAMILLES__", rendre_familles(visibility))
-            .replace("__SETTINGS_SYSTEME__", rendre_systeme(visibility))
             .replace("__SETTINGS_CATALOGUE_JSON__", _json.dumps(onglets_visibles(visibility)).replace("</", "<\\/"))
             .replace("__V_LABEL__", f"v{APP_VERSION}")
             .replace("__SETTINGS_VISIBILITY_JSON__", _json.dumps(visibility))
@@ -69,7 +68,7 @@ body.light{--muted:#64748b;--accent-fg:#fff;--ok:#059669;--danger-fg:#fff;}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 .layout{display:flex;min-height:100vh}
-.sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto;scrollbar-width:none}
+.sidebar{width:272px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto;scrollbar-width:none}
 .sidebar::-webkit-scrollbar{width:0}
 .logo{font-size:15px;font-weight:800;margin-bottom:20px;padding:0 8px}.logo span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
@@ -481,8 +480,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
 /* ── Page Menu général ─────────────────────────────────────────── */
 /* ── Accueil des Paramètres (refonte nov. 2026) ─────────────────────────
    Catalogue : app/services/settings_catalogue.py. Trois étages : bandeau
-   « À traiter », « Ouverts récemment », familles en colonnes à hauteur libre ;
-   Système replié en bas. */
+   « À traiter », « Ouverts récemment », puis Système sur toute la largeur et
+   les familles en grille alignée. */
 .set-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .set-search{display:flex;align-items:center;gap:8px;flex:0 1 380px;min-width:240px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0 10px;color:var(--muted);transition:border-color .15s;cursor:text}
 .set-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
@@ -502,8 +501,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
 .set-recent .rb{display:flex;flex-direction:column;gap:2px;min-width:0}
 .set-recent .rl{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .set-recent .rd{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.set-cols{column-count:3;column-gap:14px}
-.set-box{break-inside:avoid;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;padding:6px}
+.set-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+.set-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:0}
+.set-box-large{grid-column:1/-1}
+.set-box-large .set-box-rows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:6px}
 .set-box-h{display:flex;justify-content:space-between;align-items:baseline;padding:8px 10px 6px;font-size:13px;font-weight:800;color:var(--text)}
 .set-box-n{font-size:11px;font-weight:600;color:var(--muted)}
 .set-row{align-items:center}
@@ -515,18 +516,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
 .set-badge + .mi-chev{margin-left:8px}
 .set-masque-recherche{display:none!important}
 .set-vide{color:var(--muted);font-size:13px;margin:6px 2px 14px}
-.set-sys{margin-top:4px;background:var(--card);border:1px dashed var(--border);border-radius:12px}
-.set-sys>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;color:var(--muted);font-size:12.5px}
-.set-sys>summary::-webkit-details-marker{display:none}
-.set-sys>summary:hover{color:var(--text)}
-.set-sys-ico{display:inline-flex}
-.set-sys-t{font-weight:800;color:var(--text)}
-.set-sys-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.set-sys-chev{transition:transform .15s;flex-shrink:0}
-.set-sys[open] .set-sys-chev{transform:rotate(180deg)}
-.set-sys-items{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:0 6px 8px}
-@media (max-width:1250px){.set-cols{column-count:2}.set-recents{grid-template-columns:repeat(2,minmax(0,1fr))}.set-sys-items{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:900px){.set-cols{column-count:1}.set-sys-items{grid-template-columns:1fr}.set-search{flex-basis:100%}}
+@media (max-width:1250px){.set-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.set-recents{grid-template-columns:repeat(2,minmax(0,1fr))}.set-box-large .set-box-rows{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){.set-cols{grid-template-columns:1fr}.set-box-large .set-box-rows{grid-template-columns:1fr}.set-search{flex-basis:100%}}
 .menu-hero{margin-bottom:22px}
 .menu-hero h1{font-size:22px;margin:0 0 6px}
 .menu-hero p{color:var(--muted);font-size:13px;margin:0}
@@ -966,7 +957,6 @@ window.__SETTINGS_CATALOGUE__ = __SETTINGS_CATALOGUE_JSON__;
 __SETTINGS_FAMILLES__
       </div>
       <p id="set-vide" class="set-vide" hidden></p>
-__SETTINGS_SYSTEME__
     </section>
 
     <section id="panel-users" class="hidden">
@@ -3581,12 +3571,6 @@ function settingsFiltrer(q) {
   document.querySelectorAll('#set-cols .set-box').forEach(b => {
     b.hidden = !b.querySelector('.set-row:not([hidden])');
   });
-  const sys = document.getElementById('set-sys');
-  if (sys) {
-    const vis = !!sys.querySelector('.set-row:not([hidden])');
-    sys.hidden = !vis;
-    if (t && vis) sys.open = true;
-  }
   ['set-atraiter', 'set-recents-zone'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('set-masque-recherche', !!t);

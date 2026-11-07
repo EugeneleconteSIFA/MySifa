@@ -46,7 +46,6 @@ _ICO = {
     "api": '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
     "perf": '<path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>',
     "diagnostic": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>',
-    "_systeme": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 }
 
 
@@ -159,7 +158,7 @@ def _bouton_nav(o):
 def rendre_barre_laterale(visibility: dict) -> str:
     par_cle = {f["cle"]: f for f in FAMILLES}
     morceaux = []
-    for titre, cles in GROUPES + [("Système", [None])]:
+    for titre, cles in [("Système", [None])] + GROUPES:
         blocs = []
         for cle in cles:
             fam = par_cle.get(cle) if cle else SYSTEME
@@ -187,24 +186,24 @@ def _ligne_menu(o, famille):
             % (cible, _e(cherche), _svg(o["tab"], 16), _e(o["libelle"]), _e(o["desc"]), _e(o["tab"]), _CHEV_DROITE))
 
 
+def _boite(fam, vis, classe=""):
+    return ('<div class="set-box%s" data-famille="%s"><div class="set-box-h"><span>%s</span>'
+            '<span class="set-box-n">%d</span></div><div class="set-box-rows">%s</div></div>'
+            % (classe, _e(fam["cle"]), _e(fam["libelle"]), len(vis),
+               "".join(_ligne_menu(o, fam["libelle"]) for o in vis)))
+
+
 def rendre_familles(visibility: dict) -> str:
+    """Système en tête, sur toute la largeur ; puis les familles, des plus
+    fournies aux moins fournies (ordre du catalogue à égalité), pour que les
+    boîtes d'une même rangée aient des hauteurs proches."""
     out = []
-    for fam in FAMILLES:
-        vis = _visibles(fam, visibility)
-        if not vis:
-            continue
-        out.append('<div class="set-box" data-famille="%s"><div class="set-box-h"><span>%s</span><span class="set-box-n">%d</span></div>%s</div>'
-                   % (_e(fam["cle"]), _e(fam["libelle"]), len(vis), "".join(_ligne_menu(o, fam["libelle"]) for o in vis)))
+    vis_sys = _visibles(SYSTEME, visibility)
+    if vis_sys:
+        out.append(_boite(SYSTEME, vis_sys, " set-box-large"))
+    familles = [(fam, _visibles(fam, visibility)) for fam in FAMILLES]
+    familles = [(f, v) for f, v in familles if v]
+    familles.sort(key=lambda fv: -len(fv[1]))
+    out.extend(_boite(f, v) for f, v in familles)
     return "\n".join(out)
 
-
-def rendre_systeme(visibility: dict) -> str:
-    vis = _visibles(SYSTEME, visibility)
-    if not vis:
-        return ""
-    noms = " · ".join(o["libelle"] for o in vis)
-    return ('<details class="set-sys" id="set-sys"><summary><span class="set-sys-ico">%s</span>'
-            '<span class="set-sys-t">Système</span><span class="set-sys-l">%s</span>%s</summary>'
-            '<div class="set-sys-items">%s</div></details>'
-            % (_svg("_systeme", 16), _e(noms), _CHEV_BAS % ("set-sys-chev", 14, 14),
-               "".join(_ligne_menu(o, SYSTEME["libelle"]) for o in vis)))
