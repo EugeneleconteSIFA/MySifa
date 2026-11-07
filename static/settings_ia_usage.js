@@ -298,12 +298,16 @@
     S.f = {};
     FILTRES.forEach(function (k) { var v = q.get('ia_' + k); if (v != null && v !== '') S.f[k] = v.slice(0, 120); });
     S.appliPose = q.has('ia_application');
-    if (S.appliPose) S.f.application = q.get('ia_application') || '';
+    // « __vide__ » : appels sans application (une valeur vide ne s'écrit pas dans l'adresse).
+    if (S.appliPose) { var ap = q.get('ia_application') || ''; S.f.application = ap === '__vide__' ? '' : ap; }
     if (S.f.statut && ['ok', 'err'].indexOf(S.f.statut) === -1) delete S.f.statut;
     var a = q.get('ia_appel');
     return /^\d+$/.test(a || '') ? a : null;
   }
   function ecrireUrl() {
+    // Dans la page Paramètres, l'adresse est tenue par static/settings_url.js :
+    // la fiche d'un appel s'y empile (Retour la referme), les filtres remplacent.
+    if (typeof window.settingsPlanifierSync === 'function') { window.settingsPlanifierSync(); return; }
     try {
       var q = new URLSearchParams(location.search);
       ['jours', 'appel'].concat(FILTRES).forEach(function (k) { q.delete('ia_' + k); });
@@ -381,6 +385,28 @@
         if (S.data) render();
       });
   }
+
+  window.IaUsage = {
+    adresse: {
+      etat: function () {
+        var p = {};
+        if (S.jours !== 30) p.ia_jours = String(S.jours);
+        FILTRES.forEach(function (k) {
+          if (k === 'application') { if (S.appliPose) p.ia_application = S.f.application || '__vide__'; }
+          else if (S.f[k]) p['ia_' + k] = S.f[k];
+        });
+        var ouvert = null;
+        if (S.fiche && S.fiche.id) { p.ia_appel = String(S.fiche.id); ouvert = 'appel'; }
+        return { params: p, ouvert: ouvert };
+      },
+      aller: function () {
+        var a = lireUrl();
+        if (S.fiche && String(S.fiche.id) !== String(a)) { S.fiche = null; renderFiche(); }
+        load();
+        if (a && !S.fiche) ouvrirFiche(a);
+      }
+    }
+  };
 
   window.initIaUsagePanel = function () {
     brancher();

@@ -3166,9 +3166,11 @@ __SETTINGS_FAMILLES__
      pastille d'origine, bloc « fiche RVGI ». Tout est dans ce fichier,
      la page n'y accroche que trois appels. -->
 <script src="/static/mysifa_rvgi_tiers.js?v=__V_LABEL__"></script>
-<script src="/static/settings_ia_usage.js?v=2"></script>
+<script src="/static/mysifa_url.js?v=5"></script>
+<script src="/static/settings_url.js?v=1"></script>
+<script src="/static/settings_ia_usage.js?v=3"></script>
 <script src="/static/mysifa_bulles.js?v=1"></script>
-<script src="/static/settings_coherence.js?v=1"></script>
+<script src="/static/settings_coherence.js?v=2"></script>
 <script src="/static/settings_reunion_types.js?v=1"></script>
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
@@ -3178,6 +3180,7 @@ __SETTINGS_FAMILLES__
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_notifs_admin.js?v=2"></script>
 <script>
+try { settingsEnvelopper(); } catch (e) { /* static/settings_url.js absent */ }
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
 async function api(path, opt) {
@@ -3623,22 +3626,15 @@ function setTab(id, opts) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  if (!silent) {
-    // Persistance dans l'URL : hard refresh, partage de lien, back/forward
-    try {
-      const target = '#' + id;
-      if (location.hash !== target) {
-        // replaceState pour éviter d'ajouter chaque clic à l'historique
-        history.replaceState(null, '', target);
-      }
-    } catch(e){}
-  }
   ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'reuniontypes', 'audit', 'fsc', 'blocs', 'api', 'iausage', 'coherence', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
   syncSettingsPageHead(id);
   if (id === 'menu') settingsChargerAccueil(); else settingsNoterOuverture(id);
+  // Adresse : l'onglet est un endroit, il s'empile (Retour ramène à la Vue
+  // d'ensemble). static/settings_url.js ; rien avant settingsDemarrerUrl().
+  if (typeof settingsSyncUrl === 'function') settingsSyncUrl();
   // loadFournisseursGroupes() était appelé hors du if : il repartait à
   // chaque changement d'onglet, y compris sur des panneaux sans rapport.
   if (id === 'fournisseurs') { loadFournisseurs(); loadFournisseursGroupes(); }
@@ -3686,29 +3682,36 @@ document.querySelectorAll('.sub-tab-btn[data-subtab]').forEach(b => {
 
 // Onglet initial : lu depuis location.hash (hard refresh, deep-link)
 function _readHashTab(){
+  // ?onglet=… (adresse actuelle) ou #onglet (anciens liens, réécrits ensuite).
   try {
+    const o = new URLSearchParams(location.search).get('onglet');
+    if (o && VALID_TABS.includes(o)) return o;
     const h = (location.hash || '').replace(/^#/, '').trim();
     return VALID_TABS.includes(h) ? h : 'menu';
   } catch(e){ return 'menu'; }
 }
 // Différé pour attendre que toutes les 'let' globales du script (fournisseursAll, etc.)
 // soient effectivement déclarées — sinon TDZ ReferenceError.
-window.addEventListener('DOMContentLoaded', () => {
+let _settingsDemarre = false;
+function _settingsDemarrer() {
+  if (_settingsDemarre) return;
+  _settingsDemarre = true;
   try { setTab(_readHashTab(), { silent: true }); }
   catch(e){ try { syncSettingsPageHead('menu'); } catch(e2){} }
-});
+  if (typeof settingsDemarrerUrl === 'function') settingsDemarrerUrl();
+}
+window.addEventListener('DOMContentLoaded', _settingsDemarrer);
 // Fallback si DOMContentLoaded a déjà tiré (page cache/back-forward)
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  setTimeout(() => {
-    try { setTab(_readHashTab(), { silent: true }); }
-    catch(e){ try { syncSettingsPageHead('menu'); } catch(e2){} }
-  }, 0);
+  setTimeout(_settingsDemarrer, 0);
 }
 
-// Navigation clavier (back/forward) : synchroniser
+// Lien interne ancien « #onglet » cliqué dans la page : l'onglet s'ouvre, puis
+// l'adresse est réécrite au format ?onglet=. Retour/Avant passent par
+// MySifaUrl.surRetour (static/settings_url.js).
 window.addEventListener('hashchange', () => {
-  const id = _readHashTab();
-  setTab(id, { silent: true });
+  const h = (location.hash || '').replace(/^#/, '').trim();
+  if (VALID_TABS.includes(h)) setTab(h);
 });
 
 function setSidebarOpen(open){
@@ -5312,6 +5315,8 @@ function renderFournisseursTable() {
 
 // ─── Persistance URL ──────────────────────────────────────────────
 function _fourSyncURL(){
+  // Adresse tenue par static/settings_url.js (clés ffsc, fgrp… conservées).
+  if (typeof settingsPlanifierSync === 'function') { settingsPlanifierSync(); return; }
   try {
     const url = new URL(window.location.href);
     const p = url.searchParams;
@@ -5346,6 +5351,8 @@ function _fourReadURL(){
     if (fid) f2Id = fid;
     const fg = p.get('fgroupe');
     if (fg) f2Groupe = fg;
+    const fo = p.get('fonglet');
+    if (fid && fo && /^[a-z]+$/.test(fo)) f2Tab = fo;
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
     set('four-search', fourSearchQuery);
     set('four-filter-fsc', fourFilterFsc);
@@ -8171,6 +8178,7 @@ async function deleteUpdate(id) {
 
 </script>
 <script>
+try { settingsEnvelopper(); } catch (e) { /* static/settings_url.js absent */ }
 // ─── Formations & guides in-app (admin) ────────────────────────────
 let _fmtData = null;
 let _fmtSearch = '';
@@ -8755,6 +8763,7 @@ async function unlinkBridge(mp_id) {
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.
      NE PAS fusionner avec le <script src> ci-dessus (contenu ignore par le navigateur). -->
 <script>
+try { settingsEnvelopper(); } catch (e) { /* static/settings_url.js absent */ }
 
 // ---- Fonctions restaurees depuis e503c42~1 ----
 
