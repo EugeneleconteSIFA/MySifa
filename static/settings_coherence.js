@@ -236,10 +236,35 @@
       });
   }
 
+  // Adresse (static/settings_url.js) : famille et statut, lus à l'ouverture
+  // de l'onglet et au Retour du navigateur. La recherche reste hors adresse.
+  var STATUTS = ['ouvert', 'explique', 'resolu', 'tous'];
+  function lireUrl() {
+    var q = new URLSearchParams(location.search);
+    var st = q.get('statut');
+    S.statut = STATUTS.indexOf(st) !== -1 ? st : 'ouvert';
+    var fam = q.get('famille') || '';
+    S.famille = /^[a-z0-9_]{0,40}$/.test(fam) ? fam : '';
+    var sel = document.getElementById('coh-statut');
+    if (sel) sel.value = S.statut;
+  }
+  window.SettingsCoherence = {
+    adresse: {
+      etat: function () {
+        var p = {};
+        if (S.famille) p.famille = S.famille;
+        if (S.statut !== 'ouvert') p.statut = S.statut;
+        return { params: p };
+      },
+      aller: function () { lireUrl(); charger(); }
+    }
+  };
+
   window.initCoherencePanel = function () {
     var root = document.getElementById('coherence-root');
     if (!root) return;
     if (!document.getElementById('coh-liste')) squelette(root);
+    lireUrl();
     charger();
     req('/reglages').then(function (r) { S.reglages = r; rendreReglages(); }).catch(function () {});
   };
