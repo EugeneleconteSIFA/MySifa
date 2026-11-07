@@ -157,6 +157,11 @@ PARAMS = {
     ("/tools", "poste"): (RACINE / "static/mysifa_tools_etiquettes.js",
                           r"TRACA_(?:POSTES|OUTILS)\s*=\s*\[(.*?)\];",
                           r"id\s*:\s*'([a-z0-9_-]+)'"),
+    # Paramètres : le volet est généré depuis app/services/settings_catalogue.py,
+    # les onglets ouvrables sont VALID_TABS de la page.
+    ("/settings", "onglet"): (RACINE / "app/web/settings_page.py",
+                              r"const VALID_TABS\s*=\s*\[([^\]]*)\]",
+                              r"'([a-z0-9_-]+)'"),
     ("/tools", "outil"): (RACINE / "static/mysifa_tools.js",
                           r"TOOLS_OUTILS\s*=\s*\[(.*?)\];",
                           r"\{\s*id\s*:\s*'([a-z0-9_-]+)'"),
