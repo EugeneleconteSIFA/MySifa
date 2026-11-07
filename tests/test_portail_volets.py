@@ -104,11 +104,13 @@ ANCRES = {
     "/rh/coffre": (RACINE / "app/web/rh_coffre_page.py", r"RH_COFFRE_VALID_TABS\s*=\s*\[([^\]]*)\]"),
     "/planning-rh": (RACINE / "app/web/planning_rh_page.py", r"PRH_VALID_TABS\s*=\s*\[([^\]]*)\]"),
     "/qualite": (RACINE / "app/web/qualite_page.py", r"QUALITE_PERSIST_VIEWS\s*=\s*\[([^\]]*)\]"),
+    # Le menu des Paramètres est généré depuis app/services/settings_catalogue.py :
+    # la liste des onglets ouvrables est VALID_TABS.
+    "/settings": (RACINE / "app/web/settings_page.py", r"const VALID_TABS\s*=\s*\[([^\]]*)\]"),
 }
-# Deux pages ne déclarent pas de liste : leurs onglets sont les valeurs de
-# `data-tab` du menu (Paramètres) et les clés de VIEW_META (Maintenance).
+# Une page ne déclare pas de liste : ses onglets sont les clés de VIEW_META
+# (Maintenance).
 ANCRES_DIRECTES = {
-    "/settings": (RACINE / "app/web/settings_page.py", r'data-tab="([a-z_-]+)"'),
     "/maintenance": (RACINE / "app/web/maintenance_page.py",
                      r"^\s*'?([a-z-]+)'?\s*:\s*\{\s*title:"),
 }

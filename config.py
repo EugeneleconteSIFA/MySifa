@@ -819,6 +819,19 @@ ROLES_SETTINGS = (
     | ROLES_SETTINGS_FSC
 )
 
+# Accueil des Paramètres, ligne « Ouverts récemment » : 4 derniers onglets
+# ouverts par l'utilisateur (table settings_recents). Tant que son historique
+# en compte moins de 4, la ligne est complétée par cette liste, dans l'ordre,
+# en sautant les onglets qu'il ne peut pas ouvrir.
+SETTINGS_RECENTS_NOMBRE = 4
+SETTINGS_RECENTS_DEFAUT = {
+    ROLE_SUPERADMIN:               ["users", "machines", "updates", "promote"],
+    ROLE_DIRECTION:                ["users", "machines", "coherence", "fournisseurs"],
+    ROLE_ADMINISTRATION_TECHNIQUE: ["machines", "operations", "emplacements", "laizes"],
+    ROLE_COMPTABILITE:             ["fournisseurs", "clients", "printers", "fsc"],
+}
+SETTINGS_RECENTS_DEFAUT_AUTRES = ["users", "fournisseurs", "clients", "printers"]
+
 # ─── Gestionnaire de tâches : accès par défaut ────────────────────
 # Valeur de repli uniquement. L'accès réel est piloté par la matrice
 # database-driven (role_access_defaults / user_access_overrides) : c'est elle

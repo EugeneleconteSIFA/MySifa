@@ -403,6 +403,8 @@ SKIP_PREFIXES: tuple[str, ...] = (
     "/oauth/register",
     "/oauth/revoke",
     "/api/filters",
+    # Onglet des Paramètres ouvert : préférence d'affichage, pas un changement.
+    "/api/settings/recents",
     "/static/",
     "/uploads/",
 )
