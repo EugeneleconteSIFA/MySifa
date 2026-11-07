@@ -529,13 +529,15 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
 #panel-menu .set-cols{gap:10px}
 #panel-menu .set-box{padding:4px}
 #panel-menu .set-box-h{padding:6px 9px 3px;font-size:12.5px}
-#panel-menu .set-row{padding:4px 8px;gap:9px;align-items:center}
+#panel-menu .set-row{padding:calc(4px + var(--set-pad, 0px)) 8px;gap:9px;align-items:center}
 #panel-menu .set-row .mi-ico{width:24px;height:24px;border-radius:6px;margin-top:0}
 #panel-menu .set-row .mi-ico svg{width:14px;height:14px}
 #panel-menu .set-row .mi-lbl{font-size:12.5px}
 #panel-menu .set-row .mi-desc{display:none}
 #panel-menu .set-row .mi-chev{margin-top:0}
 #panel-menu.set-recherche-active .set-row .mi-desc{display:block}
+/* Assez de hauteur : les descriptions reviennent (settingsAjusterHauteur). */
+#panel-menu.set-desc .set-row .mi-desc{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (min-width:1900px){#panel-menu .set-box-large .set-box-rows{grid-template-columns:repeat(6,minmax(0,1fr))}}
 #panel-menu .set-row .mi-lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.settings-tab-menu .main{padding-top:16px;padding-bottom:16px}
@@ -3583,9 +3585,59 @@ async function settingsChargerATraiter() {
   });
 }
 
+// L'accueil occupe toute la hauteur jusqu'à la barre d'outils, sans défiler
+// (retour du 07/11/2026) : on mesure la place qui reste sous la dernière
+// rangée, on réaffiche les descriptions si elles tiennent, puis on répartit
+// le reste en espacement des lignes. Rien n'est figé : un écran plus petit
+// garde la version compacte.
+function _setLignesEmpilees() {
+  // Nombre de lignes de réglages empilées de haut en bas : par rangée de
+  // boîtes, la plus longue ; dans une boîte, une ligne par hauteur distincte.
+  const parRangee = {};
+  document.querySelectorAll('#set-cols .set-box:not([hidden])').forEach(b => {
+    const hauts = new Set(Array.from(b.querySelectorAll('.set-row:not([hidden])')).map(r => r.offsetTop));
+    const k = b.offsetTop;
+    parRangee[k] = Math.max(parRangee[k] || 0, hauts.size);
+  });
+  return Object.values(parRangee).reduce((a, n) => a + n, 0);
+}
+function settingsAjusterHauteur() {
+  const pm = document.getElementById('panel-menu');
+  if (!pm || pm.classList.contains('hidden') || pm.classList.contains('set-recherche-active')) return;
+  if (window.innerWidth < 900) { pm.classList.remove('set-desc'); pm.style.removeProperty('--set-pad'); return; }
+  pm.classList.remove('set-desc');
+  pm.style.setProperty('--set-pad', '0px');
+  const boites = document.querySelectorAll('#set-cols .set-box:not([hidden])');
+  if (!boites.length) return;
+  // Haut de la barre d'outils flottante : le plus haut de ses boutons
+  // (.mysifa-dock-fab, static/mysifa_dock.js), moins le bord de la barre.
+  let hautDock = window.innerHeight;
+  document.querySelectorAll('.mysifa-dock-fab').forEach(f => {
+    const r = f.getBoundingClientRect();
+    if (r.height && r.top > window.innerHeight / 2) hautDock = Math.min(hautDock, r.top - 10);
+  });
+  const limite = hautDock - 14;
+  const bas = () => Math.max.apply(null, Array.from(boites).map(b => b.getBoundingClientRect().bottom));
+  const lignes = Math.max(1, _setLignesEmpilees());
+  if (limite - bas() > lignes * 16) {
+    pm.classList.add('set-desc');
+    if (bas() > limite) pm.classList.remove('set-desc');
+  }
+  const reste = limite - bas();
+  if (reste > 0) pm.style.setProperty('--set-pad', Math.min(14, Math.floor(reste / lignes / 2)) + 'px');
+}
+let _setAjustPrevu = null;
+function settingsPlanifierAjustement() {
+  clearTimeout(_setAjustPrevu);
+  _setAjustPrevu = setTimeout(settingsAjusterHauteur, 60);
+}
+window.addEventListener('resize', settingsPlanifierAjustement);
+
 function settingsChargerAccueil() {
-  settingsChargerRecents();
-  settingsChargerATraiter();
+  settingsPlanifierAjustement();
+  Promise.all([settingsChargerRecents(), settingsChargerATraiter()]).then(settingsPlanifierAjustement, settingsPlanifierAjustement);
+  // La barre d'outils se monte après la page : on réajuste une fois en place.
+  setTimeout(settingsAjusterHauteur, 1200);
 }
 
 function settingsFiltrer(q) {
@@ -3605,6 +3657,7 @@ function settingsFiltrer(q) {
   });
   const pm = document.getElementById('panel-menu');
   if (pm) pm.classList.toggle('set-recherche-active', !!t);
+  if (pm && !t) settingsPlanifierAjustement();
   const lbl = document.getElementById('set-familles-lbl');
   if (lbl) lbl.textContent = t ? 'Résultats' : 'Toutes les familles';
   const vide = document.getElementById('set-vide');
