@@ -537,11 +537,29 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
 #panel-menu .set-row .mi-chev{margin-top:0}
 #panel-menu.set-recherche-active .set-row .mi-desc{display:block}
 /* Assez de hauteur : les descriptions reviennent (settingsAjusterHauteur). */
-#panel-menu.set-desc .set-row .mi-desc{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-menu.set-desc .set-row .mi-desc{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;line-height:1.3}
 @media (min-width:1900px){#panel-menu .set-box-large .set-box-rows{grid-template-columns:repeat(6,minmax(0,1fr))}}
 #panel-menu .set-row .mi-lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.settings-tab-menu .main{padding-top:16px;padding-bottom:16px}
 .set-masque-recherche{display:none!important}
+/* Fluidité des postes (static/settings_perf.js) */
+.pf-barre{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.pf-barre select{width:auto;min-width:180px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font:inherit;font-size:13px}
+.pf-total{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted)}
+.pf-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.pf-carte h3{font-size:15px;margin:0 0 10px;color:var(--text)}
+.pf-defile{overflow-x:auto}
+.pf-table{width:100%;border-collapse:collapse;font-size:13px}
+.pf-table th{text-align:left;color:var(--muted);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+.pf-table td{padding:8px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text)}
+.pf-table tr:last-child td{border-bottom:none}
+.pf-fps{font-weight:700}
+.pf-bas{color:var(--danger)}.pf-moy{color:var(--warn)}.pf-ok{color:var(--ok)}
+.pf-tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.pf-tag.pf-eco{border-color:var(--warn);color:var(--warn)}
+.pf-mono{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted)}
+.pf-vide{color:var(--muted);padding:12px 0;font-size:13px}
+.pf-note{color:var(--muted);font-size:12px;margin:10px 0 0}
 .set-vide{color:var(--muted);font-size:13px;margin:6px 2px 14px}
 @media (max-width:1250px){.set-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.set-recents{grid-template-columns:repeat(2,minmax(0,1fr))}.set-box-large .set-box-rows{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:900px){.set-cols{grid-template-columns:1fr}.set-box-large .set-box-rows{grid-template-columns:1fr}.set-search{flex-basis:100%}}
@@ -2205,6 +2223,21 @@ __SETTINGS_FAMILLES__
     </section>
 
     <!-- ═══════════════════════ PANEL USAGE IA ═══════════════════════ -->
+    <!-- Fluidité des postes : ancienne page /perf-postes, désormais un onglet
+         (static/settings_perf.js) ; /perf-postes redirige ici. -->
+    <section id="panel-perf" class="hidden" data-req-section="audit_full">
+      <div style="max-width:1180px">
+        <div style="margin-bottom:16px">
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Fluidité des postes</div>
+          <div style="font-size:13px;color:var(--muted)">
+            Images par seconde réellement obtenues sur chaque ordinateur, mesurées dans MySifa.
+            Un poste sous 30 fps passe automatiquement en affichage allégé.
+          </div>
+        </div>
+        <div id="perf-root"></div>
+      </div>
+    </section>
+
     <section id="panel-iausage" class="hidden" data-req-section="audit_full">
       <div style="max-width:1100px">
         <div style="margin-bottom:20px">
@@ -3194,10 +3227,11 @@ __SETTINGS_FAMILLES__
      la page n'y accroche que trois appels. -->
 <script src="/static/mysifa_rvgi_tiers.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/settings_url.js?v=1"></script>
+<script src="/static/settings_url.js?v=2"></script>
 <script src="/static/settings_ia_usage.js?v=3"></script>
 <script src="/static/mysifa_bulles.js?v=1"></script>
 <script src="/static/settings_coherence.js?v=2"></script>
+<script src="/static/settings_perf.js?v=1"></script>
 <script src="/static/settings_reunion_types.js?v=1"></script>
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
@@ -3315,6 +3349,7 @@ function syncSettingsPageHead(tabId) {
     printers:     { title: 'Imprimantes',     sub: 'Configuration et templates' },
     promote:      { title: 'Déploiement',     sub: 'Promouvoir v1 → v2' },
     diagnostic:   { title: 'Lecture SQL',     sub: 'SELECT encadré sur la base de cette instance' },
+    perf:         { title: 'Fluidité des postes', sub: 'Images par seconde mesurées sur chaque ordinateur' },
   };
   const h = HEADS[tabId] || { title: 'Paramètres', sub: 'Gestion des comptes et des accès' };
   if (titleEl) titleEl.textContent = h.title;
@@ -3619,10 +3654,11 @@ function settingsAjusterHauteur() {
   const limite = hautDock - 14;
   const bas = () => Math.max.apply(null, Array.from(boites).map(b => b.getBoundingClientRect().bottom));
   const lignes = Math.max(1, _setLignesEmpilees());
-  if (limite - bas() > lignes * 16) {
-    pm.classList.add('set-desc');
-    if (bas() > limite) pm.classList.remove('set-desc');
-  }
+  // On essaie avec les descriptions et on mesure, plutôt que de deviner leur
+  // hauteur : un seuil estimé les retirait alors qu'elles tenaient (retour du
+  // 07/11/2026). Elles ne disparaissent que si elles débordent vraiment.
+  pm.classList.add('set-desc');
+  if (bas() > limite) pm.classList.remove('set-desc');
   const reste = limite - bas();
   if (reste > 0) pm.style.setProperty('--set-pad', Math.min(14, Math.floor(reste / lignes / 2)) + 'px');
 }
@@ -3693,7 +3729,7 @@ function settingsFiltrer(q) {
   });
 })();
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','reuniontypes','audit','fsc','blocs','api','iausage','coherence','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','reuniontypes','audit','fsc','blocs','api','iausage','coherence','promote','printers','formations','diagnostic','perf'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3706,7 +3742,7 @@ function setTab(id, opts) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'reuniontypes', 'audit', 'fsc', 'blocs', 'api', 'iausage', 'coherence', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'reuniontypes', 'audit', 'fsc', 'blocs', 'api', 'iausage', 'coherence', 'promote', 'printers', 'formations', 'diagnostic', 'perf'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3741,6 +3777,7 @@ function setTab(id, opts) {
   if (id === 'api') loadApiKeys();
   if (id === 'iausage' && window.initIaUsagePanel) window.initIaUsagePanel();
   if (id === 'coherence' && window.initCoherencePanel) window.initCoherencePanel();
+  if (id === 'perf' && window.initPerfPanel) window.initPerfPanel();
   if (id === 'reuniontypes' && window.initReunionTypesPanel) window.initReunionTypesPanel();
   if (id === 'promote') loadPromoteStatus();
   if (id === 'diagnostic') initDiagnosticPanel();

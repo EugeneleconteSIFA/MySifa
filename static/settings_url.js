@@ -25,6 +25,7 @@
  *   formations    statut
  *   coherence     famille, statut (module settings_coherence.js)
  *   iausage       ia_* (module settings_ia_usage.js, clés conservées)
+ *   perf          jours (module settings_perf.js, 30 par défaut)
  * Fenêtres (SET_FENETRES) : utilisateur, fusion, doublons, contact, groupe,
  *   annonce, apercu_maj, seuil, operation, code, piece, documents, rattacher,
  *   promouvoir, alerte, apercu_alerte, reglages=alertes, appairer, couverture,
@@ -304,7 +305,7 @@ function settingsParams() {
     }
   }
 
-  const mod = { coherence: 'SettingsCoherence', iausage: 'IaUsage' }[onglet];
+  const mod = { coherence: 'SettingsCoherence', iausage: 'IaUsage', perf: 'SettingsPerf' }[onglet];
   const ad = mod && _setModule(mod);
   if (ad) {
     try {
@@ -430,7 +431,7 @@ async function settingsAllerUrl(complet) {
     }
   }
 
-  const mod = { coherence: 'SettingsCoherence', iausage: 'IaUsage' }[onglet];
+  const mod = { coherence: 'SettingsCoherence', iausage: 'IaUsage', perf: 'SettingsPerf' }[onglet];
   const ad = mod && _setModule(mod);
   if (ad && complet) { try { await ad.aller(); } catch (e) { /* module */ } }
 

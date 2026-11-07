@@ -104,7 +104,7 @@ SYSTEME = {"cle": "systeme", "libelle": "Système", "onglets": [
     _o("audit", "Log d'activité", "Historique complet des actions superadmin.", "audit_full"),
     _o("iausage", "Usage IA", "Coût des appels à Claude, par utilisateur et par fonction.", "audit_full"),
     _o("api", "Clés API", "Jetons d'intégration externe.", "audit_full"),
-    _o("perf", "Fluidité des postes", "Images par seconde mesurées sur chaque ordinateur.", "audit_full", href="/perf-postes"),
+    _o("perf", "Fluidité des postes", "Images par seconde mesurées sur chaque ordinateur.", "audit_full"),
     _o("diagnostic", "Lecture SQL", "SELECT en lecture seule, encadré par le moteur.", "diagnostic"),
 ]}
 
