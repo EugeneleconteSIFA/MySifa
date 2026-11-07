@@ -514,6 +514,31 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
 .set-badge.niv-info,.set-nav-badge.niv-info{background:color-mix(in srgb,var(--ok) 16%,var(--card));color:var(--ok)}
 .set-badge[hidden],.set-nav-badge[hidden]{display:none}
 .set-badge + .mi-chev{margin-left:8px}
+/* Accueil compact (retour du 07/11/2026 : tout doit tenir sans défiler sur un
+   écran d'ordinateur). Les descriptions passent en infobulle (title) et
+   restent cherchables ; elles réapparaissent pendant une recherche. */
+#panel-menu .set-hero{margin-bottom:12px;align-items:center}
+#panel-menu .set-hero h1{font-size:20px;margin:0}
+#panel-menu .set-hero p{display:none}
+#panel-menu .set-sublbl{margin:14px 0 7px;font-size:10.5px}
+#panel-menu .set-atraiter{gap:6px}
+#panel-menu .set-chip{padding:4px 11px;font-size:12px}
+#panel-menu .set-recents{gap:8px}
+#panel-menu .set-recent{padding:7px 11px;gap:9px;align-items:center}
+#panel-menu .set-recent .ri{width:26px;height:26px;border-radius:7px}
+#panel-menu .set-cols{gap:10px}
+#panel-menu .set-box{padding:4px}
+#panel-menu .set-box-h{padding:6px 9px 3px;font-size:12.5px}
+#panel-menu .set-row{padding:4px 8px;gap:9px;align-items:center}
+#panel-menu .set-row .mi-ico{width:24px;height:24px;border-radius:6px;margin-top:0}
+#panel-menu .set-row .mi-ico svg{width:14px;height:14px}
+#panel-menu .set-row .mi-lbl{font-size:12.5px}
+#panel-menu .set-row .mi-desc{display:none}
+#panel-menu .set-row .mi-chev{margin-top:0}
+#panel-menu.set-recherche-active .set-row .mi-desc{display:block}
+@media (min-width:1900px){#panel-menu .set-box-large .set-box-rows{grid-template-columns:repeat(6,minmax(0,1fr))}}
+#panel-menu .set-row .mi-lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.settings-tab-menu .main{padding-top:16px;padding-bottom:16px}
 .set-masque-recherche{display:none!important}
 .set-vide{color:var(--muted);font-size:13px;margin:6px 2px 14px}
 @media (max-width:1250px){.set-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.set-recents{grid-template-columns:repeat(2,minmax(0,1fr))}.set-box-large .set-box-rows{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -3578,6 +3603,8 @@ function settingsFiltrer(q) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('set-masque-recherche', !!t);
   });
+  const pm = document.getElementById('panel-menu');
+  if (pm) pm.classList.toggle('set-recherche-active', !!t);
   const lbl = document.getElementById('set-familles-lbl');
   if (lbl) lbl.textContent = t ? 'Résultats' : 'Toutes les familles';
   const vide = document.getElementById('set-vide');
