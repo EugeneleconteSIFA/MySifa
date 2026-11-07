@@ -4941,6 +4941,10 @@ def _validate_alert_params(params: dict, anciens_items: list = None) -> dict:
             # Hors tolérance = non-conformité. Sans borne, rien à comparer.
             if bool(it.get("out_of_range_is_nc", False)) and (vmin is not None or vmax is not None):
                 item_out["out_of_range_is_nc"] = True
+            # Pesée d'étiquettes : la saisie prod affiche sous chaque valeur
+            # le grammage de colle calculé (static/mysifa_poids_colle.js).
+            if bool(it.get("calcul_colle", False)):
+                item_out["calcul_colle"] = True
             # v2.2.85 : required (bool). Défaut false (optionnel = rétro-compat).
             if bool(it.get("required", False)):
                 item_out["required"] = True

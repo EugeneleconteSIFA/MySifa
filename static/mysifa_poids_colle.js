@@ -18,6 +18,12 @@
  * La page hôte dit quel dossier est en cours :
  *   window.mysifaPoidsColleContexte = () => ({no_dossier, machine})
  * Monté par MySifaPoidsColle.monter(). Tout texte passe par textContent.
+ *
+ * L'alerte d'inspection (question valeur marquée `calcul_colle`) affiche le
+ * grammage sous chaque pesée avec les mêmes réglages : une seule saisie du
+ * poids, dans l'alerte. Elle passe par pret(), grammage(poids), resume(),
+ * regler({nombre}) et abonner(fn) / desabonner(fn), appelé à chaque
+ * changement de réglage (widget ou alerte).
  */
 (function (global) {
   "use strict";
@@ -82,7 +88,14 @@
     return i;
   }
   function lireLS() { try { return JSON.parse(localStorage.getItem(LS) || "null"); } catch (e) { return null; } }
-  function ecrireLS() { try { localStorage.setItem(LS, JSON.stringify(W.saisie)); } catch (e) {} }
+  function ecrireLS() {
+    try { localStorage.setItem(LS, JSON.stringify(W.saisie)); } catch (e) {}
+    signalerChange();
+  }
+  var abonnes = [];
+  function signalerChange() {
+    abonnes.slice().forEach(function (fn) { try { fn(); } catch (e) {} });
+  }
   function contexte() {
     try { return (global.mysifaPoidsColleContexte && global.mysifaPoidsColleContexte()) || {}; } catch (e) { return {}; }
   }
@@ -418,5 +431,51 @@
     if (global.MySifaDock && typeof global.MySifaDock.layout === "function") global.MySifaDock.layout();
   }
 
-  global.MySifaPoidsColle = { monter: monter, ouvrir: ouvrir, _calcul: calcul, _surface: surface };
+  // ── Calcul pour l'alerte d'inspection ──────────────────────────────────
+  var enCours = null;
+  // Réglages chargés pour le dossier en cours (sans ouvrir le widget).
+  function pret() {
+    var c = contexte();
+    if (W.saisie && (!c.no_dossier || String(c.no_dossier) === String(W.saisie.dossier || ""))) return Promise.resolve();
+    if (!enCours) enCours = charger(false).then(function () { enCours = null; }, function () { enCours = null; });
+    return enCours;
+  }
+  // Grammage d'adhésif pour un poids pesé, avec les réglages en cours.
+  function grammage(poids) {
+    if (!W.saisie) return { manque: "Réglages en cours de chargement." };
+    var s = {};
+    Object.keys(W.saisie).forEach(function (k) { s[k] = W.saisie[k]; });
+    s.pese = poids;
+    return calcul(s);
+  }
+  // « 148 × 210 mm, rayon 6 · papier 70 g/m² · encre 2 g/m² à 30 % »
+  function resume() {
+    var s = W.saisie;
+    if (!s) return "";
+    var f = s.forme === "ronde"
+      ? (nb(s.diametre) > 0 ? "Ø " + fmt(nb(s.diametre), 1).replace(/,0$/, "") + " mm" : "format à saisir")
+      : (nb(s.laize) > 0 && nb(s.hauteur) > 0
+          ? fmt(nb(s.laize), 1).replace(/,0$/, "") + " × " + fmt(nb(s.hauteur), 1).replace(/,0$/, "") + " mm"
+            + (nb(s.rayon) > 0 ? ", rayon " + fmt(nb(s.rayon), 1).replace(/,0$/, "") : "")
+          : "format à saisir");
+    var parts = [f, nb(s.frontal) > 0 ? "papier " + fmt(nb(s.frontal), 1).replace(/,0$/, "") + " g/m²" : "papier à saisir"];
+    if (nb(s.encre) > 0 && nb(s.couverture) > 0) {
+      parts.push("encre " + fmt(nb(s.encre), 1).replace(/,0$/, "") + " g/m² à " + fmt(nb(s.couverture), 0) + " %");
+    }
+    return parts.join(" · ");
+  }
+  function regler(v) {
+    if (!W.saisie || !v) return;
+    if (v.nombre != null) W.saisie.nombre = String(v.nombre);
+    ecrireLS();
+    if (W.open && !W.edit) rendre();
+  }
+
+  global.MySifaPoidsColle = {
+    monter: monter, ouvrir: ouvrir, _calcul: calcul, _surface: surface,
+    pret: pret, grammage: grammage, resume: resume, regler: regler,
+    nombre: function () { return W.saisie ? W.saisie.nombre : ""; },
+    abonner: function (fn) { if (typeof fn === "function" && abonnes.indexOf(fn) < 0) abonnes.push(fn); },
+    desabonner: function (fn) { var i = abonnes.indexOf(fn); if (i >= 0) abonnes.splice(i, 1); },
+  };
 })(window);
