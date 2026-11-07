@@ -81,6 +81,16 @@ MySifaUrl.surRetour(async u => { …réappliquer, recharger… });
    `?sous=retour&cr=24-1187` doit charger le compte-rendu, pas afficher
    « Chargement… ». Tester chaque sous-onglet par une adresse tapée à la main.
 
+### Une nouvelle page = une adresse dès le premier commit
+
+`tests/test_pages_adresse.py` (CI, depuis le 07/11/2026) refuse toute page HTML
+de `app/web/` qui n'inclut pas `static/mysifa_url.js`, ou qui l'inclut sans
+qu'elle-même ni ses `static/*.js` n'appellent `MySifaUrl.ecrire`. Une page sans
+état de navigation (message, portail externe à jeton, sortie d'impression) se
+déclare dans `EXCEPTIONS` avec sa raison. `A_BRANCHER` liste la dette connue
+(MyLearning, Paie, aperçu du site) : on n'y ajoute rien, on en retire une page
+dès qu'elle est branchée, et le test le réclame.
+
 ### Un nouvel onglet, filtre, tri ou panneau = une clé d'URL
 
 Dans le même commit que l'onglet ou le filtre : l'ajouter à la fonction de
