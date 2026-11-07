@@ -9,8 +9,10 @@ Deux entrées :
                           par session, via sendBeacon). Tolérant : un relevé
                           reçu sans session valide est gardé sans email — on
                           préfère une mesure anonyme à pas de mesure.
-  GET  /perf-postes       la vue superadmin / direction : un poste par ligne,
-                          trié du plus lent au plus fluide.
+  GET  /api/perf/postes  la vue superadmin / direction : un poste par ligne,
+                          trié du plus lent au plus fluide, affichée dans
+                          Paramètres › Système › Fluidité des postes
+                          (static/settings_perf.js). /perf-postes y redirige.
 
 Ce qui compte dans la lecture : le FPS médian d'un poste, pas son dernier
 relevé. Une session à 20 images par seconde peut être une visioconférence
@@ -30,7 +32,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.core.database import get_db
 from app.services.auth_service import get_current_user
@@ -219,103 +221,12 @@ def liste_postes(request: Request, jours: int = 30):
     return {"jours": jours, "postes": postes, "pages": pages[:20], "total_releves": len(lignes)}
 
 
-_PAGE = """<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fluidité des postes — MySifa</title>
-<style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--muted:#94a3b8;
-      --accent:#22d3ee;--danger:#f87171;--warn:#fbbf24;--ok:#34d399}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--accent:#0891b2}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font:14px/1.5 'Segoe UI',system-ui,sans-serif;padding:24px}
-.wrap{max-width:1180px;margin:0 auto}
-h1{font-size:21px;margin-bottom:4px}
-.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
-.bar{display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
-select,a.btn{background:var(--card);color:var(--text);border:1px solid var(--border);
-      border-radius:8px;padding:6px 10px;font-size:13px;text-decoration:none}
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:18px}
-h2{font-size:15px;margin-bottom:10px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--muted);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
-td{padding:8px;border-bottom:1px solid var(--border);vertical-align:top}
-tr:last-child td{border-bottom:none}
-.fps{font-weight:700}
-.f-bas{color:var(--danger)}.f-moy{color:var(--warn)}.f-ok{color:var(--ok)}
-.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:99px;border:1px solid var(--border);color:var(--muted)}
-.tag.eco{border-color:var(--warn);color:var(--warn)}
-.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted)}
-.vide{color:var(--muted);padding:14px 0}
-.note{color:var(--muted);font-size:12px;margin-top:10px}
-</style></head><body>
-<div class="wrap">
-  <h1>Fluidité des postes</h1>
-  <div class="sub">Images par seconde réellement obtenues sur chaque ordinateur, mesurées dans MySifa.
-  Un poste sous 30 fps passe automatiquement en affichage allégé.</div>
-  <div class="bar">
-    <select id="jours" onchange="charger()">
-      <option value="7">7 derniers jours</option>
-      <option value="30" selected>30 derniers jours</option>
-      <option value="90">90 derniers jours</option>
-    </select>
-    <span class="mono" id="total"></span>
-    <a class="btn" href="/settings">← Paramètres</a>
-    <a class="btn" href="/">MySifa</a>
-  </div>
-  <div class="card"><h2>Postes</h2><div id="postes" class="vide">Chargement…</div>
-    <div class="note">« Mode éco » signifie que le poste affiche déjà une version allégée :
-    son FPS est alors mesuré effets coupés, il est normalement bon. C'est le passage en éco
-    qui est le signal, pas le chiffre.</div>
-  </div>
-  <div class="card"><h2>Pages les plus lourdes</h2><div id="pages" class="vide">Chargement…</div>
-    <div class="note">Médiane calculée sur les seules sessions en affichage complet.</div>
-  </div>
-</div>
-<script>
-try{ if((localStorage.getItem('theme')||'light')!=='dark') document.body.classList.add('light'); }catch(e){}
-function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function cls(f){ if(f==null) return ''; return f<30?'f-bas':f<50?'f-moy':'f-ok'; }
-function dt(s){ if(!s) return ''; return s.replace('T',' ').slice(0,16); }
-async function charger(){
-  const j=document.getElementById('jours').value;
-  const r=await fetch('/api/perf/postes?jours='+j,{credentials:'same-origin'});
-  if(!r.ok){ document.getElementById('postes').textContent='Accès refusé.'; return; }
-  const d=await r.json();
-  document.getElementById('total').textContent=d.total_releves+' relevés';
-  document.getElementById('postes').innerHTML = d.postes.length ? (
-    '<table><tr><th>Poste</th><th>FPS médian</th><th>Pire</th><th>Rendu page</th>'+
-    '<th>Mode</th><th>Machine</th><th>Utilisateurs</th><th>Sessions</th><th>Dernier relevé</th></tr>'+
-    d.postes.map(p=>'<tr>'+
-      '<td class="mono">'+esc(p.poste)+'</td>'+
-      '<td class="fps '+cls(p.fps_median)+'">'+(p.fps_median==null?'—':p.fps_median)+'</td>'+
-      '<td class="'+cls(p.fps_pire)+'">'+(p.fps_pire==null?'—':p.fps_pire)+'</td>'+
-      '<td>'+(p.rendu_median==null?'—':Math.round(p.rendu_median)+' ms')+'</td>'+
-      '<td>'+(p.niveau==='eco'?'<span class="tag eco">éco'+(p.force_main?' (manuel)':'')+'</span>':'<span class="tag">complet</span>')+'</td>'+
-      '<td>'+esc(p.navigateur)+'<div class="mono">'+(p.cores?p.cores+' cœurs':'')+
-        (p.memoire_go?' · '+p.memoire_go+' Go':'')+(p.ecran?' · '+esc(p.ecran):'')+'</div></td>'+
-      '<td class="mono">'+esc((p.utilisateurs||[]).join(', '))+'</td>'+
-      '<td>'+p.sessions+'</td>'+
-      '<td class="mono">'+dt(p.dernier)+'</td></tr>').join('')+'</table>'
-  ) : '<div class="vide">Aucun relevé sur la période.</div>';
-  document.getElementById('pages').innerHTML = d.pages.length ? (
-    '<table><tr><th>Page</th><th>FPS médian</th><th>Mesures</th></tr>'+
-    d.pages.map(p=>'<tr><td class="mono">'+esc(p.page)+'</td>'+
-      '<td class="fps '+cls(p.fps_median)+'">'+(p.fps_median==null?'—':p.fps_median)+'</td>'+
-      '<td>'+p.mesures+'</td></tr>').join('')+'</table>'
-  ) : '<div class="vide">Aucune mesure en affichage complet.</div>';
-}
-charger();
-</script>
-<script src="/static/mysifa_cal_rappel.js?v=9"></script>
-</body></html>"""
-
-
-@router.get("/perf-postes", response_class=HTMLResponse)
-def page_postes(request: Request):
-    try:
-        _exiger_vue(request)
-    except HTTPException as e:
-        if e.status_code == 401:
-            return RedirectResponse(url="/?next=/perf-postes", status_code=302)
-        raise
-    return HTMLResponse(content=_PAGE)
+@router.get("/perf-postes")
+def page_postes(request: Request, jours: Optional[int] = None):
+    """Ancienne page à part, sans la barre latérale : la vue vit désormais dans
+    Paramètres › Système › Fluidité des postes. L'adresse reste pour les liens
+    déjà posés (favoris, annonces) ; les droits sont contrôlés par l'onglet."""
+    cible = "/settings?onglet=perf"
+    if jours in (7, 90):
+        cible += "&jours=%d" % jours
+    return RedirectResponse(url=cible, status_code=302)
