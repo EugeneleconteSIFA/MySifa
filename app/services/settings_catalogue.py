@@ -179,11 +179,11 @@ def rendre_barre_laterale(visibility: dict) -> str:
 def _ligne_menu(o, famille):
     cherche = " ".join([o["libelle"], o["desc"], famille]).lower()
     cible = ('data-href="%s"' % _e(o["href"])) if o["href"] else ('data-goto="%s"' % _e(o["tab"]))
-    return ('<button type="button" class="menu-item set-row" %s data-cherche="%s">'
+    return ('<button type="button" class="menu-item set-row" %s data-cherche="%s" title="%s">'
             '<span class="mi-ico">%s</span>'
             '<span class="mi-body"><span class="mi-lbl">%s</span><span class="mi-desc">%s</span></span>'
             '<span class="set-badge" data-compte="%s" hidden></span>%s</button>'
-            % (cible, _e(cherche), _svg(o["tab"], 16), _e(o["libelle"]), _e(o["desc"]), _e(o["tab"]), _CHEV_DROITE))
+            % (cible, _e(cherche), _e(o["desc"]), _svg(o["tab"], 16), _e(o["libelle"]), _e(o["desc"]), _e(o["tab"]), _CHEV_DROITE))
 
 
 def _boite(fam, vis, classe=""):
