@@ -32,7 +32,7 @@ et les transitions.
 
 Côté serveur, chaque session remonte un relevé (`POST /api/perf/releve`, table
 `perf_releves`). La vue `/perf-postes` (superadmin et direction, accessible depuis
-Paramètres → Audit & qualité) classe les postes du plus lent au plus fluide et liste les pages les plus lourdes. Piège
+Paramètres → Système) classe les postes du plus lent au plus fluide et liste les pages les plus lourdes. Piège
 de lecture : un poste déjà en éco mesure sans les effets, donc son FPS est bon
 — c'est son passage en éco qui est le signal, pas son chiffre.
 

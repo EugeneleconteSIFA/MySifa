@@ -305,7 +305,7 @@ ne se règle que là.
 
 ### Pilotage (superadmin)
 
-Paramètres › Audit › **Widgets et tableaux de bord**, section « Blocs capturables » (`renderSettingsBlocsCapturables` dans
+Paramètres › Communication & interface › **Widgets et tableaux de bord**, section « Blocs capturables » (`renderSettingsBlocsCapturables` dans
 `settings_page.py`, visibilité `blocs` = superadmin réel) liste les blocs du
 registre, le nombre de widgets créés sur chacun, l'étiquette « Nouveau », et
 un interrupteur de capture (`blocs_reglages`). Couper un bloc masque ses
