@@ -61,6 +61,8 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
+<!-- Téléphone : tableaux en cartes, cibles au doigt (revue du 08/11/2026). -->
+<link rel="stylesheet" href="/static/settings_mobile.css?v=1">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
 :root{--accent-fg:#0a0e17;--ok:#34d399;--danger-fg:#fff;}
@@ -326,8 +328,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
   .layout{min-height:100vh}
   .nav-btn{padding:12px 14px;font-size:14px}
   .nav-scroll{gap:4px}
-  /* Masquer les sous-onglets Utilisateurs dupliqués (navigation = sidebar) */
-  .main section>.tabs:has(.sub-tab-btn){display:none}
+  /* Masquer les sous-onglets Utilisateurs dupliqués (navigation = sidebar).
+     Seulement eux (data-subtab) : la règle visait tout .sub-tab-btn et
+     cachait aussi Maintenance et Couleurs d'encre, sans autre accès sur
+     téléphone (revue mobile du 08/11/2026). */
+  .main section>.tabs:has([data-subtab]){display:none}
   .tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;gap:6px;margin-bottom:12px}
   .tabs .btn{flex-shrink:0;font-size:12px;padding:8px 12px}
   .form-grid{grid-template-columns:1fr}
@@ -3236,6 +3241,7 @@ __SETTINGS_FAMILLES__
 <script src="/static/mysifa_bulles.js?v=1"></script>
 <script src="/static/settings_coherence.js?v=2"></script>
 <script src="/static/settings_perf.js?v=1"></script>
+<script src="/static/settings_mobile.js?v=1"></script>
 <script src="/static/settings_reunion_types.js?v=1"></script>
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
@@ -11715,8 +11721,10 @@ function _cliAppliquerRvgi(c) {
     }
   });
   // Supprimer une fiche pilotée n'a pas de sens : la synchro la recréerait.
+  // Une fiche pas encore créée (c sans id) n'a rien à supprimer non plus :
+  // ce réglage annulait celui de openCliModal(null).
   const del = document.getElementById('cli-delete-btn');
-  if (del) del.style.display = lie ? 'none' : '';
+  if (del) del.style.display = (lie || !(c && c.id)) ? 'none' : '';
   const bloc = document.getElementById('cli-rvgi-bloc');
   if (bloc && window.MysRvgiTiers) {
     MysRvgiTiers.bloc(bloc, 'client', c, () => { closeCliModal(); _cliBarrePeinte = false; loadClients(); });
