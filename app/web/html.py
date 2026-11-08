@@ -1459,7 +1459,7 @@ body.mysifa-hide-navbar .mobile-navbar{display:none!important}
   position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.45);
   opacity:0;transition:opacity .18s;pointer-events:none;
 }
-.msf-sheet-backdrop.open{opacity:1;pointer-events:auto}
+.msf-sheet-backdrop.open{opacity:1;pointer-events:auto;touch-action:none}
 .msf-sheet{
   position:fixed;left:0;right:0;bottom:0;z-index:501;
   background:var(--card);border-top:1px solid var(--border);
@@ -1468,6 +1468,9 @@ body.mysifa-hide-navbar .mobile-navbar{display:none!important}
   padding:8px 0 calc(16px + env(safe-area-inset-bottom,0px));
   transform:translateY(100%);transition:transform .22s cubic-bezier(.4,0,.2,1);
   max-height:88vh;overflow-y:auto;
+  /* Le défilement reste dans la feuille : en bout de liste, il ne passe pas
+     à la page derrière (la page est en plus figée, voir _msfSheetVerrou). */
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
 }
 body.light .msf-sheet{box-shadow:0 -8px 40px rgba(15,23,42,.15)}
 .msf-sheet.open{transform:translateY(0)}
@@ -1476,11 +1479,11 @@ body.light .msf-sheet{box-shadow:0 -8px 40px rgba(15,23,42,.15)}
   margin:6px auto 10px;
 }
 .msf-sheet-user{
-  display:flex;align-items:center;gap:12px;padding:8px 20px 14px;
-  border-bottom:1px solid var(--border);margin-bottom:8px;
+  display:flex;align-items:center;gap:12px;padding:4px 20px 10px;
+  border-bottom:1px solid var(--border);margin-bottom:4px;
 }
 .msf-sheet-user-avatar{
-  width:44px;height:44px;border-radius:50%;
+  width:40px;height:40px;border-radius:50%;
   background:var(--accent);color:#fff;
   display:flex;align-items:center;justify-content:center;
   font-size:16px;font-weight:800;letter-spacing:.02em;flex-shrink:0;
@@ -1491,15 +1494,20 @@ body.light .msf-sheet{box-shadow:0 -8px 40px rgba(15,23,42,.15)}
 .msf-sheet-list{display:flex;flex-direction:column;padding:0 8px}
 .msf-sheet-item{
   display:flex;align-items:center;gap:14px;
-  padding:14px 14px;border-radius:12px;
+  /* 46 px de haut (retour du 08/11/2026) : toutes les entrées tiennent sur
+     un téléphone sans faire défiler la feuille, cible toujours > 44 px. */
+  padding:8px 14px;min-height:46px;border-radius:12px;
   color:var(--text);font-size:15px;font-weight:500;
   background:transparent;border:0;cursor:pointer;text-align:left;
   transition:background .12s;font-family:inherit;
   position:relative;
 }
-.msf-sheet-item:hover{background:var(--accent-bg)}
+/* Au doigt, :hover reste allumé après le toucher : le fond ne s'allume
+   qu'avec une vraie souris, ou pendant l'appui. */
+@media (hover:hover){.msf-sheet-item:hover{background:var(--accent-bg)}}
+.msf-sheet-item:active{background:var(--accent-bg)}
 .msf-sheet-item-ico{
-  width:32px;height:32px;border-radius:10px;
+  width:30px;height:30px;border-radius:9px;
   background:var(--bg);border:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;color:var(--text2);flex-shrink:0;
 }
@@ -10753,15 +10761,48 @@ function openProfileSheet(){
   bd.setAttribute('aria-hidden','false');
   requestAnimationFrame(()=>{sheet.classList.add('open');});
   bd.onclick=closeProfileSheet;
-  // Fermeture au swipe-down basique
+  // Glisser vers le bas ferme la feuille, mais seulement depuis la poignée ou
+  // quand la liste est déjà tout en haut : sinon un simple défilement vers le
+  // haut de la liste la refermait.
   let startY=null;
-  sheet.ontouchstart=(e)=>{startY=e.touches[0].clientY;};
+  sheet.ontouchstart=(e)=>{
+    const surPoignee=!!(e.target.closest&&e.target.closest('.msf-sheet-handle,.msf-sheet-user'));
+    startY=(surPoignee||sheet.scrollTop<=0)?e.touches[0].clientY:null;
+  };
   sheet.ontouchmove=(e)=>{
     if(startY==null) return;
     const dy=e.touches[0].clientY-startY;
-    if(dy>60){closeProfileSheet();startY=null;}
+    if(dy>60&&sheet.scrollTop<=0){closeProfileSheet();startY=null;}
   };
 }
+// La page derrière la feuille ne défile pas : body figé à sa position tant
+// que #msf-sheet-root porte .open, rendu à la même position à la fermeture.
+// Sur iPhone, overflow:hidden ne suffit pas ; position:fixed avec le décalage
+// du défilement, si. Un observateur couvre toutes les ouvertures (menu profil,
+// appui maintenu sur une tuile) sans toucher à chacune.
+(function _msfSheetVerrou(){
+  let y=0, fige=false;
+  function poser(on){
+    if(on===fige) return;
+    fige=on;
+    const b=document.body, st=b.style;
+    if(on){
+      y=window.scrollY||document.documentElement.scrollTop||0;
+      st.position='fixed';st.top=(-y)+'px';st.left='0';st.right='0';st.width='100%';
+    }else{
+      st.position='';st.top='';st.left='';st.right='';st.width='';
+      window.scrollTo(0,y);
+    }
+  }
+  function brancher(){
+    const sheet=document.getElementById('msf-sheet-root');
+    if(!sheet) return;
+    new MutationObserver(()=>poser(sheet.classList.contains('open')))
+      .observe(sheet,{attributes:true,attributeFilter:['class']});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',brancher);
+  else brancher();
+})();
 function closeProfileSheet(){
   const sheet=document.getElementById('msf-sheet-root');
   const bd=document.getElementById('msf-sheet-backdrop');
