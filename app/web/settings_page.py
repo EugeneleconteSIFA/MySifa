@@ -542,6 +542,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var
 #panel-menu .set-row .mi-lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.settings-tab-menu .main{padding-top:16px;padding-bottom:16px}
 .set-masque-recherche{display:none!important}
+/* Vue d'ensemble qui tient entière à l'écran : la page ne défile plus
+   (settingsAjusterHauteur pose la classe seulement après l'avoir vérifié).
+   Sur v1, le bandeau rouge ajoutait 24 px de trop et coupait le titre. */
+html.set-fige,html.set-fige body{overflow:hidden}
 /* Fluidité des postes (static/settings_perf.js) */
 .pf-barre{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .pf-barre select{width:auto;min-width:180px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font:inherit;font-size:13px}
@@ -3636,10 +3640,17 @@ function _setLignesEmpilees() {
   });
   return Object.values(parRangee).reduce((a, n) => a + n, 0);
 }
+function settingsFiger(on) {
+  const h = document.documentElement;
+  if (on && !h.classList.contains('set-fige')) { h.classList.add('set-fige'); window.scrollTo(0, 0); }
+  else if (!on && h.classList.contains('set-fige')) h.classList.remove('set-fige');
+}
 function settingsAjusterHauteur() {
   const pm = document.getElementById('panel-menu');
-  if (!pm || pm.classList.contains('hidden') || pm.classList.contains('set-recherche-active')) return;
-  if (window.innerWidth < 900) { pm.classList.remove('set-desc'); pm.style.removeProperty('--set-pad'); return; }
+  if (!pm || pm.classList.contains('hidden') || pm.classList.contains('set-recherche-active')) { settingsFiger(false); return; }
+  if (window.innerWidth < 900) { pm.classList.remove('set-desc'); pm.style.removeProperty('--set-pad'); settingsFiger(false); return; }
+  // La vue d'ensemble se lit depuis le haut : on y revient avant de mesurer.
+  if (window.scrollY) window.scrollTo(0, 0);
   pm.classList.remove('set-desc');
   pm.style.setProperty('--set-pad', '0px');
   const boites = document.querySelectorAll('#set-cols .set-box:not([hidden])');
@@ -3661,6 +3672,8 @@ function settingsAjusterHauteur() {
   if (bas() > limite) pm.classList.remove('set-desc');
   const reste = limite - bas();
   if (reste > 0) pm.style.setProperty('--set-pad', Math.min(14, Math.floor(reste / lignes / 2)) + 'px');
+  // Tout tient au-dessus de la barre d'outils : plus de défilement possible.
+  settingsFiger(bas() <= limite + 1);
 }
 let _setAjustPrevu = null;
 function settingsPlanifierAjustement() {
@@ -3693,6 +3706,7 @@ function settingsFiltrer(q) {
   });
   const pm = document.getElementById('panel-menu');
   if (pm) pm.classList.toggle('set-recherche-active', !!t);
+  if (t) settingsFiger(false);
   if (pm && !t) settingsPlanifierAjustement();
   const lbl = document.getElementById('set-familles-lbl');
   if (lbl) lbl.textContent = t ? 'Résultats' : 'Toutes les familles';
@@ -3747,7 +3761,7 @@ function setTab(id, opts) {
     if (el) el.classList.toggle('hidden', p !== id);
   });
   syncSettingsPageHead(id);
-  if (id === 'menu') settingsChargerAccueil(); else settingsNoterOuverture(id);
+  if (id === 'menu') settingsChargerAccueil(); else { settingsFiger(false); settingsNoterOuverture(id); }
   // Adresse : l'onglet est un endroit, il s'empile (Retour ramène à la Vue
   // d'ensemble). static/settings_url.js ; rien avant settingsDemarrerUrl().
   if (typeof settingsSyncUrl === 'function') settingsSyncUrl();
