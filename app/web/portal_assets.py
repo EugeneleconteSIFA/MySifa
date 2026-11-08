@@ -1007,6 +1007,20 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   .portal-atelier{display:none!important}
 }
 
+/* Téléphone, colonne repliée : les boutons des tableaux de bord (déplier,
+   guide) s'affichent à droite du « Bonjour » (portalTdbBoutons). Les vrais boutons
+   restent dans #mysifa-accueil, hors de l'écran : static/mysifa_accueil.js
+   n'est pas modifié, et leur comportement non plus. */
+@media (max-width:899px){
+  .portal-tdb-btns{display:flex;align-items:center;gap:6px;flex:none;margin-left:auto}
+  .portal-tdb-btns .mac-btn,.portal-tdb-btns button{height:34px;min-width:34px}
+  body.portal-tdb-deplaces #mysifa-accueil.repliee .mac-tete > .mac-repli,
+  body.portal-tdb-deplaces #mysifa-accueil.repliee .mac-tete > .mac-guide,
+  body.portal-tdb-deplaces #mysifa-accueil.repliee .mac-tete > .mac-perso{
+    position:absolute!important;left:-10000px!important;top:auto!important}
+  body.portal-tdb-deplaces #mysifa-accueil .mac-tete{flex-wrap:nowrap}
+}
+
 """
 
 PORTAL_MAIN_JS = r"""
@@ -3054,4 +3068,51 @@ function portalAttacherVolets(){
     });
   });
 }
+
+// ── Téléphone : boutons des tableaux de bord à droite du « Bonjour » ──────
+// Demande du 08/11/2026 : gagner la ligne de boutons sous « Mes tableaux de
+// bord ». Le portail reconstruit son en-tête à chaque rendu : y déplacer les
+// vrais boutons les détruirait. On y pose des copies qui cliquent l'original,
+// resté dans #mysifa-accueil (hors de l'écran). Une copie n'existe que si son
+// original est affiché, et seulement colonne repliée : « tableau » (déplier)
+// et le guide. Dépliée, la colonne cache l'accueil et garde ses boutons.
+const _TDB_TEL=window.matchMedia('(max-width:899px)');
+function portalTdbBoutons(){
+  const hdr=document.querySelector('.portal-mobile-header');
+  // Seulement colonne repliée : dépliée, elle remplace l'accueil (Bonjour
+  // compris) et ses boutons doivent rester chez elle, « Revenir aux
+  // applications » en tête.
+  const tete=document.querySelector('#mysifa-accueil.repliee .mac-tete');
+  if(!_TDB_TEL.matches||!hdr||!tete){
+    document.body.classList.remove('portal-tdb-deplaces');
+    document.querySelectorAll('.portal-tdb-btns').forEach(e=>e.remove());
+    return;
+  }
+  document.body.classList.add('portal-tdb-deplaces');
+  let box=hdr.querySelector('.portal-tdb-btns');
+  if(!box){box=document.createElement('div');box.className='portal-tdb-btns';hdr.appendChild(box);}
+  const origs=[tete.querySelector('.mac-repli'),tete.querySelector('.mac-guide > *'),tete.querySelector('.mac-perso')]
+    .filter(o=>o&&getComputedStyle(o).display!=='none');
+  const sig=origs.map(o=>o.outerHTML).join('|');
+  if(box._sig===sig)return;
+  box._sig=sig;
+  box.textContent='';
+  origs.forEach(o=>{
+    const c=o.cloneNode(true);
+    c.removeAttribute('id');
+    c.removeAttribute('onclick');
+    c.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();o.click();});
+    box.appendChild(c);
+  });
+}
+(function(){
+  if(location.pathname!=='/')return;
+  let prevu=null;
+  const planifier=()=>{clearTimeout(prevu);prevu=setTimeout(portalTdbBoutons,40);};
+  try{
+    new MutationObserver(planifier).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  }catch(e){}
+  if(_TDB_TEL.addEventListener)_TDB_TEL.addEventListener('change',planifier);
+  planifier();
+})();
 """
