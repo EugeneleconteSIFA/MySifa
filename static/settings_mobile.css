@@ -1,0 +1,84 @@
+/* MySifa — Paramètres sur téléphone (revue du 08/11/2026).
+   Portée : la zone principale ET les fenêtres ajoutées directement à <body>
+   (alertes, fusion de fournisseurs, fiche utilisateur : voiles
+   « position:fixed;inset:0 », écrit « inset: 0px » quand le style est posé
+   en JavaScript), qui échappaient aux règles.
+   Ne s'applique que sous 900 px : le bureau n'est pas touché.
+   Tableaux en cartes : libellés posés par static/settings_mobile.js. */
+@media (max-width:900px){
+
+  /* ── Lisibilité : rien sous 11 px, mots longs (chemins, URL) coupés ── */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) th{font-size:11.5px!important}
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .pill,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .tag,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .badge,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [class*="pill"],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [class*="chip"],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [class*="badge"],
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .prof-ring-label,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .cell-ov,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .set-sublbl{font-size:11px!important}
+  /* Tailles écrites en dur dans le HTML des panneaux (style="font-size:10px"). */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [style*="font-size:9px"],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [style*="font-size:9.5px"],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [style*="font-size:10px"],
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [style*="font-size:10.5px"],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [style*="font-size: 10px"]{font-size:11px!important}
+  /* break-word et non anywhere : anywhere réduit la largeur minimale des
+     cellules et coupait les mots courts lettre par lettre. */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) section{overflow-wrap:break-word;word-break:break-word}
+
+  /* ── Cibles au doigt : 38 px minimum pour un bouton, 42 px pour un champ ── */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .btn,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .btn-sm,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .btn-sec,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .btn-ghost,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .btn-accent,
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) button.mac-sub-btn,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .sub-tab-btn{min-height:38px}
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .four-view-toggle button,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [data-wsec],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [data-ia-jours]{min-height:38px}
+  /* 16 px : en dessous, Safari zoome la page à chaque champ touché. */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) select,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) textarea,
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]){
+    min-height:42px;font-size:16px}
+  /* Une case à cocher n'est jamais étirée à 100 % (règle générale des champs). */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) input[type=checkbox],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) input[type=radio]{
+    width:20px!important;height:20px!important;min-width:20px;flex:0 0 auto!important;margin:0}
+  /* Recherche toujours sur toute la largeur (certaines ont une largeur fixe en ligne). */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) input[type=search],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) input[placeholder^="Rechercher"],:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) input[placeholder^="Filtrer"]{width:100%!important;max-width:none!important;flex:1 1 100%}
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .acc-expand{min-width:34px;min-height:34px}
+  /* Tout bouton : 36 px au moins (pastilles de filtre, pagination, onglets
+     de module). L'interrupteur garde son dessin : sa zone tactile s'agrandit
+     par ::before (::after est son curseur). */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) button:not(.nadm-sw):not(.acc-expand),:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) [role=button]{min-height:36px}
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .nadm-sw::before{content:"";position:absolute;inset:-10px -8px}
+  /* Raccourci clavier « / » : sans objet au doigt. */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .set-search kbd{display:none}
+
+  /* Un libellé long va à la ligne dans son bouton au lieu d'en sortir. */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .btn,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) button:not(.nadm-sw):not(.acc-expand){white-space:normal;height:auto;max-width:100%}
+  /* ── Rangées de boutons : à la ligne plutôt que coupées ── */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .row,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .btn-row,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .four-toolbar,:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .pf-barre{flex-wrap:wrap}
+
+  /* Filtres des fournisseurs : deux par ligne, la recherche sur toute la largeur. */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .four-toolbar{display:grid!important;grid-template-columns:1fr 1fr;gap:8px}
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .four-toolbar input.four-search{grid-column:1/-1}
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .four-toolbar select.four-filter{width:100%!important;max-width:none!important;min-width:0!important}
+
+  /* Formulaires en grille à trois colonnes (fiche client…) : deux sur téléphone. */
+  .form-grid[style*="1fr 1fr 1fr"]{grid-template-columns:1fr 1fr!important}
+  /* ── Tableaux de liste : une carte par ligne ── */
+  table.set-cartes,table.set-cartes tbody,table.set-cartes tfoot{display:block;width:100%!important;min-width:0!important}
+  table.set-cartes thead,table.set-cartes tr:has(> th):not(:has(> td)){display:none}
+  table.set-cartes tr{display:block;background:var(--card);border:1px solid var(--border);border-radius:12px;
+    padding:8px 12px;margin:0 0 8px}
+  table.set-cartes td{display:flex;justify-content:space-between;align-items:center;gap:12px;
+    padding:5px 0!important;border:0!important;text-align:right;width:auto!important;min-width:0;max-width:none!important;
+    white-space:normal!important}
+  /* Libellés sur une largeur commune : valeurs et champs alignés d'une ligne à l'autre. */
+  table.set-cartes td::before{content:attr(data-label);flex:0 0 38%;max-width:38%;text-align:left;
+    color:var(--muted);font-size:12px;font-weight:600}
+  table.set-cartes td[data-label=""]::before{display:none}
+  table.set-cartes td[data-label=""]{justify-content:flex-start;text-align:left}
+  table.set-cartes td.set-vide{display:none}
+  table.set-cartes td.set-actions{justify-content:flex-start;flex-wrap:wrap;gap:8px;margin-top:4px;
+    padding-top:8px!important;border-top:1px solid var(--border)!important}
+  table.set-cartes td > *{min-width:0}
+  table.set-cartes .set-val{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:1 1 auto;min-width:0;text-align:right}
+  table.set-cartes td > input:not([type=checkbox]):not([type=radio]),table.set-cartes td > select,table.set-cartes td > textarea{flex:1 1 auto;width:auto!important}
+  table.set-cartes tr.set-cat{background:none;border:0;padding:12px 2px 4px;margin:0}
+  table.set-cartes tr.set-cat td{display:block;text-align:left;font-weight:800;color:var(--text)}
+  table.set-cartes tr.set-cat td::before{display:none}
+  /* Le cadre qui faisait défiler le tableau en largeur n'a plus lieu d'être. */
+  :is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .table-wrap:has(> table.set-cartes),:is(.main,.alert-modal-overlay,.four-modal-backdrop,body>[style*="inset:0"],body>[style*="inset: 0"]) .op-table-wrap:has(> table.set-cartes){overflow:visible!important;border:0;background:none}
+
+  /* ── Grilles à double entrée : défilement, première colonne figée ── */
+  table.set-grille th:first-child,table.set-grille td:first-child{position:sticky;left:0;z-index:1;background:var(--card);
+    width:118px!important;min-width:118px!important;max-width:118px!important;white-space:normal!important;box-shadow:1px 0 0 var(--border)}
+  table.set-grille select{font-size:14px!important;min-height:36px;min-width:128px;width:auto!important}
+}
