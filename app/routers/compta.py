@@ -858,6 +858,31 @@ def _cmp_ligne(conn, cmp_id: int):
     return row
 
 
+def _cmp_resultat(row) -> dict:
+    """Résultat enregistré. Les comparaisons faites avant les versions
+    (09/11/2026) n'ont pas de clé par ligne : elle se reconstitue, avec la
+    même règle que le service (numéro|date, côté RVGI d'abord)."""
+    res = json.loads(row["resultat"])
+    for l in res.get("lignes", []):
+        if "cle" not in l:
+            l["cle"] = f"{l.get('numero')}|{l.get('date')}"
+    return res
+
+
+def _cmp_a_traiter(conn, v, justifs: Dict[str, dict]) -> int:
+    """Écarts à traiter d'une version, justifications déduites. Une
+    comparaison d'avant les versions n'a pas la colonne `ecarts` : on la
+    relit dans son résultat."""
+    from app.services.compta_comparaison_factures import compter_a_traiter, ecarts_compacts
+
+    if v["ecarts"]:
+        ecarts = json.loads(v["ecarts"])
+    else:
+        r = conn.execute("SELECT resultat FROM compta_comparaisons WHERE id = ?", (v["id"],)).fetchone()
+        ecarts = ecarts_compacts(_cmp_resultat(r))
+    return compter_a_traiter(ecarts, justifs)
+
+
 def _cmp_enregistrer(conn, user: dict, res: dict, fichiers: list,
                      dossier_id: Optional[int] = None, version: int = 1) -> int:
     from app.services.compta_comparaison_factures import ecarts_compacts
@@ -882,12 +907,12 @@ def _cmp_enregistrer(conn, user: dict, res: dict, fichiers: list,
 
 def _cmp_detail(conn, cmp_id: int) -> dict:
     """Une version, justifications appliquées, avec la liste des versions du dossier."""
-    from app.services.compta_comparaison_factures import appliquer_justifications, compter_a_traiter
+    from app.services.compta_comparaison_factures import appliquer_justifications
 
     row = _cmp_ligne(conn, cmp_id)
     dossier = row["dossier_id"] or row["id"]
     justifs = _cmp_justifs(conn, dossier)
-    res = json.loads(row["resultat"])
+    res = _cmp_resultat(row)
     appliquer_justifications(res, justifs)
     versions = conn.execute(
         "SELECT id, version, cree_le, ecarts, nb_ecarts FROM compta_comparaisons "
@@ -904,8 +929,7 @@ def _cmp_detail(conn, cmp_id: int) -> dict:
         "reverifiable": bool(row["donnees"]),
         "versions": [{
             "id": v["id"], "version": v["version"] or 1, "cree_le": v["cree_le"],
-            "nb_a_traiter": (compter_a_traiter(json.loads(v["ecarts"]), justifs)
-                             if v["ecarts"] else v["nb_ecarts"]),
+            "nb_a_traiter": _cmp_a_traiter(conn, v, justifs),
         } for v in versions],
     })
     return res
@@ -978,7 +1002,7 @@ async def comparaison_reverifier(
     res = comparer(donnees["rvgi"], donnees["cw"])
     res["types"] = ["rvgi", "cw"]
     res["donnees"] = donnees
-    precedent = json.loads(row["resultat"])
+    precedent = _cmp_resultat(row)
     res["bilan"] = bilan(precedent, res)
     res["bilan"].update(precedente_id=row["id"], precedente_version=row["version"] or 1,
                         remplaces=sorted(vus))
@@ -999,8 +1023,6 @@ def comparaisons_liste(request: Request):
     """Une ligne par dossier (sa dernière version), avec la progression du
     nombre d'écarts à traiter de version en version."""
     _require_compta(request)
-    from app.services.compta_comparaison_factures import compter_a_traiter
-
     with get_db() as conn:
         dossiers = [r[0] for r in conn.execute(
             "SELECT dossier_id FROM compta_comparaisons GROUP BY dossier_id "
@@ -1015,10 +1037,7 @@ def comparaisons_liste(request: Request):
                 (d,),
             ).fetchall()
             justifs = _cmp_justifs(conn, d)
-            progression = [
-                compter_a_traiter(json.loads(v["ecarts"]), justifs) if v["ecarts"] else v["nb_ecarts"]
-                for v in versions
-            ]
+            progression = [_cmp_a_traiter(conn, v, justifs) for v in versions]
             der = versions[-1]
             sortie.append({
                 "id": der["id"],
@@ -1069,7 +1088,7 @@ async def comparaison_justifier(request: Request, cmp_id: int):
         raise HTTPException(status_code=400, detail="Commentaire trop long — 300 caractères au plus.")
     with get_db() as conn:
         row = _cmp_ligne(conn, cmp_id)
-        ligne = next((l for l in json.loads(row["resultat"])["lignes"]
+        ligne = next((l for l in _cmp_resultat(row)["lignes"]
                       if l.get("cle") == cle and est_ecart(l)), None)
         if not ligne:
             raise HTTPException(status_code=404, detail="Écart introuvable dans cette comparaison.")
