@@ -80,7 +80,19 @@
       '.ta-cl-ecart{font-size:11px;font-weight:600;color:var(--muted);min-width:52px;text-align:right;font-variant-numeric:tabular-nums}',
       /* Bouton "Quitter le test" du simulateur — fixed indépendant */
       '.ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}',
-      '.ta-sim-exit:hover{background:rgba(0,0,0,.9)}'
+      '.ta-sim-exit:hover{background:rgba(0,0,0,.9)}',
+      /* Test lancé à la demande : « Fermer » sans rien enregistrer */
+      '.ta-sim-btn.ta-fermer-demande{flex:0 0 auto;padding:9px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border)}',
+      '.ta-sim-btn.ta-fermer-demande.ta-confirmer{background:var(--danger);color:white;border-color:var(--danger)}',
+      /* Pesée d'étiquettes : grammage de colle calculé sous chaque valeur */
+      '.ta-cl-colle{flex:0 0 auto;min-width:62px;text-align:right;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}',
+      '.ta-cl-colle.ta-neg{color:var(--danger)}',
+      '.ta-cl-colle-calc{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--accent-bg);font-size:12px;color:var(--text2);display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.4}',
+      '.ta-cl-colle-calc label{display:inline-flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap;margin:0}',
+      '.ta-cl-colle-calc .ta-cl-colle-nb{width:52px !important;flex:0 0 52px;min-width:0;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:12px;text-align:center}',
+      '.ta-cl-colle-res{flex:1 1 160px;min-width:0}',
+      '.ta-cl-colle-res.ta-manque{color:var(--danger);font-weight:600}',
+      '.ta-cl-colle-regl{flex:0 0 auto;padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:var(--card);color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}'
     ].join('\n');
     document.head.appendChild(style);
   })();
@@ -207,6 +219,7 @@
           help: (it && typeof it.help === 'string') ? it.help : '',
           target_value: (it && it.target_value != null && it.target_value !== '' && isFinite(Number(it.target_value))) ? Number(it.target_value) : null,
           out_of_range_is_nc: !!(it && it.out_of_range_is_nc),
+          calcul_colle: !!(it && it.calcul_colle),
         };
       }
       const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -263,8 +276,93 @@
         ecartEl.style.color = oor ? 'var(--danger)' : 'var(--muted)';
       }
     }
+    if (item.getAttribute('data-colle') === '1') _majColleValeur(inp);
   }
   window._mysifaAlertOnValueInput = _onValueInput;
+
+  // ── Pesée d'étiquettes : grammage de colle (question `calcul_colle`) ──
+  // Le calcul et ses réglages (format, papier, encre, nombre d'étiquettes
+  // pesées) sont ceux du widget Poids de colle (static/mysifa_poids_colle.js)
+  // pour le dossier en cours. Sans le widget (pages hors saisie prod), rien
+  // ne s'affiche.
+  function _colleApi() {
+    const P = window.MySifaPoidsColle;
+    return (P && typeof P.grammage === 'function' && typeof P.pret === 'function') ? P : null;
+  }
+  function _fmt1(v) {
+    return Number(v).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
+  function _majColleValeur(inp) {
+    const P = _colleApi();
+    const out = inp.parentElement && inp.parentElement.querySelector('.ta-cl-colle');
+    if (!P || !out) return;
+    const v = parseFloat(String(inp.value).replace(',', '.'));
+    out.classList.remove('ta-neg');
+    out.title = '';
+    if (!(v > 0)) { out.textContent = ''; return; }
+    const r = P.grammage(v);
+    if (r.adhesif == null) { out.textContent = '—'; out.title = r.manque || ''; return; }
+    out.textContent = _fmt1(r.adhesif) + ' g/m²';
+    out.title = 'Grammage de colle';
+    if (r.adhesif < 0) { out.classList.add('ta-neg'); out.title = 'Négatif : poids pesé ou grammage du papier à revoir'; }
+  }
+  function _majColleItem(item) {
+    const P = _colleApi();
+    const calc = item.querySelector('.ta-cl-colle-calc');
+    if (!P || !calc) return;
+    const nb = calc.querySelector('.ta-cl-colle-nb');
+    if (nb && document.activeElement !== nb) nb.value = P.nombre ? String(P.nombre() || '') : '';
+    const res = calc.querySelector('.ta-cl-colle-res');
+    const test = P.grammage(1);
+    if (test.adhesif == null) {
+      res.textContent = 'Calcul impossible : ' + String(test.manque || '').replace(/\.$/, '').toLowerCase() + '.';
+      res.classList.add('ta-manque');
+    } else {
+      res.textContent = P.resume ? P.resume() : '';
+      res.classList.remove('ta-manque');
+    }
+    item.querySelectorAll('.ta-cl-val').forEach(_majColleValeur);
+  }
+  function _initColle(wrap) {
+    const items = Array.from(wrap.querySelectorAll('.ta-cl-item[data-colle="1"]'));
+    if (!items.length) return;
+    const P = _colleApi();
+    if (!P) {
+      items.forEach(item => item.querySelectorAll('.ta-cl-colle, .ta-cl-colle-calc').forEach(e => e.remove()));
+      return;
+    }
+    items.forEach(item => {
+      const calc = item.querySelector('.ta-cl-colle-calc');
+      if (!calc) return;
+      const lab = document.createElement('label');
+      lab.appendChild(document.createTextNode('Étiquettes par pesée'));
+      const nb = document.createElement('input');
+      nb.type = 'number'; nb.min = '1'; nb.step = '1'; nb.inputMode = 'numeric';
+      nb.className = 'ta-cl-colle-nb';
+      nb.addEventListener('input', (e) => {
+        e.stopPropagation();
+        const n = parseInt(nb.value, 10);
+        if (n >= 1) P.regler({ nombre: n });
+      });
+      lab.appendChild(nb);
+      const res = document.createElement('span');
+      res.className = 'ta-cl-colle-res';
+      res.textContent = 'Chargement du dossier…';
+      const regl = document.createElement('button');
+      regl.type = 'button';
+      regl.className = 'ta-cl-colle-regl';
+      regl.textContent = 'Réglages du calcul';
+      regl.title = 'Format, papier et encre : widget Poids de colle';
+      regl.addEventListener('click', () => { if (typeof P.ouvrir === 'function') P.ouvrir(true); });
+      calc.append(lab, res, regl);
+    });
+    const maj = () => {
+      if (!wrap.isConnected) { if (P.desabonner) P.desabonner(maj); return; }
+      items.forEach(_majColleItem);
+    };
+    if (P.abonner) P.abonner(maj);
+    P.pret().then(maj, maj);
+  }
 
   // Nombre libre : l'opérateur ajoute ou retire une mesure. Les lignes sont
   // renumérotées ; les premières (minimum demandé) ne se retirent pas.
@@ -294,6 +392,7 @@
     const inp = neuve.querySelector('.ta-cl-val');
     inp.value = ''; inp.style.borderColor = ''; inp.style.color = '';
     const ec = neuve.querySelector('.ta-cl-ecart'); if (ec) ec.textContent = '';
+    const gc = neuve.querySelector('.ta-cl-colle'); if (gc) { gc.textContent = ''; gc.title = ''; gc.classList.remove('ta-neg'); }
     liste.appendChild(neuve);
     _renumeroterMesures(item);
     inp.focus();
@@ -381,11 +480,13 @@
               const _ecart = (it.target_value != null) ? '<span class="ta-cl-ecart"></span>' : '';
               const _reqStarV = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
               const _ph = _esc(it.placeholder || 'Valeur');
+              const _colle = it.calcul_colle ? '<span class="ta-cl-colle"></span>' : '';
               const _inp = (sub) => '<input type="number" step="any" inputmode="decimal" class="ta-cl-val" data-point="' + idx + '"' + (sub != null ? ' data-sub="' + sub + '"' : '') + ' placeholder="' + _ph + '" style="flex:1;min-width:0;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="window._mysifaAlertOnValueInput(this)">';
+              const _lblW = it.calcul_colle ? '64px' : '110px';
               const _multi = Array.isArray(it.points) && it.points.length > 1;
               const _ligneLibre = (k) => '<div class="ta-cl-libre" style="display:flex;align-items:center;gap:8px">'
-                + '<span class="ta-cl-libre-lbl" style="flex:0 0 110px;font-size:12px;color:var(--text2);font-weight:600">' + _esc(it.libelle_point) + ' ' + (k + 1) + '</span>'
-                + _inp(k) + unit + _ecart
+                + '<span class="ta-cl-libre-lbl" style="flex:0 0 ' + _lblW + ';font-size:12px;color:var(--text2);font-weight:600">' + _esc(it.libelle_point) + ' ' + (k + 1) + '</span>'
+                + _inp(k) + unit + _ecart + _colle
                 + '<button type="button" class="ta-cl-retirer" title="Retirer cette mesure" aria-label="Retirer cette mesure" onclick="window._mysifaAlertRetirerMesure(this)" style="flex:0 0 auto;width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-size:14px;line-height:1;' + (k < it.min_points ? 'visibility:hidden' : '') + '">×</button>'
                 + '</div>';
               const _champs = it.points_libres
@@ -395,20 +496,22 @@
                 : _multi
                 ? '<div style="display:flex;flex-direction:column;gap:6px">' + it.points.map((pl, k) =>
                     '<div style="display:flex;align-items:center;gap:8px">'
-                    + '<span style="flex:0 0 110px;font-size:12px;color:var(--text2);font-weight:600">' + _esc(pl) + '</span>'
-                    + _inp(k) + unit + _ecart
+                    + '<span style="flex:0 0 ' + _lblW + ';font-size:12px;color:var(--text2);font-weight:600">' + _esc(pl) + '</span>'
+                    + _inp(k) + unit + _ecart + _colle
                     + '</div>').join('') + '</div>'
-                : '<div style="display:flex;align-items:center;gap:8px">' + _inp(null) + unit + _ecart + '</div>';
+                : '<div style="display:flex;align-items:center;gap:8px">' + _inp(null) + unit + _ecart + _colle + '</div>';
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
                 + (it.required ? ' data-required="1"' : '')
                 + (it.points_libres ? ' data-libres="1" data-libelle="' + _esc(it.libelle_point) + '" data-min-pts="' + it.min_points + '" data-max-pts="' + it.max_points + '"' : '')
                 + (it.min != null ? ' data-min="' + _esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + _esc(String(it.max)) + '"' : '')
-                + (it.target_value != null ? ' data-cible="' + _esc(String(it.target_value)) + '"' : '') + '>'
+                + (it.target_value != null ? ' data-cible="' + _esc(String(it.target_value)) + '"' : '')
+                + (it.calcul_colle ? ' data-colle="1"' : '') + '>'
                 + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + _reqStarV + '</div>'
                 + _helpHtml(it)
                 + _champs
                 + hint
+                + (it.calcul_colle ? '<div class="ta-cl-colle-calc"></div>' : '')
                 + '</div>';
             }
             const isMulti = it.multi !== false;
@@ -600,7 +703,10 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ responses, comment, no_dossier }),
+        // Test lancé à la demande : la machine affichée par la saisie prod
+        // (celle choisie par l'admin) — le serveur la vérifie.
+        body: JSON.stringify({ responses, comment, no_dossier,
+                               machine: (alert && alert.machine) || undefined }),
       });
       if (!r.ok) {
         let msg = 'Erreur lors de la validation';
@@ -890,6 +996,7 @@
     // flushOpenAcks() puisse resoumettre les données saisies sans dépendre
     // du closure du bouton Valider.
     wrap._alert = alert;
+    _initColle(wrap);
 
     const alertEl = wrap.querySelector('.ta-sim-alert');
     // v2.3.24 : les alertes bloquantes NE sont PAS déplaçables — elles
@@ -960,6 +1067,8 @@
         // "Saisie enregistrée" de fabrication_page.py via showToast).
         _toast('Merci pour votre réponse au questionnaire.');
         closeWithSuccess();
+        // La page peut relire ses mesures (onglet Qualité de la saisie prod).
+        try { window.dispatchEvent(new CustomEvent('mysifa-alerte-validee', { detail: { id: alert.id } })); } catch (e) {}
       }
     };
     wrap.querySelector('.ta-validate').addEventListener('click', onValidate);
@@ -1094,6 +1203,55 @@
     return results;
   }
 
+  async function _ouvrirDemande(rawAlert, opts) {
+    if (!rawAlert || rawAlert.id == null) return null;
+    if (!_started) {
+      try { await _loadSettings(); } catch (e) {}
+    }
+    const deja = _displayed.get(rawAlert.id);
+    if (deja && deja.isConnected) {
+      const el = deja.querySelector('.ta-sim-alert');
+      if (el && el.classList.contains('ta-minimized')) _restoreAlert(el);
+      return deja;
+    }
+    const alert = _normalizeAlert(rawAlert);
+    alert.block_production = false;
+    alert.dismiss_button = Object.assign({}, alert.dismiss_button, { enabled: false });
+    alert.no_dossier = typeof rawAlert.no_dossier === 'string' ? rawAlert.no_dossier : '';
+    alert.machine = typeof opts.machine === 'string' ? opts.machine : '';
+    const wrap = _renderAlert(alert);
+    wrap.classList.remove('ta-blocking');
+    wrap.setAttribute('data-demande', '1');
+    _displayed.set(alert.id, wrap);
+    _displayedBlocking.add(alert.id);  // le poll ne la retire pas
+    const actions = wrap.querySelector('.ta-sim-actions');
+    if (actions) {
+      const fermer = document.createElement('button');
+      fermer.type = 'button';
+      fermer.className = 'ta-sim-btn ta-fermer-demande';
+      fermer.textContent = 'Fermer';
+      let armeJusqua = 0;
+      fermer.addEventListener('click', () => {
+        if (_hasUserInput(wrap) && Date.now() > armeJusqua) {
+          armeJusqua = Date.now() + 4000;
+          fermer.textContent = 'Fermer sans enregistrer';
+          fermer.classList.add('ta-confirmer');
+          setTimeout(() => {
+            if (!fermer.isConnected || Date.now() < armeJusqua) return;
+            fermer.textContent = 'Fermer';
+            fermer.classList.remove('ta-confirmer');
+          }, 4100);
+          return;
+        }
+        try { wrap.remove(); } catch (e) {}
+        _displayed.delete(alert.id);
+        _displayedBlocking.delete(alert.id);
+      });
+      actions.appendChild(fermer);
+    }
+    return wrap;
+  }
+
   // Aperçu dans le formulaire d'administration : la carte réelle, posée dans
   // `container`, interactive (Valider se débloque comme chez l'opérateur)
   // mais sans aucun envoi.
@@ -1108,6 +1266,7 @@
     wrap.addEventListener('change', _sync);
     wrap.addEventListener('input', _sync);
     wrap.querySelectorAll('.ta-validate, .ta-dismiss').forEach(b => b.addEventListener('click', (e) => e.preventDefault()));
+    _initColle(wrap);
     _sync();
   }
 
@@ -1128,6 +1287,12 @@
     },
     refresh: function() { return _poll(); },
     showBlockingAlerts: function(items) { return _showBlockingAlerts(items); },
+    // Test qualité lancé à la demande (saisie prod, onglet Qualité) : la
+    // vraie carte, validée par /ack comme une alerte poussée. Jamais
+    // bloquante, le poll ne la retire pas, et « Fermer » la referme sans
+    // rien enregistrer (deuxième clic demandé si une réponse est saisie).
+    // opts.machine : machine affichée par la page, transmise à l'ack.
+    ouvrir: function(rawAlert, opts) { return _ouvrirDemande(rawAlert, opts || {}); },
     // v2.3.29 : à appeler côté client avant toute saisie non-productive
     // pour préserver les données que l'op a déjà saisies dans une alerte
     // (sinon l'auto-close backend écrit un ack vide "Fermée auto : XX").

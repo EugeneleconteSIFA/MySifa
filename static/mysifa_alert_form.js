@@ -129,6 +129,7 @@
         help: (it && typeof it.help === 'string') ? it.help : '',
         target_value: (it && it.target_value != null && it.target_value !== '') ? Number(it.target_value) : null,
         out_of_range_is_nc: !!(it && it.out_of_range_is_nc),
+        calcul_colle: !!(it && it.calcul_colle),
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -461,6 +462,7 @@
     const safeMax = (item && item.max != null && item.max !== '') ? String(item.max) : '';
     const safeCible = (item && item.target_value != null && item.target_value !== '') ? String(item.target_value) : '';
     const oorNc = !!(item && item.out_of_range_is_nc);
+    const calculColle = !!(item && item.calcul_colle);
     const safePh = escAttr((item && item.placeholder) || '');
     const pts = _afPoints(item && item.points);
     const libreOn = !!(item && item.points_libres);
@@ -477,6 +479,10 @@
       + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:12px;color:var(--text2)">'
       +   '<input type="checkbox" class="af-cl-oor-nc"' + (oorNc ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
       +   '<span>Valeur hors tolérance = <strong style="color:var(--danger)">non-conformité</strong> <span style="color:var(--muted)">(signalée dans l\'historique des contrôles ; Min ou Max requis)</span></span>'
+      + '</label>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin-top:6px;cursor:pointer;font-size:12px;color:var(--text2)">'
+      +   '<input type="checkbox" class="af-cl-calcul-colle"' + (calculColle ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
+      +   '<span>Pesée d\'étiquettes : afficher le <strong>grammage de colle</strong> calculé sous chaque valeur <span style="color:var(--muted)">(saisie prod ; poids en g, format et papier du dossier, réglables dans le widget Poids de colle)</span></span>'
       + '</label>'
       + '<div style="margin-top:8px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Texte d\'exemple dans le champ <span style="text-transform:none;letter-spacing:0">(optionnel)</span></div>'
       +   '<input type="text" class="alert-field-input af-cl-placeholder" maxlength="60" placeholder="Valeur" value="' + safePh + '" style="padding:6px 10px;font-size:13px"></div>'
@@ -1036,6 +1042,7 @@
         const cibleStr = (card.querySelector('.af-cl-cible')?.value || '').trim();
         if (cibleStr !== '' && !isNaN(parseFloat(cibleStr))) item.target_value = parseFloat(cibleStr);
         if (card.querySelector('.af-cl-oor-nc')?.checked) item.out_of_range_is_nc = true;
+        if (card.querySelector('.af-cl-calcul-colle')?.checked) item.calcul_colle = true;
         // v2.3.28 : required manquait — les items marqués obligatoires
         // repassaient optionnels à chaque save via /maintenance.
         if (card.querySelector('.af-cl-required')?.checked) item.required = true;

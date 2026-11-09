@@ -838,6 +838,12 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .fab-qualite-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .fab-qualite-nav .fab-prod-card[aria-pressed="true"]{border:2px solid var(--accent);background:var(--accent-bg);padding:15px 17px}
 .fab-qualite-nav .fab-prod-card[aria-pressed="true"] .fab-prod-card-title{color:var(--accent)}
+/* Test qualité à la demande : bandeau sous les deux cartes. */
+.fab-tests-qualite{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;border-radius:12px;border:1px solid var(--border);background:var(--card)}
+.fab-tests-qualite-titre{font-size:15px;font-weight:700;color:var(--text)}
+.fab-tests-qualite-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.fab-tests-qualite-btns{display:flex;gap:8px;flex-wrap:wrap}
+.fab-tests-qualite .fab-btn-primary{color:white}
 .fab-prod-card-pesees .fab-prod-card-ico{background:var(--accent)}
 .fab-prod-card-maintenance .fab-prod-card-ico{background:var(--c4)}
 .fab-prod-head-title{
@@ -1397,7 +1403,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.21"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.23"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
 <script src="/static/mysifa_produit_memoire.js?v=2.9"></script>
 <!-- Au poste, la fiche s'ouvre sur le dernier OF scanne, les precedents a la demande. -->
@@ -1408,9 +1414,9 @@ body.has-topbar .fab-main{padding-top:74px}
 <!-- Plaque confirmée au démarrage du dossier. -->
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
-<script src="/static/mysifa_pesees.js?v=5"></script>
+<script src="/static/mysifa_pesees.js?v=6"></script>
 <script src="/static/mysifa_maint_saisie.js?v=5"></script>
-<script src="/static/mysifa_poids_colle.js?v=4"></script>
+<script src="/static/mysifa_poids_colle.js?v=5"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
   window.mysifaPoidsColleContexte = function () {
@@ -2923,6 +2929,8 @@ async function switchFabTab(tab){
   }
   // Machines proposées pour une opération de maintenance (onglet Qualité).
   if(tab==='qualite' && !(S.machines || []).length) await loadMachines();
+  // Tests qualité à la demande : relus à chaque entrée dans l'onglet.
+  if(tab==='qualite') S.testsQualite = null;
 }
 
 var FAB_VALID_TABS=['saisie','print','traca','qualite','of','stats'];
@@ -5418,6 +5426,52 @@ function _fabQualiteSous(sous){
   _fabQualiteHaut = 0;
   set({qualiteSous: sous});
 }
+/* Test qualité à la demande : les alertes actives de la machine qui ont des
+   mesures (GET /api/maintenance/alerts/a-la-demande). Le bouton ouvre la
+   carte de l'alerte (MysifaAlerts.ouvrir) au moment choisi par l'opérateur ;
+   sa validation est celle de l'alerte (même /ack, même historique). Étape
+   de saisie : rien dans l'adresse. */
+async function _fabChargerTestsQualite(machine){
+  S.testsQualite = {machine, items:null, charge:true, erreur:''};
+  let items = [], erreur = '';
+  try{
+    const d = await apiFetch('/api/maintenance/alerts/a-la-demande?machine='+encodeURIComponent(machine));
+    items = (d && Array.isArray(d.items)) ? d.items : [];
+  }catch(e){ erreur = (e && e.message) || 'Lecture impossible.'; }
+  if(!S.testsQualite || S.testsQualite.machine !== machine) return;
+  set({testsQualite:{machine, items, charge:false, erreur}});
+}
+function _fabLancerTestQualite(a){
+  if(!window.MysifaAlerts || typeof window.MysifaAlerts.ouvrir !== 'function'){
+    showToast('Module des alertes indisponible — rechargez la page.','danger');
+    return;
+  }
+  void window.MysifaAlerts.ouvrir(a, {machine:(S.machine && S.machine.nom) || ''});
+}
+// Une réponse validée ajoute des mesures : la vue des inspections les relit.
+window.addEventListener('mysifa-alerte-validee', ()=>{
+  const P = window.MySifaPesees;
+  if(S.fabTab==='qualite' && P && typeof P.recharger === 'function') P.recharger();
+});
+function _fabTestsQualiteBarre(machine){
+  if(!machine) return null;
+  const tq = S.testsQualite;
+  if(!tq || tq.machine !== machine){ void _fabChargerTestsQualite(machine); return null; }
+  if(tq.charge) return null;
+  if(tq.erreur) return h('div',{className:'fab-prod-head-sub'},'Tests qualité indisponibles — '+tq.erreur);
+  const items = tq.items || [];
+  if(!items.length) return null;
+  const seul = items.length === 1;
+  return h('div',{className:'fab-tests-qualite'},
+    h('div',null,
+      h('div',{className:'fab-tests-qualite-titre'}, seul ? items[0].nom : 'Tests qualité'),
+      h('div',{className:'fab-tests-qualite-sub'},
+        'À faire au moment voulu, sans attendre l\'alerte. La validation compte comme celle de l\'alerte.')),
+    h('div',{className:'fab-tests-qualite-btns'},
+      ...items.map(a => h('button',{type:'button', className:'fab-btn fab-btn-primary',
+          title:'Ouvrir le questionnaire « '+a.nom+' »', onClick:()=>_fabLancerTestQualite(a)},
+        svgIcon('plus-circle',16), seul ? 'Faire le test maintenant' : a.nom))));
+}
 function renderQualitePanel(){
   const P = window.MySifaPesees, MM = window.MySifaMaintSaisie;
   const machine = (S.machine && S.machine.nom) || '';
@@ -5434,6 +5488,8 @@ function renderQualitePanel(){
     h('div',{className:'fab-qualite-nav',role:'group','aria-label':'Qualité'},
       carte('pesees', 'balance', 'Inspections des produits finis', 'Pesées et mesures, dossier par dossier'),
       carte('maintenance', 'tool', 'Opérations de maintenance', 'Enregistrer une intervention')));
+  const barre = _fabTestsQualiteBarre(machine);
+  if(barre) wrap.appendChild(barre);
   // Opérations de maintenance : enregistrées dans MyMaintenance.
   if(sous === 'maintenance' && MM) wrap.appendChild(MM.vue({machine, role:(S.user && S.user.role) || '',
     machines:(S.machines || []).map(m => m.nom).filter(Boolean)}));
