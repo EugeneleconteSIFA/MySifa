@@ -489,7 +489,10 @@ async function comptaComparer(){
     fd.append('doc_a',docs[0]);fd.append('doc_b',docs[1]);
     const r=await api('/api/compta/comparaison-factures',{method:'POST',body:fd});
     if(!r){set({comptaCmpEnCours:false});return;}
-    set({comptaCmpRes:r,comptaCmpEnCours:false});
+    // Enregistrée côté serveur : l'id passe dans l'adresse (comparaison=…),
+    // un rechargement la rouvre.
+    set({comptaCmpRes:r,comptaCmpId:r.id,comptaCmpDocs:[],comptaCmpEnCours:false});
+    comptaCmpChargerHist();
     const n=r.lignes.filter(l=>l.statut!=='ok').length;
     toast(n?(n+' écart'+(n>1?'s':'')+' à examiner.'):'Les deux documents concordent.', n?'info':'success');
   }catch(e){
@@ -507,7 +510,34 @@ function comptaCmpAjouter(fichiers){
   if(docs.length===2) comptaComparer();
 }
 function comptaCmpNouvelle(){
-  set({comptaCmpDocs:[],comptaCmpRes:null,comptaCmpErreur:null,comptaCmpEnCours:false});
+  set({comptaCmpDocs:[],comptaCmpRes:null,comptaCmpId:null,comptaCmpErreur:null,comptaCmpEnCours:false});
+}
+async function comptaCmpChargerHist(){
+  try{ const l=await api('/api/compta/comparaisons'); if(l) set({comptaCmpHist:l}); }catch(e){}
+}
+async function comptaCmpOuvrir(id){
+  if(id==null) return;
+  set({comptaCmpId:id,comptaCmpDocs:[],comptaCmpErreur:null,comptaCmpEnCours:true});
+  try{
+    const r=await api('/api/compta/comparaisons/'+encodeURIComponent(id));
+    if(!r){set({comptaCmpEnCours:false});return;}
+    if(S.comptaCmpId!==id) return;
+    set({comptaCmpRes:r,comptaCmpEnCours:false});
+  }catch(e){
+    set({comptaCmpRes:null,comptaCmpId:null,comptaCmpEnCours:false,comptaCmpErreur:e.message||'Comparaison introuvable.'});
+  }
+}
+async function comptaCmpSupprimer(c){
+  if(!confirm('Supprimer la comparaison du '+comptaCmpHorodatage(c.cree_le)+' ?'))return;
+  try{
+    await api('/api/compta/comparaisons/'+c.id,{method:'DELETE'});
+    if(S.comptaCmpId===c.id) comptaCmpNouvelle();
+    toast('Comparaison supprimée.');
+    comptaCmpChargerHist();
+  }catch(e){toast(e.message||'Suppression impossible.','error');}
+}
+function comptaCmpHorodatage(iso){
+  return iso?(iso.slice(8,10)+'/'+iso.slice(5,7)+'/'+iso.slice(0,4)+' à '+iso.slice(11,16)):'';
 }
 function renderComptaCmpDepot(){
   const docs=S.comptaCmpDocs||[];
@@ -515,12 +545,17 @@ function renderComptaCmpDepot(){
   const enCours=!!S.comptaCmpEnCours;
   const inp=h('input',{type:'file',accept:'.pdf,application/pdf',multiple:'',style:{display:'none'}});
   inp.addEventListener('change',e=>{comptaCmpAjouter(e.target.files);inp.value='';});
-  const pastille=(f,i)=>{
-    const type=r&&r.types?r.types[i]:null;
+  // Fichiers à afficher : ceux qu'on vient de déposer, sinon ceux de la
+  // comparaison rouverte (noms enregistrés, les PDF ne sont pas gardés).
+  const fichiers=docs.length
+    ? docs.map((f,i)=>({nom:f.name,type:r&&r.types?r.types[i]:null}))
+    : ((r&&r.fichiers)||[]);
+  const pastille=(f)=>{
+    const type=f.type;
     return h('span',{style:{display:'inline-flex',alignItems:'center',gap:'6px',maxWidth:'100%',
       padding:'5px 10px',borderRadius:'8px',background:'var(--bg)',border:'1px solid var(--border)',fontSize:'12px'}},
       iconEl('file-text',13),
-      h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},f.name),
+      h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},f.nom),
       type?h('span',{style:{fontSize:'10px',fontWeight:'700',color:'var(--accent)'}},type==='rvgi'?'RVGI':'CW'):null
     );
   };
@@ -529,14 +564,17 @@ function renderComptaCmpDepot(){
   else if(S.comptaCmpErreur) aide=S.comptaCmpErreur;
   else if(docs.length===0) aide='Analyse des ventes RVGI et grand-livre clients CW du même mois, dans n\'importe quel ordre.';
   else if(docs.length===1) aide='Ajoute le second PDF : la comparaison démarre aussitôt.';
-  else aide='Rapprochement par numéro et date de facture.';
+  else if(docs.length===2) aide='Rapprochement par numéro et date de facture.';
+  else if(r&&r.cree_le) aide='Comparaison enregistrée le '+comptaCmpHorodatage(r.cree_le)+(r.cree_par?(' par '+r.cree_par):'')+'.';
+  else aide='Analyse des ventes RVGI et grand-livre clients CW du même mois, dans n\'importe quel ordre.';
   const zone=h('div',{className:'drop-zone',
       style:{flex:'1 1 320px',minWidth:'0',margin:'0',padding:'16px 18px',display:'flex',alignItems:'center',gap:'14px',textAlign:'left'}},
     h('div',{className:'dz-icon',style:{margin:'0'}},iconEl('cloud-upload',28)),
     h('div',{style:{flex:'1',minWidth:'0'}},
       h('div',{className:'dz-title',style:{margin:'0 0 4px'}},
-        docs.length?(docs.length+' / 2 document'+(docs.length>1?'s':'')):'Dépose les deux PDF ici'),
-      docs.length?h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'4px'}},...docs.map(pastille)):null,
+        docs.length?(docs.length+' / 2 document'+(docs.length>1?'s':''))
+          :fichiers.length?'Comparaison n° '+r.id:'Dépose les deux PDF ici'),
+      fichiers.length?h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'4px'}},...fichiers.map(pastille)):null,
       h('div',{className:'dz-sub',style:{color:S.comptaCmpErreur&&!enCours?'var(--danger)':null}},aide)
     )
   );
@@ -643,8 +681,37 @@ function renderComptaCmpResultat(r){
     )
   );
 }
+function renderComptaCmpHistorique(){
+  const liste=S.comptaCmpHist||[];
+  if(!liste.length) return null;
+  const fmtPer=p=>p&&p[0]?(comptaCmpDate(p[0])+' – '+comptaCmpDate(p[1])):'Période inconnue';
+  return h('div',{className:'card',style:{marginTop:'16px'}},
+    h('div',{className:'card-header'},h('h3',null,'Comparaisons enregistrées ('+liste.length+')')),
+    h('div',{style:{padding:'6px 12px 10px'}},...liste.map(c=>{
+      const actif=S.comptaCmpId===c.id;
+      return h('div',{className:'import-row',
+          style:{cursor:'pointer',borderRadius:'8px',padding:'8px 10px',
+            background:actif?'var(--accent-bg)':null},
+          onClick:()=>{ if(!actif) comptaCmpOuvrir(c.id); }},
+        h('div',{style:{flex:'1',minWidth:'0'}},
+          h('div',{style:{fontSize:'13px',fontWeight:'600',color:actif?'var(--accent)':'var(--text)'}},
+            'Période '+fmtPer(c.periode)),
+          h('div',{style:{fontSize:'11px',color:'var(--muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
+            comptaCmpHorodatage(c.cree_le)+(c.cree_par?(' · '+c.cree_par):'')+' · '+(c.fichiers||[]).map(f=>f.nom).join(' · '))
+        ),
+        h('span',{style:{fontSize:'12px',fontWeight:'700',whiteSpace:'nowrap',
+          color:c.nb_ecarts?'var(--danger)':'var(--success)'}},
+          c.nb_ecarts?(c.nb_ecarts+' écart'+(c.nb_ecarts>1?'s':'')):'Concordant'),
+        h('button',{type:'button',className:'btn-sm','aria-label':'Supprimer',title:'Supprimer',
+          style:{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--muted)',padding:'4px 8px'},
+          onClick:e=>{e.stopPropagation();comptaCmpSupprimer(c);}},iconEl('trash',13))
+      );
+    }))
+  );
+}
 function renderComptaComparaison(){
-  return h('div',null,renderComptaCmpDepot(),renderComptaCmpResultat(S.comptaCmpRes||null));
+  if(!S.comptaCmpHistCharge){ S.comptaCmpHistCharge=true; comptaCmpChargerHist(); }
+  return h('div',null,renderComptaCmpDepot(),renderComptaCmpResultat(S.comptaCmpRes||null),renderComptaCmpHistorique());
 }
 
 function renderCompta(){

@@ -13,8 +13,9 @@
  *   acheteur, d'un compte, d'une banque ; Paie : période, employé
  *   sélectionné, historique des périodes.
  * Hors adresse : le résultat d'un import et les documents de la comparaison
- * de factures et leur résultat (ils dépendent d'un fichier) ; le filtre du
- * résultat (filtre=) y est. Le texte
+ * de factures en cours de dépôt (ils dépendent d'un fichier) ; la
+ * comparaison enregistrée ouverte (comparaison=<id>) et son filtre (filtre=)
+ * y sont. Le texte
  * collé, la recherche d'employé, les variables de paie en cours de saisie.
  * Le « RH outil » embarqué dans le même code a déménagé vers /rh
  * (/compta#rhoutil y redirige déjà) : il ne relève pas de MyCompta.
@@ -39,7 +40,10 @@ function comptaParams() {
   if (tab !== 'factor') p.onglet = tab;
   let nav = tab;
   if (tab === 'factor' && S.comptaFactorMode === 'paste') p.mode = 'collage';
-  if (tab === 'comparaison' && S.comptaCmpFiltre && S.comptaCmpFiltre !== 'ecarts') p.filtre = S.comptaCmpFiltre;
+  if (tab === 'comparaison') {
+    if (S.comptaCmpFiltre && S.comptaCmpFiltre !== 'ecarts') p.filtre = S.comptaCmpFiltre;
+    if (S.comptaCmpId != null) { p.comparaison = String(S.comptaCmpId); nav += '/comparaison:' + S.comptaCmpId; }
+  }
   if (tab === 'paie') {
     const per = S.paieAnnee + '-' + String(S.paieMois).padStart(2, '0');
     if (per !== _comptaPeriodeCourante()) p.periode = per;
@@ -83,6 +87,12 @@ async function comptaAllerUrl(complet) {
     const f = u.get('filtre', 'ecarts');
     S.comptaCmpFiltre = (typeof COMPTA_CMP_FILTRES !== 'undefined' && COMPTA_CMP_FILTRES.includes(f)) ? f : 'ecarts';
   }
+  // Comparaison enregistrée ouverte (comparaison=<id>).
+  let cmpVoulue = null;
+  if (tab === 'comparaison') {
+    const c = u.get('comparaison', null);
+    if (c && /^[0-9]+$/.test(c)) cmpVoulue = Number(c);
+  }
   let periodeChangee = false;
   if (tab === 'paie') {
     const per = u.get('periode', complet ? _comptaPeriodeCourante() : null);
@@ -100,6 +110,10 @@ async function comptaAllerUrl(complet) {
     if (tab === 'acheteurs') loadComptaAcheteurs();
     else if (tab === 'comptes') loadComptaComptes();
     else if (tab === 'banques') loadComptaBanques();
+  }
+  if (tab === 'comparaison' && typeof comptaCmpOuvrir === 'function') {
+    if (cmpVoulue != null && cmpVoulue !== S.comptaCmpId) comptaCmpOuvrir(cmpVoulue);
+    else if (cmpVoulue == null && complet && S.comptaCmpId != null) comptaCmpNouvelle();
   }
   if (tab === 'paie' && (tab !== avantTab || periodeChangee || !complet)) {
     if (!S.paieEmpLoaded) paieLoadEmployes();
