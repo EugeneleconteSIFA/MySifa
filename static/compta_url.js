@@ -8,18 +8,20 @@
  * principal.
  *
  * Inventaire du 18/10/2026, par nom d'état (S.compta*, S.paie*, set({})) :
- *   onglet (factor, acheteurs, comptes, banques, cession, paie) ; mode de
+ *   onglet (factor, acheteurs, comptes, banques, comparaison, cession, paie) ; mode de
  *   l'import Factor (fichier / collage) ; fenêtres de modification d'un
  *   acheteur, d'un compte, d'une banque ; Paie : période, employé
  *   sélectionné, historique des périodes.
- * Hors adresse : le résultat d'un import (il dépend d'un fichier), le texte
+ * Hors adresse : le résultat d'un import et les documents de la comparaison
+ * de factures et leur résultat (ils dépendent d'un fichier) ; le filtre du
+ * résultat (filtre=) y est. Le texte
  * collé, la recherche d'employé, les variables de paie en cours de saisie.
  * Le « RH outil » embarqué dans le même code a déménagé vers /rh
  * (/compta#rhoutil y redirige déjà) : il ne relève pas de MyCompta.
  */
 let _comptaUrlPrete = false;
 let _comptaDemarre = false;
-const _COMPTA_ONGLETS = ['factor', 'acheteurs', 'comptes', 'banques', 'cession', 'paie'];
+const _COMPTA_ONGLETS = ['factor', 'acheteurs', 'comptes', 'banques', 'comparaison', 'cession', 'paie'];
 const _comptaSurPage = () => location.pathname === '/compta';
 const _comptaPeriodeCourante = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
 
@@ -37,6 +39,7 @@ function comptaParams() {
   if (tab !== 'factor') p.onglet = tab;
   let nav = tab;
   if (tab === 'factor' && S.comptaFactorMode === 'paste') p.mode = 'collage';
+  if (tab === 'comparaison' && S.comptaCmpFiltre && S.comptaCmpFiltre !== 'ecarts') p.filtre = S.comptaCmpFiltre;
   if (tab === 'paie') {
     const per = S.paieAnnee + '-' + String(S.paieMois).padStart(2, '0');
     if (per !== _comptaPeriodeCourante()) p.periode = per;
@@ -76,6 +79,10 @@ async function comptaAllerUrl(complet) {
   const avantTab = S.comptaTab || 'factor';
   S.comptaTab = tab;
   if (u.a('mode') || complet) S.comptaFactorMode = u.get('mode', null) === 'collage' ? 'paste' : 'file';
+  if (tab === 'comparaison' && (u.a('filtre') || complet)) {
+    const f = u.get('filtre', 'ecarts');
+    S.comptaCmpFiltre = (typeof COMPTA_CMP_FILTRES !== 'undefined' && COMPTA_CMP_FILTRES.includes(f)) ? f : 'ecarts';
+  }
   let periodeChangee = false;
   if (tab === 'paie') {
     const per = u.get('periode', complet ? _comptaPeriodeCourante() : null);

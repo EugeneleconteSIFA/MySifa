@@ -448,6 +448,188 @@ function renderComptaCompteModal(){
   return overlay;
 }
 
+// ── COMPARAISON FACTURES ─────────────────────────────────────────
+// Analyse des ventes RVGI (HT) et grand-livre clients CW (TTC), en PDF.
+// Le serveur reconnaît chaque document : l'ordre de dépôt est indifférent.
+// Rapprochement par numéro + date (app/services/compta_comparaison_factures.py).
+// Hors adresse : les fichiers et le résultat (ils dépendent d'un dépôt) ;
+// dans l'adresse : le filtre du résultat (filtre=…, static/compta_url.js).
+const COMPTA_CMP_STATUTS={
+  montant:{lib:'Montant',ton:'danger'},
+  numero:{lib:'Numéro',ton:'warn'},
+  date:{lib:'Date',ton:'warn'},
+  rvgi_seul:{lib:'Absente de CW',ton:'danger'},
+  cw_seul:{lib:'Absente de RVGI',ton:'danger'},
+  tva:{lib:'TVA isolée',ton:'warn'},
+  ok:{lib:'Concordante',ton:'success'},
+};
+const COMPTA_CMP_FILTRES=['ecarts','tout','montant','numero','date','rvgi_seul','cw_seul','tva','ok'];
+function comptaCmpTaille(o){
+  if(o<1024) return o+' o';
+  if(o<1048576) return (o/1024).toFixed(0)+' Ko';
+  return (o/1048576).toFixed(1).replace('.',',')+' Mo';
+}
+function comptaCmpEur(v){
+  if(v==null||!isFinite(v)) return '—';
+  return new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)+' €';
+}
+function comptaCmpDate(d){ return d?(d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4)):''; }
+function comptaCmpBadge(statut){
+  const st=COMPTA_CMP_STATUTS[statut]||{lib:statut,ton:'muted'};
+  return h('span',{style:{display:'inline-block',whiteSpace:'nowrap',fontSize:'11px',fontWeight:'700',
+    padding:'3px 9px',borderRadius:'20px',color:'var(--'+st.ton+')',
+    background:'color-mix(in srgb, var(--'+st.ton+') 14%, transparent)'}},st.lib);
+}
+async function comptaComparer(){
+  const c=S.comptaCmp||{};
+  if(!c.a||!c.b) return;
+  set({comptaCmpEnCours:true});
+  try{
+    const fd=new FormData();
+    fd.append('doc_a',c.a);fd.append('doc_b',c.b);
+    const r=await api('/api/compta/comparaison-factures',{method:'POST',body:fd});
+    if(!r){set({comptaCmpEnCours:false});return;}
+    set({comptaCmpRes:r,comptaCmpEnCours:false});
+    const n=r.lignes.filter(l=>l.statut!=='ok').length;
+    toast(n?(n+' écart'+(n>1?'s':'')+' à examiner.'):'Les deux documents concordent.', n?'info':'success');
+  }catch(e){
+    set({comptaCmpEnCours:false});
+    toast(e.message||'Comparaison impossible.','error');
+  }
+}
+function renderComptaCmpZone(cle,titre,aide){
+  const f=(S.comptaCmp||{})[cle]||null;
+  const poser=(file)=>{
+    if(!file) return;
+    if(!/\.pdf$/i.test(file.name)){toast('PDF attendu.','error');return;}
+    set({comptaCmp:Object.assign({},S.comptaCmp||{},{[cle]:file}),comptaCmpRes:null});
+  };
+  const inp=h('input',{type:'file',accept:'.pdf,application/pdf',style:{display:'none'}});
+  inp.addEventListener('change',e=>poser(e.target.files[0]));
+  const zone=h('div',{className:'drop-zone',style:{marginBottom:'0',padding:'28px 16px'}},
+    h('div',{className:'dz-icon'},iconEl(f?'file-text':'cloud-upload',32)),
+    f ? h('div',{className:'dz-title',style:{wordBreak:'break-all'}},f.name)
+      : h('div',{className:'dz-title'},'Dépose le PDF'),
+    h('div',{className:'dz-sub'}, f ? comptaCmpTaille(f.size)+' · cliquer pour remplacer' : aide)
+  );
+  zone.addEventListener('click',()=>inp.click());
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');poser(e.dataTransfer.files[0]);});
+  return h('div',{className:'card',style:{flex:'1 1 280px',minWidth:'0'}},
+    h('div',{className:'card-header'},
+      h('h3',null,titre),
+      f ? h('button',{type:'button',className:'btn-ghost btn-sm',onClick:()=>{
+            const n=Object.assign({},S.comptaCmp||{});delete n[cle];set({comptaCmp:n,comptaCmpRes:null});
+          }},iconEl('x',13),' Retirer') : null
+    ),
+    h('div',{style:{padding:'14px 18px'}},zone,inp)
+  );
+}
+function renderComptaCmpTuile(lib,val,ton,filtre){
+  const actif=filtre&&(S.comptaCmpFiltre||'ecarts')===filtre;
+  return h('div',{className:'card',
+    style:{flex:'1 1 150px',padding:'12px 16px',cursor:filtre?'pointer':'default',
+      borderColor:actif?'var(--accent)':'var(--border)'},
+    onClick:filtre?()=>set({comptaCmpFiltre:filtre}):null},
+    h('div',{style:{fontSize:'11px',fontWeight:'600',textTransform:'uppercase',letterSpacing:'.5px',color:'var(--muted)'}},lib),
+    h('div',{style:{fontSize:'22px',fontWeight:'700',marginTop:'4px',color:ton?('var(--'+ton+')'):'var(--text)'}},String(val))
+  );
+}
+function renderComptaCmpResultat(r){
+  const filtre=S.comptaCmpFiltre||'ecarts';
+  const lignes=r.lignes.filter(l=>filtre==='tout'?true:filtre==='ecarts'?l.statut!=='ok':l.statut===filtre);
+  const nbEcarts=r.lignes.length-r.compte.ok;
+  const per=r.periode_rvgi||r.periode_cw;
+  const alertes=[];
+  if(r.total_ht_rvgi_edition!=null && Math.abs(r.total_ht_rvgi_edition-r.total_ht_rvgi)>0.01)
+    alertes.push('Lecture RVGI incomplète : '+comptaCmpEur(r.total_ht_rvgi)+' lus pour un total édité de '+comptaCmpEur(r.total_ht_rvgi_edition)+'.');
+  if(r.periode_rvgi&&r.periode_cw&&(r.periode_rvgi[0]!==r.periode_cw[0]||r.periode_rvgi[1]!==r.periode_cw[1]))
+    alertes.push('Périodes différentes : RVGI du '+comptaCmpDate(r.periode_rvgi[0])+' au '+comptaCmpDate(r.periode_rvgi[1])
+      +', CW du '+comptaCmpDate(r.periode_cw[0])+' au '+comptaCmpDate(r.periode_cw[1])+'.');
+
+  const tuiles=h('div',{style:{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'12px'}},
+    renderComptaCmpTuile('Écarts',nbEcarts,nbEcarts?'danger':'success','ecarts'),
+    renderComptaCmpTuile('Concordantes',r.compte.ok,'success','ok'),
+    renderComptaCmpTuile('Factures RVGI',r.nb_rvgi,null,'tout'),
+    renderComptaCmpTuile('Écritures CW',r.nb_cw,null,null),
+    renderComptaCmpTuile('Total HT RVGI',comptaCmpEur(r.total_ht_rvgi),null,null),
+    renderComptaCmpTuile('Total TTC CW',comptaCmpEur(r.total_ttc_cw),null,null)
+  );
+  const chips=h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'12px'}},
+    ...['ecarts','tout',...Object.keys(COMPTA_CMP_STATUTS).filter(k=>k!=='ok'&&r.compte[k])].map(k=>{
+      const lib=k==='ecarts'?'Écarts ('+nbEcarts+')':k==='tout'?'Toutes ('+r.lignes.length+')'
+        :(COMPTA_CMP_STATUTS[k].lib+' ('+r.compte[k]+')');
+      const actif=filtre===k;
+      return h('button',{type:'button',className:'btn-sm',
+        style:actif?{background:'var(--accent-bg)',border:'1px solid var(--accent)',color:'var(--accent)'}
+                   :{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text2)'},
+        onClick:()=>set({comptaCmpFiltre:k})},lib);
+    })
+  );
+  const num=(v)=>h('td',{style:{textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}},v);
+  const tableau=lignes.length ? h('div',{style:{overflowX:'auto'}},
+    h('table',{style:{width:'100%'}},
+      h('thead',null,h('tr',null,
+        h('th',null,'Statut'),h('th',null,'Facture'),h('th',null,'Client'),
+        h('th',{style:{textAlign:'right'}},'HT RVGI'),h('th',{style:{textAlign:'right'}},'TTC CW'),
+        h('th',{style:{textAlign:'right'}},'TVA'),h('th',null,'Piste'))),
+      h('tbody',null,...lignes.map(l=>{
+        const autreNum=l.numero_cw&&l.numero_cw!==l.numero;
+        const autreDate=l.date_cw&&l.date_cw!==l.date;
+        return h('tr',null,
+          h('td',null,comptaCmpBadge(l.statut)),
+          h('td',{style:{whiteSpace:'nowrap'}},
+            h('div',{style:{fontFamily:'monospace',fontWeight:'600'}},l.numero),
+            h('div',{style:{fontSize:'11px',color:'var(--muted)'}},comptaCmpDate(l.date)),
+            (autreNum||autreDate)?h('div',{style:{fontSize:'11px',color:'var(--warn)'}},
+              'CW : '+(autreNum?l.numero_cw+' ':'')+(autreDate?comptaCmpDate(l.date_cw):'')):null),
+          h('td',null,
+            h('div',null,l.client_rvgi||l.client_cw||''),
+            l.compte_cw?h('div',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},l.compte_cw):null),
+          num(comptaCmpEur(l.ht)),
+          num(comptaCmpEur(l.ttc)),
+          num(l.taux!=null?(String(l.taux).replace('.',',')+' %'):'—'),
+          h('td',{style:{fontSize:'12px',color:'var(--text2)',minWidth:'240px'}},l.piste||'')
+        );
+      }))
+    )
+  ) : h('div',{className:'card-empty'},filtre==='ecarts'?'Aucun écart : les deux documents concordent.':'Aucune facture dans ce filtre.');
+
+  return h('div',null,
+    per?h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'10px'}},
+      'Période du '+comptaCmpDate(per[0])+' au '+comptaCmpDate(per[1])
+      +' · tolérance '+String(r.tolerance).replace('.',',')+' € sur le TTC'):null,
+    ...alertes.map(a=>h('div',{className:'card',style:{padding:'10px 16px',marginBottom:'10px',
+      borderColor:'var(--danger)',color:'var(--danger)',fontSize:'13px'}},a)),
+    tuiles,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',null,'Factures')),
+      h('div',{style:{padding:'14px 18px'}},chips,tableau)
+    )
+  );
+}
+function renderComptaComparaison(){
+  const c=S.comptaCmp||{};
+  const pret=!!(c.a&&c.b);
+  const enCours=!!S.comptaCmpEnCours;
+  const r=S.comptaCmpRes;
+  return h('div',null,
+    h('div',{style:{display:'flex',gap:'16px',flexWrap:'wrap',marginBottom:'12px'}},
+      renderComptaCmpZone('a','Analyse des ventes RVGI','Édition détaillée par client · montants HT'),
+      renderComptaCmpZone('b','Grand-livre clients CW','Journal des ventes · montants TTC')
+    ),
+    h('div',{style:{display:'flex',gap:'12px',alignItems:'center',flexWrap:'wrap',marginBottom:'16px'}},
+      h('button',{type:'button',className:'btn-sm',disabled:!pret||enCours,onClick:comptaComparer},
+        iconEl('copy',13),enCours?' Comparaison…':' Comparer'),
+      h('span',{style:{fontSize:'12px',color:'var(--muted)'}},
+        pret?'Rapprochement par numéro et date de facture. L\'ordre de dépôt est indifférent.'
+            :'Déposez les deux PDF du même mois.')
+    ),
+    r?renderComptaCmpResultat(r):null
+  );
+}
+
 function renderCompta(){
   // Premier rendu : l'adresse (onglet, fenêtre, période de paie) est lue par
   // static/compta_url.js, qui la tient ensuite à jour.
@@ -470,6 +652,9 @@ function renderCompta(){
         iconEl('file',15),'  Table des comptes'),
       h('button',{className:'nav-btn'+(tab==='banques'?' active':''),onClick:()=>{set({comptaTab:'banques'});loadComptaBanques();}},
         iconEl('credit-card',15),'  Code de banque'),
+      h('div',{className:'nav-group-label msb-section'},h('span',null,'Contrôle')),
+      h('button',{className:'nav-btn'+(tab==='comparaison'?' active':''),onClick:()=>{set({comptaTab:'comparaison'});}},
+        iconEl('copy',15),'  Comparaison factures'),
       h('div',{className:'nav-group-label msb-section'},h('span',null,'Autres modules')),
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
@@ -762,6 +947,8 @@ function renderCompta(){
     );
   }else if(tab==='paie'){
     content=renderPaieTab();
+  }else if(tab==='comparaison'){
+    content=renderComptaComparaison();
   }
 
   const body=h('div',{className:'app'},
@@ -769,8 +956,10 @@ function renderCompta(){
     h('main',{className:'main'},
       h('div',{className:'container'},
         topbar,
-          h('h1',null,S.comptaTab==='paie'?'Gestion des Paies':'MyCompta'),
-        h('div',{className:'subtitle'},S.comptaTab==='paie'?'Saisie mensuelle · Export xlsx':'Import Factor → mise en forme → copier vers CW'),
+          h('h1',null,S.comptaTab==='paie'?'Gestion des Paies':S.comptaTab==='comparaison'?'Comparaison factures':'MyCompta'),
+        h('div',{className:'subtitle'},S.comptaTab==='paie'?'Saisie mensuelle · Export xlsx'
+          :S.comptaTab==='comparaison'?'Deux documents de facture, côte à côte'
+          :'Import Factor → mise en forme → copier vers CW'),
         content
       )
     )
