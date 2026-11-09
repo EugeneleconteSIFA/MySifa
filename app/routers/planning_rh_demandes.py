@@ -26,6 +26,7 @@ from app.routers.planning_rh import (
     _require_atelier_view,
     _require_conge_edit,
     _week_bounds,
+    jours_affectes_pendant,
 )
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
@@ -159,19 +160,10 @@ def _demande(conn, demande_id: int) -> dict:
 
 
 def _conflits_planning(conn, user_id: int, d_deb: date, d_fin: date) -> list[str]:
-    """Semaines où l'employé est déjà affecté à un poste pendant la période."""
-    semaines = set()
-    for a in conn.execute(
-        "SELECT semaine FROM rh_planning_postes WHERE user_id = ?", (user_id,)
-    ).fetchall():
-        try:
-            ay, aw = str(a["semaine"]).split("-W")
-            lundi = date.fromisocalendar(int(ay), int(aw), 1)
-        except (ValueError, AttributeError):
-            continue
-        if d_deb <= lundi + timedelta(days=6) and d_fin >= lundi:
-            semaines.add(a["semaine"])
-    return sorted(semaines)
+    """Semaines où l'employé est affecté sur au moins un jour de la période
+    (jour par jour, d'après le masque `jours` de l'affectation)."""
+    return [f"{c['semaine']} ({', '.join(c['jours'])})"
+            for c in jours_affectes_pendant(conn, user_id, d_deb, d_fin)]
 
 
 # ── Référentiels ─────────────────────────────────────────────────
