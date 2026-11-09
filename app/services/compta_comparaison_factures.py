@@ -393,8 +393,34 @@ def comparer(rvgi: Dict, cw: Dict) -> Dict:
     compte = {s: 0 for s in ordre}
     for l in lignes:
         compte[l["statut"]] += 1
+    # TTC côté RVGI, pour comparer des totaux de même nature : HT de chaque
+    # facture + la TVA reconnue. Sans taux reconnu (montant en écart, facture
+    # absente de CW), le taux est SUPPOSÉ : le plus proche du TTC CW, sinon
+    # celui des autres factures du client, sinon le plus fréquent.
+    reconnus = [l["taux"] for l in lignes if l["taux"] is not None]
+    taux_courant = max(set(reconnus), key=reconnus.count) if reconnus else COMPTA_CMP_TAUX_TVA[0]
+    par_client: Dict[str, List[float]] = {}
+    for l in lignes:
+        if l["taux"] is not None and l["client_rvgi"]:
+            par_client.setdefault(l["client_rvgi"], []).append(l["taux"])
+    nb_supposes = 0
+    for l in lignes:
+        if l["ht"] is None:
+            l["ttc_rvgi"] = None
+            continue
+        t = l["taux"]
+        if t is None:
+            nb_supposes += 1
+            if l["ttc"] is not None:
+                t = _taux_proche(l["ht"], l["ttc"])
+            else:
+                tc = par_client.get(l["client_rvgi"] or "")
+                t = max(set(tc), key=tc.count) if tc else taux_courant
+        l["ttc_rvgi"] = round(l["ht"] * (1 + t / 100), 2)
+
     total_ht = round(sum(f["ht"] for f in rvgi["factures"]), 2)
     total_ttc = round(sum(f["ttc"] for f in cw["factures"]), 2)
+    total_ttc_rvgi = round(sum(l["ttc_rvgi"] for l in lignes if l["ttc_rvgi"] is not None), 2)
     return {
         "lignes": lignes,
         "compte": compte,
@@ -403,6 +429,9 @@ def comparer(rvgi: Dict, cw: Dict) -> Dict:
         "total_ht_rvgi": total_ht,
         "total_ht_rvgi_edition": rvgi.get("total_ht"),
         "total_ttc_cw": total_ttc,
+        "total_ttc_rvgi": total_ttc_rvgi,
+        "ecart_ttc": round(total_ttc - total_ttc_rvgi, 2),
+        "nb_taux_supposes": nb_supposes,
         "periode_rvgi": rvgi.get("periode"),
         "periode_cw": cw.get("periode"),
         "tolerance": COMPTA_CMP_TOLERANCE,

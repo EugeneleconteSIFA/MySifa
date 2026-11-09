@@ -551,14 +551,15 @@ function renderComptaCmpDepot(){
       onClick:comptaCmpNouvelle},iconEl('copy',13),' Nouvelle comparaison')
   );
 }
-function renderComptaCmpTuile(lib,val,ton,filtre){
+function renderComptaCmpTuile(lib,val,ton,filtre,detail,tonDetail){
   const actif=filtre&&(S.comptaCmpFiltre||'ecarts')===filtre;
   return h('div',{className:'card',
     style:{flex:'1 1 150px',padding:'12px 16px',cursor:filtre?'pointer':'default',
       borderColor:actif?'var(--accent)':'var(--border)'},
     onClick:filtre?()=>set({comptaCmpFiltre:filtre}):null},
     h('div',{style:{fontSize:'11px',fontWeight:'600',textTransform:'uppercase',letterSpacing:'.5px',color:'var(--muted)'}},lib),
-    h('div',{style:{fontSize:'22px',fontWeight:'700',marginTop:'4px',color:ton?('var(--'+ton+')'):'var(--text)'}},String(val))
+    h('div',{style:{fontSize:'22px',fontWeight:'700',marginTop:'4px',color:ton?('var(--'+ton+')'):'var(--text)'}},String(val)),
+    detail?h('div',{style:{fontSize:'12px',marginTop:'2px',color:tonDetail?('var(--'+tonDetail+')'):'var(--muted)'}},detail):null
   );
 }
 function renderComptaCmpResultat(r){
@@ -580,8 +581,14 @@ function renderComptaCmpResultat(r){
     renderComptaCmpTuile('Concordantes',vide?'—':r.compte.ok,vide?null:'success',vide?null:'ok'),
     renderComptaCmpTuile('Factures RVGI',vide?'—':r.nb_rvgi,null,vide?null:'tout'),
     renderComptaCmpTuile('Écritures CW',vide?'—':r.nb_cw,null,null),
-    renderComptaCmpTuile('Total HT RVGI',comptaCmpEur(r.total_ht_rvgi),null,null),
-    renderComptaCmpTuile('Total TTC CW',comptaCmpEur(r.total_ttc_cw),null,null)
+    // TTC contre TTC : RVGI ne donne que le HT, son TTC est recalculé
+    // facture par facture avec la TVA reconnue (service, total_ttc_rvgi).
+    renderComptaCmpTuile('Total TTC RVGI',comptaCmpEur(r.total_ttc_rvgi),null,null,
+      vide?null:('HT '+comptaCmpEur(r.total_ht_rvgi)+' + TVA'+(r.nb_taux_supposes?(' · '+r.nb_taux_supposes+' taux supposé'+(r.nb_taux_supposes>1?'s':'')):''))),
+    renderComptaCmpTuile('Total TTC CW',comptaCmpEur(r.total_ttc_cw),null,null,
+      vide?null:(Math.abs(r.ecart_ttc)<0.01?'Égal au TTC RVGI'
+        :('Écart '+(r.ecart_ttc>0?'+':'')+comptaCmpEur(r.ecart_ttc))),
+      vide?null:(Math.abs(r.ecart_ttc)<0.01?'success':'danger'))
   );
   const chips=vide?null:h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'12px'}},
     ...['ecarts','tout',...Object.keys(COMPTA_CMP_STATUTS).filter(k=>k!=='ok'&&r.compte[k])].map(k=>{
