@@ -348,6 +348,7 @@ body.light .rh-table tr:hover td{background:rgba(0,0,0,.02)}
 .rh-act-btn.ok{border-color:var(--success);color:var(--success)}
 .rh-act-btn.ok:hover{background:var(--success);color:white}
 .rh-act-btn svg{vertical-align:-1px}
+.rh-act-btn.ico{display:inline-flex;align-items:center;justify-content:center;padding:5px 7px}
 /* Demandes des employés (static/planning_rh_demandes.js) */
 .rh-badge.dm-en_attente{background:var(--accent-bg);color:var(--warn)}
 .rh-badge.dm-validee{background:var(--accent-bg);color:var(--success)}
@@ -2411,8 +2412,8 @@ function buildCongesTab(){
         <td style="color:var(--muted);font-size:12px">${escHtml(c.note)||'—'}</td>
         <td><span class="rh-badge ${c.statut}">${STATUT_CONGE_LABELS[c.statut]||c.statut}</span></td>
         ${S.isEditor?`<td style="white-space:nowrap">
-          <button class="rh-act-btn" onclick="editConge(${c.id})">✏️</button>
-          <button class="rh-act-btn del" onclick="deleteConge(${c.id})">🗑</button>
+          <button class="rh-act-btn ico" onclick="editConge(${c.id})" title="Modifier" aria-label="Modifier le congé">${icon('edit',13)}</button>
+          <button class="rh-act-btn ico del" onclick="deleteConge(${c.id})" title="Supprimer" aria-label="Supprimer le congé">${icon('trash',13)}</button>
         </td>`:''}
       `;
       ctbody.appendChild(tr);
