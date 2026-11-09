@@ -66,6 +66,7 @@ from app.routers.produits_memoire import router as produits_memoire_router
 from app.web.fabrication_page import router as fabrication_page_router
 from app.routers.planning_rh import router as planning_rh_api_router
 from app.routers.planning_rh_demandes import router as planning_rh_demandes_router
+from app.routers.planning_rh_outils import router as planning_rh_outils_router
 from app.web.planning_rh_page import router as planning_rh_page_router
 from app.routers.paie import router as paie_api_router
 from app.routers.rh_outil import router as rh_outil_api_router
@@ -757,6 +758,8 @@ _VERSION_ASSET = {
     b"/static/mysifa_dock.js": b"?v=4",
     b"/static/mysifa_dock_fenetres.js": b"?v=1",
     b"/static/mysifa_outils_mobile.js": b"?v=3",
+    b"/static/mysifa_postit.css": b"?v=2",
+    b"/static/mysifa_postit.js": b"?v=2",
 }
 
 
@@ -929,6 +932,7 @@ app.include_router(produits_memoire_router)
 app.include_router(fabrication_page_router)
 app.include_router(planning_rh_api_router)
 app.include_router(planning_rh_demandes_router)
+app.include_router(planning_rh_outils_router)
 app.include_router(planning_rh_page_router)
 app.include_router(paie_api_router)
 app.include_router(rh_outil_api_router)

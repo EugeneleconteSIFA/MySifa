@@ -18,6 +18,11 @@
  * `filtre=toutes` (en attente par défaut), fenêtre `motifs=ouverts` (référentiel
  * des motifs d'absence). Hors adresse : le formulaire de nouvelle demande
  * (création) et le motif d'un refus (étape interne de la décision).
+ *
+ * Outils (09/11/2026, static/planning_rh_outils.js) : `onglet=equite` (+ `annee`),
+ * fenêtres `publication=ouverte`, `seuils=ouverts`, `note=<id>` (modification
+ * d'une note existante). Hors adresse : l'assistant de génération et la
+ * création d'une note (gestes en cours).
  */
 let _prhUrlPrete = false;
 let _prhDefauts = null;              // horizons par défaut du compte, relevés au démarrage
@@ -41,6 +46,9 @@ function _prhModale() {
   if (S.modal === 'machine_config' && S.machineConfigSelected) return { cle: 'config_machine', id: S.machineConfigSelected };
   if (S.modal === 'my_maint_detail' && S.myMaintDetail && S.myMaintDetail.id != null) return { cle: 'maintenance', id: S.myMaintDetail.id };
   if (S.modal === 'motifs') return { cle: 'motifs', id: 'ouverts' };
+  if (S.modal === 'seuils') return { cle: 'seuils', id: 'ouverts' };
+  if (S.modal === 'publication') return { cle: 'publication', id: 'ouverte' };
+  if (S.modal === 'note' && S.out && S.out.note && S.out.note.id) return { cle: 'note', id: S.out.note.id };
   if (S.editConge && S.editConge.id != null) return { cle: 'modifier_conge', id: S.editConge.id };
   return null;
 }
@@ -59,6 +67,8 @@ function prhParams() {
     else if (S.viewRange !== d.vue) p.horizon = String(S.viewRange);
     if (S.detailMode) p.detail = 'jours';
   } else if (S.tab === 'conges') {
+    if (S.annee && S.annee !== new Date().getFullYear()) p.annee = String(S.annee);
+  } else if (S.tab === 'equite') {
     if (S.annee && S.annee !== new Date().getFullYear()) p.annee = String(S.annee);
   } else if (S.tab === 'demandes') {
     if (S.dm && S.dm.filtre === 'toutes') {
@@ -102,8 +112,9 @@ function prhLireUrl(complet) {
   }
   const h = MySifaUrl.hashHerite();
   const defTab = S.view === 'rh' ? 'conges' : 'planning';
-  let tab = u.get('onglet', null, ['planning', 'conges', 'demandes']) || (['planning', 'conges', 'demandes'].indexOf(h) !== -1 ? h : null);
-  if (tab || complet) S.tab = (tab === 'demandes') ? 'demandes' : ((S.view === 'rh') ? 'conges' : (tab || defTab));
+  let tab = u.get('onglet', null, ['planning', 'conges', 'demandes', 'equite']) || (['planning', 'conges', 'demandes', 'equite'].indexOf(h) !== -1 ? h : null);
+  if (tab === 'equite' && (S.view === 'rh' || _prhOperateur())) tab = null;
+  if (tab || complet) S.tab = (tab === 'demandes' || tab === 'equite') ? tab : ((S.view === 'rh') ? 'conges' : (tab || defTab));
   if (typeof prhDemandesSeules === 'function' && prhDemandesSeules()) S.tab = 'demandes';
   if (typeof prhDmEtatInitial === 'function') {
     prhDmEtatInitial();
@@ -130,6 +141,9 @@ const _PRH_REOUVRIR = {
   solde: v => openSoldeModal(v === 'nouveau' ? undefined : (isNaN(Number(v)) ? v : Number(v))),
   config_machine: v => { S.machineConfigSelected = isNaN(Number(v)) ? v : Number(v); openMachineConfigModal(); },
   maintenance: v => openMyMaintDetail(v),
+  seuils: v => { if (typeof prhPeutValider === 'function' && prhPeutValider()) return prhOuvrirSeuils(); },
+  publication: v => { if (S.isEditor && typeof prhOuvrirPublication === 'function') prhOuvrirPublication(); },
+  note: v => { if (S.isEditor && typeof prhOuvrirNote === 'function' && /^[0-9]+$/.test(v)) return prhOuvrirNote(Number(v)); },
   motifs: v => { if (typeof prhPeutValider === 'function' && prhPeutValider()) prhOuvrirMotifs(); },
   modifier_conge: v => { if ((S.conges || []).some(c => String(c.id) === v)) editConge(isNaN(Number(v)) ? v : Number(v)); },
 };

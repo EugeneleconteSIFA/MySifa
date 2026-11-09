@@ -14,6 +14,8 @@ Ce test verrouille :
    avec `force`.
 5. Refuser exige un motif ; une demande traitée ne s'annule plus (409) ;
    seul l'auteur annule la sienne (403 sinon).
+7. Un horaire aménagé validé est renvoyé pour les semaines qu'il touche,
+   sans le commentaire du demandeur ; refusé, il ne l'est pas.
 6. Les soldes imputent un motif selon son décompte (RTT, formation hors CP).
 """
 
@@ -58,6 +60,7 @@ def en_tant_que(uid, role):
 
 dm.get_current_user = lambda request: dict(COURANT)
 dm._require_conge_edit = lambda request: dict(COURANT)
+dm._require_atelier_view = lambda request: dict(COURANT)
 planning_rh._require_view = lambda request, scope="atelier": dict(COURANT)
 dm.log_action = lambda **k: None
 planning_rh.log_action = lambda **k: None
@@ -167,6 +170,20 @@ sol = {s["user_id"]: s for s in planning_rh.get_soldes(Req(), annee=2026)["solde
 s_op = sol.get(U_OP, {})
 check("CP imputés au solde CP", s_op.get("poses_cp"), 5.0)
 check("formation hors CP, comptée par motif", (s_op.get("poses_par_motif") or {}).get("formation"), 2.0)
+
+# 7. Horaires validés pour le planning.
+en_tant_que(U_OP, "fabrication")
+st, d_h2 = appel(dm.create_demande, Req({"nature": "horaire", "date_debut": "2026-12-08", "date_fin": "2026-12-09",
+                                          "heure_debut": "07:00", "heure_fin": "15:00", "commentaire": "privé"}))
+en_tant_que(U_RESP, "direction")
+appel(dm.decider_demande, d_h2["id"], Req({"decision": "valider"}))
+hz = dm.horaires_valides(Req(), from_week="2026-W50", to_week="2026-W50")["horaires"]
+check("horaire validé renvoyé sur sa semaine", [(h["heure_debut"], h["heure_fin"]) for h in hz], [("07:00", "15:00")])
+check("commentaire du demandeur non renvoyé", "commentaire" in (hz[0] if hz else {}), False)
+check("horaire refusé absent (semaine 49)",
+      dm.horaires_valides(Req(), from_week="2026-W49", to_week="2026-W49")["horaires"], [])
+check("horaire validé absent d'une autre semaine",
+      dm.horaires_valides(Req(), from_week="2026-W51", to_week="2026-W51")["horaires"], [])
 
 # Motif créé : code dérivé du libellé.
 st, m = appel(dm.create_motif, Req({"libelle": "Visite médicale", "decompte": "aucun"}))

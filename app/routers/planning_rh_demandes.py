@@ -23,7 +23,9 @@ from fastapi import APIRouter, HTTPException, Request
 from app.routers.planning_rh import (
     _filter_planning_rh_user_rows,
     _planning_rh_nom_excluded,
+    _require_atelier_view,
     _require_conge_edit,
+    _week_bounds,
 )
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
@@ -46,11 +48,65 @@ _SELECT_DEMANDE = """
            d.nature, d.motif_code, m.libelle AS motif_libelle,
            d.date_debut, d.date_fin, d.nb_jours, d.heure_debut, d.heure_fin,
            d.commentaire, d.statut, d.decision_par, d.decision_le,
-           d.decision_note, d.conge_id, d.cree_le
+           d.decision_note, d.conge_id, d.cree_le,
+           d.semaine, d.affectation_id, d.affectation_cible_id,
+           d.cible_user_id, uc.nom AS cible_nom, d.cible_reponse,
+           m1.nom AS aff_machine, p1.poste AS aff_poste, p1.creneau AS aff_creneau,
+           m2.nom AS cible_machine, p2.poste AS cible_poste, p2.creneau AS cible_creneau
       FROM rh_demandes d
       JOIN users u ON u.id = d.user_id
       LEFT JOIN rh_motifs_absence m ON m.code = d.motif_code
+      LEFT JOIN users uc ON uc.id = d.cible_user_id
+      LEFT JOIN rh_planning_postes p1 ON p1.id = d.affectation_id
+      LEFT JOIN machines m1 ON m1.id = p1.machine_id
+      LEFT JOIN rh_planning_postes p2 ON p2.id = d.affectation_cible_id
+      LEFT JOIN machines m2 ON m2.id = p2.machine_id
 """
+
+_SELECT_AFFECTATION = """
+    SELECT p.id, p.user_id, u.nom AS user_nom, u.role AS user_role, p.semaine,
+           p.machine_id, m.nom AS machine_nom, p.poste, p.creneau, p.jours
+      FROM rh_planning_postes p
+      JOIN users u ON u.id = p.user_id
+      LEFT JOIN machines m ON m.id = p.machine_id
+"""
+
+
+def _push(user_id, titre: str, corps: str, url: str = "/planning-rh?onglet=demandes") -> None:
+    """Notification push au salarié concerné — jamais bloquante."""
+    try:
+        from app.routers.push import send_push_safe
+        send_push_safe(user_id, title=titre, body=corps, url=url, tag="rh-demande")
+    except Exception:
+        pass
+
+
+def _absents_simultanes(conn, user_id: int, role: str, d_deb: date, d_fin: date) -> dict:
+    """Collègues du même service absents sur la période, pic par jour et seuil."""
+    rows = conn.execute(
+        """SELECT c.user_id, u.nom, c.date_debut, c.date_fin
+             FROM rh_conges c JOIN users u ON u.id = c.user_id
+            WHERE u.role = ? AND c.user_id != ? AND u.actif = 1 AND c.statut != 'refuse'
+              AND c.date_debut <= ? AND c.date_fin >= ?""",
+        (role, user_id, d_fin.isoformat(), d_deb.isoformat()),
+    ).fetchall()
+    pic, cur = 0, d_deb
+    while cur <= d_fin:
+        if cur.weekday() < 5:
+            j = cur.isoformat()
+            pic = max(pic, len({r["user_id"] for r in rows if r["date_debut"] <= j <= r["date_fin"]}))
+        cur += timedelta(days=1)
+    try:
+        s = conn.execute(
+            "SELECT max_absents FROM rh_absences_seuils WHERE service = ?", (role,)
+        ).fetchone()
+    except Exception:
+        s = None
+    return {
+        "noms": sorted({r["nom"] for r in rows}),
+        "pic": pic,
+        "seuil": int(s["max_absents"]) if s else None,
+    }
 
 
 def _ip(request: Request) -> Optional[str]:
@@ -231,7 +287,13 @@ def mes_demandes(request: Request):
             _SELECT_DEMANDE + " WHERE d.user_id = ? ORDER BY d.date_debut DESC, d.id DESC LIMIT 200",
             (user["id"],),
         ).fetchall()
-    return {"demandes": [dict(r) for r in rows]}
+        recues = conn.execute(
+            _SELECT_DEMANDE + """ WHERE d.cible_user_id = ? AND d.nature = 'echange'
+                                  ORDER BY CASE d.statut WHEN 'attente_collegue' THEN 0 ELSE 1 END,
+                                           d.date_debut DESC LIMIT 50""",
+            (user["id"],),
+        ).fetchall()
+    return {"demandes": [dict(r) for r in rows], "recues": [dict(r) for r in recues]}
 
 
 @router.post("/demandes")
@@ -242,6 +304,8 @@ async def create_demande(request: Request):
     nature = str(body.get("nature") or "")
     if nature not in rh_demande_natures():
         raise HTTPException(400, "Type de demande invalide.")
+    if nature == "echange":
+        return _creer_echange(user, body, request)
     d_deb, d_fin = _lire_dates(body)
     commentaire = str(body.get("commentaire") or "").strip()[:1000] or None
     motif_code = nb = h_deb = h_fin = None
@@ -307,7 +371,7 @@ def annuler_demande(demande_id: int, request: Request):
         d = _demande(conn, demande_id)
         if d["user_id"] != user["id"]:
             raise HTTPException(403, "Seul le demandeur peut annuler sa demande.")
-        if d["statut"] != "en_attente":
+        if d["statut"] not in ("en_attente", "attente_collegue"):
             raise HTTPException(409, "Demande déjà traitée — voir le responsable pour la modifier.")
         conn.execute("UPDATE rh_demandes SET statut = 'annulee' WHERE id = ?", (demande_id,))
         conn.commit()
@@ -333,11 +397,18 @@ def list_demandes(request: Request, statut: str = "", annee: Optional[int] = Non
         params += [str(annee), str(annee)]
     if _perimetre_validation(editor) == "atelier":
         conds.append(_ATELIER_SQL)
+    if not statut:
+        conds.append("d.statut != 'attente_collegue'")
     q = _SELECT_DEMANDE + (" WHERE " + " AND ".join(conds) if conds else "")
     q += " ORDER BY CASE d.statut WHEN 'en_attente' THEN 0 ELSE 1 END, d.date_debut DESC, d.id DESC"
     with get_db() as conn:
-        rows = conn.execute(q, params).fetchall()
-    return {"demandes": _filter_planning_rh_user_rows(rows, "user_nom")}
+        out = _filter_planning_rh_user_rows(conn.execute(q, params).fetchall(), "user_nom")
+        for d in out:
+            if d["nature"] == "absence" and d["statut"] == "en_attente":
+                d["absents"] = _absents_simultanes(
+                    conn, d["user_id"], d["user_role"],
+                    date.fromisoformat(d["date_debut"]), date.fromisoformat(d["date_fin"]))
+    return {"demandes": out}
 
 
 @router.post("/demandes/{demande_id}/decision")
@@ -349,6 +420,9 @@ async def decider_demande(demande_id: int, request: Request):
     if decision not in ("valider", "refuser"):
         raise HTTPException(400, "Décision invalide.")
     note = str(body.get("note") or "").strip()[:500] or None
+    forcer = set(body.get("forcer") or [])
+    if body.get("force"):
+        forcer |= {"planning", "seuil"}
     if decision == "refuser" and not note:
         raise HTTPException(400, "Motif du refus obligatoire — il est affiché au demandeur.")
 
@@ -366,8 +440,16 @@ async def decider_demande(demande_id: int, request: Request):
         conge_id = None
         if decision == "valider" and d["nature"] == "absence":
             d_deb, d_fin = date.fromisoformat(d["date_debut"]), date.fromisoformat(d["date_fin"])
+            ab = _absents_simultanes(conn, d["user_id"], d["user_role"], d_deb, d_fin)
+            if ab["seuil"] is not None and ab["pic"] + 1 > ab["seuil"] and "seuil" not in forcer:
+                raise HTTPException(409, {
+                    "message": (f"Seuil d'absences dépassé : {ab['pic']} collègue(s) du même service déjà "
+                                f"absent(s) ({', '.join(ab['noms'])}), maximum {ab['seuil']}. "
+                                f"Valider quand même ?"),
+                    "conflict_type": "seuil",
+                })
             semaines = _conflits_planning(conn, d["user_id"], d_deb, d_fin)
-            if semaines and not body.get("force"):
+            if semaines and "planning" not in forcer:
                 raise HTTPException(409, {
                     "message": (f"{d['user_nom']} est affecté(e) au planning les semaines "
                                 f"{', '.join(semaines)}. Valider quand même ? Les affectations "
@@ -385,6 +467,8 @@ async def decider_demande(demande_id: int, request: Request):
                  d["motif_code"], note_conge, editor.get("email"), maintenant),
             )
             conge_id = cur.lastrowid
+        elif decision == "valider" and d["nature"] == "echange":
+            _appliquer_echange(conn, d)
 
         conn.execute(
             """UPDATE rh_demandes
@@ -396,10 +480,164 @@ async def decider_demande(demande_id: int, request: Request):
         conn.commit()
         out = _demande(conn, demande_id)
     _invalider_notif()
+    verbe = "validée" if decision == "valider" else "refusée"
+    nature_lib = rh_demande_natures().get(d["nature"], "Demande").lower()
+    _push(d["user_id"], f"Demande {verbe}",
+          f"Votre demande ({nature_lib}, {d['date_debut']}) a été {verbe}." + (f" {note}" if note else ""))
+    if d["nature"] == "echange" and d.get("cible_user_id"):
+        _push(d["cible_user_id"], f"Échange {verbe}",
+              f"L'échange de créneau avec {d['user_nom']} ({d['semaine']}) a été {verbe}.")
     log_action(user=editor, action="UPDATE", module="rh",
-               objet=f"Demande RH #{demande_id} {'validée' if decision == 'valider' else 'refusée'} · {d['user_nom']}",
+               objet=f"Demande RH #{demande_id} {verbe} · {d['user_nom']}",
                detail={"note": note} if note else None, ip=_ip(request))
     return out
+
+
+# ── Échanges de créneau entre collègues ──────────────────────────
+def _libelle_aff(a) -> str:
+    cr = {"matin": "matin", "aprem": "après-midi", "nuit": "nuit"}.get(a["creneau"], a["creneau"] or "")
+    return " · ".join(x for x in (a["machine_nom"], a["poste"], cr) if x)
+
+
+@router.get("/echanges/options")
+def options_echange(request: Request, semaine: str):
+    """Mes affectations d'une semaine et celles des collègues échangeables."""
+    user = get_current_user(request)
+    lundi, dimanche = _week_bounds(semaine)
+    with get_db() as conn:
+        miennes = conn.execute(_SELECT_AFFECTATION + " WHERE p.semaine = ? AND p.user_id = ?",
+                               (semaine, user["id"])).fetchall()
+        autres = []
+        if miennes:
+            autres = conn.execute(
+                _SELECT_AFFECTATION + """ WHERE p.semaine = ? AND p.user_id != ? AND u.actif = 1
+                                         ORDER BY m.nom, p.creneau, u.nom COLLATE NOCASE""",
+                (semaine, user["id"]),
+            ).fetchall()
+    garder = ("id", "user_id", "user_nom", "machine_nom", "poste", "creneau", "jours")
+    return {
+        "semaine": semaine, "du": lundi.isoformat(), "au": dimanche.isoformat(),
+        "miennes": [{k: r[k] for k in garder} for r in miennes],
+        "collegues": [{k: r[k] for k in garder} for r in _filter_planning_rh_user_rows(autres, "user_nom")],
+    }
+
+
+def _creer_echange(user: dict, body: dict, request: Request) -> dict:
+    try:
+        aff_id = int(body.get("affectation_id"))
+        cible_id = int(body.get("affectation_cible_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Choisissez votre créneau et celui du collègue.")
+    commentaire = str(body.get("commentaire") or "").strip()[:1000] or None
+    with get_db() as conn:
+        mien = conn.execute(_SELECT_AFFECTATION + " WHERE p.id = ?", (aff_id,)).fetchone()
+        cible = conn.execute(_SELECT_AFFECTATION + " WHERE p.id = ?", (cible_id,)).fetchone()
+        if not mien or mien["user_id"] != user["id"]:
+            raise HTTPException(400, "Ce créneau n'est pas le vôtre.")
+        if not cible or cible["user_id"] == user["id"]:
+            raise HTTPException(400, "Créneau du collègue introuvable.")
+        if cible["semaine"] != mien["semaine"]:
+            raise HTTPException(400, "Un échange se fait sur la même semaine.")
+        if _planning_rh_nom_excluded(cible["user_nom"]):
+            raise HTTPException(400, "Ce profil n'est pas planifiable.")
+        if conn.execute(
+            """SELECT 1 FROM rh_demandes WHERE nature = 'echange'
+                  AND statut IN ('attente_collegue', 'en_attente')
+                  AND (affectation_id IN (?, ?) OR affectation_cible_id IN (?, ?))""",
+            (aff_id, cible_id, aff_id, cible_id),
+        ).fetchone():
+            raise HTTPException(409, "Un échange est déjà en cours sur l'un de ces créneaux.")
+        lundi, dimanche = _week_bounds(mien["semaine"])
+        cur = conn.execute(
+            """INSERT INTO rh_demandes
+                   (user_id, nature, date_debut, date_fin, commentaire, statut, semaine,
+                    affectation_id, affectation_cible_id, cible_user_id, cree_le, cree_par)
+               VALUES (?, 'echange', ?, ?, ?, 'attente_collegue', ?, ?, ?, ?, ?, ?)""",
+            (user["id"], lundi.isoformat(), dimanche.isoformat(), commentaire, mien["semaine"],
+             aff_id, cible_id, cible["user_id"], datetime.now().isoformat(timespec="seconds"),
+             user.get("email")),
+        )
+        conn.commit()
+        out = _demande(conn, cur.lastrowid)
+    _push(cible["user_id"], "Demande d'échange de créneau",
+          f"{mien['user_nom']} vous propose d'échanger {_libelle_aff(cible)} contre "
+          f"{_libelle_aff(mien)} ({mien['semaine']}).")
+    log_action(user=user, action="CREATE", module="rh",
+               objet=f"Échange proposé · {mien['user_nom']} ↔ {cible['user_nom']} · {mien['semaine']}",
+               ip=_ip(request))
+    return out
+
+
+@router.post("/demandes/{demande_id}/reponse")
+async def repondre_echange(demande_id: int, request: Request):
+    """Le collègue accepte ou refuse l'échange ; accepté, il part au responsable."""
+    user = get_current_user(request)
+    body = await request.json()
+    accepter = bool(body.get("accepter"))
+    with get_db() as conn:
+        d = _demande(conn, demande_id)
+        if d["nature"] != "echange" or d["cible_user_id"] != user["id"]:
+            raise HTTPException(403, "Cette demande d'échange ne vous est pas adressée.")
+        if d["statut"] != "attente_collegue":
+            raise HTTPException(409, "Échange déjà traité.")
+        maintenant = datetime.now().isoformat(timespec="seconds")
+        if accepter:
+            conn.execute(
+                """UPDATE rh_demandes SET statut = 'en_attente', cible_reponse = 'acceptee',
+                          cible_reponse_le = ? WHERE id = ?""", (maintenant, demande_id))
+        else:
+            conn.execute(
+                """UPDATE rh_demandes SET statut = 'refusee', cible_reponse = 'refusee',
+                          cible_reponse_le = ?, decision_par = ?, decision_le = ?,
+                          decision_note = 'Refusé par le collègue' WHERE id = ?""",
+                (maintenant, d["cible_nom"], maintenant, demande_id))
+        conn.commit()
+        out = _demande(conn, demande_id)
+    _invalider_notif()
+    _push(d["user_id"], "Échange " + ("accepté" if accepter else "refusé"),
+          f"{d['cible_nom']} a {'accepté' if accepter else 'refusé'} l'échange ({d['semaine']})."
+          + (" Il reste à valider par le responsable." if accepter else ""))
+    log_action(user=user, action="UPDATE", module="rh",
+               objet=f"Échange #{demande_id} {'accepté' if accepter else 'refusé'} par le collègue",
+               ip=_ip(request))
+    return out
+
+
+def _appliquer_echange(conn, d: dict) -> None:
+    """Intervertit les deux affectations, si elles n'ont pas bougé depuis la demande."""
+    a = conn.execute("SELECT id, user_id, semaine FROM rh_planning_postes WHERE id = ?",
+                     (d["affectation_id"],)).fetchone()
+    b = conn.execute("SELECT id, user_id, semaine FROM rh_planning_postes WHERE id = ?",
+                     (d["affectation_cible_id"],)).fetchone()
+    if (not a or not b or a["user_id"] != d["user_id"] or b["user_id"] != d["cible_user_id"]
+            or a["semaine"] != b["semaine"]):
+        raise HTTPException(409, "Le planning a changé depuis la demande : échange impossible, à refuser.")
+    conn.execute("UPDATE rh_planning_postes SET user_id = ? WHERE id = ?", (d["cible_user_id"], a["id"]))
+    conn.execute("UPDATE rh_planning_postes SET user_id = ? WHERE id = ?", (d["user_id"], b["id"]))
+
+
+# ── Horaires aménagés validés (affichés dans le planning) ────────
+@router.get("/horaires")
+def horaires_valides(request: Request, from_week: str, to_week: str = ""):
+    """Aménagements d'horaire validés qui touchent les semaines affichées.
+
+    Lus par la grille atelier et la vue opérateur. Le commentaire du demandeur
+    n'est pas renvoyé : le planning est vu par toute l'équipe.
+    """
+    _require_atelier_view(request)
+    lundi, _ = _week_bounds(from_week)
+    _, dimanche = _week_bounds(to_week or from_week)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT d.id, d.user_id, u.nom AS user_nom, d.date_debut, d.date_fin,
+                      d.heure_debut, d.heure_fin
+                 FROM rh_demandes d JOIN users u ON u.id = d.user_id
+                WHERE d.nature = 'horaire' AND d.statut = 'validee'
+                  AND d.date_debut <= ? AND d.date_fin >= ?
+                ORDER BY d.date_debut""",
+            (dimanche.isoformat(), lundi.isoformat()),
+        ).fetchall()
+    return {"horaires": _filter_planning_rh_user_rows(rows, "user_nom")}
 
 
 def _invalider_notif():

@@ -14,8 +14,9 @@
  * API : app/routers/planning_rh_demandes.py.
  */
 
-const PRH_DM_STATUTS = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', annulee: 'Annulée' };
-const PRH_DM_NATURES = { absence: 'Absence', horaire: "Aménagement d'horaire", autre: 'Autre demande' };
+const PRH_DM_STATUTS = { attente_collegue: 'En attente du collègue', en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', annulee: 'Annulée' };
+const PRH_DM_NATURES = { absence: 'Absence', horaire: "Aménagement d'horaire", echange: 'Échange de créneau', autre: 'Autre demande' };
+const PRH_DM_CRENEAUX = { matin: 'matin', aprem: 'après-midi', nuit: 'nuit', journee: 'journée' };
 const PRH_DM_DECOMPTES = { cp: 'Congés payés', rtt: 'RTT', aucun: 'Aucun solde' };
 
 function prhDmEtatInitial() {
@@ -67,6 +68,7 @@ async function prhChargerDemandes() {
   try {
     const mes = await api('/demandes/mes');
     S.dm.mes = (mes && mes.demandes) || [];
+    S.dm.recues = (mes && mes.recues) || [];
   } catch (e) { toast('Erreur demandes : ' + e.message, 'error'); }
   if (prhPeutValider()) {
     try {
@@ -100,7 +102,20 @@ function prhDmObjet(d) {
   if (d.nature === 'absence') return escHtml(d.motif_libelle || TYPE_CONGE_LABELS[d.motif_code] || d.motif_code || 'Absence')
     + (d.nb_jours != null ? ` · <strong>${parseFloat(d.nb_jours)}j</strong>` : '');
   if (d.nature === 'horaire') return "Horaire " + escHtml(d.heure_debut || '') + '–' + escHtml(d.heure_fin || '');
+  if (d.nature === 'echange') return prhDmAff(d.aff_machine, d.aff_creneau) + ' ↔ ' + escHtml(d.cible_nom || '?')
+    + ' (' + prhDmAff(d.cible_machine, d.cible_creneau) + ')';
   return 'Autre demande';
+}
+function prhDmAff(machine, creneau) {
+  return escHtml([machine, PRH_DM_CRENEAUX[creneau] || creneau].filter(Boolean).join(' · ') || 'créneau supprimé');
+}
+// Collègues du même service déjà absents (renvoyé par l'API pour une absence en attente).
+function prhDmAbsents(d) {
+  const a = d.absents;
+  if (!a || !a.noms || !a.noms.length) return '';
+  const depasse = a.seuil != null && a.pic + 1 > a.seuil;
+  return `<div class="rh-dm-absents${depasse ? ' depasse' : ''}">${icon('alert', 11)} Déjà absents : ${escHtml(a.noms.join(', '))}`
+    + (a.seuil != null ? ` · max ${a.seuil}` : '') + '</div>';
 }
 function prhDmBadge(statut) {
   return `<span class="rh-badge dm-${escHtml(statut)}">${escHtml(PRH_DM_STATUTS[statut] || statut)}</span>`;
@@ -121,8 +136,26 @@ function buildDemandesTab() {
       <td>${prhDmPeriode(d)}</td>
       <td class="rh-dm-com">${escHtml(d.commentaire) || '—'}</td>
       <td>${prhDmBadge(d.statut)}${d.decision_note ? `<div class="rh-dm-note">${escHtml(d.decision_note)}</div>` : ''}</td>
-      <td>${d.statut === 'en_attente' ? `<button class="rh-act-btn del" onclick="prhAnnulerDemande(${d.id})">Annuler</button>` : ''}</td>
+      <td>${d.statut === 'en_attente' || d.statut === 'attente_collegue' ? `<button class="rh-act-btn del" onclick="prhAnnulerDemande(${d.id})">Annuler</button>` : ''}</td>
     </tr>`).join('');
+  const recues = (S.dm.recues || []).filter(d => d.statut === 'attente_collegue');
+  if (recues.length) {
+    const rc = document.createElement('div'); rc.className = 'rh-section rh-dm-recues';
+    rc.innerHTML = `
+      <div class="rh-section-hdr"><span class="rh-section-title">${icon('users', 13)} Échanges proposés par un collègue</span></div>
+      <div class="rh-dm-scroll"><table class="rh-table"><tbody>${recues.map(d => `
+        <tr>
+          <td style="font-weight:600">${escHtml(d.user_nom)}</td>
+          <td>Semaine ${escHtml(String(d.semaine || '').split('-W')[1] || '')}</td>
+          <td>Vous lui donnez : <strong>${prhDmAff(d.cible_machine, d.cible_creneau)}</strong><br>Vous prenez : <strong>${prhDmAff(d.aff_machine, d.aff_creneau)}</strong></td>
+          <td class="rh-dm-com">${escHtml(d.commentaire) || '—'}</td>
+          <td style="white-space:nowrap">
+            <button class="rh-act-btn ok" onclick="prhRepondreEchange(${d.id},true)">${icon('check', 11)} Accepter</button>
+            <button class="rh-act-btn del" onclick="prhRepondreEchange(${d.id},false)">${icon('x', 11)} Refuser</button>
+          </td>
+        </tr>`).join('')}</tbody></table></div>`;
+    wrap.appendChild(rc);
+  }
   mes.innerHTML = `
     <div class="rh-section-hdr">
       <span class="rh-section-title">${icon('mail', 13)} Mes demandes</span>
@@ -142,8 +175,8 @@ function buildDemandesTab() {
     <tr>
       <td style="font-weight:600">${escHtml(d.user_nom)}</td>
       <td>${escHtml(PRH_DM_NATURES[d.nature] || d.nature)}</td>
-      <td>${prhDmObjet(d)}</td>
-      <td>${prhDmPeriode(d)}</td>
+      <td>${prhDmObjet(d)}${d.statut === 'en_attente' ? prhDmAbsents(d) : ''}</td>
+      <td>${d.nature === 'echange' ? 'Semaine ' + escHtml(String(d.semaine || '').split('-W')[1] || '') : prhDmPeriode(d)}</td>
       <td class="rh-dm-com">${escHtml(d.commentaire) || '—'}</td>
       <td>${prhDmBadge(d.statut)}${d.decision_par ? `<div class="rh-dm-note">${escHtml(d.decision_par)}${d.decision_note ? ' · ' + escHtml(d.decision_note) : ''}</div>` : ''}</td>
       <td style="white-space:nowrap">${d.statut === 'en_attente' ? `
@@ -157,6 +190,7 @@ function buildDemandesTab() {
         <button class="rh-dm-pill${S.dm.filtre === 'en_attente' ? ' active' : ''}" onclick="prhFiltreDemandes('en_attente')">En attente</button>
         <button class="rh-dm-pill${S.dm.filtre === 'toutes' ? ' active' : ''}" onclick="prhFiltreDemandes('toutes')">Toutes ${S.annee}</button>
         <button class="rh-icon-btn" onclick="prhOuvrirMotifs()">${icon('settings', 12)} Motifs d'absence</button>
+        <button class="rh-icon-btn" onclick="prhOuvrirSeuils()">${icon('users', 12)} Seuils d'absence</button>
       </div>
     </div>
     <div class="rh-dm-scroll"><table class="rh-table">
@@ -194,6 +228,7 @@ function prhJoursOuvres(deb, fin) {
 
 function prhDmChamp(cle, valeur) {
   S.dm.form[cle] = valeur;
+  if (cle === 'nature' && valeur === 'echange' && !S.dm.form.semaine) { prhDmChampSemaine(weekStr(new Date())); return; }
   if (cle === 'date_debut' && (!S.dm.form.date_fin || S.dm.form.date_fin < valeur)) S.dm.form.date_fin = valeur;
   if (cle === 'nature' || cle === 'date_debut' || cle === 'date_fin') render();
 }
@@ -212,10 +247,11 @@ function buildDemandeModal() {
     <button class="rh-modal-close" onclick="S.modal=null;render();">${icon('x', 16)}</button>
     <h3>Nouvelle demande</h3>
     <div class="rh-field"><label>Type de demande</label><div class="rh-dm-pills">${natures}</div></div>
+    ${f.nature === 'echange' ? prhDmChampsEchange(f) : ''}
     ${f.nature === 'absence' ? `
       <div class="rh-field"><label>Motif *</label>
         <select onchange="prhDmChamp('motif_code',this.value)">${motifs}</select></div>` : ''}
-    <div class="rh-dm-grid">
+    <div class="rh-dm-grid"${f.nature === 'echange' ? ' hidden' : ''}>
       <div class="rh-field"><label>${f.nature === 'horaire' ? 'Du *' : 'Date début *'}</label>
         <input type="date" value="${escHtml(f.date_debut)}" onchange="prhDmChamp('date_debut',this.value)"></div>
       <div class="rh-field"><label>${f.nature === 'horaire' ? 'Au *' : 'Date fin *'}</label>
@@ -233,7 +269,7 @@ function buildDemandeModal() {
         <div class="rh-field"><label>Heure de départ souhaitée *</label>
           <input type="time" value="${escHtml(f.heure_fin)}" onchange="prhDmChamp('heure_fin',this.value)"></div>
       </div>` : ''}
-    <div class="rh-field"><label>${f.nature === 'absence' ? 'Commentaire' : 'Motif de la demande *'}</label>
+    <div class="rh-field"><label>${f.nature === 'absence' || f.nature === 'echange' ? 'Commentaire' : 'Motif de la demande *'}</label>
       <textarea id="prh-dm-com" rows="3" maxlength="1000" placeholder="${f.nature === 'absence' ? 'Optionnel' : 'Expliquez votre demande'}"
         oninput="S.dm.form.commentaire=this.value"></textarea></div>
     <div class="rh-modal-acts">
@@ -248,10 +284,18 @@ function buildDemandeModal() {
 
 async function prhEnvoyerDemande() {
   const f = S.dm.form; if (!f) return;
+  if (f.nature === 'echange') {
+    if (!f.affectation_id || !f.affectation_cible_id) { toast('Choisissez votre créneau et celui du collègue.', 'error'); return; }
+    return prhEnvoyerCorps({ nature: 'echange', affectation_id: f.affectation_id, affectation_cible_id: f.affectation_cible_id, commentaire: f.commentaire });
+  }
   if (!f.date_debut) { toast('Date de début obligatoire.', 'error'); return; }
   const corps = { nature: f.nature, date_debut: f.date_debut, date_fin: f.date_fin || f.date_debut, commentaire: f.commentaire };
   if (f.nature === 'absence') { corps.motif_code = f.motif_code; if (f.nb_jours !== '') corps.nb_jours = parseFloat(String(f.nb_jours).replace(',', '.')); }
   if (f.nature === 'horaire') { corps.heure_debut = f.heure_debut; corps.heure_fin = f.heure_fin; }
+  return prhEnvoyerCorps(corps);
+}
+
+async function prhEnvoyerCorps(corps) {
   const btn = document.getElementById('prh-dm-envoyer'); if (btn) btn.disabled = true;
   try {
     await api('/demandes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps) });
@@ -273,15 +317,17 @@ async function prhAnnulerDemande(id) {
 }
 
 // ── Décision du responsable ───────────────────────────────────────
-async function prhDecider(id, decision, note, force) {
+async function prhDecider(id, decision, note, forcer) {
+  forcer = forcer || [];
   const r = await fetch(API + '/demandes/' + id + '/decision', {
     credentials: 'include', method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ decision, note: note || '', force: !!force }),
+    body: JSON.stringify({ decision, note: note || '', forcer }),
   });
   if (r.status === 401) { window.location.href = '/'; return; }
   const d = await r.json().catch(() => ({}));
-  if (r.status === 409 && d.detail && d.detail.conflict_type === 'planning') {
-    if (confirm(d.detail.message)) return prhDecider(id, decision, note, true);
+  // Conflit à confirmer (seuil d'absences, planning) : un par un, puis on renvoie.
+  if (r.status === 409 && d.detail && d.detail.conflict_type) {
+    if (confirm(d.detail.message)) return prhDecider(id, decision, note, forcer.concat([d.detail.conflict_type]));
     return;
   }
   if (!r.ok) { toast((typeof d.detail === 'string' ? d.detail : '') || ('Erreur ' + r.status), 'error'); return; }
@@ -388,6 +434,116 @@ async function prhEnregistrerMotif() {
     toast('Motif enregistré.', 'success');
     S.dm.motifEdit = null;
     await prhChargerMotifs();
+  } catch (e) { toast(e.message, 'error'); }
+  render();
+}
+
+// ── Horaires aménagés validés, affichés dans le planning ──────────
+// Chargés avec le planning atelier (loadData) : S.dmHoraires.
+async function prhChargerHoraires(from, to) {
+  try {
+    const d = await api('/horaires?from_week=' + encodeURIComponent(from) + '&to_week=' + encodeURIComponent(to));
+    S.dmHoraires = (d && d.horaires) || [];
+  } catch (e) { S.dmHoraires = []; }
+}
+
+function prhHorairesSemaine(userId, ws) {
+  const lun = weekMonday(ws); const dim = new Date(lun); dim.setDate(lun.getDate() + 6);
+  const a = toLocalDateStr(lun), b = toLocalDateStr(dim);
+  return (S.dmHoraires || []).filter(h => h.user_id === userId && h.date_debut <= b && h.date_fin >= a);
+}
+
+function prhHoraireLibelle(h) {
+  const per = h.date_debut === h.date_fin ? 'le ' + fmtDateFull(h.date_debut)
+    : 'du ' + fmtDateFull(h.date_debut) + ' au ' + fmtDateFull(h.date_fin);
+  return 'Horaire aménagé ' + (h.heure_debut || '') + '–' + (h.heure_fin || '') + ' ' + per;
+}
+
+// Badge sous le nom d'une personne dans une cellule de la grille.
+function prhBadgeHoraire(userId, ws) {
+  const hs = prhHorairesSemaine(userId, ws);
+  if (!hs.length) return null;
+  const b = document.createElement('span');
+  b.className = 'rh-horaire-inline-badge';
+  b.textContent = hs.map(h => (h.heure_debut || '') + '–' + (h.heure_fin || '')).join(' · ');
+  b.title = hs.map(prhHoraireLibelle).join('\n');
+  return b;
+}
+
+// ── Échanges de créneau ───────────────────────────────────────────
+async function prhDmChampSemaine(ws) {
+  const f = S.dm.form; if (!f) return;
+  f.semaine = ws; f.affectation_id = ''; f.affectation_cible_id = ''; f.options = null;
+  render();
+  try { f.options = await api('/echanges/options?semaine=' + encodeURIComponent(ws)); }
+  catch (e) { f.options = { miennes: [], collegues: [] }; toast(e.message, 'error'); }
+  if (f.options.miennes.length === 1) f.affectation_id = String(f.options.miennes[0].id);
+  if (S.dm.form === f) render();
+}
+
+function prhDmChampsEchange(f) {
+  const sems = Array.from({ length: 6 }, (_, i) => addWeeks(weekStr(new Date()), i));
+  const lib = a => [a.machine_nom, PRH_DM_CRENEAUX[a.creneau] || a.creneau].filter(Boolean).join(' · ');
+  const o = f.options;
+  let corps;
+  if (!o) corps = '<div class="rh-dm-aide">Chargement des créneaux…</div>';
+  else if (!o.miennes.length) corps = '<div class="rh-dm-aide">Vous n\'êtes pas affecté(e) cette semaine : rien à échanger.</div>';
+  else corps = `
+    <div class="rh-field"><label>Mon créneau *</label>
+      <select onchange="S.dm.form.affectation_id=this.value"><option value="">Choisir…</option>
+        ${o.miennes.map(a => `<option value="${a.id}"${String(f.affectation_id) === String(a.id) ? ' selected' : ''}>${escHtml(lib(a))}</option>`).join('')}</select></div>
+    <div class="rh-field"><label>Créneau du collègue *</label>
+      <select onchange="S.dm.form.affectation_cible_id=this.value"><option value="">Choisir…</option>
+        ${o.collegues.map(a => `<option value="${a.id}"${String(f.affectation_cible_id) === String(a.id) ? ' selected' : ''}>${escHtml(a.user_nom + ' — ' + lib(a))}</option>`).join('')}</select>
+      <small class="rh-dm-aide">Le collègue reçoit la demande et l'accepte, puis le responsable valide.</small></div>`;
+  return `<div class="rh-field"><label>Semaine</label>
+      <select onchange="prhDmChampSemaine(this.value)">${sems.map(s => `<option value="${s}"${s === f.semaine ? ' selected' : ''}>${fmtWeekLabel(s)}</option>`).join('')}</select></div>` + corps;
+}
+
+async function prhRepondreEchange(id, accepter) {
+  if (!accepter && !confirm('Refuser cet échange ?')) return;
+  try {
+    await api('/demandes/' + id + '/reponse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accepter }) });
+    toast(accepter ? 'Échange accepté — en attente du responsable.' : 'Échange refusé.', 'success');
+    await prhChargerDemandes();
+    prhCompterAValider();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Seuils d'absences simultanées ─────────────────────────────────
+async function prhOuvrirSeuils() {
+  try { const d = await api('/absences-seuils'); S.dm.seuils = (d && d.seuils) || []; }
+  catch (e) { toast(e.message, 'error'); return; }
+  S.modal = 'seuils'; render();
+}
+
+function buildSeuilsModal() {
+  const ov = document.createElement('div'); ov.className = 'rh-modal-ov';
+  ov.addEventListener('mousedown', e => { if (e.target === ov) { S.modal = null; render(); } });
+  const box = document.createElement('div'); box.className = 'rh-modal-box';
+  box.innerHTML = `
+    <button class="rh-modal-close" onclick="S.modal=null;render();">${icon('x', 16)}</button>
+    <h3>Seuils d'absences simultanées</h3>
+    <p class="rh-dm-aide" style="margin-bottom:12px">Nombre maximal de personnes d'un même service absentes le même jour. Au-delà, la validation d'une absence demande confirmation. Vide : pas de limite.</p>
+    <table class="rh-table"><tbody>${(S.dm.seuils || []).map((s, i) => `
+      <tr><td style="font-weight:600">${escHtml(s.libelle)}</td>
+        <td style="width:120px"><div class="rh-field" style="margin:0"><input type="number" min="1" max="99" value="${s.max_absents == null ? '' : s.max_absents}" placeholder="—"
+          onchange="S.dm.seuils[${i}].max_absents=this.value"></div></td></tr>`).join('')}</tbody></table>
+    <div class="rh-modal-acts">
+      <button class="rh-btn secondary" onclick="S.modal=null;render();">Annuler</button>
+      <button class="rh-btn primary" onclick="prhEnregistrerSeuils()">${icon('check', 13)} Enregistrer</button>
+    </div>`;
+  ov.appendChild(box);
+  return ov;
+}
+
+async function prhEnregistrerSeuils() {
+  try {
+    await api('/absences-seuils', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seuils: (S.dm.seuils || []).map(s => ({ service: s.service, max_absents: s.max_absents === '' ? null : s.max_absents })) }) });
+    toast('Seuils enregistrés.', 'success');
+    S.modal = null;
+    S.dm.charge = false;
   } catch (e) { toast(e.message, 'error'); }
   render();
 }

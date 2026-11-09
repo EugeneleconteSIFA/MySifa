@@ -1030,9 +1030,13 @@ ROLES_PLANNING_RH_STAFF = {ROLE_FABRICATION, ROLE_LOGISTIQUE}
 RH_DEMANDE_NATURES = (
     ("absence", "Absence"),
     ("horaire", "Aménagement d'horaire"),
+    ("echange", "Échange de créneau"),
     ("autre", "Autre demande"),
 )
+# Un échange passe d'abord par le collègue (attente_collegue), puis par le
+# responsable (en_attente). Un refus du collègue clôt la demande (refusee).
 RH_DEMANDE_STATUTS = (
+    ("attente_collegue", "En attente du collègue"),
     ("en_attente", "En attente"),
     ("validee", "Validée"),
     ("refusee", "Refusée"),
