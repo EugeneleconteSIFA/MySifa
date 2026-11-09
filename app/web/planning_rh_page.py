@@ -761,9 +761,9 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/planning_rh_url.js?v=3"></script>
 <script src="/static/planning_rh_impression.js?v=1"></script>
 <!-- Demandes des employés et motifs d'absence (onglet Demandes). -->
-<script src="/static/planning_rh_demandes.js?v=3"></script>
+<script src="/static/planning_rh_demandes.js?v=4"></script>
 <!-- Outils du responsable (génération, publication, notes, équité) et vue employé. -->
-<script src="/static/planning_rh_outils.js?v=2"></script>
+<script src="/static/planning_rh_outils.js?v=3"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -2334,6 +2334,8 @@ function buildCongesTab(){
   // === Section 2: Ajouter un congé (configurateur) ===
   if(S.isEditor){
     const addSection=document.createElement('div'); addSection.className='rh-section';
+    // Options déjà échappées par prhMotifsOptions (planning_rh_demandes.js).
+    const typeOptionsHtml=prhMotifsOptions(S.congeForm.type_conge||'CP');
     addSection.innerHTML=`
       <div class="rh-section-hdr">
         <span class="rh-section-title">${icon('plus',13)} ${S.editConge?'Modifier un congé':'Ajouter un congé'}</span>
@@ -2350,7 +2352,7 @@ function buildCongesTab(){
         <div class="rh-field" style="margin:0">
           <label>Type</label>
           <select onchange="S.congeForm.type_conge=this.value">
-            ${prhMotifsOptions(S.congeForm.type_conge||'CP')}
+            ${typeOptionsHtml}
           </select>
         </div>
         <div class="rh-field" style="margin:0">

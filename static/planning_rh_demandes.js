@@ -241,8 +241,11 @@ function buildDemandeModal() {
   const ouvres = prhJoursOuvres(f.date_debut, f.date_fin);
   const natures = Object.entries(PRH_DM_NATURES).map(([k, v]) =>
     `<button type="button" class="rh-dm-pill${f.nature === k ? ' active' : ''}" onclick="prhDmChamp('nature','${k}')">${escHtml(v)}</button>`).join('');
-  const motifs = prhMotifsActifs(true).map(m =>
-    `<option value="${escHtml(m.code)}"${f.motif_code === m.code ? ' selected' : ''}>${escHtml(m.libelle)}</option>`).join('');
+  const codeChoisi = f.motif_code;
+  const optionsHtml = prhMotifsActifs(true).map(m =>
+    `<option value="${escHtml(m.code)}"${codeChoisi === m.code ? ' selected' : ''}>${escHtml(m.libelle)}</option>`).join('');
+  // Libellé écrit dans le code (pas une saisie) : calculé hors du gabarit.
+  const libelleChamp = (f.nature === 'absence' || f.nature === 'echange') ? 'Commentaire' : 'Motif de la demande *';
   box.innerHTML = `
     <button class="rh-modal-close" onclick="S.modal=null;render();">${icon('x', 16)}</button>
     <h3>Nouvelle demande</h3>
@@ -250,7 +253,7 @@ function buildDemandeModal() {
     ${f.nature === 'echange' ? prhDmChampsEchange(f) : ''}
     ${f.nature === 'absence' ? `
       <div class="rh-field"><label>Motif *</label>
-        <select onchange="prhDmChamp('motif_code',this.value)">${motifs}</select></div>` : ''}
+        <select onchange="prhDmChamp('motif_code',this.value)">${optionsHtml}</select></div>` : ''}
     <div class="rh-dm-grid"${f.nature === 'echange' ? ' hidden' : ''}>
       <div class="rh-field"><label>${f.nature === 'horaire' ? 'Du *' : 'Date début *'}</label>
         <input type="date" value="${escHtml(f.date_debut)}" onchange="prhDmChamp('date_debut',this.value)"></div>
@@ -269,7 +272,7 @@ function buildDemandeModal() {
         <div class="rh-field"><label>Heure de départ souhaitée *</label>
           <input type="time" value="${escHtml(f.heure_fin)}" onchange="prhDmChamp('heure_fin',this.value)"></div>
       </div>` : ''}
-    <div class="rh-field"><label>${f.nature === 'absence' || f.nature === 'echange' ? 'Commentaire' : 'Motif de la demande *'}</label>
+    <div class="rh-field"><label>${libelleChamp}</label>
       <textarea id="prh-dm-com" rows="3" maxlength="1000" placeholder="${f.nature === 'absence' ? 'Optionnel' : 'Expliquez votre demande'}"
         oninput="S.dm.form.commentaire=this.value"></textarea></div>
     <div class="rh-modal-acts">
@@ -391,13 +394,14 @@ function buildMotifsModal() {
       <td>${m.actif ? 'Actif' : 'Désactivé'}</td>
       <td><button class="rh-act-btn" onclick="prhEditerMotif(${m.id})">Modifier</button></td>
     </tr>`).join('');
+  const videHtml = '<tr><td colspan="5" class="rh-empty">Aucun motif.</td></tr>';
   box.innerHTML = `
     <button class="rh-modal-close" onclick="S.modal=null;render();">${icon('x', 16)}</button>
     <h3>Motifs d'absence</h3>
     <p class="rh-dm-aide" style="margin-bottom:12px">Le décompte dit sur quel solde le motif s'impute. « Demandable » : proposé aux employés dans leurs demandes.</p>
     <div class="rh-dm-scroll"><table class="rh-table">
       <thead><tr><th>Motif</th><th>Décompte</th><th>Demandable</th><th>État</th><th></th></tr></thead>
-      <tbody>${lignes || '<tr><td colspan="5" class="rh-empty">Aucun motif.</td></tr>'}</tbody>
+      <tbody>${lignes || videHtml}</tbody>
     </table></div>
     ${ed ? `
       <div class="rh-dm-edit">
