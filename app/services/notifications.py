@@ -148,6 +148,17 @@ def _compter_departs_a_valider(conn):
     return n, (f"{today}:{r['m']}" if n else None)
 
 
+def _compter_demandes_rh(conn):
+    """Demandes d'employés (absence, horaire…) en attente de validation."""
+    if "rh_demandes" not in _tables(conn):
+        return 0, None
+    r = conn.execute(
+        "SELECT COUNT(*) AS n, MAX(id) AS m FROM rh_demandes WHERE statut = 'en_attente'"
+    ).fetchone()
+    n = int(r["n"] or 0)
+    return n, (str(r["m"]) if n else None)
+
+
 def dossiers_a_venir_sans_devis(conn) -> list[int]:
     """Dossiers du planning qui passeront en machine APRÈS aujourd'hui et
     n'ont encore aucun devis rattaché (règle d'Eugène du 16/10/2026).
@@ -268,6 +279,16 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         lien="/expe#suivi_departs",
         compter=_compter_departs_a_valider,
         roles_suggeres=("expedition",),
+    ),
+    Detecteur(
+        code="rh.demandes_a_valider",
+        app="planning_rh", app_label="Planning RH",
+        titre="Demandes RH à valider",
+        description="Demandes d'absence, d'aménagement d'horaire ou autres déposées par les "
+                    "employés et pas encore validées ni refusées.",
+        lien="/planning-rh?onglet=demandes",
+        compter=_compter_demandes_rh,
+        roles_suggeres=("direction", "comptabilite"),
     ),
     Detecteur(
         code="settings.coherence",

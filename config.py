@@ -1036,6 +1036,45 @@ ROLES_PLANNING_RH_VIEW  = ROLES_PLANNING_RH_ATELIER_VIEW | ROLES_PLANNING_RH_HR_
 ROLES_PLANNING_RH_EDIT  = ROLES_PLANNING_RH_ATELIER_EDIT | ROLES_PLANNING_RH_HR_EDIT
 ROLES_PLANNING_RH_STAFF = {ROLE_FABRICATION, ROLE_LOGISTIQUE}
 
+# Demandes des employés (Planning RH › Demandes) : chaque employé dépose une
+# demande, le responsable du planning RH la valide ou la refuse. Une absence
+# validée devient un congé (rh_conges) avec son motif. Les motifs d'absence
+# eux-mêmes sont un référentiel en base (rh_motifs_absence), pas ici.
+RH_DEMANDE_NATURES = (
+    ("absence", "Absence"),
+    ("horaire", "Aménagement d'horaire"),
+    ("echange", "Échange de créneau"),
+    ("autre", "Autre demande"),
+)
+# Un échange passe d'abord par le collègue (attente_collegue), puis par le
+# responsable (en_attente). Un refus du collègue clôt la demande (refusee).
+RH_DEMANDE_STATUTS = (
+    ("attente_collegue", "En attente du collègue"),
+    ("en_attente", "En attente"),
+    ("validee", "Validée"),
+    ("refusee", "Refusée"),
+    ("annulee", "Annulée"),
+)
+# Décompte d'un motif d'absence : sur quel solde il s'impute.
+RH_MOTIF_DECOMPTES = (
+    ("cp", "Congés payés"),
+    ("rtt", "RTT"),
+    ("aucun", "Aucun solde"),
+)
+
+
+def rh_demande_natures() -> dict:
+    return dict(RH_DEMANDE_NATURES)
+
+
+def rh_demande_statuts() -> dict:
+    return dict(RH_DEMANDE_STATUTS)
+
+
+def rh_motif_decomptes() -> dict:
+    return dict(RH_MOTIF_DECOMPTES)
+
+
 # Profils utilisateurs exclus du planning RH (comparaison sur nom normalisé : trim + minuscules).
 PLANNING_RH_EXCLUDED_NOMS = frozenset({"logistique sifa"})
 
@@ -1066,7 +1105,9 @@ def default_app_access_for_role(role: str) -> dict:
         "pricing": role in ROLES_PRICING,
         "fabrication": role in ROLES_FABRICATION_APP,
         "settings": role in ROLES_SETTINGS,
-        "planning_rh": role in ROLES_PLANNING_RH_VIEW,
+        # Tout employé ouvre Planning RH pour y déposer ses demandes ; la vue
+        # planning et la gestion des congés restent filtrées par rôle dans l'API.
+        "planning_rh": True,
         "taches": role in ROLES_TACHES,
     }
 

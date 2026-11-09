@@ -1388,11 +1388,11 @@ body.has-topbar .fab-main{padding-top:74px}
 <link rel="stylesheet" href="/static/mysifa_pesees.css?v=6">
 <link rel="stylesheet" href="/static/mysifa_maint_saisie.css?v=5">
 <link rel="stylesheet" href="/static/mysifa_poids_colle.css?v=1">
-<link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <script src="/static/mysifa_dock.js?v=fab2"></script>
-<script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_postit.js?v=2"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_poste_bobine.js?v=1"></script>

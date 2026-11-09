@@ -1,5 +1,11 @@
-"""MySifa — Post-its draggables (portail + pages applicatives si multi-page)."""
+"""MySifa — Post-its draggables (portail + pages applicatives si multi-page).
 
+Le contenu d'un post-it est une suite de blocs (prise de notes libre, menu « / »
+côté page) rangée en JSON dans `postits.contenu`. Chaque enregistrement réécrit
+la liste entière : un post-it est petit, et un seul utilisateur l'édite.
+"""
+
+import json
 import re
 
 from fastapi import APIRouter, HTTPException, Request
@@ -9,9 +15,68 @@ from services.auth_service import get_current_user
 
 router = APIRouter(tags=["postits"])
 
-_POSTIT_COLS = "id, user_id, type, title, pos_x, pos_y, width, multi_page, hidden, color, created_at"
+_POSTIT_COLS = "id, user_id, type, title, pos_x, pos_y, width, multi_page, hidden, color, contenu, created_at"
 _POSTIT_DEFAULT_COLORS = {"today": "#22d3ee", "someday": "#fbbf24"}
 _COLOR_HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+# Format d'édition (pas un référentiel métier) : les types que l'éditeur sait
+# afficher. Un type inconnu est refusé plutôt que perdu en silence.
+BLOC_TYPES = ("p", "h1", "h2", "h3", "todo", "puce", "num", "citation", "encadre", "code", "sep")
+BLOCS_MAX = 400
+BLOC_TEXTE_MAX = 4000
+BLOC_RETRAIT_MAX = 3
+
+
+def _bloc_propre(b: dict) -> dict:
+    t = str(b.get("type") or "p")
+    texte = "" if t == "sep" else str(b.get("texte") if b.get("texte") is not None else "")
+    try:
+        retrait = max(0, min(BLOC_RETRAIT_MAX, int(b.get("retrait") or 0)))
+    except (TypeError, ValueError):
+        retrait = 0
+    out = {"type": t, "texte": texte}
+    if retrait:
+        out["retrait"] = retrait
+    if t == "todo":
+        out["coche"] = bool(b.get("coche"))
+    return out
+
+
+def normaliser_blocs(valeur) -> list[dict]:
+    """Contrôle une liste de blocs reçue de la page. Lève 400 si elle est invalide."""
+    if not isinstance(valeur, list):
+        raise HTTPException(400, "Contenu invalide — liste de blocs attendue.")
+    if len(valeur) > BLOCS_MAX:
+        raise HTTPException(400, f"Post-it trop long — {BLOCS_MAX} blocs au plus.")
+    out = []
+    for b in valeur:
+        if not isinstance(b, dict):
+            raise HTTPException(400, "Contenu invalide — bloc mal formé.")
+        t = str(b.get("type") or "p")
+        if t not in BLOC_TYPES:
+            raise HTTPException(400, f"Type de bloc inconnu : {t}.")
+        propre = _bloc_propre(b)
+        if len(propre["texte"]) > BLOC_TEXTE_MAX:
+            raise HTTPException(400, f"Bloc trop long — {BLOC_TEXTE_MAX} caractères au plus.")
+        out.append(propre)
+    return out
+
+
+def lire_blocs(brut) -> list[dict]:
+    """Contenu stocké → blocs. Tolérant : un contenu illisible donne un post-it vide."""
+    try:
+        data = json.loads(brut) if brut else []
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    return [_bloc_propre(b) for b in data if isinstance(b, dict) and str(b.get("type") or "p") in BLOC_TYPES]
+
+
+def _sortie(row) -> dict:
+    p = dict(row)
+    p["blocs"] = lire_blocs(p.pop("contenu", None))
+    return p
 
 
 def _default_postit_color(ptype: str) -> str:
@@ -51,17 +116,7 @@ def list_postits(request: Request):
             f"SELECT {_POSTIT_COLS} FROM postits WHERE user_id=? ORDER BY id",
             (user_id,),
         ).fetchall()
-        out = []
-        for r in rows:
-            p = dict(r)
-            tasks = conn.execute(
-                """SELECT id, postit_id, text, done, order_index
-                   FROM postit_tasks WHERE postit_id=? ORDER BY order_index, id""",
-                (p["id"],),
-            ).fetchall()
-            p["tasks"] = [dict(t) for t in tasks]
-            out.append(p)
-    return out
+    return [_sortie(r) for r in rows]
 
 
 @router.post("/api/postits")
@@ -75,10 +130,11 @@ async def create_postit(request: Request):
     if not title:
         raise HTTPException(400, "Titre obligatoire")
     color = _normalize_postit_color(body.get("color"), ptype)
+    blocs = normaliser_blocs(body.get("blocs") or [])
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO postits (user_id, type, title, color) VALUES (?,?,?,?)",
-            (user_id, ptype, title, color),
+            "INSERT INTO postits (user_id, type, title, color, contenu) VALUES (?,?,?,?,?)",
+            (user_id, ptype, title, color, json.dumps(blocs, ensure_ascii=False)),
         )
         pid = cur.lastrowid
         row = conn.execute(
@@ -86,7 +142,7 @@ async def create_postit(request: Request):
             (pid,),
         ).fetchone()
         conn.commit()
-    return dict(row)
+    return _sortie(row)
 
 
 @router.delete("/api/postits/{postit_id}")
@@ -120,6 +176,9 @@ async def patch_postit(postit_id: int, request: Request):
     if "color" in body:
         updates.append("color=?")
         params.append(_normalize_postit_color(body.get("color")))
+    if "blocs" in body:
+        updates.append("contenu=?")
+        params.append(json.dumps(normaliser_blocs(body.get("blocs")), ensure_ascii=False))
     if not updates:
         raise HTTPException(400, "Aucune modification")
     with get_db() as conn:
@@ -134,7 +193,7 @@ async def patch_postit(postit_id: int, request: Request):
             (postit_id,),
         ).fetchone()
         conn.commit()
-    out = dict(row)
+    out = _sortie(row)
     out["ok"] = True
     return out
 
@@ -157,91 +216,19 @@ async def update_postit_pos(postit_id: int, request: Request):
 
 @router.post("/api/postits/{postit_id}/tasks")
 async def add_task(postit_id: int, request: Request):
+    """Ajoute une case à cocher en fin de post-it (action de l'assistant IA)."""
     user_id = _user_id(request)
     body = await request.json()
     text = str(body.get("text") if body.get("text") is not None else "")
     with get_db() as conn:
-        _get_postit_or_404(conn, postit_id, user_id)
-        row_max = conn.execute(
-            "SELECT COALESCE(MAX(order_index), -1) AS m FROM postit_tasks WHERE postit_id=?",
-            (postit_id,),
-        ).fetchone()
-        order_index = int(row_max["m"]) + 1
-        cur = conn.execute(
-            "INSERT INTO postit_tasks (postit_id, text, order_index) VALUES (?,?,?)",
-            (postit_id, text, order_index),
-        )
-        tid = cur.lastrowid
-        row = conn.execute(
-            "SELECT id, postit_id, text, done, order_index FROM postit_tasks WHERE id=?",
-            (tid,),
-        ).fetchone()
-        conn.commit()
-    return dict(row)
-
-
-@router.delete("/api/postits/{postit_id}/tasks/done/clear")
-def clear_done_tasks(postit_id: int, request: Request):
-    user_id = _user_id(request)
-    with get_db() as conn:
-        _get_postit_or_404(conn, postit_id, user_id)
+        p = _get_postit_or_404(conn, postit_id, user_id)
+        blocs = lire_blocs(p.get("contenu"))
+        bloc = {"type": "todo", "texte": text, "coche": False}
+        blocs.append(bloc)
+        blocs = normaliser_blocs(blocs)
         conn.execute(
-            "DELETE FROM postit_tasks WHERE postit_id=? AND done=1",
-            (postit_id,),
+            "UPDATE postits SET contenu=? WHERE id=?",
+            (json.dumps(blocs, ensure_ascii=False), postit_id),
         )
         conn.commit()
-    return {"ok": True}
-
-
-@router.patch("/api/postits/{postit_id}/tasks/{task_id}")
-async def patch_task(postit_id: int, task_id: int, request: Request):
-    user_id = _user_id(request)
-    body = await request.json()
-    with get_db() as conn:
-        _get_postit_or_404(conn, postit_id, user_id)
-        row = conn.execute(
-            "SELECT id FROM postit_tasks WHERE id=? AND postit_id=?",
-            (task_id, postit_id),
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "Tâche introuvable")
-        updates = []
-        params = []
-        if "done" in body:
-            updates.append("done=?")
-            params.append(1 if body.get("done") else 0)
-        if "text" in body:
-            updates.append("text=?")
-            params.append(str(body.get("text") if body.get("text") is not None else ""))
-        if not updates:
-            raise HTTPException(400, "Aucune modification")
-        params.extend([task_id, postit_id])
-        conn.execute(
-            f"UPDATE postit_tasks SET {', '.join(updates)} WHERE id=? AND postit_id=?",
-            params,
-        )
-        conn.commit()
-        out = conn.execute(
-            "SELECT id, postit_id, text, done, order_index FROM postit_tasks WHERE id=?",
-            (task_id,),
-        ).fetchone()
-    return dict(out)
-
-
-@router.delete("/api/postits/{postit_id}/tasks/{task_id}")
-def delete_task(postit_id: int, task_id: int, request: Request):
-    user_id = _user_id(request)
-    with get_db() as conn:
-        _get_postit_or_404(conn, postit_id, user_id)
-        row = conn.execute(
-            "SELECT id FROM postit_tasks WHERE id=? AND postit_id=?",
-            (task_id, postit_id),
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "Tâche introuvable")
-        conn.execute(
-            "DELETE FROM postit_tasks WHERE id=? AND postit_id=?",
-            (task_id, postit_id),
-        )
-        conn.commit()
-    return {"ok": True}
+    return {"ok": True, "bloc": blocs[-1], "index": len(blocs) - 1}

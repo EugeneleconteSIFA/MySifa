@@ -227,6 +227,9 @@ body.sb-open .sidebar-overlay{display:block}
   font-size:9px;font-weight:600;color:var(--warn);white-space:nowrap;
   letter-spacing:0.01em;
 }
+.rh-horaire-inline-badge{
+  font-size:9px;font-weight:700;color:var(--accent);white-space:nowrap;letter-spacing:0.01em;
+}
 .rh-chip-del{
   display:inline-flex;align-items:center;justify-content:center;
   width:14px;height:14px;border-radius:50%;border:none;background:transparent;
@@ -326,7 +329,7 @@ body.light .rh-table tr:hover td{background:rgba(0,0,0,.02)}
 .rh-bar-fill.danger{background:var(--danger)}
 .rh-badge{
   display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;
-  font-size:11px;font-weight:600;
+  font-size:11px;font-weight:600;background:var(--accent-bg);color:var(--text2);
 }
 .rh-badge.cp{background:var(--accent-bg);color:var(--accent)}
 .rh-badge.rtt{background:rgba(167,139,250,.12);color:var(--c2)}
@@ -337,11 +340,93 @@ body.light .rh-table tr:hover td{background:rgba(0,0,0,.02)}
 .rh-badge.refuse{background:rgba(248,113,113,.12);color:var(--danger)}
 .rh-act-btn{
   padding:4px 10px;border-radius:6px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);cursor:pointer;font-size:11px;
+  background:var(--bg);color:var(--text2);cursor:pointer;font-size:11px;
   font-family:inherit;font-weight:600;transition:all .15s;
 }
 .rh-act-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-act-btn.del:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.08)}
+.rh-act-btn.ok{border-color:var(--success);color:var(--success)}
+.rh-act-btn.ok:hover{background:var(--success);color:white}
+.rh-act-btn svg{vertical-align:-1px}
+/* Demandes des employés (static/planning_rh_demandes.js) */
+.rh-badge.dm-en_attente{background:var(--accent-bg);color:var(--warn)}
+.rh-badge.dm-validee{background:var(--accent-bg);color:var(--success)}
+.rh-badge.dm-refusee{background:var(--accent-bg);color:var(--danger)}
+.rh-badge.dm-annulee{background:var(--accent-bg);color:var(--muted)}
+.rh-dm-scroll{overflow-x:auto}
+.rh-dm-com{color:var(--muted);font-size:12px;max-width:280px;white-space:pre-wrap;word-break:break-word}
+.rh-dm-note{color:var(--muted);font-size:11px;margin-top:3px}
+.rh-dm-aide{color:var(--muted);font-size:11px}
+.rh-dm-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rh-dm-pill{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.rh-dm-pill:hover{background:var(--card)}
+.rh-dm-pill.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.rh-dm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rh-dm-check{display:flex!important;align-items:center;gap:8px;text-transform:none!important;letter-spacing:0!important;
+  font-size:13px!important;font-weight:500!important;color:var(--text)!important;margin-bottom:6px!important}
+.rh-dm-check input{width:auto!important}
+.rh-dm-edit{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.rh-dm-inactif td{opacity:.55}
+.rh-nav-count{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);
+  color:white;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+@media(max-width:600px){.rh-dm-grid{grid-template-columns:1fr}}
+.rh-dm-grid[hidden]{display:none}
+.rh-dm-absents{margin-top:4px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.rh-dm-absents.depasse{color:var(--danger);font-weight:600}
+.rh-dm-recues{border-color:var(--accent)}
+/* Outils du responsable (static/planning_rh_outils.js) */
+.rh-pub{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:var(--accent-bg)}
+.rh-pub.brouillon{color:var(--muted)}
+.rh-pub.publie{color:var(--success)}
+.rh-pub.modifie{color:var(--warn)}
+.rh-notes-bandeau{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.rh-note{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:10px 14px;
+  background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px}
+.rh-note.important{border-left-color:var(--danger)}
+.rh-note-meta{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.rh-note-texte{grid-column:1;font-size:14px;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.rh-note-acts{grid-column:2;grid-row:1/span 2;display:flex;gap:6px}
+.rh-gen-apercu{margin-top:4px;padding:12px;background:var(--bg);border-radius:10px;font-size:13px;display:flex;flex-direction:column;gap:6px}
+.rh-gen-ignorees{font-size:12px;color:var(--text2);max-height:160px;overflow:auto}
+.rh-equite td{min-width:84px}
+.rh-eq-cell{display:flex;flex-direction:column;gap:3px;font-weight:600}
+.rh-eq-cell i{display:block;height:4px;border-radius:2px;background:var(--accent);opacity:.45;min-width:2px}
+.rh-eq-cell.haut{color:var(--warn)}
+.rh-eq-cell.haut i{background:var(--warn);opacity:.8}
+.rh-equite tfoot td{font-weight:700;color:var(--muted);border-top:1px solid var(--border)}
+/* Vue employé sur ordinateur */
+.rh-emp{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.rh-emp-barre{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.rh-emp-titre{flex:1;font-size:14px;font-weight:700;color:var(--text);min-width:200px}
+.rh-emp-semaines{display:grid;gap:16px}
+.rh-emp-carte{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.rh-emp-carte.courante{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.rh-emp-tete{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.rh-emp-sem{font-size:17px;font-weight:800;color:var(--text)}
+.rh-emp-cette{font-size:11px;font-weight:700;color:var(--accent);margin-left:6px;text-transform:uppercase;letter-spacing:.4px}
+.rh-emp-postes{display:flex;flex-direction:column;gap:6px}
+.rh-emp-poste{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rh-emp-machine{font-size:15px;font-weight:700;color:var(--text)}
+.rh-emp-creneau{padding:3px 10px;border-radius:8px;font-size:12px;font-weight:700;background:var(--accent-bg);color:var(--accent)}
+.rh-emp-creneau.c-nuit,.rh-emp-etat.c-nuit{color:var(--c4)}
+.rh-emp-creneau.c-aprem,.rh-emp-etat.c-aprem{color:var(--c2)}
+.rh-emp-jours{display:grid;gap:6px}
+.rh-emp-jour{display:flex;flex-direction:column;gap:4px;padding:10px 8px;border-radius:10px;min-width:0;background:var(--bg);border:1px solid var(--border);min-height:78px}
+.rh-emp-jour.aujourdhui{border-color:var(--accent)}
+.rh-emp-jour.conge{background:var(--accent-bg)}
+.rh-emp-jour.repos{opacity:.6}
+.rh-emp-jlib{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.rh-emp-jlib b{color:var(--text);font-size:13px}
+.rh-emp-etat{font-size:13px;font-weight:700;color:var(--accent)}
+.rh-emp-etat.conge{color:var(--warn)}
+.rh-emp-etat.repos{color:var(--muted)}
+.rh-emp-heures{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+.rh-emp-heures.amenage{color:var(--accent);font-weight:700}
+.rh-emp-maint{display:inline-flex;align-items:center;gap:4px;margin-top:2px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);font-size:11px;font-family:inherit;cursor:pointer}
+.rh-emp-maint:hover{border-color:var(--accent);color:var(--accent)}
+.rh-emp-vide{font-size:13px;color:var(--muted)}
 .rh-empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
 
 /* ── Toast ──────────────────────────────────────────── */
@@ -387,7 +472,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   letter-spacing:.6px;color:var(--muted);margin-bottom:6px;
 }
 .rh-field input,.rh-field select,.rh-field textarea{
-  width:100%;padding:9px 12px;background:var(--bg);
+  width:100%;padding:9px 12px;background:var(--card);
   border:1px solid var(--border);border-radius:8px;
   color:var(--text);font-size:13px;outline:none;transition:border-color .15s;
 }
@@ -398,9 +483,11 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   padding:9px 20px;border-radius:8px;border:none;cursor:pointer;
   font-size:13px;font-weight:700;font-family:inherit;transition:all .15s;
 }
-.rh-btn.primary{background:var(--accent);color:var(--bg)}
+.rh-btn.primary{background:var(--accent);color:white}
+.rh-btn.danger{background:var(--danger);color:white}
+.rh-btn.danger:hover{filter:brightness(1.08)}
 .rh-btn.primary:hover{filter:brightness(1.08)}
-.rh-btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.rh-btn.secondary{background:var(--bg);border:1px solid var(--border);color:var(--text2)}
 .rh-btn.secondary:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-btn:disabled{opacity:.5;cursor:not-allowed}
 
@@ -663,16 +750,20 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning_rh';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=4"></script>
-<script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_postit.js?v=2"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/planning_rh_url.js?v=1"></script>
+<script src="/static/planning_rh_url.js?v=3"></script>
 <script src="/static/planning_rh_impression.js?v=1"></script>
+<!-- Demandes des employés et motifs d'absence (onglet Demandes). -->
+<script src="/static/planning_rh_demandes.js?v=3"></script>
+<!-- Outils du responsable (génération, publication, notes, équité) et vue employé. -->
+<script src="/static/planning_rh_outils.js?v=2"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -1070,7 +1161,7 @@ async function loadData(){
       S.planning=[];
       S.conges=conges?.conges||[];
       // Congés est la seule vue possible en RH → forcer le tab courant
-      if(S.tab!=='conges') S.tab='conges';
+      if(S.tab!=='conges' && S.tab!=='demandes') S.tab='conges';
     } else {
       const [pers,plan,conges,mcfgs]=await Promise.all([
         api('/personnel').catch(()=>({personnel:[]})),
@@ -1083,6 +1174,9 @@ async function loadData(){
       S.conges=conges?.conges||[];
       S.machineConfigs=mcfgs?.configs||[];
       S.machineConfigsLoaded=true;
+      // Horaires aménagés validés, publications et notes d'équipe.
+      if(typeof prhChargerHoraires==='function') await prhChargerHoraires(from,to);
+      if(typeof prhOutilsCharger==='function') await prhOutilsCharger(from,to);
       // v2.2.59 : charger les créneaux de maintenance de l'user courant si opérateur
       const _isOp = S.user && !S.isEditor && !S.isReadOnlyAdmin;
       if(_isOp){
@@ -1459,6 +1553,7 @@ function rhMobileToolbarHtml(){
   const rangeLbl=rhMobileRangeLabel();
   const parts=[];
 
+  if(S.tab==='demandes'||S.tab==='equite') return '';
   if(isOp){
     parts.push(`<div class="rh-wk-nav">
       <button type="button" onclick="S.opOffset-=S.opViewRange;loadData();" title="Précédent" aria-label="Précédent">${icon('chevron_left',14)}</button>
@@ -1494,7 +1589,7 @@ function renderMobileTopbar(){
   const bar=document.getElementById('rh-mobile-topbar');
   if(!bar)return;
   const isOp=S.user&&!S.isEditor&&!S.isReadOnlyAdmin;
-  const sub=isOp?'Ma semaine':(S.view==='rh'?'RH · Congés & soldes':(S.tab==='conges'?'Congés':'Planning'));
+  const sub=S.tab==='demandes'?'Demandes':S.tab==='equite'?'Équité':(isOp?'Ma semaine':(S.view==='rh'?'RH · Congés & soldes':(S.tab==='conges'?'Congés':'Planning')));
   const toolbar=window.innerWidth<=900?rhMobileToolbarHtml():'';
   bar.innerHTML=`
     <div class="rh-mobile-topbar-row">
@@ -1561,8 +1656,10 @@ function renderSidebar(){
 
   // Vue Atelier : Planning + Congés (comportement historique)
   // Vue RH     : Congés uniquement (soldes intégrés dans la même page)
-  const showPlanningTab = (S.view==='atelier');
-  const showCongesTab = (S.view==='rh') || S.isEditor || S.isReadOnlyAdmin;
+  const seul = (typeof prhDemandesSeules==='function') && prhDemandesSeules();
+  const showPlanningTab = (S.view==='atelier') && !seul;
+  const showCongesTab = !seul && ((S.view==='rh') || S.isEditor || S.isReadOnlyAdmin);
+  const nbDm = (S.dm && S.dm.nbAttente) || 0;
 
   nav.innerHTML=`
     ${viewToggle}
@@ -1572,6 +1669,12 @@ function renderSidebar(){
     ${showCongesTab?`<button class="rh-nav-btn nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
       ${icon('umbrella',14)} Congés${S.view==='rh'?' & soldes':''}
     </button>`:''}
+    ${(S.view==='atelier'&&(S.isEditor||S.isReadOnlyAdmin))?`<button class="rh-nav-btn nav-btn${S.tab==='equite'?' active':''}" onclick="setTab('equite')">
+      ${icon('users',14)} Équité
+    </button>`:''}
+    <button class="rh-nav-btn nav-btn${S.tab==='demandes'?' active':''}" onclick="setTab('demandes')">
+      ${icon('mail',14)} Demandes${nbDm?`<span class="rh-nav-count">${nbDm}</span>`:''}
+    </button>
   `;
 
 }
@@ -1587,6 +1690,11 @@ function renderHeader(){
     return;
   }
 
+  if(S.tab==='demandes'){
+    hdr.innerHTML='<div class="rh-hdr-title">Planning <span>RH</span> · Demandes</div>'
+      +(S.isEditor||S.isReadOnlyAdmin?`<div class="rh-hdr-right"><select class="rh-annee-sel" onchange="changeAnnee(this.value)">${[S.annee-1,S.annee,S.annee+1].map(y=>`<option value="${y}"${y===S.annee?' selected':''}>${y}</option>`).join('')}</select></div>`:'');
+    return;
+  }
   if(!isEditor){
     hdr.innerHTML='<div class="rh-hdr-title">Planning RH · <span>Ma semaine</span></div>';
     return;
@@ -1600,7 +1708,7 @@ function renderHeader(){
   hdr.innerHTML=`
     <div class="rh-hdr-title" style="display:flex;align-items:center;gap:10px">${titleSuffix}${(window.MySifaGuides?MySifaGuides.bookBtn((S.user&&!S.isEditor&&!S.isReadOnlyAdmin)?'planningrh-operator':'planningrh-overview'):'')}</div>
     <div class="rh-hdr-right">
-      ${!isRHView?`<div class="rh-hdr-nav-row">
+      ${!isRHView&&S.tab!=='equite'?`<div class="rh-hdr-nav-row">
         <div class="rh-wk-nav">
           <button type="button" onclick="navWeeks(-S.viewRange)" title="Période précédente">${icon('chevron_left',14)}</button>
           <button type="button" class="rh-wk-today" onclick="navWeeks(0)">Aujourd'hui</button>
@@ -1613,19 +1721,20 @@ function renderHeader(){
           <button type="button" class="rh-icon-btn rh-icon-btn--icon-only" onclick="openMachineConfigModal()" title="Configurer les équipes par machine" aria-label="Réglages équipes">
             ${icon('settings',14)}<span class="rh-icon-btn-label"> Réglages</span>
           </button>
+          ${typeof prhOutilsBoutonsEntete==='function'?prhOutilsBoutonsEntete():''}
         `:''}
       </div>
       <span class="rh-hdr-range">${rangeLabel}</span>
       <div class="rh-range-tabs">
         ${rhDesktopRangeOpts().map(n=>`<button type="button" class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
       </div>`:''}
-      ${S.tab==='conges'?`
+      ${S.tab==='conges'||S.tab==='equite'?`
         <select class="rh-annee-sel" onchange="changeAnnee(this.value)">
           ${[S.annee-1,S.annee,S.annee+1].map(y=>`<option value="${y}"${y===S.annee?' selected':''}>${y}</option>`).join('')}
         </select>
-        <button type="button" class="rh-icon-btn" onclick="printConges()">
+        ${S.tab==='conges'?`<button type="button" class="rh-icon-btn" onclick="printConges()">
           ${icon('printer',13)} Imprimer
-        </button>
+        </button>`:''}
       `:''}
     </div>
   `;
@@ -1636,10 +1745,28 @@ function renderContent(){
   const c=document.getElementById('rh-content');
   if(!c)return;
   if(S.loading){c.innerHTML=`<div class="rh-loading"><div class="rh-spinner"></div> Chargement…</div>`;renderModals();return;}
-  if(!S.isEditor && !S.isReadOnlyAdmin){c.innerHTML='';c.appendChild(buildOperatorView());renderModals();return;}
+  if(S.tab==='demandes'){c.innerHTML='';c.appendChild(buildDemandesTab());renderModals();return;}
+  if(!S.isEditor && !S.isReadOnlyAdmin){
+    c.innerHTML='';
+    // Ordinateur : vue employé en cartes (planning_rh_outils.js) ; téléphone : vue historique.
+    if(window.innerWidth>900&&typeof prhVueEmployeBureau==='function'){c.appendChild(prhVueEmployeBureau());}
+    else{
+      const opW=Array.from({length:S.opViewRange},(_,i)=>addWeeks(addWeeks(weekStr(new Date()),S.opOffset),i));
+      const bn=(typeof prhBandeauNotes==='function')?prhBandeauNotes(opW):null;
+      if(bn)c.appendChild(bn);
+      c.appendChild(buildOperatorView());
+    }
+    renderModals();return;
+  }
+  if(S.tab==='equite'&&S.view==='atelier'){c.innerHTML='';c.appendChild(buildEquiteTab());renderModals();return;}
   // Vue RH : pas de planning postes -> forcer conges
   if(S.view==='rh' && S.tab==='planning') S.tab='conges';
-  if(S.tab==='planning'){c.innerHTML='';c.appendChild(buildPlanningGrid());}
+  if(S.tab==='planning'){
+    c.innerHTML='';
+    const bn=(typeof prhBandeauNotes==='function')?prhBandeauNotes(getWeeksToShow()):null;
+    if(bn)c.appendChild(bn);
+    c.appendChild(buildPlanningGrid());
+  }
   else if(S.tab==='conges'){c.innerHTML='';c.appendChild(buildCongesTab());}
   renderModals();
 }
@@ -1787,6 +1914,8 @@ function buildPlanningGrid(){
               badge.textContent=joursToList(joursVal).join(', ');
               inner.appendChild(badge);
             }
+            const hzBadge=(typeof prhBadgeHoraire==='function')?prhBadgeHoraire(a.user_id,ws):null;
+            if(hzBadge) inner.appendChild(hzBadge);
             chip.appendChild(inner);
 
             if(S.isEditor){
@@ -2221,7 +2350,7 @@ function buildCongesTab(){
         <div class="rh-field" style="margin:0">
           <label>Type</label>
           <select onchange="S.congeForm.type_conge=this.value">
-            ${Object.entries(TYPE_CONGE_LABELS).map(([k,v])=>`<option value="${k}"${(S.congeForm.type_conge||'CP')===k?' selected':''}>${v}</option>`).join('')}
+            ${prhMotifsOptions(S.congeForm.type_conge||'CP')}
           </select>
         </div>
         <div class="rh-field" style="margin:0">
@@ -2517,7 +2646,18 @@ function buildOperatorView(){
           planCard.appendChild(row);
         });
       });
-    }else{
+    }
+    // Horaire aménagé validé de la semaine (planning_rh_demandes.js).
+    if(S.user&&typeof prhHorairesSemaine==='function'){
+      prhHorairesSemaine(S.user.id,ws).forEach(h=>{
+        const row=document.createElement('div'); row.className='rh-op-row';
+        const k=document.createElement('span'); k.className='rh-op-key'; k.textContent='Horaire aménagé';
+        const v=document.createElement('span'); v.className='rh-op-val accent';
+        v.textContent=(h.heure_debut||'')+'–'+(h.heure_fin||'')+' · '+(h.date_debut===h.date_fin?fmtDateFull(h.date_debut):fmtDateFull(h.date_debut)+' → '+fmtDateFull(h.date_fin));
+        row.appendChild(k); row.appendChild(v); planCard.appendChild(row);
+      });
+    }
+    if(!myPlans.length){
       const noPlanDiv=document.createElement('div');
       noPlanDiv.className='rh-op-no-plan';
       noPlanDiv.style.cssText='font-size:12px;color:var(--muted);font-style:italic;padding:4px 0;';
@@ -2776,6 +2916,12 @@ function renderModals(){
   }else if(S.modal==='my_maint_detail'){
     const m=buildMyMaintDetailModal();
     mr.innerHTML=''; if(m)mr.appendChild(m);
+  }else if(['demande','refus','motifs','seuils','generer','publication','note'].includes(S.modal)){
+    // Saisies libres relues depuis l'état : reconstruire ne perd rien.
+    const fab={demande:buildDemandeModal,refus:buildRefusModal,motifs:buildMotifsModal,seuils:buildSeuilsModal,
+      generer:buildGenererModal,publication:buildPublicationModal,note:buildNoteModal}[S.modal];
+    const m=fab();
+    mr.innerHTML=''; if(m)mr.appendChild(m);
   }else{
     mr.innerHTML='';
   }
@@ -2792,7 +2938,7 @@ function toast(msg,type='success'){
 }
 
 // ── Actions ────────────────────────────────────────────
-var PRH_VALID_TABS=['planning','conges'];
+var PRH_VALID_TABS=['planning','conges','demandes','equite'];
 function _readPrhTab(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(PRH_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
@@ -2806,6 +2952,7 @@ function setTab(t, opts){
   // L'adresse (?onglet=) suit l'écran : static/planning_rh_url.js.
   closeSidebar();
   if(t==='conges'&&!S.soldes.length)loadSoldes();
+  if(t==='demandes'&&typeof prhChargerDemandes==='function'){S.dm&&(S.dm.charge=false);}
   render();
 }
 function setRange(n){S.viewRange=n;loadData();}
@@ -3352,9 +3499,18 @@ if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:render});
   await loadMe();
   if(S.view==='rh'){ S.tab='conges'; }
   var _initPrhTab=_readPrhTab(); if(_initPrhTab!=='planning'){S.tab=_initPrhTab;}
+  // Motifs d'absence (libellés des congés) et demandes (planning_rh_demandes.js).
+  try{ await prhChargerMotifs(); }catch(e){}
+  try{ prhCompterAValider(); }catch(e){}
   if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=2; else S.viewRange=1;
   // Adresse : vue, onglet, semaine, horizon, détail, année (planning_rh_url.js).
   try{ if(typeof prhLireUrl==='function') prhLireUrl(false); }catch(e){}
+  // Compte sans planning ni gestion des congés : seulement ses demandes.
+  if(prhDemandesSeules()){
+    S.tab='demandes'; render();
+    try{ if(typeof prhDemarrerUrl==='function') await prhDemarrerUrl(); }catch(e){}
+    return;
+  }
   if(S.view!=='rh'){ await loadMachines(); }
   await loadData();
   if(S.tab==='conges')await loadSoldes();

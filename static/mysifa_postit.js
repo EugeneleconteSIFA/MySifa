@@ -1,5 +1,6 @@
 /**
  * MySifa — Post-its (portail + toutes les pages applicatives si multi-page activé).
+ * Prise de notes libre en blocs, menu « / » à la manière de Notion.
  * Compatible SPA html.py (S.app) et pages autonomes (window.__MYSIFA_APP__).
  */
 (function () {
@@ -461,40 +462,6 @@
     });
   }
 
-  function buildPostitTaskHtml(postitId, t) {
-    var done = !!t.done;
-    return (
-      '<div class="postit-task' +
-      (done ? ' done' : '') +
-      '" data-task-id="' +
-      t.id +
-      '">' +
-      '<input type="checkbox" ' +
-      (done ? 'checked' : '') +
-      ' onchange="togglePostitTask(' +
-      postitId +
-      ', ' +
-      t.id +
-      ', this.checked)">' +
-      '<textarea class="postit-task-text" rows="1" onchange="editPostitTask(' +
-      postitId +
-      ', ' +
-      t.id +
-      ', this.value)" onkeydown="onPostitTaskKeydown(event, ' +
-      postitId +
-      ', ' +
-      t.id +
-      ')" onmousedown="event.stopPropagation()" onfocus="autoResizePostitTask(this)" oninput="autoResizePostitTask(this)">' +
-      postitEscHtml(t.text || '') +
-      '</textarea>' +
-      '<button type="button" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px" onclick="deletePostitTask(' +
-      postitId +
-      ', ' +
-      t.id +
-      ')" title="Supprimer">×</button></div>'
-    );
-  }
-
   function buildPostitEl(p) {
     var el = document.createElement('div');
     el.className = 'postit' + (postitIsHidden(p) ? ' is-hidden' : '');
@@ -504,10 +471,6 @@
       el.style.left = (p.pos_x != null ? p.pos_x : 100) + 'px';
       el.style.top = (p.pos_y != null ? p.pos_y : 100) + 'px';
     }
-    var tasks = Array.isArray(p.tasks) ? p.tasks : [];
-    var hasDone = tasks.some(function (t) {
-      return t.done;
-    });
     var multiOn = !!p.multi_page;
     var hideTitle = postitIsHidden(p)
       ? 'Afficher à la position enregistrée'
@@ -535,17 +498,17 @@
       ')" title="Supprimer">×</button></div></div>' +
       '<div class="postit-body" id="postit-body-' +
       p.id +
+      '" data-postit="' +
+      p.id +
       '">' +
-      tasks.map(function (t) {
-        return buildPostitTaskHtml(p.id, t);
-      }).join('') +
+      edBlocsHtml(p) +
       '</div>' +
       '<div class="postit-footer" onmousedown="startPostitDrag(event, ' +
       p.id +
       ')">' +
-      '<button type="button" class="postit-add-task-btn" onclick="addPostitTask(' +
+      '<button type="button" class="postit-add-task-btn" onclick="postitOuvrirCommandes(' +
       p.id +
-      ')">+ Ajouter</button>' +
+      ')" title="Ajouter un bloc — ou taper « / » dans le texte">/ Insérer</button>' +
       '<button type="button" class="postit-multipage-btn' +
       (multiOn ? ' on' : '') +
       '" onclick="togglePostitMultiPage(' +
@@ -557,16 +520,17 @@
       '">' +
       (multiOn ? 'Désactiver' : 'Activer') +
       ' <span class="postit-multipage-label">(multi-page)</span></button>' +
-      (hasDone
-        ? '<button type="button" class="postit-clear-btn" onclick="clearPostitDone(' +
-          p.id +
-          ')">Effacer terminées</button>'
-        : '') +
+      '<button type="button" class="postit-clear-btn" onclick="clearPostitDone(' +
+      p.id +
+      ')"' +
+      (edACoche(p) ? '' : ' hidden') +
+      '>Effacer cochées</button>' +
       '</div>';
     applyPostitColor(el, postitResolveColor(p));
     setupPostitColorDot(el, p.id);
     setupPostitInteractions(el, p);
     setupPostitResize(el, p);
+    edBrancher(el.querySelector('.postit-body'), p);
     return el;
   }
 
@@ -614,7 +578,7 @@
 
   function fitPostitTaskTextareas(root) {
     if (!root) return;
-    root.querySelectorAll('.postit-task-text').forEach(function (ta) {
+    root.querySelectorAll('.pb-txt').forEach(function (ta) {
       autoResizePostitTask(ta);
     });
   }
@@ -690,16 +654,21 @@
   }
 
   async function addPostit(type) {
-    var title = type === 'today' ? 'Post-it tâche quotidienne' : 'Post-it à faire';
+    var title = type === 'today' ? 'Aujourd\'hui' : 'Note';
+    var blocs = type === 'today' ? [{ type: 'todo', texte: '', coche: false }] : [{ type: 'p', texte: '' }];
     closePostitDockMenu();
     try {
       var p = await postitApi('/api/postits', {
         method: 'POST',
-        body: JSON.stringify({ type: type, title: title }),
+        body: JSON.stringify({ type: type, title: title, blocs: blocs }),
       });
       if (!p) return;
-      PostitState.items.push(Object.assign({}, p, { tasks: [] }));
+      if (!Array.isArray(p.blocs) || !p.blocs.length) p.blocs = blocs;
+      PostitState.items.push(p);
       renderPostits();
+      requestAnimationFrame(function () {
+        edFocus(p.id, 0, 0);
+      });
     } catch (e) {
       postitToast((e && e.message) || 'Création impossible.', 'danger');
     }
@@ -715,8 +684,8 @@
         POSTIT_DOCK_ICON +
         '</button>' +
         '<div id="postit-dock-menu" class="mysifa-dock-panel" role="menu" aria-label="Créer un post-it">' +
-        '<button type="button" class="postit-dock-menu-btn someday" role="menuitem">Post-it à faire</button>' +
-        '<button type="button" class="postit-dock-menu-btn today" role="menuitem">Post-it tâche quotidienne</button>' +
+        '<button type="button" class="postit-dock-menu-btn someday" role="menuitem">Note libre</button>' +
+        '<button type="button" class="postit-dock-menu-btn today" role="menuitem">Liste du jour</button>' +
         '</div>';
       document.body.appendChild(root);
       var btn = root.querySelector('#postit-dock-btn');
@@ -911,119 +880,716 @@
     }
   }
 
-  async function onPostitTaskKeydown(e, postitId, taskId) {
-    if (!e || e.key !== 'Enter' || !e.shiftKey) return;
-    e.preventDefault();
-    var ta = e.target;
-    if (!ta || !ta.classList.contains('postit-task-text')) return;
-    try {
-      await editPostitTask(postitId, taskId, ta.value);
-      await addPostitTask(postitId);
-    } catch (err) {
-      /* editPostitTask / addPostitTask affichent déjà un toast */
-    }
+  /* ── Éditeur libre : blocs et commandes « / » ──────────────────────────
+     Un post-it est une suite de blocs { type, texte, coche, retrait }. Chaque
+     bloc est un <textarea> : texte brut, annulation native, aucun HTML à
+     assainir. La structure (découper, fusionner, changer de type) redessine
+     le corps du post-it et replace le curseur ; la frappe simple ne redessine
+     rien. Enregistrement groupé (PATCH { blocs }) après une courte pause. */
+
+  var ED_TYPES = {
+    p: { libelle: 'Texte', aide: 'Paragraphe simple', icone: 'Aa', ph: 'Écrire, ou « / » pour les commandes', mots: 'texte paragraphe normal' },
+    h1: { libelle: 'Titre 1', aide: 'Grand titre', icone: 'H1', ph: 'Titre 1', mots: 'titre grand h1 #' },
+    h2: { libelle: 'Titre 2', aide: 'Titre de section', icone: 'H2', ph: 'Titre 2', mots: 'titre moyen h2 ##' },
+    h3: { libelle: 'Titre 3', aide: 'Petit titre', icone: 'H3', ph: 'Titre 3', mots: 'titre petit h3 ###' },
+    todo: { libelle: 'Case à cocher', aide: 'Tâche à cocher', icone: '✓', ph: 'À faire', mots: 'tache case cocher todo checkbox liste []' },
+    puce: { libelle: 'Liste à puces', aide: 'Liste simple', icone: '•', ph: 'Élément', mots: 'liste puce puces bullet -' },
+    num: { libelle: 'Liste numérotée', aide: 'Liste 1, 2, 3', icone: '1.', ph: 'Élément', mots: 'liste numerotee numero ordonnee 1.' },
+    citation: { libelle: 'Citation', aide: 'Propos rapporté', icone: '“', ph: 'Citation', mots: 'citation quote >' },
+    encadre: { libelle: 'Encadré', aide: 'Texte mis en avant', icone: '!', ph: 'À retenir', mots: 'encadre important callout attention note !' },
+    code: { libelle: 'Code', aide: 'Texte à chasse fixe', icone: '</>', ph: 'Code', mots: 'code mono commande ```' },
+    sep: { libelle: 'Séparateur', aide: 'Ligne de séparation', icone: '—', ph: '', mots: 'separateur ligne trait diviseur ---' },
+  };
+  var ED_LISTES = { todo: 1, puce: 1, num: 1 };
+  var ED_RETRAIT_MAX = 3;
+  var ED_COMMANDES = Object.keys(ED_TYPES)
+    .map(function (t) {
+      var d = ED_TYPES[t];
+      return { cle: t, type: t, libelle: d.libelle, aide: d.aide, icone: d.icone, mots: d.mots };
+    })
+    .concat([
+      { cle: 'date', action: 'date', libelle: 'Date du jour', aide: 'Insère la date', icone: 'J', mots: 'date jour aujourdhui' },
+      { cle: 'heure', action: 'heure', libelle: 'Heure', aide: 'Insère l\'heure', icone: 'h', mots: 'heure maintenant' },
+      { cle: 'dupliquer', action: 'dupliquer', libelle: 'Dupliquer le bloc', aide: 'Copie juste en dessous', icone: '⧉', mots: 'dupliquer copier' },
+      { cle: 'supprimer', action: 'supprimer', libelle: 'Supprimer le bloc', aide: 'Retire ce bloc', icone: '×', mots: 'supprimer effacer retirer' },
+    ]);
+  /* Raccourcis en début de bloc, validés par une espace. */
+  var ED_RACCOURCIS = {
+    '#': 'h1', '##': 'h2', '###': 'h3', '-': 'puce', '*': 'puce', '1.': 'num',
+    '[]': 'todo', '[ ]': 'todo', '>': 'citation', '!': 'encadre',
+  };
+
+  var _edTimers = {};
+  var _edSlash = null;
+  var _edMesure = null;
+
+  function edBlocs(p) {
+    if (!Array.isArray(p.blocs)) p.blocs = [];
+    if (!p.blocs.length) p.blocs.push({ type: 'p', texte: '' });
+    return p.blocs;
   }
 
-  async function addPostitTask(postitId) {
-    try {
-      var task = await postitApi('/api/postits/' + postitId + '/tasks', {
-        method: 'POST',
-        body: JSON.stringify({ text: '' }),
-      });
-      if (!task) return;
-      var p = PostitState.items.find(function (x) {
-        return x.id === postitId;
-      });
-      if (p) {
-        if (!Array.isArray(p.tasks)) p.tasks = [];
-        p.tasks.push(task);
-      }
-      renderPostits();
-      requestAnimationFrame(function () {
-        var body = document.getElementById('postit-body-' + postitId);
-        if (!body) return;
-        fitPostitTaskTextareas(body);
-        var textareas = body.querySelectorAll('.postit-task-text');
-        var last = textareas[textareas.length - 1];
-        if (last) last.focus();
-      });
-    } catch (e) {
-      postitToast((e && e.message) || 'Ajout de tâche impossible.', 'danger');
-    }
+  function edACoche(p) {
+    return edBlocs(p).some(function (b) {
+      return b.type === 'todo' && b.coche;
+    });
   }
 
-  async function togglePostitTask(postitId, taskId, done) {
-    try {
-      await postitApi('/api/postits/' + postitId + '/tasks/' + taskId, {
-        method: 'PATCH',
-        body: JSON.stringify({ done: done ? 1 : 0 }),
-      });
-      var p = PostitState.items.find(function (x) {
-        return x.id === postitId;
-      });
-      var t = p && p.tasks && p.tasks.find(function (x) {
-        return x.id === taskId;
-      });
-      if (t) t.done = done ? 1 : 0;
-      renderPostits();
-    } catch (e) {
-      postitToast((e && e.message) || 'Mise à jour impossible.', 'danger');
+  function edNumero(blocs, i) {
+    var r = blocs[i].retrait || 0;
+    var n = 1;
+    for (var j = i - 1; j >= 0; j--) {
+      var rj = blocs[j].retrait || 0;
+      if (rj > r) continue;
+      if (rj < r || blocs[j].type !== 'num') break;
+      n++;
     }
+    return n;
   }
 
-  async function editPostitTask(postitId, taskId, text) {
+  function edBlocHtml(p, blocs, i) {
+    var b = blocs[i];
+    var t = ED_TYPES[b.type] ? b.type : 'p';
+    var r = Math.max(0, Math.min(ED_RETRAIT_MAX, b.retrait || 0));
+    var cls = 'pb pb-' + t + (t === 'todo' && b.coche ? ' coche' : '');
+    var h = '<div class="' + cls + '" data-i="' + i + '" style="--pb-r:' + r + '">';
+    if (t === 'sep') return h + '<div class="pb-sep" tabindex="0" aria-label="Séparateur"></div></div>';
+    if (t === 'todo') h += '<input type="checkbox" class="pb-case" tabindex="-1"' + (b.coche ? ' checked' : '') + '>';
+    else if (t === 'puce') h += '<span class="pb-marque" aria-hidden="true">' + (r % 2 ? '◦' : '•') + '</span>';
+    else if (t === 'num') h += '<span class="pb-marque pb-marque-num" aria-hidden="true">' + edNumero(blocs, i) + '.</span>';
+    var ph = blocs.length === 1 && t === 'p' ? 'Notes libres — « / » pour insérer un titre, une case…' : ED_TYPES[t].ph;
+    h +=
+      '<textarea class="pb-txt" rows="1" spellcheck="true" placeholder="' +
+      postitEscAttr(ph) +
+      '">' +
+      postitEscHtml(b.texte || '') +
+      '</textarea>';
+    return h + '</div>';
+  }
+
+  function edBlocsHtml(p) {
+    var blocs = edBlocs(p);
+    var out = '';
+    for (var i = 0; i < blocs.length; i++) out += edBlocHtml(p, blocs, i);
+    return out;
+  }
+
+  function edCorps(pid) {
+    return document.getElementById('postit-body-' + pid);
+  }
+
+  function edRedessiner(pid, focusI, pos) {
+    var p = postitFindById(pid);
+    var body = edCorps(pid);
+    if (!p || !body) return;
+    body.innerHTML = edBlocsHtml(p);
+    fitPostitTaskTextareas(body);
+    edMajPied(pid);
+    if (focusI != null) edFocus(pid, focusI, pos);
+  }
+
+  function edMajPied(pid) {
+    var p = postitFindById(pid);
+    var el = document.querySelector('.postit[data-id="' + pid + '"]');
+    var btn = el && el.querySelector('.postit-clear-btn');
+    if (p && btn) btn.hidden = !edACoche(p);
+  }
+
+  function edFocus(pid, i, pos) {
+    var body = edCorps(pid);
+    if (!body) return;
+    var row = body.querySelector('.pb[data-i="' + i + '"]');
+    if (!row) return;
+    var ta = row.querySelector('.pb-txt');
+    if (!ta) {
+      var sep = row.querySelector('.pb-sep');
+      if (sep) sep.focus();
+      return;
+    }
+    ta.focus();
+    var n = ta.value.length;
+    var at = pos == null || pos < 0 || pos > n ? n : pos;
     try {
-      await postitApi('/api/postits/' + postitId + '/tasks/' + taskId, {
-        method: 'PATCH',
-        body: JSON.stringify({ text: text }),
-      });
-      var p = PostitState.items.find(function (x) {
-        return x.id === postitId;
-      });
-      var t = p && p.tasks && p.tasks.find(function (x) {
-        return x.id === taskId;
-      });
-      if (t) t.text = text;
-      var el = document.querySelector('.postit[data-id="' + postitId + '"]');
+      ta.setSelectionRange(at, at);
+    } catch (e) {}
+  }
+
+  function edCtx(node) {
+    var row = node && node.closest && node.closest('.pb');
+    var body = node && node.closest && node.closest('.postit-body');
+    if (!row || !body) return null;
+    var pid = Number(body.dataset.postit);
+    var p = postitFindById(pid);
+    if (!p) return null;
+    var i = Number(row.dataset.i);
+    var blocs = edBlocs(p);
+    if (!blocs[i]) return null;
+    return { pid: pid, p: p, i: i, blocs: blocs, b: blocs[i], row: row };
+  }
+
+  function edEnregistrer(pid, immediat) {
+    if (_edTimers[pid]) clearTimeout(_edTimers[pid]);
+    var envoyer = function () {
+      delete _edTimers[pid];
+      var p = postitFindById(pid);
+      if (!p) return;
+      var el = document.querySelector('.postit[data-id="' + pid + '"]');
       if (el && el.classList.contains('is-hidden')) updatePostitPeekVar(el);
-    } catch (e) {
-      postitToast((e && e.message) || 'Modification impossible.', 'danger');
+      postitApi('/api/postits/' + pid, {
+        method: 'PATCH',
+        body: JSON.stringify({ blocs: edBlocs(p) }),
+        keepalive: !!immediat,
+      }).catch(function (e) {
+        postitToast((e && e.message) || 'Note non enregistrée.', 'danger');
+      });
+    };
+    if (immediat) envoyer();
+    else _edTimers[pid] = setTimeout(envoyer, 700);
+  }
+
+  function edToutEnregistrer() {
+    Object.keys(_edTimers).forEach(function (pid) {
+      edEnregistrer(Number(pid), true);
+    });
+  }
+
+  /* Ligne visuelle du curseur, mesurée sur un textarea fantôme de même largeur. */
+  function edHauteur(ta, texte) {
+    if (!_edMesure) {
+      _edMesure = document.createElement('textarea');
+      _edMesure.setAttribute('aria-hidden', 'true');
+      _edMesure.tabIndex = -1;
+      document.body.appendChild(_edMesure);
+    }
+    var cs = getComputedStyle(ta);
+    var m = _edMesure.style;
+    m.position = 'fixed';
+    m.left = '-9999px';
+    m.top = '0';
+    m.visibility = 'hidden';
+    m.overflow = 'hidden';
+    m.height = '0';
+    m.boxSizing = 'border-box';
+    m.width = ta.offsetWidth + 'px';
+    ['fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing', 'paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom', 'whiteSpace', 'wordBreak', 'overflowWrap', 'tabSize'].forEach(function (k) {
+      m[k] = cs[k];
+    });
+    _edMesure.value = texte;
+    return _edMesure.scrollHeight;
+  }
+
+  function edPremiereLigne(ta) {
+    var lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
+    return edHauteur(ta, ta.value.slice(0, ta.selectionStart)) <= edHauteur(ta, '') + lh / 2;
+  }
+
+  function edDerniereLigne(ta) {
+    var lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
+    return edHauteur(ta, ta.value.slice(0, ta.selectionEnd)) >= edHauteur(ta, ta.value) - lh / 2;
+  }
+
+  /* Ligne collée « - truc », « [x] fait », « ## Titre » → bloc typé. */
+  function edBlocDepuisLigne(ligne) {
+    var m = /^(\s*)(#{1,3}|[-*•]|\d+[.)]|\[[ xX]?\]|>)\s+(.*)$/.exec(ligne);
+    if (!m) return { type: 'p', texte: ligne };
+    var r = Math.min(ED_RETRAIT_MAX, Math.floor(m[1].replace(/\t/g, '  ').length / 2));
+    var k = m[2];
+    var b = { texte: m[3] };
+    if (k.charAt(0) === '#') b.type = 'h' + k.length;
+    else if (/^[-*•]$/.test(k)) b.type = 'puce';
+    else if (/^\d/.test(k)) b.type = 'num';
+    else if (k === '>') b.type = 'citation';
+    else {
+      b.type = 'todo';
+      b.coche = /x/i.test(k);
+    }
+    if (r) b.retrait = r;
+    return b;
+  }
+
+  function edSurCollage(e) {
+    var ta = e.target;
+    if (!ta.classList || !ta.classList.contains('pb-txt')) return;
+    var c = edCtx(ta);
+    if (!c || c.b.type === 'code') return;
+    var txt = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
+    if (txt.indexOf('\n') < 0) return;
+    e.preventDefault();
+    var lignes = txt.replace(/\r\n?/g, '\n').split('\n');
+    while (lignes.length && !lignes[lignes.length - 1].trim()) lignes.pop();
+    if (!lignes.length) return;
+    var v = ta.value;
+    var avant = v.slice(0, ta.selectionStart);
+    var apres = v.slice(ta.selectionEnd);
+    if (!avant && c.b.type === 'p') {
+      var tete = edBlocDepuisLigne(lignes[0]);
+      Object.keys(tete).forEach(function (k) {
+        c.b[k] = tete[k];
+      });
+    } else {
+      c.b.texte = avant + lignes[0];
+    }
+    var nouveaux = lignes.slice(1).map(edBlocDepuisLigne);
+    if (nouveaux.length + c.blocs.length > 400) {
+      postitToast('Post-it trop long — 400 blocs au plus.', 'danger');
+      return;
+    }
+    var dernier = nouveaux.length ? nouveaux[nouveaux.length - 1] : c.b;
+    var pos = dernier.texte.length;
+    dernier.texte += apres;
+    Array.prototype.splice.apply(c.blocs, [c.i + 1, 0].concat(nouveaux));
+    edRedessiner(c.pid, c.i + nouveaux.length, pos);
+    edEnregistrer(c.pid);
+  }
+
+  function edSurSaisie(e) {
+    var ta = e.target;
+    if (!ta.classList || !ta.classList.contains('pb-txt')) return;
+    var c = edCtx(ta);
+    if (!c) return;
+    c.b.texte = ta.value;
+    autoResizePostitTask(ta);
+    var pos = ta.selectionStart;
+    if (e.inputType === 'insertText' && e.data === ' ' && c.b.type === 'p') {
+      var tete = ta.value.slice(0, pos - 1);
+      var t = ED_RACCOURCIS[tete];
+      if (t) {
+        c.b.type = t;
+        c.b.texte = ta.value.slice(pos);
+        if (t === 'todo') c.b.coche = false;
+        edFermerSlash();
+        edRedessiner(c.pid, c.i, 0);
+        edEnregistrer(c.pid);
+        return;
+      }
+    }
+    if (c.b.type === 'p' && (ta.value === '---' || ta.value === '```')) {
+      if (ta.value === '---') {
+        c.b.type = 'sep';
+        c.b.texte = '';
+        c.blocs.splice(c.i + 1, 0, { type: 'p', texte: '' });
+        edRedessiner(c.pid, c.i + 1, 0);
+      } else {
+        c.b.type = 'code';
+        c.b.texte = '';
+        edRedessiner(c.pid, c.i, 0);
+      }
+      edEnregistrer(c.pid);
+      return;
+    }
+    if (_edSlash && _edSlash.ta === ta) edMajSlash();
+    else if (e.data === '/' && c.b.type !== 'code') {
+      var precedent = ta.value.charAt(pos - 2);
+      if (pos === 1 || /\s/.test(precedent)) edOuvrirSlash(ta, c.pid, pos - 1);
+    }
+    edEnregistrer(c.pid);
+  }
+
+  function edSurChangement(e) {
+    var cb = e.target;
+    if (!cb.classList || !cb.classList.contains('pb-case')) return;
+    var c = edCtx(cb);
+    if (!c) return;
+    c.b.coche = !!cb.checked;
+    c.row.classList.toggle('coche', c.b.coche);
+    edMajPied(c.pid);
+    edEnregistrer(c.pid);
+  }
+
+  function edSurToucheSep(e, c) {
+    var k = e.key;
+    if (k === 'Backspace' || k === 'Delete') {
+      e.preventDefault();
+      c.blocs.splice(c.i, 1);
+      edRedessiner(c.pid, Math.max(0, c.i - (k === 'Backspace' ? 1 : 0)), k === 'Backspace' ? -1 : 0);
+      edEnregistrer(c.pid);
+    } else if (k === 'Enter') {
+      e.preventDefault();
+      c.blocs.splice(c.i + 1, 0, { type: 'p', texte: '' });
+      edRedessiner(c.pid, c.i + 1, 0);
+      edEnregistrer(c.pid);
+    } else if (k === 'ArrowUp' && c.i > 0) {
+      e.preventDefault();
+      edFocus(c.pid, c.i - 1, -1);
+    } else if (k === 'ArrowDown' && c.i < c.blocs.length - 1) {
+      e.preventDefault();
+      edFocus(c.pid, c.i + 1, 0);
     }
   }
 
-  async function deletePostitTask(postitId, taskId) {
-    try {
-      await postitApi('/api/postits/' + postitId + '/tasks/' + taskId, { method: 'DELETE' });
-      var p = PostitState.items.find(function (x) {
-        return x.id === postitId;
-      });
-      if (p && p.tasks) {
-        p.tasks = p.tasks.filter(function (t) {
-          return t.id !== taskId;
-        });
+  function edSurTouche(e) {
+    if (e.isComposing) return;
+    var t = e.target;
+    var c = edCtx(t);
+    if (!c) return;
+    if (t.classList.contains('pb-sep')) return edSurToucheSep(e, c);
+    if (!t.classList.contains('pb-txt')) return;
+    if (_edSlash && _edSlash.ta === t && edToucheSlash(e)) return;
+    var ta = t;
+    var v = ta.value;
+    var s = ta.selectionStart;
+    var f = ta.selectionEnd;
+    var b = c.b;
+    var mod = e.metaKey || e.ctrlKey;
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (mod && b.type === 'todo') {
+        e.preventDefault();
+        b.coche = !b.coche;
+        edRedessiner(c.pid, c.i, s);
+        edEnregistrer(c.pid);
+        return;
       }
-      renderPostits();
-    } catch (e) {
-      postitToast((e && e.message) || 'Suppression impossible.', 'danger');
+      if (b.type === 'code' && !mod) return;
+      e.preventDefault();
+      if (v === '' && ED_LISTES[b.type]) {
+        if (b.retrait) b.retrait--;
+        else b.type = 'p';
+        edRedessiner(c.pid, c.i, 0);
+        edEnregistrer(c.pid);
+        return;
+      }
+      var suite = {
+        type: ED_LISTES[b.type] ? b.type : 'p',
+        texte: v.slice(f),
+      };
+      if (b.retrait) suite.retrait = b.retrait;
+      if (suite.type === 'todo') suite.coche = false;
+      if (s === 0 && v !== '') {
+        var vide = { type: suite.type, texte: '' };
+        if (b.retrait) vide.retrait = b.retrait;
+        c.blocs.splice(c.i, 0, vide);
+        edRedessiner(c.pid, c.i + 1, 0);
+      } else {
+        b.texte = v.slice(0, s);
+        c.blocs.splice(c.i + 1, 0, suite);
+        edRedessiner(c.pid, c.i + 1, 0);
+      }
+      edEnregistrer(c.pid);
+      return;
     }
+
+    if (e.key === 'Backspace' && s === 0 && f === 0) {
+      if (b.type !== 'p') {
+        e.preventDefault();
+        b.type = 'p';
+        delete b.coche;
+        edRedessiner(c.pid, c.i, 0);
+        edEnregistrer(c.pid);
+        return;
+      }
+      if (b.retrait) {
+        e.preventDefault();
+        b.retrait--;
+        edRedessiner(c.pid, c.i, 0);
+        edEnregistrer(c.pid);
+        return;
+      }
+      if (c.i === 0) return;
+      e.preventDefault();
+      var prec = c.blocs[c.i - 1];
+      if (prec.type === 'sep') {
+        c.blocs.splice(c.i - 1, 1);
+        edRedessiner(c.pid, c.i - 1, 0);
+      } else {
+        var pos = (prec.texte || '').length;
+        prec.texte = (prec.texte || '') + v;
+        c.blocs.splice(c.i, 1);
+        edRedessiner(c.pid, c.i - 1, pos);
+      }
+      edEnregistrer(c.pid);
+      return;
+    }
+
+    if (e.key === 'Delete' && s === v.length && f === s && c.i < c.blocs.length - 1) {
+      e.preventDefault();
+      var suiv = c.blocs[c.i + 1];
+      if (suiv.type !== 'sep') b.texte = v + (suiv.texte || '');
+      c.blocs.splice(c.i + 1, 1);
+      edRedessiner(c.pid, c.i, s);
+      edEnregistrer(c.pid);
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      var r = (b.retrait || 0) + (e.shiftKey ? -1 : 1);
+      r = Math.max(0, Math.min(ED_RETRAIT_MAX, r));
+      if (r === (b.retrait || 0)) return;
+      if (r) b.retrait = r;
+      else delete b.retrait;
+      edRedessiner(c.pid, c.i, s);
+      edEnregistrer(c.pid);
+      return;
+    }
+
+    if (e.key === 'ArrowUp' && !e.shiftKey && s === f && c.i > 0 && edPremiereLigne(ta)) {
+      e.preventDefault();
+      edFocus(c.pid, c.i - 1, -1);
+      return;
+    }
+    if (e.key === 'ArrowDown' && !e.shiftKey && s === f && c.i < c.blocs.length - 1 && edDerniereLigne(ta)) {
+      e.preventDefault();
+      edFocus(c.pid, c.i + 1, 0);
+      return;
+    }
+    if (e.key === 'Escape') ta.blur();
   }
 
-  async function clearPostitDone(postitId) {
-    try {
-      await postitApi('/api/postits/' + postitId + '/tasks/done/clear', { method: 'DELETE' });
-      var p = PostitState.items.find(function (x) {
-        return x.id === postitId;
-      });
-      if (p && p.tasks) {
-        p.tasks = p.tasks.filter(function (t) {
-          return !t.done;
-        });
-      }
-      renderPostits();
-    } catch (e) {
-      postitToast((e && e.message) || 'Effacement impossible.', 'danger');
+  /* Clic sous le dernier bloc : on reprend l'écriture en bas, comme sur une page. */
+  function edSurClicVide(e) {
+    var body = e.currentTarget;
+    if (e.target !== body) return;
+    e.preventDefault();
+    var pid = Number(body.dataset.postit);
+    var p = postitFindById(pid);
+    if (!p) return;
+    var blocs = edBlocs(p);
+    var der = blocs[blocs.length - 1];
+    if (der.type === 'p' && !der.texte) {
+      edFocus(pid, blocs.length - 1, 0);
+      return;
     }
+    blocs.push({ type: 'p', texte: '' });
+    edRedessiner(pid, blocs.length - 1, 0);
   }
+
+  function edBrancher(body, p) {
+    if (!body) return;
+    body.addEventListener('input', edSurSaisie);
+    body.addEventListener('keydown', edSurTouche);
+    body.addEventListener('change', edSurChangement);
+    body.addEventListener('paste', edSurCollage);
+    body.addEventListener('mousedown', function (e) {
+      e.stopPropagation();
+      edSurClicVide(e);
+    });
+    body.addEventListener('focusout', function (e) {
+      var vers = e.relatedTarget;
+      if (vers && body.contains(vers)) return;
+      if (_edSlash && _edSlash.pid === p.id) edFermerSlash();
+      if (_edTimers[p.id]) edEnregistrer(p.id, true);
+    });
+  }
+
+  /* ── Menu « / » ── */
+
+  function edSansAccent(s) {
+    return String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '');
+  }
+
+  function edMenuSlash() {
+    var m = document.getElementById('postit-slash');
+    if (!m) {
+      m = document.createElement('div');
+      m.id = 'postit-slash';
+      m.setAttribute('role', 'listbox');
+      m.setAttribute('aria-label', 'Insérer un bloc');
+      m.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var item = e.target.closest('.postit-slash-item');
+        if (item && _edSlash) edAppliquerSlash(_edSlash.items[Number(item.dataset.k)]);
+      });
+      m.addEventListener('mousemove', function (e) {
+        var item = e.target.closest('.postit-slash-item');
+        if (!item || !_edSlash) return;
+        var k = Number(item.dataset.k);
+        if (k !== _edSlash.sel) {
+          _edSlash.sel = k;
+          edDessinerSlash(false);
+        }
+      });
+      document.body.appendChild(m);
+    }
+    return m;
+  }
+
+  function edOuvrirSlash(ta, pid, debut) {
+    _edSlash = { ta: ta, pid: pid, debut: debut, sel: 0, items: ED_COMMANDES.slice(), q: '' };
+    edMajSlash();
+  }
+
+  function edFermerSlash() {
+    _edSlash = null;
+    var m = document.getElementById('postit-slash');
+    if (m) m.classList.remove('open');
+  }
+
+  function edMajSlash() {
+    var st = _edSlash;
+    if (!st) return;
+    var ta = st.ta;
+    var v = ta.value;
+    var pos = ta.selectionStart;
+    if (!document.body.contains(ta) || v.charAt(st.debut) !== '/' || pos <= st.debut) return edFermerSlash();
+    var q = v.slice(st.debut + 1, pos);
+    if (q.length > 24 || /\n/.test(q) || /\s\s/.test(q)) return edFermerSlash();
+    var nq = edSansAccent(q.trim());
+    st.q = q;
+    st.items = ED_COMMANDES.filter(function (cmd) {
+      if (!nq) return true;
+      return edSansAccent(cmd.libelle + ' ' + cmd.mots).indexOf(nq) >= 0;
+    });
+    if (!st.items.length && / $/.test(q)) return edFermerSlash();
+    if (st.sel >= st.items.length) st.sel = 0;
+    edDessinerSlash(true);
+  }
+
+  function edDessinerSlash(placer) {
+    var st = _edSlash;
+    var m = edMenuSlash();
+    if (!st) return;
+    if (!st.items.length) {
+      m.innerHTML = '<div class="postit-slash-vide">Aucune commande pour « ' + postitEscHtml(st.q.trim()) + ' »</div>';
+    } else {
+      m.innerHTML =
+        '<div class="postit-slash-titre">Insérer</div>' +
+        st.items
+          .map(function (cmd, k) {
+            return (
+              '<div class="postit-slash-item' +
+              (k === st.sel ? ' sel' : '') +
+              '" role="option" data-k="' +
+              k +
+              '"' +
+              (k === st.sel ? ' aria-selected="true"' : '') +
+              '><span class="postit-slash-ico">' +
+              postitEscHtml(cmd.icone) +
+              '</span><span class="postit-slash-txt"><b>' +
+              postitEscHtml(cmd.libelle) +
+              '</b><small>' +
+              postitEscHtml(cmd.aide) +
+              '</small></span></div>'
+            );
+          })
+          .join('');
+    }
+    m.classList.add('open');
+    var sel = m.querySelector('.postit-slash-item.sel');
+    if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
+    if (!placer) return;
+    var rect = st.ta.getBoundingClientRect();
+    var w = 250;
+    var h = Math.min(300, m.scrollHeight || 300);
+    var left = Math.min(rect.left, window.innerWidth - w - 12);
+    var top = rect.bottom + 4;
+    if (top + h > window.innerHeight - 12) top = Math.max(12, rect.top - h - 4);
+    m.style.left = Math.max(12, left) + 'px';
+    m.style.top = top + 'px';
+  }
+
+  function edToucheSlash(e) {
+    var st = _edSlash;
+    if (!st) return false;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!st.items.length) return false;
+      e.preventDefault();
+      var n = st.items.length;
+      st.sel = (st.sel + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+      edDessinerSlash(false);
+      return true;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      if (!st.items.length) {
+        edFermerSlash();
+        return false;
+      }
+      e.preventDefault();
+      edAppliquerSlash(st.items[st.sel]);
+      return true;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      edFermerSlash();
+      return true;
+    }
+    return false;
+  }
+
+  function edAppliquerSlash(cmd) {
+    var st = _edSlash;
+    if (!st || !cmd) return;
+    var c = edCtx(st.ta);
+    edFermerSlash();
+    if (!c) return;
+    var v = st.ta.value;
+    var fin = Math.max(st.debut + 1, st.ta.selectionStart);
+    var debut = st.debut;
+    var reste = v.slice(0, debut) + v.slice(fin);
+    var b = c.b;
+    b.texte = reste;
+    if (cmd.action === 'date' || cmd.action === 'heure') {
+      var d = new Date();
+      var ins =
+        cmd.action === 'date'
+          ? d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          : d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      b.texte = reste.slice(0, debut) + ins + reste.slice(debut);
+      edRedessiner(c.pid, c.i, debut + ins.length);
+    } else if (cmd.action === 'dupliquer') {
+      c.blocs.splice(c.i + 1, 0, JSON.parse(JSON.stringify(b)));
+      edRedessiner(c.pid, c.i + 1, -1);
+    } else if (cmd.action === 'supprimer') {
+      c.blocs.splice(c.i, 1);
+      edRedessiner(c.pid, Math.max(0, c.i - 1), -1);
+    } else if (cmd.type === 'sep') {
+      if (!reste.trim()) {
+        b.type = 'sep';
+        b.texte = '';
+        delete b.coche;
+        c.blocs.splice(c.i + 1, 0, { type: 'p', texte: '' });
+      } else {
+        c.blocs.splice(c.i + 1, 0, { type: 'sep', texte: '' }, { type: 'p', texte: '' });
+      }
+      edRedessiner(c.pid, c.i + (reste.trim() ? 2 : 1), 0);
+    } else {
+      b.type = cmd.type;
+      if (cmd.type === 'todo') b.coche = !!b.coche;
+      else delete b.coche;
+      edRedessiner(c.pid, c.i, debut);
+    }
+    edEnregistrer(c.pid);
+  }
+
+  /* Bouton « / Insérer » du pied : un bloc vide en bas, menu ouvert dessus. */
+  function postitOuvrirCommandes(pid) {
+    var p = postitFindById(pid);
+    if (!p) return;
+    var blocs = edBlocs(p);
+    var der = blocs[blocs.length - 1];
+    if (!(der.type === 'p' && !der.texte)) blocs.push({ type: 'p', texte: '' });
+    var i = blocs.length - 1;
+    blocs[i].texte = '/';
+    edRedessiner(pid, i, 1);
+    var ta = edCorps(pid) && edCorps(pid).querySelector('.pb[data-i="' + i + '"] .pb-txt');
+    if (ta) edOuvrirSlash(ta, pid, 0);
+  }
+
+  async function clearPostitDone(pid) {
+    var p = postitFindById(pid);
+    if (!p) return;
+    p.blocs = edBlocs(p).filter(function (b) {
+      return !(b.type === 'todo' && b.coche);
+    });
+    edRedessiner(pid);
+    edEnregistrer(pid, true);
+  }
+
+  window.addEventListener('pagehide', edToutEnregistrer);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') edToutEnregistrer();
+  });
+  window.addEventListener(
+    'scroll',
+    function () {
+      if (_edSlash && !(e.target && e.target.id === 'postit-slash')) edFermerSlash();
+    },
+    true
+  );
 
   window.PostitState = PostitState;
   window.clearPostitsUi = clearPostitsUi;
@@ -1041,11 +1607,7 @@
   window.togglePostitMultiPage = togglePostitMultiPage;
   window.deletePostit = deletePostit;
   window.renamePostit = renamePostit;
-  window.addPostitTask = addPostitTask;
-  window.onPostitTaskKeydown = onPostitTaskKeydown;
-  window.togglePostitTask = togglePostitTask;
-  window.editPostitTask = editPostitTask;
-  window.deletePostitTask = deletePostitTask;
+  window.postitOuvrirCommandes = postitOuvrirCommandes;
   window.clearPostitDone = clearPostitDone;
   window.autoResizePostitTask = autoResizePostitTask;
   window.layoutHiddenPostits = layoutHiddenPostits;
