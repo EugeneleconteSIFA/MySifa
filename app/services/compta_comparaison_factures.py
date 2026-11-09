@@ -423,4 +423,6 @@ def comparer_pdf(doc_a: bytes, doc_b: bytes) -> Dict:
         raise DocumentNonReconnu("Aucune facture lue dans l'analyse des ventes RVGI — édition détaillée attendue.")
     if not cw["factures"]:
         raise DocumentNonReconnu("Aucune écriture du journal des ventes lue dans le grand-livre CW.")
-    return comparer(rvgi, cw)
+    res = comparer(rvgi, cw)
+    res["types"] = [ta, tb]
+    return res
