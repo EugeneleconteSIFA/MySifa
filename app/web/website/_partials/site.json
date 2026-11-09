@@ -31,6 +31,12 @@
      "description": "Fondée en 1987 à Roubaix, SIFA fabrique ses propres complexes adhésifs. Usine de 3 000 m², 39 collaborateurs, deuxième site en 2027."},
     {"path": "contact/", "nav": "", "crumb": "Contact", "priority": "0.7",
      "title": "Contact et demande de devis d'étiquettes adhésives | SIFA",
-     "description": "Demandez un devis d'étiquettes adhésives à SIFA : 45 rue Rollin, 59100 Roubaix. Téléphone +33 (0)3 20 69 01 01, contact@sifa.pro."}
+     "description": "Demandez un devis d'étiquettes adhésives à SIFA : 45 rue Rollin, 59100 Roubaix. Téléphone +33 (0)3 20 69 01 01, contact@sifa.pro."},
+    {"path": "mentions-legales/", "nav": "", "crumb": "Mentions légales", "priority": "0.2",
+     "title": "Mentions légales | SIFA",
+     "description": "Mentions légales du site de SIFA, fabricant et enducteur d'étiquettes adhésives à Roubaix : éditeur, hébergeur, propriété intellectuelle."},
+    {"path": "politique-de-confidentialite/", "nav": "", "crumb": "Politique de confidentialité", "priority": "0.2",
+     "title": "Politique de confidentialité | SIFA",
+     "description": "Données personnelles reçues par SIFA via son site, finalités, durées de conservation et exercice de vos droits."}
   ]
 }
