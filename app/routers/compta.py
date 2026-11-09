@@ -813,11 +813,15 @@ async def import_comptes_from_excel(request: Request, file: UploadFile = File(..
 
 
 # ── Comparaison factures : analyse des ventes RVGI / grand-livre CW ──────
-# Chaque comparaison est enregistrée (table compta_comparaisons) : elle se
-# rouvre par son id, depuis l'adresse ou l'historique. Les PDF ne sont pas
-# conservés, seulement leurs noms et le résultat calculé.
+# Chaque comparaison est enregistrée (table compta_comparaisons) et se rouvre
+# par son id. Une comparaison corrigée se REVÉRIFIE en ne redéposant que le
+# fichier refait : l'autre côté est relu dans `donnees` (factures lues, jamais
+# le PDF). Chaque revérification est une nouvelle version du même dossier
+# (dossier_id = id de la v1). Un écart normal se justifie pour tout le
+# dossier, tant que ses montants ne changent pas (compta_comparaisons_justifs).
 _CMP_TAILLE_MAX = 20 * 1024 * 1024
 _CMP_HISTORIQUE = 50
+_CMP_TYPES = {"rvgi": "l'analyse des ventes RVGI", "cw": "le grand-livre CW"}
 
 
 def _cmp_maintenant() -> str:
@@ -826,22 +830,85 @@ def _cmp_maintenant() -> str:
     return datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _cmp_resume(row) -> dict:
-    return {
+async def _cmp_lire_upload(f: UploadFile) -> bytes:
+    data = await f.read()
+    if len(data) > _CMP_TAILLE_MAX:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux — 20 Mo maximum.")
+    return data
+
+
+def _cmp_justifs(conn, dossier_id: int) -> Dict[str, dict]:
+    rows = conn.execute(
+        "SELECT j.cle, j.signature, j.commentaire, j.cree_le, u.nom FROM compta_comparaisons_justifs j "
+        "LEFT JOIN users u ON u.id = j.cree_par WHERE j.dossier_id = ?",
+        (dossier_id,),
+    ).fetchall()
+    return {r["cle"]: {"signature": r["signature"], "commentaire": r["commentaire"],
+                       "par": r["nom"], "le": r["cree_le"]} for r in rows}
+
+
+def _cmp_ligne(conn, cmp_id: int):
+    row = conn.execute(
+        "SELECT c.*, u.nom AS cree_par_nom FROM compta_comparaisons c "
+        "LEFT JOIN users u ON u.id = c.cree_par WHERE c.id = ?",
+        (cmp_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comparaison introuvable.")
+    return row
+
+
+def _cmp_enregistrer(conn, user: dict, res: dict, fichiers: list,
+                     dossier_id: Optional[int] = None, version: int = 1) -> int:
+    from app.services.compta_comparaison_factures import ecarts_compacts
+
+    donnees = res.pop("donnees", None)
+    per = res.get("periode_rvgi") or res.get("periode_cw") or (None, None)
+    ecarts = ecarts_compacts(res)
+    cur = conn.execute(
+        "INSERT INTO compta_comparaisons (cree_le, cree_par, fichiers, periode_du, periode_au, "
+        "nb_ecarts, resultat, dossier_id, version, donnees, ecarts) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (_cmp_maintenant(), user.get("id"), json.dumps(fichiers, ensure_ascii=False),
+         per[0], per[1], len(ecarts), json.dumps(res, ensure_ascii=False), dossier_id, version,
+         json.dumps(donnees, ensure_ascii=False) if donnees else None,
+         json.dumps(ecarts, ensure_ascii=False)),
+    )
+    cid = cur.lastrowid
+    if dossier_id is None:
+        conn.execute("UPDATE compta_comparaisons SET dossier_id = ? WHERE id = ?", (cid, cid))
+    conn.commit()
+    return cid
+
+
+def _cmp_detail(conn, cmp_id: int) -> dict:
+    """Une version, justifications appliquées, avec la liste des versions du dossier."""
+    from app.services.compta_comparaison_factures import appliquer_justifications, compter_a_traiter
+
+    row = _cmp_ligne(conn, cmp_id)
+    dossier = row["dossier_id"] or row["id"]
+    justifs = _cmp_justifs(conn, dossier)
+    res = json.loads(row["resultat"])
+    appliquer_justifications(res, justifs)
+    versions = conn.execute(
+        "SELECT id, version, cree_le, ecarts, nb_ecarts FROM compta_comparaisons "
+        "WHERE dossier_id = ? ORDER BY version",
+        (dossier,),
+    ).fetchall()
+    res.update({
         "id": row["id"],
+        "dossier_id": dossier,
+        "version": row["version"] or 1,
         "cree_le": row["cree_le"],
         "cree_par": row["cree_par_nom"],
         "fichiers": json.loads(row["fichiers"] or "[]"),
-        "periode": [row["periode_du"], row["periode_au"]] if row["periode_du"] else None,
-        "nb_ecarts": row["nb_ecarts"],
-    }
-
-
-_CMP_SELECT = (
-    "SELECT c.id, c.cree_le, c.fichiers, c.periode_du, c.periode_au, c.nb_ecarts, "
-    "u.nom AS cree_par_nom {extra} FROM compta_comparaisons c "
-    "LEFT JOIN users u ON u.id = c.cree_par"
-)
+        "reverifiable": bool(row["donnees"]),
+        "versions": [{
+            "id": v["id"], "version": v["version"] or 1, "cree_le": v["cree_le"],
+            "nb_a_traiter": (compter_a_traiter(json.loads(v["ecarts"]), justifs)
+                             if v["ecarts"] else v["nb_ecarts"]),
+        } for v in versions],
+    })
+    return res
 
 
 @router.post("/api/compta/comparaison-factures")
@@ -851,72 +918,180 @@ async def comparaison_factures(
     doc_b: UploadFile = File(...),
 ):
     """Compare deux PDF (ordre indifférent : chacun est reconnu) et enregistre
-    le résultat."""
+    le résultat comme version 1 d'un nouveau dossier."""
     user = _require_compta(request)
-    from app.services.compta_comparaison_factures import (
-        DocumentNonReconnu,
-        comparer_pdf,
-    )
+    from app.services.compta_comparaison_factures import DocumentNonReconnu, comparer_pdf
 
-    a = await doc_a.read()
-    b = await doc_b.read()
-    if len(a) > _CMP_TAILLE_MAX or len(b) > _CMP_TAILLE_MAX:
-        raise HTTPException(status_code=400, detail="Fichier trop volumineux — 20 Mo maximum.")
+    a = await _cmp_lire_upload(doc_a)
+    b = await _cmp_lire_upload(doc_b)
     try:
         res = comparer_pdf(a, b)
     except DocumentNonReconnu as e:
         raise HTTPException(status_code=400, detail=str(e))
-
     fichiers = [
         {"nom": (doc_a.filename or "document.pdf")[:200], "type": res["types"][0]},
         {"nom": (doc_b.filename or "document.pdf")[:200], "type": res["types"][1]},
     ]
-    per = res.get("periode_rvgi") or res.get("periode_cw") or (None, None)
-    nb_ecarts = len(res["lignes"]) - res["compte"].get("ok", 0)
     with get_db() as conn:
-        cur = conn.execute(
-            "INSERT INTO compta_comparaisons (cree_le, cree_par, fichiers, periode_du, "
-            "periode_au, nb_ecarts, resultat) VALUES (?,?,?,?,?,?,?)",
-            (_cmp_maintenant(), user.get("id"), json.dumps(fichiers, ensure_ascii=False),
-             per[0], per[1], nb_ecarts, json.dumps(res, ensure_ascii=False)),
+        cid = _cmp_enregistrer(conn, user, res, fichiers)
+        return _cmp_detail(conn, cid)
+
+
+@router.post("/api/compta/comparaisons/{cmp_id}/reverifier")
+async def comparaison_reverifier(
+    request: Request,
+    cmp_id: int,
+    doc_a: UploadFile = File(...),
+    doc_b: Optional[UploadFile] = File(None),
+):
+    """Revérifie une comparaison avec le ou les fichiers corrigés : chaque PDF
+    déposé remplace le côté qu'il représente, l'autre est relu de la version
+    `cmp_id`. Crée la version suivante du dossier, avec le bilan des
+    corrections par rapport à `cmp_id`."""
+    user = _require_compta(request)
+    from app.services.compta_comparaison_factures import (
+        DocumentNonReconnu, bilan, comparer, lire_document,
+    )
+
+    with get_db() as conn:
+        row = _cmp_ligne(conn, cmp_id)
+    if not row["donnees"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Comparaison enregistrée avant la revérification — lance une nouvelle comparaison avec les deux PDF.",
         )
-        conn.commit()
-        res["id"] = cur.lastrowid
-    res["fichiers"] = fichiers
-    return res
+    donnees = json.loads(row["donnees"])
+    fichiers = {f["type"]: f for f in json.loads(row["fichiers"] or "[]") if f.get("type")}
+    vus = set()
+    for up in [f for f in (doc_a, doc_b) if f is not None]:
+        data = await _cmp_lire_upload(up)
+        try:
+            t, d = lire_document(data)
+        except DocumentNonReconnu as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        if t in vus:
+            raise HTTPException(status_code=400, detail=f"Les deux documents sont {_CMP_TYPES[t]} — un seul de chaque.")
+        vus.add(t)
+        donnees[t] = d
+        fichiers[t] = {"nom": (up.filename or "document.pdf")[:200], "type": t, "corrige": True}
+
+    res = comparer(donnees["rvgi"], donnees["cw"])
+    res["types"] = ["rvgi", "cw"]
+    res["donnees"] = donnees
+    precedent = json.loads(row["resultat"])
+    res["bilan"] = bilan(precedent, res)
+    res["bilan"].update(precedente_id=row["id"], precedente_version=row["version"] or 1,
+                        remplaces=sorted(vus))
+    dossier = row["dossier_id"] or row["id"]
+    with get_db() as conn:
+        version = conn.execute(
+            "SELECT COALESCE(MAX(version), 1) + 1 FROM compta_comparaisons WHERE dossier_id = ?",
+            (dossier,),
+        ).fetchone()[0]
+        cid = _cmp_enregistrer(conn, user, res,
+                               [fichiers[t] for t in ("rvgi", "cw") if t in fichiers],
+                               dossier_id=dossier, version=version)
+        return _cmp_detail(conn, cid)
 
 
 @router.get("/api/compta/comparaisons")
 def comparaisons_liste(request: Request):
+    """Une ligne par dossier (sa dernière version), avec la progression du
+    nombre d'écarts à traiter de version en version."""
     _require_compta(request)
+    from app.services.compta_comparaison_factures import compter_a_traiter
+
     with get_db() as conn:
-        rows = conn.execute(
-            _CMP_SELECT.format(extra="") + " ORDER BY c.id DESC LIMIT ?",
-            (_CMP_HISTORIQUE,),
-        ).fetchall()
-    return [_cmp_resume(r) for r in rows]
+        dossiers = [r[0] for r in conn.execute(
+            "SELECT dossier_id FROM compta_comparaisons GROUP BY dossier_id "
+            "ORDER BY MAX(id) DESC LIMIT ?", (_CMP_HISTORIQUE,),
+        ).fetchall()]
+        sortie = []
+        for d in dossiers:
+            versions = conn.execute(
+                "SELECT c.id, c.version, c.cree_le, c.fichiers, c.periode_du, c.periode_au, "
+                "c.ecarts, c.nb_ecarts, u.nom AS cree_par_nom FROM compta_comparaisons c "
+                "LEFT JOIN users u ON u.id = c.cree_par WHERE c.dossier_id = ? ORDER BY c.version",
+                (d,),
+            ).fetchall()
+            justifs = _cmp_justifs(conn, d)
+            progression = [
+                compter_a_traiter(json.loads(v["ecarts"]), justifs) if v["ecarts"] else v["nb_ecarts"]
+                for v in versions
+            ]
+            der = versions[-1]
+            sortie.append({
+                "id": der["id"],
+                "dossier_id": d,
+                "version": der["version"] or 1,
+                "cree_le": der["cree_le"],
+                "cree_par": der["cree_par_nom"],
+                "fichiers": json.loads(der["fichiers"] or "[]"),
+                "periode": [der["periode_du"], der["periode_au"]] if der["periode_du"] else None,
+                "nb_ecarts": progression[-1],
+                "progression": progression,
+            })
+    return sortie
 
 
 @router.get("/api/compta/comparaisons/{cmp_id}")
 def comparaison_detail(request: Request, cmp_id: int):
     _require_compta(request)
     with get_db() as conn:
-        row = conn.execute(
-            _CMP_SELECT.format(extra=", c.resultat") + " WHERE c.id = ?", (cmp_id,)
-        ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Comparaison introuvable.")
-    res = json.loads(row["resultat"])
-    res.update(_cmp_resume(row))
-    return res
+        return _cmp_detail(conn, cmp_id)
 
 
 @router.delete("/api/compta/comparaisons/{cmp_id}")
 def comparaison_supprimer(request: Request, cmp_id: int):
+    """Supprime tout le dossier : ses versions et ses justifications."""
     _require_compta(request)
     with get_db() as conn:
-        cur = conn.execute("DELETE FROM compta_comparaisons WHERE id = ?", (cmp_id,))
+        row = _cmp_ligne(conn, cmp_id)
+        dossier = row["dossier_id"] or row["id"]
+        conn.execute("DELETE FROM compta_comparaisons WHERE dossier_id = ? OR id = ?", (dossier, dossier))
+        conn.execute("DELETE FROM compta_comparaisons_justifs WHERE dossier_id = ?", (dossier,))
         conn.commit()
-    if not cur.rowcount:
-        raise HTTPException(status_code=404, detail="Comparaison introuvable.")
     return {"success": True}
+
+
+@router.put("/api/compta/comparaisons/{cmp_id}/justifications")
+async def comparaison_justifier(request: Request, cmp_id: int):
+    """Justifie un écart de la version `cmp_id` pour tout le dossier."""
+    user = _require_compta(request)
+    from app.services.compta_comparaison_factures import est_ecart, signature
+
+    body = await request.json()
+    cle = str(body.get("cle") or "")
+    commentaire = str(body.get("commentaire") or "").strip()
+    if not commentaire:
+        raise HTTPException(status_code=400, detail="Commentaire obligatoire — dire pourquoi l'écart est normal.")
+    if len(commentaire) > 300:
+        raise HTTPException(status_code=400, detail="Commentaire trop long — 300 caractères au plus.")
+    with get_db() as conn:
+        row = _cmp_ligne(conn, cmp_id)
+        ligne = next((l for l in json.loads(row["resultat"])["lignes"]
+                      if l.get("cle") == cle and est_ecart(l)), None)
+        if not ligne:
+            raise HTTPException(status_code=404, detail="Écart introuvable dans cette comparaison.")
+        dossier = row["dossier_id"] or row["id"]
+        conn.execute(
+            "INSERT INTO compta_comparaisons_justifs (dossier_id, cle, signature, commentaire, cree_par, cree_le) "
+            "VALUES (?,?,?,?,?,?) ON CONFLICT(dossier_id, cle) DO UPDATE SET signature = excluded.signature, "
+            "commentaire = excluded.commentaire, cree_par = excluded.cree_par, cree_le = excluded.cree_le",
+            (dossier, cle, signature(ligne), commentaire, user.get("id"), _cmp_maintenant()),
+        )
+        conn.commit()
+        return _cmp_detail(conn, cmp_id)
+
+
+@router.delete("/api/compta/comparaisons/{cmp_id}/justifications")
+def comparaison_dejustifier(request: Request, cmp_id: int, cle: str):
+    _require_compta(request)
+    with get_db() as conn:
+        row = _cmp_ligne(conn, cmp_id)
+        conn.execute(
+            "DELETE FROM compta_comparaisons_justifs WHERE dossier_id = ? AND cle = ?",
+            (row["dossier_id"] or row["id"], cle),
+        )
+        conn.commit()
+        return _cmp_detail(conn, cmp_id)
