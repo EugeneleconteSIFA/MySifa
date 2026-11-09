@@ -293,7 +293,7 @@ p{margin:0}
 .cmp p+p{margin-top:8px}
 .engage{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
 .eng{padding:16px;display:flex;flex-direction:column;gap:12px}
-.eng .lg{background:#FFFFFF;border-radius:10px;height:84px;display:flex;align-items:center;justify-content:center;padding:10px;box-shadow:0 1px 2px rgba(2,6,23,.12) inset}
+.eng .lg{background:#FFFFFF;margin:-16px -16px 2px;border-radius:calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;height:96px;display:flex;align-items:center;justify-content:center;padding:14px 18px}
 .eng .lg img{max-height:64px;max-width:100%;width:auto;object-fit:contain}
 .eng b{font-size:14.5px;display:block;font-weight:600}
 .eng span{font-size:13px;color:var(--text2);line-height:1.45}
@@ -541,7 +541,16 @@ p{margin:0}
 @media (max-width:600px){.feat.feat-4{grid-template-columns:1fr}}
 /* Partenaire linerless : logo + mention, sous la comparaison */
 .partner{display:flex;align-items:center;gap:18px;padding:14px 18px;margin-top:18px}
-.partner .lg{background:#FFFFFF;border-radius:10px;height:64px;width:160px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:8px 12px;box-shadow:0 1px 2px rgba(2,6,23,.12)}
+.partner .lg{background:#FFFFFF;border-radius:10px;height:64px;width:160px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:8px 12px}
 .partner .lg img{max-height:46px;max-width:100%;width:auto;object-fit:contain}
 .partner .eyebrow{display:block;margin-bottom:2px}
 .partner b{font-size:16.5px;font-weight:600}
+/* Pages légales : texte long, titres de section, listes */
+.legal-doc .prose{max-width:760px}
+.legal-doc .prose h2{font-size:clamp(20px,2vw,24px);color:var(--text);margin:40px 0 12px}
+.legal-doc .prose h2:first-child{margin-top:0}
+.legal-doc .prose ul{margin:12px 0 0;padding-left:20px}
+.legal-doc .prose li+li{margin-top:6px}
+.legal-doc .prose ul+p,.legal-doc .prose p+ul{margin-top:14px}
+.legal-doc .prose a{color:var(--accent)}
+.legal-doc .prose .maj{margin-top:40px;font-size:14px;color:var(--muted)}
