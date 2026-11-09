@@ -285,7 +285,7 @@ CATALOGUE: list[dict[str, Any]] = [
         "cle": "postit_tache", "libelle": "Ligne de post-it", "module": "postit",
         "methode": "POST", "chemin": "/api/postits/{postit_id}/tasks", "lien": "",
         "autorise": _tous,
-        "aide": "Ajoute une ligne à un post-it de l'utilisateur (postits.id).",
+        "aide": "Ajoute une case à cocher en fin de post-it de l'utilisateur (postits.id).",
         "params": {
             "postit_id": ("int", True, "Post-it (postits.id)", ""),
             "text": ("str", True, "Ligne", ""),

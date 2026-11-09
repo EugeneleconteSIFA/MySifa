@@ -3484,12 +3484,12 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='settings';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <script src="/static/mysifa_dock.js?v=4"></script>
-<script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_postit.js?v=2"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <!-- Clients et fournisseurs alignés sur RVGI : bandeau de synchro,
      pastille d'origine, bloc « fiche RVGI ». Tout est dans ce fichier,
