@@ -92,6 +92,15 @@
       '.ta-cl-colle-calc .ta-cl-colle-nb{width:52px !important;flex:0 0 52px;min-width:0;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:12px;text-align:center}',
       '.ta-cl-colle-res{flex:1 1 160px;min-width:0}',
       '.ta-cl-colle-res.ta-manque{color:var(--danger);font-weight:600}',
+      '.ta-cl-colle-zone{flex:1 1 100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 8px;padding-top:6px;border-top:1px solid var(--border)}',
+      '.ta-cl-colle-zone[hidden]{display:none}',
+      '.ta-cl-colle-zone .ta-cz-seg{grid-column:1/-1;display:flex;gap:6px;align-items:center;flex-wrap:wrap}',
+      '.ta-cl-colle-zone .ta-cz-seg button{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text2);font:inherit;font-size:12px;font-weight:600;cursor:pointer}',
+      '.ta-cl-colle-zone .ta-cz-seg button.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
+      '.ta-cl-colle-zone .ta-cz-seg .ta-cz-dossier{margin-left:auto;border:none;background:none;color:var(--accent);padding:4px 0}',
+      '.ta-cl-colle-zone label{display:flex;flex-direction:column;gap:2px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}',
+      '.ta-cl-colle-zone input{width:100% !important;min-width:0;box-sizing:border-box;padding:5px 7px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:13px;text-transform:none;letter-spacing:0}',
+      '.ta-cl-colle-zone .ta-cz-aide{grid-column:1/-1;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;white-space:normal}',
       '.ta-cl-colle-regl{flex:0 0 auto;padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:var(--card);color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}'
     ].join('\n');
     document.head.appendChild(style);
@@ -314,14 +323,82 @@
     if (nb && document.activeElement !== nb) nb.value = P.nombre ? String(P.nombre() || '') : '';
     const res = calc.querySelector('.ta-cl-colle-res');
     const test = P.grammage(1);
+    const zone = calc.querySelector('.ta-cl-colle-zone');
+    const regl = calc.querySelector('.ta-cl-colle-regl');
     if (test.adhesif == null) {
       res.textContent = 'Calcul impossible : ' + String(test.manque || '').replace(/\.$/, '').toLowerCase() + '.';
       res.classList.add('ta-manque');
+      // Un réglage manque : les champs s'ouvrent d'eux-mêmes, une fois.
+      if (zone && !item._colleOuvertAuto) { item._colleOuvertAuto = true; zone.hidden = false; }
     } else {
       res.textContent = P.resume ? P.resume() : '';
       res.classList.remove('ta-manque');
     }
+    if (zone && P.valeurs) {
+      const v = P.valeurs();
+      const ronde = v.forme === 'ronde';
+      zone.querySelectorAll('[data-forme]').forEach(b => b.classList.toggle('on', b.getAttribute('data-forme') === (ronde ? 'ronde' : 'rectangle')));
+      zone.querySelectorAll('[data-pour]').forEach(l => { l.style.display = (l.getAttribute('data-pour') === (ronde ? 'ronde' : 'rectangle')) ? '' : 'none'; });
+      zone.querySelectorAll('input[data-cle]').forEach(i => {
+        if (document.activeElement === i) return;
+        const x = v[i.getAttribute('data-cle')];
+        i.value = x == null ? '' : String(x).replace('.', ',');
+      });
+      const dos = P.dossier ? P.dossier() : {};
+      const aide = zone.querySelector('.ta-cz-aide');
+      if (aide) {
+        const parts = [];
+        if (dos.no_dossier) parts.push('Dossier ' + dos.no_dossier + (dos.fiche ? ' · fiche ' + dos.fiche.reference : ' · pas de fiche technique'));
+        else parts.push('Aucun dossier en cours : format et papier à saisir.');
+        if (dos.papier && dos.papier.texte) parts.push('Papier de la fiche : ' + dos.papier.texte);
+        aide.textContent = parts.join(' — ');
+      }
+    }
+    if (regl && zone) regl.textContent = zone.hidden ? 'Modifier le calcul' : 'Masquer le calcul';
     item.querySelectorAll('.ta-cl-val').forEach(_majColleValeur);
+  }
+  // Réglages du calcul dans l'alerte même : forme, dimensions, papier, encre.
+  // Partagés avec le widget Poids de colle (mêmes valeurs, même dossier).
+  function _zoneColle(P) {
+    const zone = document.createElement('div');
+    zone.className = 'ta-cl-colle-zone';
+    zone.hidden = true;
+    const seg = document.createElement('div');
+    seg.className = 'ta-cz-seg';
+    [['rectangle', 'Rectangle'], ['ronde', 'Ronde']].forEach(f => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = f[1]; b.setAttribute('data-forme', f[0]);
+      b.addEventListener('click', () => P.regler({ forme: f[0] }));
+      seg.appendChild(b);
+    });
+    if (P.reprendre) {
+      const rep = document.createElement('button');
+      rep.type = 'button'; rep.className = 'ta-cz-dossier'; rep.textContent = 'Reprendre le dossier';
+      rep.title = 'Remettre le format et le papier du dossier en cours';
+      rep.addEventListener('click', () => { P.reprendre(); });
+      seg.appendChild(rep);
+    }
+    zone.appendChild(seg);
+    [['laize', 'Laize mm', 'rectangle'], ['hauteur', 'Hauteur mm', 'rectangle'], ['rayon', 'Rayon mm', 'rectangle'],
+     ['diametre', 'Diamètre mm', 'ronde'],
+     ['frontal', 'Papier g/m²', ''], ['encre', 'Encre g/m²', ''], ['couverture', 'Couverture %', '']].forEach(c => {
+      const l = document.createElement('label');
+      if (c[2]) l.setAttribute('data-pour', c[2]);
+      l.appendChild(document.createTextNode(c[1]));
+      const i = document.createElement('input');
+      i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('data-cle', c[0]);
+      i.addEventListener('input', (e) => {
+        e.stopPropagation();
+        const o = {}; o[c[0]] = String(i.value).replace(',', '.').trim();
+        P.regler(o);
+      });
+      l.appendChild(i);
+      zone.appendChild(l);
+    });
+    const aide = document.createElement('div');
+    aide.className = 'ta-cz-aide';
+    zone.appendChild(aide);
+    return zone;
   }
   function _initColle(wrap) {
     const items = Array.from(wrap.querySelectorAll('.ta-cl-item[data-colle="1"]'));
@@ -348,13 +425,18 @@
       const res = document.createElement('span');
       res.className = 'ta-cl-colle-res';
       res.textContent = 'Chargement du dossier…';
+      const zone = P.regler && P.valeurs ? _zoneColle(P) : null;
       const regl = document.createElement('button');
       regl.type = 'button';
       regl.className = 'ta-cl-colle-regl';
-      regl.textContent = 'Réglages du calcul';
-      regl.title = 'Format, papier et encre : widget Poids de colle';
-      regl.addEventListener('click', () => { if (typeof P.ouvrir === 'function') P.ouvrir(true); });
+      regl.textContent = 'Modifier le calcul';
+      regl.title = 'Format, papier et encre utilisés pour le grammage';
+      regl.addEventListener('click', () => {
+        if (zone) { zone.hidden = !zone.hidden; _majColleItem(item); }
+        else if (typeof P.ouvrir === 'function') P.ouvrir(true);
+      });
       calc.append(lab, res, regl);
+      if (zone) calc.appendChild(zone);
     });
     const maj = () => {
       if (!wrap.isConnected) { if (P.desabonner) P.desabonner(maj); return; }
