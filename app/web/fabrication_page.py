@@ -1403,7 +1403,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.23"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.24"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
 <script src="/static/mysifa_produit_memoire.js?v=2.8"></script>
 <!-- Au poste, la fiche s'ouvre sur le dernier OF scanne, les precedents a la demande. -->
@@ -1416,7 +1416,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
 <script src="/static/mysifa_pesees.js?v=6"></script>
 <script src="/static/mysifa_maint_saisie.js?v=5"></script>
-<script src="/static/mysifa_poids_colle.js?v=5"></script>
+<script src="/static/mysifa_poids_colle.js?v=6"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
   window.mysifaPoidsColleContexte = function () {

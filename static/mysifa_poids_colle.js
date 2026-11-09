@@ -21,9 +21,10 @@
  *
  * L'alerte d'inspection (question valeur marquée `calcul_colle`) affiche le
  * grammage sous chaque pesée avec les mêmes réglages : une seule saisie du
- * poids, dans l'alerte. Elle passe par pret(), grammage(poids), resume(),
- * regler({nombre}) et abonner(fn) / desabonner(fn), appelé à chaque
- * changement de réglage (widget ou alerte).
+ * poids, dans l'alerte, et les réglages se modifient dans l'alerte même (le
+ * widget ne s'ouvre plus par-dessus). Elle passe par pret(), grammage(poids),
+ * resume(), valeurs(), regler({cle: valeur}), reprendre() et abonner(fn) /
+ * desabonner(fn), appelé à chaque changement de réglage (widget ou alerte).
  */
 (function (global) {
   "use strict";
@@ -464,9 +465,18 @@
     }
     return parts.join(" · ");
   }
+  var REGLABLES = ["nombre", "forme", "laize", "hauteur", "rayon", "diametre", "frontal", "encre", "couverture"];
   function regler(v) {
     if (!W.saisie || !v) return;
-    if (v.nombre != null) W.saisie.nombre = String(v.nombre);
+    REGLABLES.forEach(function (k) {
+      if (v[k] == null) return;
+      W.saisie[k] = String(v[k]);
+    });
+    // Un grammage retouché à la main ne correspond plus à la matière choisie.
+    var lp = ligne(W.saisie.papier);
+    if (v.frontal != null && lp && nb(v.frontal) !== lp.grammage_gsm) W.saisie.papier = "";
+    var la = ligne(W.saisie.anilox);
+    if (v.encre != null && la && nb(v.encre) !== la.grammage_gsm) W.saisie.anilox = "";
     ecrireLS();
     if (W.open && !W.edit) rendre();
   }
@@ -475,6 +485,9 @@
     monter: monter, ouvrir: ouvrir, _calcul: calcul, _surface: surface,
     pret: pret, grammage: grammage, resume: resume, regler: regler,
     nombre: function () { return W.saisie ? W.saisie.nombre : ""; },
+    valeurs: function () { var c = {}; if (W.saisie) Object.keys(W.saisie).forEach(function (k) { c[k] = W.saisie[k]; }); return c; },
+    dossier: function () { return (W.data && W.data.dossier) || {}; },
+    reprendre: function () { return charger(true); },
     abonner: function (fn) { if (typeof fn === "function" && abonnes.indexOf(fn) < 0) abonnes.push(fn); },
     desabonner: function (fn) { var i = abonnes.indexOf(fn); if (i >= 0) abonnes.splice(i, 1); },
   };
