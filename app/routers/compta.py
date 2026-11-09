@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import re
 import unicodedata
 from datetime import datetime
@@ -812,7 +813,35 @@ async def import_comptes_from_excel(request: Request, file: UploadFile = File(..
 
 
 # ── Comparaison factures : analyse des ventes RVGI / grand-livre CW ──────
+# Chaque comparaison est enregistrée (table compta_comparaisons) : elle se
+# rouvre par son id, depuis l'adresse ou l'historique. Les PDF ne sont pas
+# conservés, seulement leurs noms et le résultat calculé.
 _CMP_TAILLE_MAX = 20 * 1024 * 1024
+_CMP_HISTORIQUE = 50
+
+
+def _cmp_maintenant() -> str:
+    from zoneinfo import ZoneInfo
+
+    return datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _cmp_resume(row) -> dict:
+    return {
+        "id": row["id"],
+        "cree_le": row["cree_le"],
+        "cree_par": row["cree_par_nom"],
+        "fichiers": json.loads(row["fichiers"] or "[]"),
+        "periode": [row["periode_du"], row["periode_au"]] if row["periode_du"] else None,
+        "nb_ecarts": row["nb_ecarts"],
+    }
+
+
+_CMP_SELECT = (
+    "SELECT c.id, c.cree_le, c.fichiers, c.periode_du, c.periode_au, c.nb_ecarts, "
+    "u.nom AS cree_par_nom {extra} FROM compta_comparaisons c "
+    "LEFT JOIN users u ON u.id = c.cree_par"
+)
 
 
 @router.post("/api/compta/comparaison-factures")
@@ -821,9 +850,9 @@ async def comparaison_factures(
     doc_a: UploadFile = File(...),
     doc_b: UploadFile = File(...),
 ):
-    """Compare deux PDF (ordre indifférent : chacun est reconnu). Lecture seule,
-    les fichiers ne sont pas conservés."""
-    _require_compta(request)
+    """Compare deux PDF (ordre indifférent : chacun est reconnu) et enregistre
+    le résultat."""
+    user = _require_compta(request)
     from app.services.compta_comparaison_factures import (
         DocumentNonReconnu,
         comparer_pdf,
@@ -834,6 +863,60 @@ async def comparaison_factures(
     if len(a) > _CMP_TAILLE_MAX or len(b) > _CMP_TAILLE_MAX:
         raise HTTPException(status_code=400, detail="Fichier trop volumineux — 20 Mo maximum.")
     try:
-        return comparer_pdf(a, b)
+        res = comparer_pdf(a, b)
     except DocumentNonReconnu as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    fichiers = [
+        {"nom": (doc_a.filename or "document.pdf")[:200], "type": res["types"][0]},
+        {"nom": (doc_b.filename or "document.pdf")[:200], "type": res["types"][1]},
+    ]
+    per = res.get("periode_rvgi") or res.get("periode_cw") or (None, None)
+    nb_ecarts = len(res["lignes"]) - res["compte"].get("ok", 0)
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO compta_comparaisons (cree_le, cree_par, fichiers, periode_du, "
+            "periode_au, nb_ecarts, resultat) VALUES (?,?,?,?,?,?,?)",
+            (_cmp_maintenant(), user.get("id"), json.dumps(fichiers, ensure_ascii=False),
+             per[0], per[1], nb_ecarts, json.dumps(res, ensure_ascii=False)),
+        )
+        conn.commit()
+        res["id"] = cur.lastrowid
+    res["fichiers"] = fichiers
+    return res
+
+
+@router.get("/api/compta/comparaisons")
+def comparaisons_liste(request: Request):
+    _require_compta(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            _CMP_SELECT.format(extra="") + " ORDER BY c.id DESC LIMIT ?",
+            (_CMP_HISTORIQUE,),
+        ).fetchall()
+    return [_cmp_resume(r) for r in rows]
+
+
+@router.get("/api/compta/comparaisons/{cmp_id}")
+def comparaison_detail(request: Request, cmp_id: int):
+    _require_compta(request)
+    with get_db() as conn:
+        row = conn.execute(
+            _CMP_SELECT.format(extra=", c.resultat") + " WHERE c.id = ?", (cmp_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comparaison introuvable.")
+    res = json.loads(row["resultat"])
+    res.update(_cmp_resume(row))
+    return res
+
+
+@router.delete("/api/compta/comparaisons/{cmp_id}")
+def comparaison_supprimer(request: Request, cmp_id: int):
+    _require_compta(request)
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM compta_comparaisons WHERE id = ?", (cmp_id,))
+        conn.commit()
+    if not cur.rowcount:
+        raise HTTPException(status_code=404, detail="Comparaison introuvable.")
+    return {"success": True}
