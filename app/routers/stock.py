@@ -25,6 +25,7 @@ from app.services import pf_prix_achat as _pf_prix_achat
 from app.services import valo_cloture as _valo_cloture
 from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
+from app.services.reference_produit import canoniser_reference_produit
 from app.services.stock_a_l_unite import passer_a_l_unite, repasser_a_la_palette
 from app.services.audit_service import log_action
 from app.services.conditionnement_pf import conditionnement_produit
@@ -2100,7 +2101,7 @@ def get_produit_emplacements_compat(produit_id: int, request: Request):
 async def create_produit(request: Request):
     user = require_stock_write(request)
     body = await request.json()
-    ref = (body.get("reference") or "").strip().upper()
+    ref = canoniser_reference_produit(body.get("reference"))
     if not ref:
         raise HTTPException(400, "Référence obligatoire")
     commentaire = (body.get("commentaire") or "").strip()
@@ -2129,12 +2130,12 @@ async def create_produit(request: Request):
                 detail={"reference": ref},
                 ip=request.client.host if request.client else None,
             )
-            return {"success": True, "id": cursor.lastrowid, "existing": False}
+            return {"success": True, "id": cursor.lastrowid, "existing": False, "reference": ref}
         except sqlite3.IntegrityError:
             conn.rollback()
             row = conn.execute("SELECT id FROM produits WHERE reference=?", (ref,)).fetchone()
             if row:
-                return {"success": True, "id": row["id"], "existing": True}
+                return {"success": True, "id": row["id"], "existing": True, "reference": ref}
             raise HTTPException(409, "Conflit en base pour cette référence")
 
 
@@ -6133,7 +6134,7 @@ def _parse_produits_import_df(df: pd.DataFrame) -> list[dict]:
         ref_raw = row.get(ref_col)
         unite_raw = row.get(unite_col)
         des_raw = row.get(des_col) if des_col else None
-        ref = "" if pd.isna(ref_raw) else str(ref_raw).strip().upper()
+        ref = "" if pd.isna(ref_raw) else canoniser_reference_produit(ref_raw)
         unite = "" if pd.isna(unite_raw) else str(unite_raw).strip()
         designation = ""
         if des_raw is not None and not pd.isna(des_raw):
@@ -8414,7 +8415,7 @@ def _pf_ensure_produit_id(
     now: str,
     produit_type: str = "fabrique",
 ) -> int:
-    ref = reference.strip().upper()
+    ref = canoniser_reference_produit(reference)
     row = conn.execute(
         "SELECT id, designation, unite, type FROM produits WHERE reference=?", (ref,)
     ).fetchone()
@@ -8664,7 +8665,7 @@ def get_produit_fini_detail(reference: str, request: Request):
 
 
 def _pf_validate_mouvement_body(body: dict) -> tuple[str, str, str, float, str]:
-    reference = (body.get("reference") or "").strip().upper()
+    reference = canoniser_reference_produit(body.get("reference"))
     designation = (body.get("designation") or "").strip()
     emplacement = (body.get("emplacement") or "").strip().upper()
     unite = (body.get("unite") or "étiquette").strip() or "étiquette"
@@ -9004,7 +9005,7 @@ async def upsert_negoce_produit(request: Request):
     """Créer ou mettre à jour un produit de négoce dans le catalogue."""
     require_stock_write(request)
     body = await request.json()
-    reference = (body.get("reference") or "").strip().upper()
+    reference = canoniser_reference_produit(body.get("reference"))
     designation = (body.get("designation") or "").strip()
     unite = (body.get("unite") or "rouleau").strip() or "rouleau"
     if not reference:
@@ -10662,7 +10663,7 @@ def export_valorisation(request: Request):
 
 
 def _pf_valo_normalize_ref(ref: str) -> str:
-    return (ref or "").strip().upper()
+    return canoniser_reference_produit(ref)
 
 
 def _pf_valo_pick_stock(conn: sqlite3.Connection, produit_type: str) -> dict[int, float]:
