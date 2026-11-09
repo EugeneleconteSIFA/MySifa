@@ -589,6 +589,18 @@ async def update_planning_jours(plan_id: int, request: Request):
 
 
 # ── Congés ───────────────────────────────────────────────────────
+def _assert_motif_actif(conn, code) -> None:
+    """Le type d'un congé est le code d'un motif de rh_motifs_absence."""
+    try:
+        row = conn.execute(
+            "SELECT actif FROM rh_motifs_absence WHERE code = ?", (str(code or ""),)
+        ).fetchone()
+    except Exception:
+        return  # table absente (migration pas encore passée) : ancien comportement
+    if not row or not row["actif"]:
+        raise HTTPException(400, "Motif d'absence inconnu ou désactivé.")
+
+
 @router.get("/conges")
 def get_conges(
     request: Request,
@@ -659,6 +671,7 @@ async def create_conge(request: Request):
         raise HTTPException(400, "Le nombre de jours doit être supérieur à 0")
 
     with get_db() as conn:
+        _assert_motif_actif(conn, type_conge)
         user_row = conn.execute(
             "SELECT id, nom FROM users WHERE id = ? AND actif = 1", (user_id,)
         ).fetchone()
@@ -743,6 +756,8 @@ async def update_conge(conge_id: int, request: Request):
         if not fields:
             raise HTTPException(400, "Aucun champ modifiable fourni")
 
+        if "type_conge" in fields:
+            _assert_motif_actif(conn, fields["type_conge"])
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [conge_id]
         conn.execute(f"UPDATE rh_conges SET {set_clause} WHERE id = ?", vals)
@@ -830,14 +845,30 @@ def get_soldes(request: Request, annee: Optional[int] = None, scope: str = "atel
                GROUP BY user_id, type_conge""",
             (str(year),),
         ).fetchall()
+        # Le solde imputé se lit dans le décompte du motif (cp, rtt, aucun),
+        # jamais dans son code. Sans référentiel : ancien comportement.
+        try:
+            decomptes = {r["code"]: r["decompte"] for r in conn.execute(
+                "SELECT code, decompte FROM rh_motifs_absence").fetchall()}
+        except Exception:
+            decomptes = {"CP": "cp", "RTT": "rtt"}
         poses_map: dict = {}
         for p in poses:
             uid = p["user_id"]
             if uid not in poses_map:
-                poses_map[uid] = {"CP": 0.0, "RTT": 0.0, "maladie": 0.0, "autre": 0.0}
+                poses_map[uid] = {"CP": 0.0, "RTT": 0.0, "maladie": 0.0, "autre": 0.0, "par_motif": {}}
             tc = p["type_conge"]
-            if tc in poses_map[uid]:
-                poses_map[uid][tc] = float(p["total"])
+            total = float(p["total"] or 0)
+            dec = decomptes.get(tc, "aucun")
+            if dec == "cp":
+                poses_map[uid]["CP"] += total
+            elif dec == "rtt":
+                poses_map[uid]["RTT"] += total
+            elif tc == "maladie":
+                poses_map[uid]["maladie"] += total
+            else:
+                poses_map[uid]["autre"] += total
+            poses_map[uid]["par_motif"][tc] = poses_map[uid]["par_motif"].get(tc, 0.0) + total
 
         result = []
         for s in staff:
@@ -857,6 +888,7 @@ def get_soldes(request: Request, annee: Optional[int] = None, scope: str = "atel
                 "poses_rtt":     pos.get("RTT",     0.0),
                 "poses_maladie": pos.get("maladie", 0.0),
                 "poses_autre":   pos.get("autre",   0.0),
+                "poses_par_motif": pos.get("par_motif", {}),
                 "restant_cp":    round(quota_cp  - pos.get("CP",  0.0), 1),
                 "restant_rtt":   round(quota_rtt - pos.get("RTT", 0.0), 1),
                 "note":          sol.get("note") or "",

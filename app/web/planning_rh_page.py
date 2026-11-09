@@ -326,7 +326,7 @@ body.light .rh-table tr:hover td{background:rgba(0,0,0,.02)}
 .rh-bar-fill.danger{background:var(--danger)}
 .rh-badge{
   display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;
-  font-size:11px;font-weight:600;
+  font-size:11px;font-weight:600;background:var(--accent-bg);color:var(--text2);
 }
 .rh-badge.cp{background:var(--accent-bg);color:var(--accent)}
 .rh-badge.rtt{background:rgba(167,139,250,.12);color:var(--c2)}
@@ -337,11 +337,37 @@ body.light .rh-table tr:hover td{background:rgba(0,0,0,.02)}
 .rh-badge.refuse{background:rgba(248,113,113,.12);color:var(--danger)}
 .rh-act-btn{
   padding:4px 10px;border-radius:6px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);cursor:pointer;font-size:11px;
+  background:var(--bg);color:var(--text2);cursor:pointer;font-size:11px;
   font-family:inherit;font-weight:600;transition:all .15s;
 }
 .rh-act-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-act-btn.del:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.08)}
+.rh-act-btn.ok{border-color:var(--success);color:var(--success)}
+.rh-act-btn.ok:hover{background:var(--success);color:white}
+.rh-act-btn svg{vertical-align:-1px}
+/* Demandes des employés (static/planning_rh_demandes.js) */
+.rh-badge.dm-en_attente{background:var(--accent-bg);color:var(--warn)}
+.rh-badge.dm-validee{background:var(--accent-bg);color:var(--success)}
+.rh-badge.dm-refusee{background:var(--accent-bg);color:var(--danger)}
+.rh-badge.dm-annulee{background:var(--accent-bg);color:var(--muted)}
+.rh-dm-scroll{overflow-x:auto}
+.rh-dm-com{color:var(--muted);font-size:12px;max-width:280px;white-space:pre-wrap;word-break:break-word}
+.rh-dm-note{color:var(--muted);font-size:11px;margin-top:3px}
+.rh-dm-aide{color:var(--muted);font-size:11px}
+.rh-dm-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rh-dm-pill{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.rh-dm-pill:hover{background:var(--card)}
+.rh-dm-pill.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.rh-dm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rh-dm-check{display:flex!important;align-items:center;gap:8px;text-transform:none!important;letter-spacing:0!important;
+  font-size:13px!important;font-weight:500!important;color:var(--text)!important;margin-bottom:6px!important}
+.rh-dm-check input{width:auto!important}
+.rh-dm-edit{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.rh-dm-inactif td{opacity:.55}
+.rh-nav-count{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);
+  color:white;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+@media(max-width:600px){.rh-dm-grid{grid-template-columns:1fr}}
 .rh-empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
 
 /* ── Toast ──────────────────────────────────────────── */
@@ -387,7 +413,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   letter-spacing:.6px;color:var(--muted);margin-bottom:6px;
 }
 .rh-field input,.rh-field select,.rh-field textarea{
-  width:100%;padding:9px 12px;background:var(--bg);
+  width:100%;padding:9px 12px;background:var(--card);
   border:1px solid var(--border);border-radius:8px;
   color:var(--text);font-size:13px;outline:none;transition:border-color .15s;
 }
@@ -398,9 +424,11 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   padding:9px 20px;border-radius:8px;border:none;cursor:pointer;
   font-size:13px;font-weight:700;font-family:inherit;transition:all .15s;
 }
-.rh-btn.primary{background:var(--accent);color:var(--bg)}
+.rh-btn.primary{background:var(--accent);color:white}
+.rh-btn.danger{background:var(--danger);color:white}
+.rh-btn.danger:hover{filter:brightness(1.08)}
 .rh-btn.primary:hover{filter:brightness(1.08)}
-.rh-btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.rh-btn.secondary{background:var(--bg);border:1px solid var(--border);color:var(--text2)}
 .rh-btn.secondary:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .rh-btn:disabled{opacity:.5;cursor:not-allowed}
 
@@ -669,7 +697,9 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/planning_rh_url.js?v=1"></script>
+<script src="/static/planning_rh_url.js?v=2"></script>
+<!-- Demandes des employés et motifs d'absence (onglet Demandes). -->
+<script src="/static/planning_rh_demandes.js?v=1"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -1067,7 +1097,7 @@ async function loadData(){
       S.planning=[];
       S.conges=conges?.conges||[];
       // Congés est la seule vue possible en RH → forcer le tab courant
-      if(S.tab!=='conges') S.tab='conges';
+      if(S.tab!=='conges' && S.tab!=='demandes') S.tab='conges';
     } else {
       const [pers,plan,conges,mcfgs]=await Promise.all([
         api('/personnel').catch(()=>({personnel:[]})),
@@ -1456,6 +1486,7 @@ function rhMobileToolbarHtml(){
   const rangeLbl=rhMobileRangeLabel();
   const parts=[];
 
+  if(S.tab==='demandes') return '';
   if(isOp){
     parts.push(`<div class="rh-wk-nav">
       <button type="button" onclick="S.opOffset-=S.opViewRange;loadData();" title="Précédent" aria-label="Précédent">${icon('chevron_left',14)}</button>
@@ -1491,7 +1522,7 @@ function renderMobileTopbar(){
   const bar=document.getElementById('rh-mobile-topbar');
   if(!bar)return;
   const isOp=S.user&&!S.isEditor&&!S.isReadOnlyAdmin;
-  const sub=isOp?'Ma semaine':(S.view==='rh'?'RH · Congés & soldes':(S.tab==='conges'?'Congés':'Planning'));
+  const sub=S.tab==='demandes'?'Demandes':(isOp?'Ma semaine':(S.view==='rh'?'RH · Congés & soldes':(S.tab==='conges'?'Congés':'Planning')));
   const toolbar=window.innerWidth<=900?rhMobileToolbarHtml():'';
   bar.innerHTML=`
     <div class="rh-mobile-topbar-row">
@@ -1558,8 +1589,10 @@ function renderSidebar(){
 
   // Vue Atelier : Planning + Congés (comportement historique)
   // Vue RH     : Congés uniquement (soldes intégrés dans la même page)
-  const showPlanningTab = (S.view==='atelier');
-  const showCongesTab = (S.view==='rh') || S.isEditor || S.isReadOnlyAdmin;
+  const seul = (typeof prhDemandesSeules==='function') && prhDemandesSeules();
+  const showPlanningTab = (S.view==='atelier') && !seul;
+  const showCongesTab = !seul && ((S.view==='rh') || S.isEditor || S.isReadOnlyAdmin);
+  const nbDm = (S.dm && S.dm.nbAttente) || 0;
 
   nav.innerHTML=`
     ${viewToggle}
@@ -1569,6 +1602,9 @@ function renderSidebar(){
     ${showCongesTab?`<button class="rh-nav-btn nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
       ${icon('umbrella',14)} Congés${S.view==='rh'?' & soldes':''}
     </button>`:''}
+    <button class="rh-nav-btn nav-btn${S.tab==='demandes'?' active':''}" onclick="setTab('demandes')">
+      ${icon('mail',14)} Demandes${nbDm?`<span class="rh-nav-count">${nbDm}</span>`:''}
+    </button>
   `;
 
 }
@@ -1584,6 +1620,11 @@ function renderHeader(){
     return;
   }
 
+  if(S.tab==='demandes'){
+    hdr.innerHTML='<div class="rh-hdr-title">Planning <span>RH</span> · Demandes</div>'
+      +(S.isEditor||S.isReadOnlyAdmin?`<div class="rh-hdr-right"><select class="rh-annee-sel" onchange="changeAnnee(this.value)">${[S.annee-1,S.annee,S.annee+1].map(y=>`<option value="${y}"${y===S.annee?' selected':''}>${y}</option>`).join('')}</select></div>`:'');
+    return;
+  }
   if(!isEditor){
     hdr.innerHTML='<div class="rh-hdr-title">Planning RH · <span>Ma semaine</span></div>';
     return;
@@ -1633,6 +1674,7 @@ function renderContent(){
   const c=document.getElementById('rh-content');
   if(!c)return;
   if(S.loading){c.innerHTML=`<div class="rh-loading"><div class="rh-spinner"></div> Chargement…</div>`;renderModals();return;}
+  if(S.tab==='demandes'){c.innerHTML='';c.appendChild(buildDemandesTab());renderModals();return;}
   if(!S.isEditor && !S.isReadOnlyAdmin){c.innerHTML='';c.appendChild(buildOperatorView());renderModals();return;}
   // Vue RH : pas de planning postes -> forcer conges
   if(S.view==='rh' && S.tab==='planning') S.tab='conges';
@@ -2218,7 +2260,7 @@ function buildCongesTab(){
         <div class="rh-field" style="margin:0">
           <label>Type</label>
           <select onchange="S.congeForm.type_conge=this.value">
-            ${Object.entries(TYPE_CONGE_LABELS).map(([k,v])=>`<option value="${k}"${(S.congeForm.type_conge||'CP')===k?' selected':''}>${v}</option>`).join('')}
+            ${prhMotifsOptions(S.congeForm.type_conge||'CP')}
           </select>
         </div>
         <div class="rh-field" style="margin:0">
@@ -2773,6 +2815,10 @@ function renderModals(){
   }else if(S.modal==='my_maint_detail'){
     const m=buildMyMaintDetailModal();
     mr.innerHTML=''; if(m)mr.appendChild(m);
+  }else if(S.modal==='demande'||S.modal==='refus'||S.modal==='motifs'){
+    // Saisies libres relues depuis S.dm : reconstruire ne perd rien.
+    const m=S.modal==='demande'?buildDemandeModal():S.modal==='refus'?buildRefusModal():buildMotifsModal();
+    mr.innerHTML=''; if(m)mr.appendChild(m);
   }else{
     mr.innerHTML='';
   }
@@ -2789,7 +2835,7 @@ function toast(msg,type='success'){
 }
 
 // ── Actions ────────────────────────────────────────────
-var PRH_VALID_TABS=['planning','conges'];
+var PRH_VALID_TABS=['planning','conges','demandes'];
 function _readPrhTab(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(PRH_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
@@ -2803,6 +2849,7 @@ function setTab(t, opts){
   // L'adresse (?onglet=) suit l'écran : static/planning_rh_url.js.
   closeSidebar();
   if(t==='conges'&&!S.soldes.length)loadSoldes();
+  if(t==='demandes'&&typeof prhChargerDemandes==='function'){S.dm&&(S.dm.charge=false);}
   render();
 }
 function setRange(n){S.viewRange=n;loadData();}
@@ -3331,9 +3378,18 @@ if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:render});
   await loadMe();
   if(S.view==='rh'){ S.tab='conges'; }
   var _initPrhTab=_readPrhTab(); if(_initPrhTab!=='planning'){S.tab=_initPrhTab;}
+  // Motifs d'absence (libellés des congés) et demandes (planning_rh_demandes.js).
+  try{ await prhChargerMotifs(); }catch(e){}
+  try{ prhCompterAValider(); }catch(e){}
   if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=2; else S.viewRange=1;
   // Adresse : vue, onglet, semaine, horizon, détail, année (planning_rh_url.js).
   try{ if(typeof prhLireUrl==='function') prhLireUrl(false); }catch(e){}
+  // Compte sans planning ni gestion des congés : seulement ses demandes.
+  if(prhDemandesSeules()){
+    S.tab='demandes'; render();
+    try{ if(typeof prhDemarrerUrl==='function') await prhDemarrerUrl(); }catch(e){}
+    return;
+  }
   if(S.view!=='rh'){ await loadMachines(); }
   await loadData();
   if(S.tab==='conges')await loadSoldes();

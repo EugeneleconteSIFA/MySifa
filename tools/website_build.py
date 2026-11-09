@@ -70,7 +70,6 @@ def json_ld(reg, page):
             "foundingDate": "1987",
             "email": "contact@sifa.pro",
             "telephone": "+33 3 20 69 01 01",
-            "faxNumber": "+33 3 20 68 33 20",
             "address": adresse,
             "sameAs": ["https://www.linkedin.com/company/sifa-france/"],
         },

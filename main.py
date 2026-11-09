@@ -65,6 +65,7 @@ from app.routers.of_import import router as of_import_router
 from app.routers.produits_memoire import router as produits_memoire_router
 from app.web.fabrication_page import router as fabrication_page_router
 from app.routers.planning_rh import router as planning_rh_api_router
+from app.routers.planning_rh_demandes import router as planning_rh_demandes_router
 from app.web.planning_rh_page import router as planning_rh_page_router
 from app.routers.paie import router as paie_api_router
 from app.routers.rh_outil import router as rh_outil_api_router
@@ -927,6 +928,7 @@ app.include_router(of_import_router, prefix="")
 app.include_router(produits_memoire_router)
 app.include_router(fabrication_page_router)
 app.include_router(planning_rh_api_router)
+app.include_router(planning_rh_demandes_router)
 app.include_router(planning_rh_page_router)
 app.include_router(paie_api_router)
 app.include_router(rh_outil_api_router)

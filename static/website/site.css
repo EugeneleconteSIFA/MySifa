@@ -534,3 +534,14 @@ p{margin:0}
 @media (max-width:600px){.engage .eng{flex-basis:calc((100% - 12px) / 2)}}
 /* Entreprise sans frise : texte centré face aux photos */
 .ent-grid{align-items:center}
+/* Avantages industriels (accueil) : quatre cartes sous la ligne d'enduction */
+.adv-head{margin-top:80px}
+.feat.feat-4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:1100px){.feat.feat-4{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:600px){.feat.feat-4{grid-template-columns:1fr}}
+/* Partenaire linerless : logo + mention, sous la comparaison */
+.partner{display:flex;align-items:center;gap:18px;padding:14px 18px;margin-top:18px}
+.partner .lg{background:#FFFFFF;border-radius:10px;height:64px;width:160px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:8px 12px;box-shadow:0 1px 2px rgba(2,6,23,.12)}
+.partner .lg img{max-height:46px;max-width:100%;width:auto;object-fit:contain}
+.partner .eyebrow{display:block;margin-bottom:2px}
+.partner b{font-size:16.5px;font-weight:600}
