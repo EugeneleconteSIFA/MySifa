@@ -41,6 +41,17 @@ def test_concordance_tva_20_et_0():
     assert l["2"]["statut"] == "ok" and l["2"]["taux"] == 0.0
 
 
+def test_totaux_ttc_comparables():
+    # Le total HT RVGI ne se compare pas au TTC CW : on compare le TTC RVGI
+    # calculé (HT + TVA reconnue) au TTC CW, et l'écart vaut la somme des écarts.
+    res = c.comparer(_rv(("1", "2026-10-01", 2020.00), ("2", "2026-10-02", 556.79),
+                         ("3", "2026-10-03", 100.00)),
+                     _cw(("1", "2026-10-01", 2424.00), ("2", "2026-10-02", 654.78)))
+    assert res["total_ttc_rvgi"] == round(2424.00 + 668.15 + 120.00, 2)
+    assert res["ecart_ttc"] == round(2424.00 + 654.78 - res["total_ttc_rvgi"], 2)
+    assert res["nb_taux_supposes"] == 2
+
+
 def test_escompte_et_montant_rond():
     res = c.comparer(_rv(("1", "2026-10-02", 556.79), ("2", "2026-10-22", 731.49)),
                      _cw(("1", "2026-10-02", 654.78), ("2", "2026-10-22", 411.49)))
