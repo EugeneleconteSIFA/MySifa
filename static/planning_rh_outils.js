@@ -214,9 +214,12 @@ function buildNoteModal() {
   const optSem = sel => sems.map(s => `<option value="${s}"${s === sel ? ' selected' : ''}>${fmtWeekLabel(s)}</option>`).join('');
   const services = prhOutEtat().services.map(s => `<option value="${escHtml(s.service)}"${String(f.cible_valeur) === s.service ? ' selected' : ''}>${escHtml(s.libelle)}</option>`).join('');
   const machines = (S.machines || []).map(m => `<option value="${m.id}"${String(f.cible_valeur) === String(m.id) ? ' selected' : ''}>${escHtml(m.nom)}</option>`).join('');
+  // Libellés écrits dans le code : calculés hors du gabarit.
+  const titreFenetre = f.id ? 'Modifier la note' : "Note à l'attention d'une équipe";
+  const libelleBouton = f.id ? 'Enregistrer' : 'Publier la note';
   box.innerHTML = `
     <button class="rh-modal-close" onclick="S.modal=null;render();">${icon('x', 16)}</button>
-    <h3>${f.id ? 'Modifier la note' : "Note à l'attention d'une équipe"}</h3>
+    <h3>${titreFenetre}</h3>
     <div class="rh-field"><label>Message *</label>
       <textarea id="prh-note-texte" rows="3" maxlength="500" placeholder="Ex. : beaucoup de préparation en logistique cette semaine, merci de faire preuve d'adaptabilité."></textarea></div>
     <div class="rh-field"><label>Destinataires</label>
@@ -237,7 +240,7 @@ function buildNoteModal() {
     </div>
     <div class="rh-modal-acts">
       <button class="rh-btn secondary" onclick="S.modal=null;render();">Annuler</button>
-      <button class="rh-btn primary" onclick="prhEnregistrerNote()">${icon('check', 13)} ${f.id ? 'Enregistrer' : 'Publier la note'}</button>
+      <button class="rh-btn primary" onclick="prhEnregistrerNote()">${icon('check', 13)} ${libelleBouton}</button>
     </div>`;
   const t = box.querySelector('#prh-note-texte');
   t.value = f.texte || '';
