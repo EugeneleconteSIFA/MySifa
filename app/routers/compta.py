@@ -809,3 +809,31 @@ async def import_comptes_from_excel(request: Request, file: UploadFile = File(..
         conn.commit()
     return {"success": True, "inserted": inserted, "updated": None, "skipped": skipped}
 
+
+
+# ── Comparaison factures : analyse des ventes RVGI / grand-livre CW ──────
+_CMP_TAILLE_MAX = 20 * 1024 * 1024
+
+
+@router.post("/api/compta/comparaison-factures")
+async def comparaison_factures(
+    request: Request,
+    doc_a: UploadFile = File(...),
+    doc_b: UploadFile = File(...),
+):
+    """Compare deux PDF (ordre indifférent : chacun est reconnu). Lecture seule,
+    les fichiers ne sont pas conservés."""
+    _require_compta(request)
+    from app.services.compta_comparaison_factures import (
+        DocumentNonReconnu,
+        comparer_pdf,
+    )
+
+    a = await doc_a.read()
+    b = await doc_b.read()
+    if len(a) > _CMP_TAILLE_MAX or len(b) > _CMP_TAILLE_MAX:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux — 20 Mo maximum.")
+    try:
+        return comparer_pdf(a, b)
+    except DocumentNonReconnu as e:
+        raise HTTPException(status_code=400, detail=str(e))

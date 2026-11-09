@@ -2104,3 +2104,13 @@ ETIQ_MODES_ENVOI = {
 # confirme au démarrage du dossier. Comparaison sans accent ni casse, sur le
 # début du mot. « Sheeter » en est volontairement absent : c'est un autre poste.
 FORMES_OUTIL_DECOUPE = ("plaque", "special")
+
+# ─── MyCompta — comparaison factures RVGI / grand-livre CW ──────────
+# L'analyse des ventes RVGI donne le HT, le grand-livre clients de CW le TTC :
+# une facture est concordante quand TTC = HT × (1 + taux) pour l'un des taux
+# légaux, à la tolérance près (arrondis de TVA calculés ligne par ligne).
+COMPTA_CMP_TAUX_TVA = NDF_TAUX_TVA
+COMPTA_CMP_TOLERANCE = float(os.getenv("COMPTA_CMP_TOLERANCE", "0.05"))
+# Journal des ventes dans le grand-livre CW : seules ses lignes sont des
+# factures ou des avoirs (VIO = règlements, à ignorer).
+COMPTA_CMP_JOURNAL_VENTES = os.getenv("COMPTA_CMP_JOURNAL_VENTES", "VE")
