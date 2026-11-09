@@ -111,6 +111,38 @@ def test_lecture_rvgi():
     ]
 
 
+def test_bilan_des_corrections():
+    # v1 : 3 écarts (montant, absente de CW, écriture CW sans facture).
+    rv1 = _rv(("1", "2026-10-01", 100.0), ("2", "2026-10-02", 50.0), ("3", "2026-10-03", 10.0))
+    cw1 = _cw(("1", "2026-10-01", 115.0), ("3", "2026-10-03", 12.0), ("99", "2026-10-09", 5.0))
+    v1 = c.comparer(rv1, cw1)
+    # v2 (grand-livre corrigé) : 1 corrigé, 99 retirée, 2 toujours absente,
+    # et une erreur nouvelle sur la 3.
+    cw2 = _cw(("1", "2026-10-01", 120.0), ("3", "2026-10-03", 13.0))
+    v2 = c.comparer(rv1, cw2)
+    n = c.bilan(v1, v2)
+    l = {x["cle"]: x for x in v2["lignes"]}
+    assert l["1|2026-10-01"]["evolution"] == "corrige"
+    assert l["99|2026-10-09"]["statut"] == "retire" and l["99|2026-10-09"]["evolution"] == "corrige"
+    assert l["2|2026-10-02"]["evolution"] == "restant"
+    assert l["3|2026-10-03"]["evolution"] == "nouveau"
+    assert n == {"corriges": 2, "restants": 1, "nouveaux": 1}
+
+
+def test_justification_tient_tant_que_les_montants():
+    res = c.comparer(_rv(("1", "2026-10-02", 556.79)), _cw(("1", "2026-10-02", 654.78)))
+    ligne = res["lignes"][0]
+    justifs = {ligne["cle"]: {"signature": c.signature(ligne), "commentaire": "Escompte voulu",
+                              "par": "X", "le": "2026-11-10T09:00:00"}}
+    assert c.appliquer_justifications(res, justifs) == 0
+    assert res["lignes"][0]["justif"]["commentaire"] == "Escompte voulu"
+    assert c.compter_a_traiter(c.ecarts_compacts(res), justifs) == 0
+    # Montant CW modifié : la justification ne vaut plus.
+    res2 = c.comparer(_rv(("1", "2026-10-02", 556.79)), _cw(("1", "2026-10-02", 650.00)))
+    assert c.appliquer_justifications(res2, justifs) == 1
+    assert res2["lignes"][0]["justif_caduque"] == "Escompte voulu"
+
+
 if __name__ == "__main__":
     # La CI lance `python tests/test_x.py`, sans pytest.
     tests = [f for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]

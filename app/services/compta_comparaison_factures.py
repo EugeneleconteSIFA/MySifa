@@ -293,6 +293,9 @@ def comparer(rvgi: Dict, cw: Dict) -> Dict:
     def ajouter(g: Optional[Dict], d: Optional[Dict], statut: str, piste: Optional[str], taux=None):
         lignes.append({
             "statut": statut,
+            # Clé stable d'une facture d'une version à l'autre (côté RVGI
+            # d'abord) : sert au bilan des corrections et aux justifications.
+            "cle": f"{(g or d)['numero']}|{(g or d)['date']}",
             "numero": (g or d)["numero"],
             "date": (g or d)["date"],
             "numero_cw": d["numero"] if d else None,
@@ -438,20 +441,104 @@ def comparer(rvgi: Dict, cw: Dict) -> Dict:
     }
 
 
+def lire_document(data: bytes) -> Tuple[str, Dict]:
+    """Reconnaît et lit un PDF : ('rvgi', données) ou ('cw', données)."""
+    t = type_document(data)
+    if t == "rvgi":
+        d = lire_rvgi(data)
+        if not d["factures"]:
+            raise DocumentNonReconnu("Aucune facture lue dans l'analyse des ventes RVGI — édition détaillée attendue.")
+    else:
+        d = lire_cw(data)
+        if not d["factures"]:
+            raise DocumentNonReconnu("Aucune écriture du journal des ventes lue dans le grand-livre CW.")
+    return t, d
+
+
 def comparer_pdf(doc_a: bytes, doc_b: bytes) -> Dict:
-    """Compare deux PDF, dans n'importe quel ordre : chacun est reconnu."""
-    ta, tb = type_document(doc_a), type_document(doc_b)
+    """Compare deux PDF, dans n'importe quel ordre : chacun est reconnu.
+    Le résultat porte aussi les données lues (`donnees`), pour revérifier
+    plus tard en ne redéposant que le fichier corrigé."""
+    ta, da = lire_document(doc_a)
+    tb, db = lire_document(doc_b)
     if ta == tb:
         nom = "l'analyse des ventes RVGI" if ta == "rvgi" else "le grand-livre CW"
         raise DocumentNonReconnu(
             f"Les deux documents sont {nom} — il faut un document de chaque."
         )
-    rvgi_b, cw_b = (doc_a, doc_b) if ta == "rvgi" else (doc_b, doc_a)
-    rvgi, cw = lire_rvgi(rvgi_b), lire_cw(cw_b)
-    if not rvgi["factures"]:
-        raise DocumentNonReconnu("Aucune facture lue dans l'analyse des ventes RVGI — édition détaillée attendue.")
-    if not cw["factures"]:
-        raise DocumentNonReconnu("Aucune écriture du journal des ventes lue dans le grand-livre CW.")
+    rvgi, cw = (da, db) if ta == "rvgi" else (db, da)
     res = comparer(rvgi, cw)
     res["types"] = [ta, tb]
+    res["donnees"] = {"rvgi": rvgi, "cw": cw}
     return res
+
+
+# ── Versions : bilan des corrections ─────────────────────────────────────
+
+_SANS_ECART = ("ok", "retire")
+
+
+def est_ecart(l: Dict) -> bool:
+    return l["statut"] not in _SANS_ECART
+
+
+def signature(l: Dict) -> str:
+    """Montants d'un écart : une justification ne vaut que tant qu'ils restent."""
+    return f"{l.get('ht')}|{l.get('ttc')}"
+
+
+def ecarts_compacts(res: Dict) -> List[List[str]]:
+    """[[clé, signature], …] des écarts d'une version (colonne `ecarts`)."""
+    return [[l["cle"], signature(l)] for l in res["lignes"] if est_ecart(l)]
+
+
+def bilan(precedent: Dict, res: Dict) -> Dict:
+    """Marque chaque ligne de `res` par rapport à la version précédente :
+    evolution = corrige | restant | nouveau. Un écart qui n'apparaît plus du
+    tout (écriture retirée) est rajouté en ligne « retire »."""
+    avant = {l["cle"]: l for l in precedent["lignes"] if est_ecart(l)}
+    cles = set()
+    n = {"corriges": 0, "restants": 0, "nouveaux": 0}
+    for l in res["lignes"]:
+        cles.add(l["cle"])
+        if est_ecart(l):
+            l["evolution"] = "restant" if l["cle"] in avant else "nouveau"
+            n["restants" if l["cle"] in avant else "nouveaux"] += 1
+        elif l["cle"] in avant:
+            l["evolution"] = "corrige"
+            n["corriges"] += 1
+    for cle, l in avant.items():
+        if cle in cles:
+            continue
+        r = dict(l)
+        r.update(statut="retire", evolution="corrige", taux=None,
+                 piste="N'apparaît plus dans le document corrigé.")
+        res["lignes"].append(r)
+        n["corriges"] += 1
+    res["compte"]["retire"] = sum(1 for l in res["lignes"] if l["statut"] == "retire")
+    return n
+
+
+def appliquer_justifications(res: Dict, justifs: Dict[str, Dict]) -> int:
+    """Pose `justif` sur les écarts justifiés dont les montants n'ont pas
+    bougé ; une justification dont les montants ont changé est signalée
+    caduque. Rend le nombre d'écarts restant à traiter."""
+    a_traiter = 0
+    for l in res["lignes"]:
+        l.pop("justif", None)
+        l.pop("justif_caduque", None)
+        if not est_ecart(l):
+            continue
+        j = justifs.get(l["cle"])
+        if j and j["signature"] == signature(l):
+            l["justif"] = {k: j[k] for k in ("commentaire", "par", "le")}
+        else:
+            if j:
+                l["justif_caduque"] = j["commentaire"]
+            a_traiter += 1
+    res["nb_a_traiter"] = a_traiter
+    return a_traiter
+
+
+def compter_a_traiter(ecarts: List[List[str]], justifs: Dict[str, Dict]) -> int:
+    return sum(1 for cle, sig in ecarts if not (cle in justifs and justifs[cle]["signature"] == sig))
