@@ -143,7 +143,8 @@ with get_db() as c:
 en_tant_que(U_RESP, "direction")
 st, det = appel(dm.decider_demande, d_cp["id"], Req({"decision": "valider"}))
 check("conflit planning : confirmation demandée (409)", st, 409)
-check("conflit planning : semaine renvoyée", isinstance(det, dict) and det.get("semaines"), ["2026-W50"])
+check("conflit planning : semaine et jours renvoyés", isinstance(det, dict) and det.get("semaines"),
+      ["2026-W50 (Lun, Mar, Mer, Jeu, Ven)"])
 st, d_ok = appel(dm.decider_demande, d_cp["id"], Req({"decision": "valider", "force": True}))
 check("validation forcée", d_ok["statut"] if st == 200 else st, "validee")
 with get_db() as c:
@@ -184,6 +185,21 @@ check("horaire refusé absent (semaine 49)",
       dm.horaires_valides(Req(), from_week="2026-W49", to_week="2026-W49")["horaires"], [])
 check("horaire validé absent d'une autre semaine",
       dm.horaires_valides(Req(), from_week="2026-W51", to_week="2026-W51")["horaires"], [])
+
+# 8. Congé saisi par le responsable : conflit jour par jour (cas réel du
+#    09/11/2026 — affecté Lun–Mer, congé Jeu–Ven refusé à tort).
+with get_db() as c:
+    c.execute("INSERT INTO rh_planning_postes (user_id, semaine, poste, creneau, jours) "
+              "VALUES (?, '2026-W48', 'conducteur', 'matin', 7)", (U_OP2,))
+    c.commit()
+planning_rh._require_conge_edit = lambda request: dict(COURANT)
+st, _ = appel(planning_rh.create_conge, Req({"user_id": U_OP2, "date_debut": "2026-11-26",
+                                             "date_fin": "2026-11-27", "nb_jours": 2, "type_conge": "formation"}))
+check("congé Jeu–Ven sur une affectation Lun–Mer accepté", st, 200)
+st, det = appel(planning_rh.create_conge, Req({"user_id": U_OP2, "date_debut": "2026-11-24",
+                                               "date_fin": "2026-11-26", "nb_jours": 3, "type_conge": "CP"}))
+check("congé Mar–Jeu : conflit sur Mar, Mer seulement (409)",
+      (st, "2026-W48 (Mar, Mer)" in str(det)), (409, True))
 
 # Motif créé : code dérivé du libellé.
 st, m = appel(dm.create_motif, Req({"libelle": "Visite médicale", "decompte": "aucun"}))

@@ -589,6 +589,32 @@ async def update_planning_jours(plan_id: int, request: Request):
 
 
 # ── Congés ───────────────────────────────────────────────────────
+def jours_affectes_pendant(conn, user_id: int, d_deb: date, d_fin: date) -> list[dict]:
+    """Affectations planning qui tombent sur des jours de la période.
+
+    Compare jour par jour le masque `jours` de chaque affectation (Lun=bit0 …
+    Sam=bit5) aux dates de la période. Le dimanche n'est jamais planifié.
+    Rend [{semaine, jours: ['Jeu', 'Ven']}], semaines triées.
+    """
+    out: dict = {}
+    for a in conn.execute(
+        "SELECT semaine, jours FROM rh_planning_postes WHERE user_id = ?", (user_id,)
+    ).fetchall():
+        try:
+            ay, aw = str(a["semaine"]).split("-W")
+            lundi = date.fromisocalendar(int(ay), int(aw), 1)
+        except (ValueError, AttributeError):
+            continue
+        if d_deb > lundi + timedelta(days=5) or d_fin < lundi:
+            continue
+        bits = int(a["jours"] if a["jours"] is not None else 31) & JOURS_MASK_ALL
+        for i in range(6):
+            jour = lundi + timedelta(days=i)
+            if bits & (1 << i) and d_deb <= jour <= d_fin:
+                out.setdefault(a["semaine"], set()).add(i)
+    return [{"semaine": s, "jours": [JOURS_ABREVS[i] for i in sorted(out[s])]} for s in sorted(out)]
+
+
 def _assert_motif_actif(conn, code) -> None:
     """Le type d'un congé est le code d'un motif de rh_motifs_absence."""
     try:
@@ -680,32 +706,16 @@ async def create_conge(request: Request):
         if _planning_rh_nom_excluded(user_row["nom"]):
             raise HTTPException(400, "Ce profil n'est pas planifiable dans le planning RH")
 
-        # Conflits avec des affectations planning existantes
-        existing_assignments = conn.execute(
-            """SELECT p.semaine, p.poste, m.nom AS machine_nom
-               FROM rh_planning_postes p
-               LEFT JOIN machines m ON m.id = p.machine_id
-               WHERE p.user_id = ?""",
-            (user_id,),
-        ).fetchall()
-
-        conflicting = []
-        for a in existing_assignments:
-            try:
-                ay, aw = a["semaine"].split("-W")
-                mon = date.fromisocalendar(int(ay), int(aw), 1)
-                sun = mon + timedelta(days=6)
-            except (ValueError, AttributeError):
-                continue
-            if d_deb <= sun and d_fin >= mon:
-                conflicting.append(a["semaine"])
-
-        if conflicting:
-            weeks_str = ", ".join(sorted(set(conflicting)))
+        # Conflits avec des affectations planning : jour par jour (masque
+        # `jours` de l'affectation), pas à la semaine — une personne prévue du
+        # lundi au mercredi peut poser son jeudi.
+        conflits = jours_affectes_pendant(conn, int(user_id), d_deb, d_fin)
+        if conflits:
+            detail = " ; ".join(f"{c['semaine']} ({', '.join(c['jours'])})" for c in conflits)
             raise HTTPException(
                 409,
-                f"{user_row['nom']} est déjà affecté à un poste pour les semaines : {weeks_str}. "
-                f"Retirez ces affectations avant de saisir les congés.",
+                f"{user_row['nom']} est affecté(e) au planning sur ces jours : {detail}. "
+                f"Retirez ou ajustez ces affectations avant de saisir le congé.",
             )
 
         now = datetime.now().isoformat()
