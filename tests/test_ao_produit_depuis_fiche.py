@@ -63,6 +63,38 @@ def test_completer_ne_reecrit_rien():
     assert n > 0 and n <= nb_champs(fiche_vers_produit(FT, ACTIVES))
 
 
+def test_nom_des_fiches_dans_la_recherche():
+    """Access ne remplit ni désignation ni client : le nom se reconstitue."""
+    import database  # noqa: F401  (shim avant app.*)
+    import app.routers.ao as ao
+
+    assert ao._ft_code("324/0004 - COHESIO2") == ("324", "0004")
+    assert ao._ft_code("Sans code") is None
+    vu = {}
+
+    def libs(codes):
+        vu["codes"] = codes
+        return {("1164", "0066"): "Etiquette 40 x 25 mm, P164 + noir R°, 4 modèles"}
+
+    ao._ft_libelles_rvgi, orig = libs, ao._ft_libelles_rvgi
+    try:
+        rows = ao._ft_enrichir([
+            {"reference": "1164/0066", "format": "40 x 25 mm", "support": "Couché",
+             "client_nom": "U'RSELF RENNES"},
+            {"reference": "324/0004 - COHESIO2", "format": "101,6 x 152,4 mm",
+             "support": "THERMIQUE ECO"},
+        ])
+    finally:
+        ao._ft_libelles_rvgi = orig
+    assert vu["codes"] == [("1164", "0066"), ("324", "0004")]
+    assert rows[0]["designation"].startswith("Etiquette 40 x 25 mm, P164")
+    assert rows[0]["client"] == "U'RSELF RENNES"
+    # Article absent du miroir : format · support
+    assert rows[1]["designation"] == "101,6 x 152,4 mm · THERMIQUE ECO"
+    assert rows[1]["client"] is None
+
+
 if __name__ == "__main__":
     test_mandrin_et_enroulement(); test_traduction(); test_completer_ne_reecrit_rien()
+    test_nom_des_fiches_dans_la_recherche()
     print("OK")

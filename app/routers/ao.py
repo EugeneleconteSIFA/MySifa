@@ -1177,39 +1177,129 @@ async def update_ao_params(request: Request, ao_id: int):
     return {"ok": True, "ao_id": ao_id, "prix_transport_pct": pct}
 
 
+# Une fiche technique Access n'a ni désignation ni client (colonnes vides sur
+# toute la base) : sa référence « 1164/0066 - COHESIO1 » est le couple
+# code1/code2 de l'article RVGI, et code1 est le numéro du client. Le nom à
+# montrer se reconstitue donc : client par `clients.numero`, libellé par
+# `fic_art.libc1` du miroir RVGI, et à défaut format · support · machine.
+_FT_CLE = ("TRIM(CASE WHEN instr(ft.reference,' ')>0 "
+           "THEN substr(ft.reference,1,instr(ft.reference,' ')-1) "
+           "ELSE ft.reference END)")
+_FT_NUM_CLIENT = ("CAST(substr(ft.reference,1,instr(ft.reference,'/')-1) AS INTEGER)")
+
+
+def _ft_code(reference: str) -> tuple[str, str] | None:
+    m = re.match(r"\s*(\d+)\s*/\s*(\d+)", str(reference or ""))
+    return (m.group(1), m.group(2)) if m else None
+
+
+def _ft_libelles_rvgi(codes: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
+    """Libellé article RVGI (libc1) par couple code1/code2. Miroir absent ou
+    illisible : dictionnaire vide, la recherche ne doit pas en dépendre."""
+    if not codes:
+        return {}
+    try:
+        from app.services import erp_mirror as miroir
+        with miroir.get_erp_db() as c:
+            if "fic_art" not in miroir.tables_presentes(c):
+                return {}
+            out: dict[tuple[str, str], str] = {}
+            for k in range(0, len(codes), 200):
+                lot = codes[k:k + 200]
+                cond = " OR ".join(["(code1=? AND code2=?)"] * len(lot))
+                params = [v for cc in lot for v in cc]
+                for r in c.execute(
+                    f"SELECT code1, code2, libc1 FROM fic_art "
+                    f"WHERE corbeille = 0 AND ({cond})", params,
+                ).fetchall():
+                    lib = str(r["libc1"] or "").strip().rstrip(".")
+                    if lib:
+                        out[(str(r["code1"]), str(r["code2"]))] = lib
+            return out
+    except Exception as exc:
+        logger.warning("Libellés RVGI des fiches techniques indisponibles : %s", exc)
+        return {}
+
+
+def _ft_codes_rvgi_par_libelle(q: str, limit: int = 300) -> list[str]:
+    """Références « code1/code2 » dont le libellé RVGI contient ``q``."""
+    try:
+        from app.services import erp_mirror as miroir
+        with miroir.get_erp_db() as c:
+            if "fic_art" not in miroir.tables_presentes(c):
+                return []
+            rows = c.execute(
+                "SELECT code1, code2 FROM fic_art WHERE corbeille = 0 "
+                "AND IFNULL(libc1,'') LIKE ? COLLATE NOCASE LIMIT ?",
+                (f"%{q}%", limit),
+            ).fetchall()
+            return [f"{r['code1']}/{r['code2']}" for r in rows]
+    except Exception as exc:
+        logger.warning("Recherche RVGI des fiches techniques indisponible : %s", exc)
+        return []
+
+
+def _ft_enrichir(rows: list[dict]) -> list[dict]:
+    """Complète designation / client des fiches (vides côté Access)."""
+    codes = []
+    for r in rows:
+        cc = _ft_code(r.get("reference"))
+        if cc and cc not in codes:
+            codes.append(cc)
+    libs = _ft_libelles_rvgi(codes)
+    for r in rows:
+        cc = _ft_code(r.get("reference"))
+        if not str(r.get("designation") or "").strip():
+            repli = " · ".join(str(x).strip() for x in (r.get("format"), r.get("support"))
+                               if str(x or "").strip())
+            r["designation"] = (libs.get(cc) if cc else None) or repli or None
+        if not str(r.get("client") or "").strip():
+            r["client"] = r.get("client_nom") or None
+    return rows
+
+
 @router.get("/fiches-techniques")
 def search_fiches_techniques(request: Request, q: str = "", limit: int = 20):
-    """Recherche autocomplete sur fiches_techniques (reference, designation, client)."""
+    """Recherche autocomplete sur les fiches techniques : référence, client
+    (numéro dans la référence), libellé article RVGI, format, support."""
     _require_ao(request)
     q_norm = (q or "").strip()
     try:
         limit = max(1, min(50, int(limit)))
     except (TypeError, ValueError):
         limit = 20
+    select = f"""SELECT ft.id, ft.reference, ft.designation, ft.client, ft.format,
+                        ft.matiere, ft.support, ft.machine,
+                        cl.id AS client_id, cl.raison_sociale AS client_nom
+                   FROM fiches_techniques ft
+                   LEFT JOIN clients cl ON cl.numero = {_FT_NUM_CLIENT}"""
     with get_db() as conn:
         if not q_norm:
             rows = conn.execute(
-                """SELECT id, reference, designation, client, format, matiere
-                   FROM fiches_techniques
-                   ORDER BY date_import DESC
-                   LIMIT ?""",
-                (limit,),
+                select + " ORDER BY ft.date_import DESC LIMIT ?", (limit,),
             ).fetchall()
         else:
             like = f"%{q_norm}%"
+            par_libelle = _ft_codes_rvgi_par_libelle(q_norm)
+            in_lib = ",".join("?" * len(par_libelle)) or "NULL"
             rows = conn.execute(
-                """SELECT id, reference, designation, client, format, matiere
-                   FROM fiches_techniques
-                   WHERE reference LIKE ? COLLATE NOCASE
-                      OR IFNULL(designation,'') LIKE ? COLLATE NOCASE
-                      OR IFNULL(client,'')      LIKE ? COLLATE NOCASE
-                   ORDER BY
-                     CASE WHEN reference LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
-                     reference COLLATE NOCASE
-                   LIMIT ?""",
-                (like, like, like, f"{q_norm}%", limit),
+                select + f"""
+                  WHERE ft.reference LIKE ? COLLATE NOCASE
+                     OR IFNULL(ft.designation,'') LIKE ? COLLATE NOCASE
+                     OR IFNULL(ft.client,'')      LIKE ? COLLATE NOCASE
+                     OR IFNULL(cl.raison_sociale,'') LIKE ? COLLATE NOCASE
+                     OR IFNULL(cl.code,'')        LIKE ? COLLATE NOCASE
+                     OR IFNULL(ft.format,'')      LIKE ? COLLATE NOCASE
+                     OR IFNULL(ft.support,'')     LIKE ? COLLATE NOCASE
+                     OR {_FT_CLE} IN ({in_lib})
+                  ORDER BY
+                    CASE WHEN ft.reference LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                    ft.reference COLLATE NOCASE
+                  LIMIT ?""",
+                (like, like, like, like, like, like, like, *par_libelle,
+                 f"{q_norm}%", limit),
             ).fetchall()
-    return [dict(r) for r in rows]
+    return _ft_enrichir([dict(r) for r in rows])
 
 
 @router.get("/fiches-techniques/by-ref")
@@ -1269,10 +1359,19 @@ def fiche_technique_en_produit(request: Request, ref: str = ""):
                 ORDER BY ref COLLATE NOCASE""",
             (ft["reference"],),
         ).fetchall()
+        cc = _ft_code(ft.get("reference"))
+        cli = conn.execute(
+            "SELECT id, raison_sociale FROM clients WHERE numero = ? LIMIT 1",
+            (int(cc[0]),),
+        ).fetchone() if cc else None
+    nom = _ft_enrichir([dict(ft, client_nom=(cli["raison_sociale"] if cli else None))])[0]
     return {
         "reference": ft.get("reference"),
-        "designation": ft.get("designation"),
-        "client": ft.get("client"),
+        "designation": nom.get("designation"),
+        "client": nom.get("client"),
+        # Client du référentiel Paramètres › Clients : repris dans la fiche
+        # produit quand elle n'en a pas encore.
+        "client_id": cli["id"] if cli else None,
         "fiche": apport,
         "nb_champs": nb_champs(apport),
         "produits_lies": [{"id": r["id"], "ref": r["ref"]} for r in lies],
@@ -1832,6 +1931,17 @@ async def rattacher_fiche_technique(request: Request, produit_id: int):
             fiche["ref_sifa"] = ft["reference"]
             if completer:
                 remplis = completer_vides(fiche, _apport_fiche_technique(conn, ft))
+                # Le numéro client est dans la référence : il complète un
+                # produit chiffré sans client, sans jamais en remplacer un.
+                cc = _ft_code(ft["reference"])
+                if cc and not row["client_id"]:
+                    cli = conn.execute(
+                        "SELECT id FROM clients WHERE numero = ? LIMIT 1", (int(cc[0]),),
+                    ).fetchone()
+                    if cli:
+                        conn.execute("UPDATE ao_produits SET client_id=? WHERE id=?",
+                                     (cli["id"], produit_id))
+                        remplis += 1
         else:
             fiche["ref_sifa"] = ""
         fiche = normalize_fiche(fiche)
