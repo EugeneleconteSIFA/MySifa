@@ -10,7 +10,8 @@ un depart MyExpe dont la date d'enlevement est a venir et qui porte au moins
 - la production doit etre terminee avant la date d'enlevement a `heure_limite` ;
 - la duree du dossier est majoree de `marge_pct` % pour assurer une marge de
   production ; cette marge occupe reellement le creneau, elle repousse donc les
-  dossiers suivants ;
+  dossiers suivants. Elle ne s'applique qu'a un dossier PAS ENCORE DEMARRE :
+  un dossier en cours garde sa duree telle quelle (retour atelier 10/11/2026) ;
 - un camion apparait sur le creneau du planning.
 
 En dessous du seuil de palettes, rien ne s'applique : ni camion, ni marge, ni
@@ -278,6 +279,11 @@ def contraintes_pour(
     ]
     if not ids:
         return {}
+    statuts = {
+        int(e["id"]): (e.get("statut") or "attente")
+        for e in entries
+        if e.get("id") is not None
+    }
     departs = departs_par_dossier(conn, ids, aujourdhui=aujourdhui)
     seuil = float(p["seuil_palettes"])
     out: Dict[int, dict] = {}
@@ -297,6 +303,13 @@ def contraintes_pour(
         lim = limite_pour(premier["date_enlevement"], p["heure_limite"])
         if lim is None:
             continue
+        # Pas de marge sur un dossier deja en production (retour atelier du
+        # 10/11/2026). La marge est un tampon de PLANIFICATION : elle reserve
+        # du temps avant le demarrage. Une fois le dossier lance, sa fin se
+        # calcule depuis la 1re saisie : y ajouter 20 % de la duree totale
+        # allongeait le dossier en cours de plusieurs heures des qu'un
+        # camion etait reserve (GLS, 64 h → +13 h, fin repoussee de 2 jours).
+        marge = 0.0 if statuts.get(eid) == "en_cours" else float(p["marge_pct"])
         out[eid] = {
             "entry_id": eid,
             "depart_id": premier["depart_id"],
@@ -308,7 +321,7 @@ def contraintes_pour(
             "limite": lim,
             "limite_iso": lim.strftime("%Y-%m-%dT%H:%M:%S"),
             "heure_limite": p["heure_limite"],
-            "marge_pct": float(p["marge_pct"]),
+            "marge_pct": marge,
             "departs": [
                 {
                     "depart_id": d["depart_id"],
@@ -570,6 +583,9 @@ def alertes_gel(
 
     Un dossier absent de `fins_avant` (celui qu'on vient d'inserer) n'a pas de
     point de comparaison : il n'est pas repousse, il arrive.
+
+    Un dossier qui finissait deja apres son camion AVANT le geste ne declenche
+    rien non plus : ce camion ne l'attend pas (livraison partielle, stock).
     """
     par_id = {int(e["id"]): e for e in entries if e.get("id") is not None}
     out: List[dict] = []
@@ -581,8 +597,16 @@ def alertes_gel(
         ecart_h = (apres - avant).total_seconds() / 3600.0
         if ecart_h <= TOLERANCE_H:
             continue
-        e = par_id.get(eid) or {"id": eid}
         lim = gel.get("limite")
+        if isinstance(lim, datetime) and avant > lim:
+            # Avant meme ce geste, la production finissait APRES le camion :
+            # ce depart n'attend pas ce dossier (livraison partielle d'un
+            # dossier en cours, envoi sur stock, depart rattache a la
+            # cadence suivante). Le repousser ne fait rater aucun camion, et
+            # demander un motif pour ca est la « question illogique »
+            # remontee par l'atelier le 10/11/2026.
+            continue
+        e = par_id.get(eid) or {"id": eid}
         out.append(
             {
                 "entry_id": eid,

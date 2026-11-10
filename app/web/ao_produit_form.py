@@ -27,6 +27,42 @@ width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;fl
 .pf-page-hdr .pf-page-sub{font-size:12px;color:var(--muted);margin-top:2px;font-weight:500}
 .pf-page-hdr .pf-page-status{margin-left:auto;padding:4px 10px;border-radius:999px;font-size:11px;
 font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:var(--accent-bg);color:var(--accent)}
+/* Source d'une fiche produit : fiche technique MyProd ou vierge, et
+   rattachement d'une fiche technique après coup. */
+.pfs-choix{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+@media(max-width:600px){.pfs-choix{grid-template-columns:1fr}}
+.pfs-opt{display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px;border-radius:12px;
+border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font:inherit;
+transition:border-color .15s,background .15s}
+.pfs-opt:hover{border-color:var(--accent)}
+.pfs-opt.is-on{border-color:var(--accent);background:var(--accent-bg)}
+.pfs-opt strong{display:flex;align-items:center;gap:8px;font-size:14px}
+.pfs-opt.is-on strong{color:var(--accent)}
+.pfs-opt span{font-size:12px;color:var(--muted);line-height:1.4}
+.pfs-search{position:relative}
+.pfs-search input{background:var(--card)}
+.pfs-list{margin-top:6px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
+.pfs-item{display:block;width:100%;text-align:left;padding:9px 12px;border:0;border-bottom:1px solid var(--border);
+background:var(--card);color:var(--text);font:inherit;font-size:12px;cursor:pointer}
+.pfs-item:last-child{border-bottom:0}
+.pfs-item:hover,.pfs-item.is-act{background:var(--accent-bg)}
+.pfs-item strong{color:var(--text)}
+.pfs-item .pfs-sub{color:var(--muted)}
+.pfs-vide{padding:12px 14px;color:var(--muted);font-size:12px}
+.pfs-apercu{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-left:3px solid var(--accent);
+border-radius:10px;background:var(--bg);font-size:13px;line-height:1.5}
+.pfs-apercu .pfs-sub{color:var(--muted);font-size:12px}
+.pfs-alerte{margin-top:8px;font-size:12px;color:var(--warn)}
+.pfs-alerte a{color:var(--accent);font-weight:600}
+.pfs-check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;text-transform:none;
+letter-spacing:0;font-weight:500;color:var(--text)}
+.pfs-check input{width:auto}
+.pfs-actuelle{font-size:13px;color:var(--text2);margin-bottom:12px}
+.prod-ft-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;
+font-weight:600;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit}
+.prod-ft-none{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;
+font-weight:600;border:1px dashed var(--border);background:var(--card);color:var(--muted);cursor:pointer;font-family:inherit}
+.prod-ft-none:hover{border-color:var(--accent);color:var(--accent)}
 .pf-section{margin-bottom:18px}
 .pf-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
 color:var(--accent);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
@@ -1240,59 +1276,6 @@ async function searchFichesTechniques(q) {
   } catch(e) { return []; }
 }
 
-async function fetchFicheTechnique(ref) {
-  return api('/api/ao/fiches-techniques/by-ref?ref=' + encodeURIComponent(ref));
-}
-
-// Applique la fiche technique aux champs VIDES uniquement.
-function fillProduitFromFiche(fiche) {
-  if (!fiche) return {applied: 0, skipped: 0};
-  const setIfEmpty = (id, val) => {
-    if (val == null || val === '') return false;
-    const el = document.getElementById(id);
-    if (!el) return false;
-    const cur = (el.value || '').trim();
-    if (cur === '' || cur === '0') { el.value = val; return true; }
-    return false;
-  };
-  let applied = 0, skipped = 0;
-  // Etiquette
-  if (setIfEmpty('pf-et-laize', fiche.laize_optimale || fiche.laize)) applied++; else if (fiche.laize) skipped++;
-  // Bobines
-  if (setIfEmpty('pf-bob-nb', fiche.nb_etiq_bobin)) applied++;
-  if (setIfEmpty('pf-bob-diam', fiche.dia_ext)) applied++;
-  // pf-bob-mand est le DIAMÈTRE du mandrin (fiche produit : bobines.diametre_mandrin).
-  // La fiche technique porte les deux : mandrin_dia et mandrin_longueur. On prenait
-  // la longueur — donc un mandrin de 40 mm de diamètre pouvait arriver à 100 mm.
-  // La référence produit auto reprend cette valeur (« M40 mm »), l'erreur se
-  // propageait jusque chez le fournisseur.
-  if (setIfEmpty('pf-bob-mand', fiche.mandrin_dia || fiche.mandrin_longueur)) applied++;
-  // Impressions
-  if (setIfEmpty('pf-imp-recto', fiche.recto)) applied++;
-  if (setIfEmpty('pf-imp-verso', fiche.verso)) applied++;
-  // Matiere : nom en texte (frontal/adhesif sont des IDs cote produit).
-  // On ne remplit PAS ces selects — mapping ID/nom trop fragile. On log.
-  // Client texte (si champ client vide et fiche a un nom, ne rien faire — le picker est pilote a part).
-  // Cartons/palettes
-  if (setIfEmpty('pf-cart-bob', fiche.nb_bobines_carton)) applied++;
-  if (setIfEmpty('pf-cart-sol', fiche.nb_au_sol)) applied++;
-  if (setIfEmpty('pf-cart-etages', fiche.nb_etage)) applied++;
-  if (setIfEmpty('pf-pal-sol', fiche.palette_nb_cartons_sol)) applied++;
-  if (setIfEmpty('pf-pal-etages', fiche.palette_nb_cartons_hauteur)) applied++;
-  // Reference du produit : si vide et on a la ref de la fiche, la reprendre.
-  // Reprendre la réf SIFA est un choix explicite : on verrouille la référence
-  // pour que la composition automatique ne l'écrase pas au recalcul suivant.
-  if (setIfEmpty('pf-ref', fiche.reference)) {
-    applied++;
-    try { pfLockRefManuelle(); } catch (e) { /* formulaire non monté */ }
-  } else {
-    // Les cotes viennent de changer : la référence auto doit suivre.
-    try { pfScheduleComposeRef(); } catch (e) { /* idem */ }
-  }
-  try { pfUpdateFormatDisplay(); } catch (e) { /* idem */ }
-  return {applied, skipped};
-}
-
 function bindRefSifaAutocomplete() {
   const inp = document.getElementById('pf-refsifa');
   const list = document.getElementById('pf-refsifa-list');
@@ -1317,9 +1300,14 @@ function bindRefSifaAutocomplete() {
         inp.value = ref;
         hide();
         try {
-          const fiche = await fetchFicheTechnique(ref);
-          const res = fillProduitFromFiche(fiche);
-          showToast(res.applied + ' champs remplis depuis la fiche ' + ref + '.', 'success');
+          const res = await fetchFicheEnProduit(ref);
+          // Synchronise d'abord l'état avec ce qui est à l'écran (saisies non
+          // enregistrées), puis ne complète que le vide et redessine.
+          collectProduitForm();
+          const n = pfCompleterVides(S.produitForm.fiche, res.fiche || {});
+          S.produitForm.fiche.ref_sifa = res.reference;
+          render();
+          showToast(n + ' champs remplis depuis la fiche ' + res.reference + '.', 'success');
         } catch(e) { showToast(e.message || 'Erreur fiche technique.', 'danger'); }
       });
     });
@@ -1338,6 +1326,257 @@ function bindRefSifaAutocomplete() {
   });
   inp.addEventListener('blur', () => { if (hideT) clearTimeout(hideT); hideT = setTimeout(hide, 200); });
   if (btnClear) btnClear.addEventListener('click', () => { inp.value = ''; hide(); inp.focus(); });
+}
+
+/* ── Fiche technique MyProd → fiche produit ────────────────────────────────
+   La traduction (colonnes Access → champs MyAO) vit côté serveur
+   (app/services/ao_produit_depuis_fiche.py) : un seul endroit sait que
+   eti_laize est la laize de l'étiquette et que « Tube 1500x40 » est un mandrin
+   de 40. Le client ne fait que fusionner.                                   */
+
+async function fetchFicheEnProduit(ref) {
+  return api('/api/ao/fiches-techniques/produit?ref=' + encodeURIComponent(ref));
+}
+
+// Même règle que completer_vides() côté serveur : ne remplit que le vide,
+// sauf ref_sifa ; impressions / enroulement / sens ne sont posés que s'ils
+// manquent (ils ont toujours une valeur par défaut dans le formulaire).
+function pfCompleterVides(dst, src) {
+  let n = 0;
+  Object.keys(src || {}).forEach(k => {
+    const v = src[k];
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      if (!dst[k] || typeof dst[k] !== 'object') dst[k] = {};
+      n += pfCompleterVides(dst[k], v);
+    } else if (k === 'ref_sifa') {
+      dst[k] = v;
+    } else if (k === 'impressions' || k === 'enroulement' || k === 'sens_sortie') {
+      if (!(k in dst)) dst[k] = v;
+    } else {
+      const cur = dst[k];
+      const vide = cur == null || String(cur).trim() === '' || String(cur).trim() === '0';
+      if (vide) { dst[k] = v; n++; }
+    }
+  });
+  return n;
+}
+
+// Champ de recherche de fiches techniques, réutilisé par les deux fenêtres.
+// onPick(ref) est appelé au clic ou à Entrée.
+function pfsBindRecherche(inpId, listId, onPick) {
+  const inp = document.getElementById(inpId);
+  const list = document.getElementById(listId);
+  if (!inp || !list) return;
+  let rows = [], act = -1, seq = 0, debT = null;
+  const dessiner = () => {
+    if (!rows.length) {
+      const q = inp.value.trim();
+      list.innerHTML = '<div class="pfs-vide">' + (q ? 'Aucun résultat pour « ' + escHtml(q) + ' »' : 'Aucune fiche technique') + '</div>';
+      return;
+    }
+    list.innerHTML = rows.map((r, i) =>
+      '<button type="button" class="pfs-item' + (i === act ? ' is-act' : '') + '" data-ref="' + escAttr(r.reference) + '">' +
+        '<strong>' + escHtml(r.reference) + '</strong>' +
+        (r.designation ? ' · ' + escHtml(r.designation) : '') +
+        (r.client ? ' <span class="pfs-sub">· ' + escHtml(r.client) + '</span>' : '') +
+      '</button>').join('');
+    list.querySelectorAll('.pfs-item').forEach(b => b.addEventListener('click', () => onPick(b.dataset.ref)));
+  };
+  const chercher = async () => {
+    const s = ++seq;
+    const r = await searchFichesTechniques(inp.value);
+    if (s !== seq) return;
+    rows = r; act = -1; dessiner();
+  };
+  inp.addEventListener('input', () => { if (debT) clearTimeout(debT); debT = setTimeout(chercher, 180); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!rows.length) return;
+      act = e.key === 'ArrowDown' ? Math.min(rows.length - 1, act + 1) : Math.max(0, act - 1);
+      dessiner();
+      list.querySelector('.is-act')?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const r = rows[act >= 0 ? act : 0];
+      if (r) onPick(r.reference);
+    } else if (e.key === 'Escape' && inp.value) {
+      e.preventDefault(); e.stopPropagation();
+      inp.value = ''; chercher();
+    }
+  });
+  chercher();
+  requestAnimationFrame(() => inp.focus());
+}
+
+function pfsApercuHtml(res, avecAlerte) {
+  const lies = (res.produits_lies || []);
+  return '<div class="pfs-apercu">' +
+    '<div><strong>' + escHtml(res.reference || '') + '</strong>' + (res.designation ? ' · ' + escHtml(res.designation) : '') + '</div>' +
+    (res.client ? '<div class="pfs-sub">Client MyProd : ' + escHtml(res.client) + '</div>' : '') +
+    '<div class="pfs-sub">' + (res.nb_champs || 0) + ' champ' + ((res.nb_champs || 0) > 1 ? 's' : '') +
+      ' repris · couleurs et zones d\'impression à compléter</div>' +
+    (avecAlerte && lies.length
+      ? '<div class="pfs-alerte">Déjà rattachée à : ' + lies.map(p =>
+          '<a href="#" class="pfs-ouvrir" data-id="' + p.id + '">' + escHtml(p.ref) + '</a>').join(', ') + '</div>'
+      : '') +
+  '</div>';
+}
+
+function pfsFermer() {
+  const m = document.getElementById('mroot');
+  if (m) m.innerHTML = '';
+}
+
+function pfsMonter(html) {
+  const m = document.getElementById('mroot');
+  m.innerHTML = '';
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.onclick = e => { if (e.target === ov) pfsFermer(); };
+  const box = document.createElement('div');
+  box.className = 'modal modal-wide';
+  box.innerHTML = html;
+  ov.appendChild(box);
+  m.appendChild(ov);
+  ov.addEventListener('keydown', e => { if (e.key === 'Escape') pfsFermer(); });
+  return box;
+}
+
+/* Nouveau produit : depuis une fiche technique ou vierge. */
+function openProduitSourceModal(mode) {
+  const st = { mode: mode === 'vierge' ? 'vierge' : 'fiche', res: null };
+  const box = pfsMonter(
+    '<h3>Nouveau produit</h3>' +
+    '<div class="pfs-choix">' +
+      '<button type="button" class="pfs-opt" data-mode="fiche"><strong>' + icon('file-text', 16) + ' Depuis une fiche technique</strong>' +
+        '<span>Produit déjà fabriqué : format, matières, mandrin et conditionnement repris de MyProd.</span></button>' +
+      '<button type="button" class="pfs-opt" data-mode="vierge"><strong>' + icon('plus', 16) + ' Produit vierge</strong>' +
+        '<span>Produit neuf à chiffrer. La fiche technique se rattache plus tard, une fois l\'appel d\'offre passé.</span></button>' +
+    '</div>' +
+    '<div id="pfs-corps"></div>' +
+    '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="pfs-annuler">Annuler</button>' +
+      '<button class="btn btn-accent" type="button" id="pfs-ok">Créer la fiche produit</button></div>'
+  );
+  const corps = box.querySelector('#pfs-corps');
+  const ok = box.querySelector('#pfs-ok');
+  const dessiner = () => {
+    box.querySelectorAll('.pfs-opt').forEach(b => b.classList.toggle('is-on', b.dataset.mode === st.mode));
+    if (st.mode === 'vierge') {
+      corps.innerHTML = '';
+      ok.disabled = false;
+      return;
+    }
+    corps.innerHTML =
+      '<div class="pfs-search"><input id="pfs-q" type="search" autocomplete="off" placeholder="Rechercher une fiche technique (référence, désignation, client)…"></div>' +
+      '<div class="pfs-list" id="pfs-list"></div><div id="pfs-apercu"></div>';
+    ok.disabled = !st.res;
+    pfsBindRecherche('pfs-q', 'pfs-list', async ref => {
+      try {
+        st.res = await fetchFicheEnProduit(ref);
+      } catch (e) { showToast(e.message || 'Fiche technique introuvable.', 'danger'); return; }
+      const ap = box.querySelector('#pfs-apercu');
+      ap.innerHTML = pfsApercuHtml(st.res, true);
+      ap.querySelectorAll('.pfs-ouvrir').forEach(a => a.addEventListener('click', e => {
+        e.preventDefault();
+        const p = (S.produits || []).find(x => String(x.id) === a.dataset.id);
+        pfsFermer();
+        if (p) openProduitForm(p);
+      }));
+      ok.disabled = false;
+      ok.focus();
+    });
+  };
+  box.querySelectorAll('.pfs-opt').forEach(b => b.addEventListener('click', () => {
+    if (st.mode === b.dataset.mode) return;
+    st.mode = b.dataset.mode; st.res = null; dessiner();
+  }));
+  box.querySelector('#pfs-annuler').onclick = pfsFermer;
+  ok.onclick = async () => {
+    if (st.mode === 'fiche' && !st.res) { showToast('Choisissez une fiche technique.', 'danger'); return; }
+    const res = st.res;
+    pfsFermer();
+    await openProduitForm(null);
+    if (res) {
+      // Produit neuf : la fiche technique s'applique sur les valeurs par
+      // défaut (sens de sortie, enroulement compris), puis la référence se
+      // compose depuis les cotes reprises.
+      const f = S.produitForm.fiche;
+      pfCompleterVides(f, res.fiche || {});
+      const enr = res.fiche && res.fiche.bobines;
+      if (enr && enr.sens_sortie) { f.bobines.sens_sortie = enr.sens_sortie; f.bobines.enroulement = enr.enroulement; }
+      if (res.fiche && res.fiche.impressions) f.impressions = true;
+      render();
+      showToast((res.nb_champs || 0) + ' champs repris de la fiche ' + res.reference + '.', 'success');
+    }
+  };
+  dessiner();
+}
+
+/* Rattacher (ou changer, ou détacher) la fiche technique d'un produit du
+   catalogue, sans ouvrir son formulaire. */
+function openRattacherFicheModal(produitId) {
+  const p = (S.produits || []).find(x => String(x.id) === String(produitId));
+  if (!p) { showToast('Produit introuvable.', 'danger'); return; }
+  const actuelle = String((p.fiche && p.fiche.ref_sifa) || '').trim();
+  const st = { res: null };
+  const box = pfsMonter(
+    '<h3>Fiche technique · ' + escHtml(p.ref) + '</h3>' +
+    '<div class="pfs-actuelle">' + (actuelle
+      ? 'Rattachée à <strong>' + escHtml(actuelle) + '</strong>. Choisissez une autre fiche pour la remplacer.'
+      : 'Aucune fiche technique rattachée.') + '</div>' +
+    '<div class="pfs-search"><input id="pfs-q" type="search" autocomplete="off" placeholder="Rechercher une fiche technique (référence, désignation, client)…"></div>' +
+    '<div class="pfs-list" id="pfs-list"></div><div id="pfs-apercu"></div>' +
+    '<label class="pfs-check"><input type="checkbox" id="pfs-completer" checked> Compléter les champs vides de la fiche produit</label>' +
+    '<div class="modal-actions">' +
+      (actuelle ? '<button class="btn btn-ghost" type="button" id="pfs-detacher" style="margin-right:auto">Détacher</button>' : '') +
+      '<button class="btn btn-ghost" type="button" id="pfs-annuler">Annuler</button>' +
+      '<button class="btn btn-accent" type="button" id="pfs-ok" disabled>Rattacher</button></div>'
+  );
+  const ok = box.querySelector('#pfs-ok');
+  const envoyer = async (ref) => {
+    ok.disabled = true;
+    try {
+      const r = await api('/api/ao/produits/' + p.id + '/fiche-technique', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref_sifa: ref, completer: !!box.querySelector('#pfs-completer')?.checked })
+      });
+      pfsFermer();
+      showToast(ref
+        ? 'Fiche ' + ref + ' rattachée' + (r.champs_completes ? ' · ' + r.champs_completes + ' champs complétés.' : '.')
+        : 'Fiche technique détachée.', 'success');
+      await loadProduits();
+      if (S.produitView === 'form' && S.produitForm && String(S.produitForm.id) === String(p.id)) {
+        S.produitForm = produitFromApi(r);
+        render();
+      } else if (typeof renderProduitsRows === 'function') {
+        renderProduitsRows();
+      }
+    } catch (e) {
+      ok.disabled = false;
+      showToast(e.message || 'Rattachement impossible.', 'danger');
+    }
+  };
+  pfsBindRecherche('pfs-q', 'pfs-list', async ref => {
+    try { st.res = await fetchFicheEnProduit(ref); }
+    catch (e) { showToast(e.message || 'Fiche technique introuvable.', 'danger'); return; }
+    const autres = (st.res.produits_lies || []).filter(x => String(x.id) !== String(p.id));
+    box.querySelector('#pfs-apercu').innerHTML = pfsApercuHtml(Object.assign({}, st.res, { produits_lies: autres }), true);
+    box.querySelectorAll('.pfs-ouvrir').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      const q = (S.produits || []).find(x => String(x.id) === a.dataset.id);
+      pfsFermer();
+      if (q) openProduitForm(q);
+    }));
+    ok.disabled = false;
+    ok.focus();
+  });
+  box.querySelector('#pfs-annuler').onclick = pfsFermer;
+  ok.onclick = () => { if (st.res) envoyer(st.res.reference); };
+  box.querySelector('#pfs-detacher')?.addEventListener('click', () => {
+    if (!confirm('Détacher la fiche ' + actuelle + ' de ce produit ? Les valeurs de la fiche produit sont conservées.')) return;
+    envoyer('');
+  });
 }
 
 async function loadMatieresForProduit() {

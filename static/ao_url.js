@@ -12,7 +12,8 @@
  * versions), fournisseur de l'AO, suivi d'un fournisseur, clôture, saisie
  * manuelle d'un prix, duplication, entrées des carnets fournisseurs et
  * clients, fiche et contact d'un fournisseur du référentiel, aperçus BAT et
- * étiquette d'un produit.
+ * étiquette d'un produit ; nouveau produit (source : fiche technique ou
+ * vierge) et rattachement d'une fiche technique à un produit (10/11/2026).
  * Hors adresse : les confirmations (envoi, suppression), le choix et la
  * création d'un client (sous-étapes d'un autre formulaire, rappel perdu au
  * rechargement), la création rapide d'un produit depuis l'assistant, les
@@ -53,6 +54,8 @@ const _AO_OUVREURS = [
   ['openEditFournisseurAoModal', 'fournisseur_ao',    a => a[0]],
   ['openBatPreview',             'apercu_bat',        a => a[0]],
   ['openEtiquettePreview',       'apercu_etiquette',  a => a[0]],
+  ['openProduitSourceModal',     'nouveau_produit',   a => (a[0] === 'vierge' ? 'vierge' : 'fiche')],
+  ['openRattacherFicheModal',    'fiche_technique',   a => a[0]],
 ];
 function aoEnvelopper() {
   _AO_OUVREURS.forEach(([nom, cle, valeur]) => {
@@ -157,6 +160,8 @@ const _AO_REOUVRIR = {
   suivi_fournisseur: v => openTimelineModal(_aoNum(v)),
   cloture: () => openCloturerAoModal(),
   fournisseur_ao: v => openEditFournisseurAoModal(_aoNum(v)),
+  nouveau_produit: v => openProduitSourceModal(v),
+  fiche_technique: async v => { await _aoAttendre(() => (S.produits || []).length); openRattacherFicheModal(v); },
   apercu_bat: v => openBatPreview(_aoNum(v), (S.produitForm && S.produitForm.ref) || ''),
   apercu_etiquette: v => openEtiquettePreview(_aoNum(v), (S.produitForm && S.produitForm.ref) || '',
     typeof pfRefSifaValue === 'function' ? pfRefSifaValue() : ''),

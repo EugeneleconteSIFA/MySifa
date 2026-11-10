@@ -202,6 +202,15 @@ a = alertes(FIN, datetime(2026, 9, 4, 15, 0))[0]
 verifier("passe 11h, le camion est rate", a["depasse_limite"], True)
 verifier("et le message le dit", "apres l'heure limite" in a["message"], True)
 
+# ── 5 bis. Camion deja rate avant le geste ──────────────────────────────────
+print("\n5 bis. Camion deja rate — le depart n'attend pas ce dossier, rien a signer")
+
+TARD = datetime(2026, 9, 4, 15, 0)   # finissait deja apres le camion de 11 h
+verifier("deja apres le camion, repousse encore : rien",
+         alertes(TARD, TARD + timedelta(hours=5)), [])
+verifier("pile a l'heure limite, repousse : une alerte",
+         len(alertes(datetime(2026, 9, 4, 11, 0), TARD)), 1)
+
 # ── 6. Le resume affiche en tete de fenetre ─────────────────────────────────
 print("\n6. Resume — singulier, pluriel, et la fenetre en clair")
 
