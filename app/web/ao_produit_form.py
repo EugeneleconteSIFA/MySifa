@@ -1288,8 +1288,9 @@ function bindRefSifaAutocomplete() {
     if (!rows.length) { list.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:12px">Aucune fiche</div>'; show(); return; }
     list.innerHTML = rows.map(r =>
       '<div class="pf-refsifa-item" data-ref="' + escAttr(r.reference) + '" style="padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">' +
-        '<strong>' + escHtml(r.reference) + '</strong> - ' + escHtml(r.designation||'') +
-        (r.client ? ' <span style="color:var(--muted)">(' + escHtml(r.client) + ')</span>' : '') +
+        '<strong>' + escHtml(r.reference) + '</strong>' +
+        (r.designation ? ' · ' + escHtml(r.designation) : '') +
+        (r.client ? ' <span style="color:var(--muted)">· ' + escHtml(r.client) + '</span>' : '') +
       '</div>'
     ).join('');
     show();
@@ -1306,6 +1307,7 @@ function bindRefSifaAutocomplete() {
           collectProduitForm();
           const n = pfCompleterVides(S.produitForm.fiche, res.fiche || {});
           S.produitForm.fiche.ref_sifa = res.reference;
+          pfReprendreClient(res);
           render();
           showToast(n + ' champs remplis depuis la fiche ' + res.reference + '.', 'success');
         } catch(e) { showToast(e.message || 'Erreur fiche technique.', 'danger'); }
@@ -1413,7 +1415,7 @@ function pfsApercuHtml(res, avecAlerte) {
   const lies = (res.produits_lies || []);
   return '<div class="pfs-apercu">' +
     '<div><strong>' + escHtml(res.reference || '') + '</strong>' + (res.designation ? ' · ' + escHtml(res.designation) : '') + '</div>' +
-    (res.client ? '<div class="pfs-sub">Client MyProd : ' + escHtml(res.client) + '</div>' : '') +
+    (res.client ? '<div class="pfs-sub">Client : ' + escHtml(res.client) + '</div>' : '') +
     '<div class="pfs-sub">' + (res.nb_champs || 0) + ' champ' + ((res.nb_champs || 0) > 1 ? 's' : '') +
       ' repris · couleurs et zones d\'impression à compléter</div>' +
     (avecAlerte && lies.length
@@ -1421,6 +1423,15 @@ function pfsApercuHtml(res, avecAlerte) {
           '<a href="#" class="pfs-ouvrir" data-id="' + p.id + '">' + escHtml(p.ref) + '</a>').join(', ') + '</div>'
       : '') +
   '</div>';
+}
+
+// Le client de la fiche technique (numéro dans sa référence) devient celui du
+// produit, s'il n'en a pas encore.
+function pfReprendreClient(res) {
+  if (!res || !res.client_id || !S.produitForm || S.produitForm.client_id) return false;
+  S.produitForm.client_id = String(res.client_id);
+  S.produitForm.client_label = res.client || '';
+  return true;
 }
 
 function pfsFermer() {
@@ -1506,6 +1517,7 @@ function openProduitSourceModal(mode) {
       const enr = res.fiche && res.fiche.bobines;
       if (enr && enr.sens_sortie) { f.bobines.sens_sortie = enr.sens_sortie; f.bobines.enroulement = enr.enroulement; }
       if (res.fiche && res.fiche.impressions) f.impressions = true;
+      pfReprendreClient(res);
       render();
       showToast((res.nb_champs || 0) + ' champs repris de la fiche ' + res.reference + '.', 'success');
     }
