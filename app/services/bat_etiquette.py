@@ -32,7 +32,7 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from app.services.ao_produit_fiche import format_printing_area
+from app.services.ao_produit_fiche import format_printing_area, libelle_composant
  
 # ---------------------------------------------------------------------------
 # Charte du plan technique
@@ -432,8 +432,8 @@ def build_bat_spec(
         bobines.get("sens_sortie", bobines.get("enroulement", ft.get("enroulement")))
     )
  
-    support = str(ft.get("support") or mp_label(((fiche.get("matiere") or {}).get("frontal_id"))) or "").strip()
-    adhesif = mp_label(((fiche.get("matiere") or {}).get("adhesif_id")))
+    support = str(ft.get("support") or libelle_composant(fiche.get("matiere"), "frontal_id", mp_label) or "").strip()
+    adhesif = libelle_composant(fiche.get("matiere"), "adhesif_id", mp_label) or ""
  
     couleurs = _collect_colors(imp, ft, encres)
     imprime = bool(fiche.get("impressions")) or bool(couleurs)

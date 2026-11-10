@@ -40,9 +40,12 @@ def default_fiche() -> dict[str, Any]:
         "echenillage": {"droite": None, "gauche": None, "avance": None},
         "matiere": {
             "frontal_id": None,
+            "frontal_libre": "",
             "adhesif_id": None,
+            "adhesif_libre": "",
             "grammage_adhesif": None,
             "glassine_id": None,
+            "glassine_libre": "",
             "couleur_glassine": "",
         },
         "bobines": {
@@ -68,6 +71,7 @@ def default_fiche() -> dict[str, Any]:
             },
             "palette": {
                 "matiere_id": None,
+                "matiere_libre": "",
                 "cartons_sol": None,
                 "nb_etages": None,
                 "cartons_palette": None,
@@ -86,17 +90,45 @@ def _norm_id(value: Any) -> int | None:
         return None
 
 
+LIBRE_MAX = 200
+
+
+def _norm_libre(bloc: dict, cle_id: str) -> None:
+    """Désignation libre d'un composant hors MyStock.
+
+    Elle n'existe que faute de référence : dès qu'un id est choisi, le texte
+    tombe — sinon deux désignations du même composant cohabiteraient."""
+    cle = cle_libre(cle_id)
+    txt = str(bloc.get(cle) or "").strip()[:LIBRE_MAX]
+    bloc[cle] = "" if bloc.get(cle_id) is not None else txt
+
+
+def cle_libre(cle_id: str) -> str:
+    """``frontal_id`` → ``frontal_libre``, ``matiere_id`` → ``matiere_libre``."""
+    return cle_id[:-3] + "_libre" if cle_id.endswith("_id") else cle_id + "_libre"
+
+
+def libelle_composant(bloc: dict | None, cle_id: str, mp_label) -> str | None:
+    """Libellé d'un composant : la référence MyStock, sinon la saisie libre."""
+    bloc = bloc or {}
+    lbl = mp_label(bloc.get(cle_id)) if bloc.get(cle_id) not in (None, "") else None
+    if lbl:
+        return lbl
+    return str(bloc.get(cle_libre(cle_id)) or "").strip() or None
+
+
 def normalize_fiche(fiche: dict[str, Any]) -> dict[str, Any]:
     """Convertit les identifiants vides en null pour le stockage JSON."""
     mat = fiche.get("matiere") or {}
-    mat["frontal_id"] = _norm_id(mat.get("frontal_id"))
-    mat["adhesif_id"] = _norm_id(mat.get("adhesif_id"))
-    mat["glassine_id"] = _norm_id(mat.get("glassine_id"))
+    for cle in ("frontal_id", "adhesif_id", "glassine_id"):
+        mat[cle] = _norm_id(mat.get(cle))
+        _norm_libre(mat, cle)
     fiche["matiere"] = mat
     cond = fiche.get("conditionnement") or {}
     for key in ("carton", "palette"):
         block = cond.get(key) or {}
         block["matiere_id"] = _norm_id(block.get("matiere_id"))
+        _norm_libre(block, "matiere_id")
         cond[key] = block
     fiche["conditionnement"] = cond
     return fiche
@@ -242,10 +274,10 @@ def render_fiche_html(
             _row_html("En avance (mm)", ech.get("avance")),
         ]),
         ("Matière", [
-            _row_html("Frontal", mp_label(mat.get("frontal_id"))),
-            _row_html("Adhésif", mp_label(mat.get("adhesif_id"))),
+            _row_html("Frontal", libelle_composant(mat, "frontal_id", mp_label)),
+            _row_html("Adhésif", libelle_composant(mat, "adhesif_id", mp_label)),
             _row_html("Grammage adhésif (gsm)", mat.get("grammage_adhesif")),
-            _row_html("Glassine", mp_label(mat.get("glassine_id"))),
+            _row_html("Glassine", libelle_composant(mat, "glassine_id", mp_label)),
             _row_html("Couleur glassine", mat.get("couleur_glassine")),
         ]),
         ("Bobines", [
@@ -265,7 +297,7 @@ def render_fiche_html(
             _row_html("Bobines / carton", cart.get("bobines_carton")),
         ]),
         ("Conditionnement — Palettes", [
-            _row_html("Type palette", mp_label(pal.get("matiere_id"))),
+            _row_html("Type palette", libelle_composant(pal, "matiere_id", mp_label)),
             _row_html("Cartons au sol", pal.get("cartons_sol")),
             _row_html("Étages de cartons", pal.get("nb_etages")),
             _row_html("Cartons / palette", pal.get("cartons_palette")),

@@ -14,7 +14,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.services.ao_pricing import DEVISES, UNITES_QUOTATION
-from app.services.ao_produit_fiche import parse_fiche
+from app.services.ao_produit_fiche import libelle_composant, parse_fiche
 from app.services.email_service import email_accuse_reception, send_email
 from app.services import ao_evenements as ao_ev
 from app.services.path_safety import path_is_under_directory
@@ -224,8 +224,8 @@ def _produit_ctx_for_ligne(conn, ref_produit: str) -> dict:
         nb = None
     return {
         "client_nom": row["client_nom"],
-        "frontal": _mp_label(conn, mat.get("frontal_id")),
-        "adhesif": _mp_label(conn, mat.get("adhesif_id")),
+        "frontal": libelle_composant(mat, "frontal_id", lambda m: _mp_label(conn, m)),
+        "adhesif": libelle_composant(mat, "adhesif_id", lambda m: _mp_label(conn, m)),
         "etiquettes_par_bobine": nb,
     }
 

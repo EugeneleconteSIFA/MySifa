@@ -368,7 +368,9 @@ def build_ref_produit(
             return str(abbrevs[kind]).strip()
         mid = matiere.get(id_key)
         if mid in (None, ""):
-            return ""
+            # Composant hors MyStock : pas d'abréviation en base, la
+            # désignation libre entre telle quelle dans la référence.
+            return str(matiere.get(id_key[:-3] + "_libre") or "").strip()
         row = mp.get(mid) or mp.get(str(mid))
         try:
             row = row or mp.get(int(mid))
