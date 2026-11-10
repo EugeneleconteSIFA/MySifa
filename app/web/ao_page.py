@@ -461,7 +461,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <!-- Adresse de la page : section, AO ouvert, onglet, produit, fenêtre (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/ao_url.js?v=1"></script>
+<script src="/static/ao_url.js?v=2"></script>
 <script>
 const BASE_URL = __BASE_URL__;
 const S = {
@@ -738,7 +738,8 @@ function filteredProduits() {
   const q = (S.produitsSearch || '').trim().toLowerCase();
   if (!q) return S.produits || [];
   return (S.produits || []).filter(p => {
-    return (p.ref || '').toLowerCase().includes(q);
+    return (p.ref || '').toLowerCase().includes(q) ||
+      String((p.fiche && p.fiche.ref_sifa) || '').toLowerCase().includes(q);
   });
 }
 
@@ -792,6 +793,15 @@ function matiereNameById(cat, id) {
   return escHtml(ref + (des ? (ref ? ' \u2014 ' : '') + des : ''));
 }
 
+// Fiche technique MyProd rattachée : pastille cliquable (changer, détacher) ou
+// invitation à rattacher — cas d'un produit chiffré en AO avant d'exister.
+function produitFicheTechniqueChip(p) {
+  const ref = String((p.fiche && p.fiche.ref_sifa) || '').trim();
+  return ref
+    ? '<button type="button" class="prod-ft-chip btn-ft-produit" data-id="'+p.id+'" title="Changer ou détacher la fiche technique">'+escHtml(ref)+'</button>'
+    : '<button type="button" class="prod-ft-none btn-ft-produit" data-id="'+p.id+'" title="Rattacher une fiche technique MyProd">'+icon('plus',12)+' Rattacher</button>';
+}
+
 function renderProduitsRows() {
   const ae = document.activeElement;
   const focusId = ae?.id;
@@ -828,6 +838,7 @@ function renderProduitsRows() {
             '<div class="msf-kv"><dt>Bobine</dt><dd>'+formatProduitConditionnement(p)+'</dd></div>'+
           '</dl>'+
         '</button>'+
+        '<div class="msf-kv" style="padding:0 14px"><dt>Fiche technique</dt><dd>'+produitFicheTechniqueChip(p)+'</dd></div>'+
         '<div class="prod-carte-act">'+
           '<button class="btn btn-ghost btn-sm btn-edit-produit" data-id="'+p.id+'">Modifier</button>'+
           '<button class="btn btn-ghost btn-sm btn-dup-produit" data-id="'+p.id+'" data-ref="'+escAttr(p.ref||'')+'">Dupliquer</button>'+
@@ -846,6 +857,7 @@ function renderProduitsRows() {
       rows += '<tr>'+
         '<td class="prod-ref-cell"><a href="#" class="prod-ref-link" data-id="'+p.id+'">'+escHtml(p.ref)+'</a></td>'+
         '<td>'+clientTxt+'</td>'+
+        '<td>'+produitFicheTechniqueChip(p)+'</td>'+
         '<td>'+frontalTxt+'</td>'+
         '<td>'+adhesifTxt+'</td>'+
         '<td class="prod-info-cell">'+formatProduitImpressions(p)+'</td>'+
@@ -860,6 +872,7 @@ function renderProduitsRows() {
       '<thead><tr>'+
       '<th>Référence</th>'+
       '<th>Client</th>'+
+      '<th>Fiche technique</th>'+
       '<th>Frontal</th>'+
       '<th>Adhésif</th>'+
       '<th>Impressions</th>'+
@@ -873,6 +886,9 @@ function renderProduitsRows() {
         const p = (S.produits||[]).find(x => String(x.id) === String(b.dataset.id));
         if (p) openProduitForm(p);
       });
+    });
+    el.querySelectorAll('.btn-ft-produit').forEach(b => {
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openRattacherFicheModal(b.dataset.id); });
     });
     el.querySelectorAll('.btn-dup-produit').forEach(b => {
       b.addEventListener('click', async () => {
@@ -917,7 +933,7 @@ function renderProduits() {
   return '<div class="page-hdr"><h1>Catalogue produits</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-produit">'+icon('plus',14)+' Ajouter un produit</button></div>'+
     '<div class="card">'+
-    '<input type="search" id="produits-search" placeholder="Rechercher une référence…" value="'+escAttr(S.produitsSearch||'')+'" style="width:100%;margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px">'+
+    '<input type="search" id="produits-search" placeholder="Rechercher (référence produit, fiche technique)…" value="'+escAttr(S.produitsSearch||'')+'" style="width:100%;margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px">'+
     '<div id="produits-list"></div></div>';
 }
 
@@ -936,7 +952,7 @@ function bindProduitsEvents() {
       search.focus();
     }
   });
-  document.getElementById('btn-add-produit')?.addEventListener('click', () => openProduitForm(null));
+  document.getElementById('btn-add-produit')?.addEventListener('click', () => openProduitSourceModal());
 }
 
 // ─── Section Fournisseurs ─────────────────────────────────────────

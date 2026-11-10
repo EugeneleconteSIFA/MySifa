@@ -220,6 +220,14 @@ tp.enregistrer_params(conn, {"marge_pct": 0})
 depart(conn, 1, "2026-09-04", 9.0)
 verifier("marge a 0 %", tp.duree_effective(10.0, contraintes(conn)[1]), 10.0)
 
+conn = base()
+depart(conn, 1, "2026-09-04", 9.0)
+en_cours = [{**DOSSIER, "statut": "en_cours"}]
+c = contraintes(conn, en_cours)[1]
+verifier("dossier en cours : toujours sous contrainte (camion affiche)", c["depart_id"] > 0, True)
+verifier("dossier en cours : aucune marge", tp.duree_effective(10.0, c), 10.0)
+verifier("dossier en cours : marge isolee nulle", tp.marge_heures(10.0, c), 0.0)
+
 # ── 7. Tension affichee ────────────────────────────────────────────────────
 print("\n7. Tension — vert, ambre, rouge")
 

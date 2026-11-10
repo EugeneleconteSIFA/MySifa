@@ -50,6 +50,11 @@ from app.services.ao_produit_fiche import (
     produit_row_to_api,
     render_fiche_html,
 )
+from app.services.ao_produit_depuis_fiche import (
+    completer_vides,
+    fiche_vers_produit,
+    nb_champs,
+)
 from app.services.ao_ref_produit import (
     build_ref_produit,
     matiere_abbrev,
@@ -1224,6 +1229,56 @@ def get_fiche_technique(request: Request, ref: str = ""):
         return dict(row)
 
 
+def _fiche_technique_par_ref(conn, reference: str) -> dict:
+    reference = (reference or "").strip()
+    if not reference:
+        raise HTTPException(status_code=400, detail="Référence de fiche technique vide.")
+    row = conn.execute(
+        "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+        (reference,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Fiche technique introuvable : {reference}.")
+    return dict(row)
+
+
+def _apport_fiche_technique(conn, ft: dict) -> dict:
+    """Fiche produit partielle tirée d'une fiche technique, limitée aux matières
+    que le formulaire MyAO sait afficher (actives, bonne catégorie)."""
+    actives = {mid: m.get("categorie") for mid, m in _load_matieres_map(conn).items()}
+    return fiche_vers_produit(ft, actives)
+
+
+@router.get("/fiches-techniques/produit")
+def fiche_technique_en_produit(request: Request, ref: str = ""):
+    """Fiche technique MyProd traduite en fiche produit MyAO.
+
+    Sert aux deux parcours : créer un produit depuis une fiche existante, et
+    compléter un produit auquel on rattache sa fiche. ``produits_lies`` liste
+    les produits du catalogue déjà rattachés à cette fiche, pour éviter un
+    doublon.
+    """
+    _require_ao(request)
+    with get_db() as conn:
+        ft = _fiche_technique_par_ref(conn, ref)
+        apport = _apport_fiche_technique(conn, ft)
+        lies = conn.execute(
+            """SELECT id, ref FROM ao_produits
+                WHERE LOWER(TRIM(COALESCE(json_extract(fiche_json,'$.ref_sifa'),'')))
+                      = LOWER(TRIM(?))
+                ORDER BY ref COLLATE NOCASE""",
+            (ft["reference"],),
+        ).fetchall()
+    return {
+        "reference": ft.get("reference"),
+        "designation": ft.get("designation"),
+        "client": ft.get("client"),
+        "fiche": apport,
+        "nb_champs": nb_champs(apport),
+        "produits_lies": [{"id": r["id"], "ref": r["ref"]} for r in lies],
+    }
+
+
 @router.get("/config/eur-usd")
 def get_eur_usd(request: Request):
     """Retourne le taux EUR/USD actif. Source de verite : mc_setting.eur_usd_rate.
@@ -1749,6 +1804,64 @@ async def update_produit(request: Request, produit_id: int):
         except Exception:
             logger.exception("Regen PJ auto sur update produit %s échoué", produit_id)
         return _serialize_produit_row(_row_dict(row), conn)
+
+
+@router.put("/produits/{produit_id}/fiche-technique")
+async def rattacher_fiche_technique(request: Request, produit_id: int):
+    """Rattache (ou détache, ``ref_sifa`` vide) la fiche technique d'un produit.
+
+    Cas d'usage : le produit a été chiffré en appel d'offre sans fiche
+    technique, l'AO est passé, le produit existe maintenant dans MyProd. Avec
+    ``completer`` (défaut), les champs encore vides de la fiche produit sont
+    remplis depuis la fiche technique ; rien de ce qui a été saisi n'est
+    écrasé.
+    """
+    user = _require_ao(request)
+    body = await request.json()
+    ref_sifa = str(body.get("ref_sifa") or "").strip()
+    completer = body.get("completer", True) is not False
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+        fiche = parse_fiche(row["fiche_json"])
+        ancienne = str(fiche.get("ref_sifa") or "").strip()
+        remplis = 0
+        if ref_sifa:
+            ft = _fiche_technique_par_ref(conn, ref_sifa)
+            fiche["ref_sifa"] = ft["reference"]
+            if completer:
+                remplis = completer_vides(fiche, _apport_fiche_technique(conn, ft))
+        else:
+            fiche["ref_sifa"] = ""
+        fiche = normalize_fiche(fiche)
+        conn.execute(
+            "UPDATE ao_produits SET fiche_json=? WHERE id=?",
+            (json.dumps(fiche, ensure_ascii=False), produit_id),
+        )
+        conn.commit()
+        log_action(
+            user=user, action="UPDATE", module="ao", request=request,
+            objet=f"Produit {row['ref']} · fiche technique",
+            detail={"avant": ancienne or None, "apres": fiche["ref_sifa"] or None,
+                    "champs_completes": remplis},
+        )
+        try:
+            _regen_fiches_for_produit(conn, produit_id)
+            conn.commit()
+        except Exception:
+            logger.exception("Regen PJ auto sur rattachement fiche %s échoué", produit_id)
+        out = conn.execute(
+            """SELECT p.*, COALESCE(cg.raison_sociale, lc.nom) AS client_nom
+                 FROM ao_produits p
+                 LEFT JOIN clients cg ON cg.id = p.client_id
+                 LEFT JOIN ao_carnet_clients lc ON lc.id = p.client_id
+                WHERE p.id=?""",
+            (produit_id,),
+        ).fetchone()
+        res = _serialize_produit_row(_row_dict(out), conn)
+        res["champs_completes"] = remplis
+        return res
 
 
 def _regen_fiches_for_produit(
