@@ -1620,7 +1620,14 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-inact-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
 .mp-inact-btn:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent)}
 /* Synthèse colorée des mouvements */
-.mp-mvt-pager{justify-content:flex-end;padding:10px 16px;border-top:1px solid var(--border)}
+.mp-mvt-pager{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mp-mvt-pager.pied{justify-content:center;padding:12px 16px;border-top:1px solid var(--border)}
+.mp-mvt-pager-btn{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:5px 10px;min-width:34px;font-size:13px;font-weight:700;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.mp-mvt-pager.pied .mp-mvt-pager-btn{padding:7px 14px}
+.mp-mvt-pager-btn:not(:disabled):hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mp-mvt-pager-btn:disabled{color:var(--muted);opacity:.5;cursor:not-allowed}
+.mp-mvt-pager-info{font-size:12px;color:var(--muted);padding:0 6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mp-mvt-pager-info b{color:var(--text);font-weight:700}
 .mvt-sum{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border)}
 .mvt-sum-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
 .mvt-sum-chip.entree{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success)}
@@ -6842,24 +6849,29 @@ function buildMpMvtHistory(mouvements, matiere) {
       if (tete && tete.getBoundingClientRect().top < 0) tete.scrollIntoView({ block: 'start' });
     }
   };
-  const nav = total > MP_MVT_PAGE
-    ? el('div', { cls: 'hist-results-head-nav mp-mvt-pager' },
-        el('button', {
-          cls: 'btn btn-ghost', type: 'button', disabled: page <= 0 ? true : null,
-          on: { click: () => aller(-1) },
-        }, '← 20 précédents'),
-        el('span', { cls: 'hist-pagination-info' },
-          fN(debut + 1) + '–' + fN(debut + visibles.length) + ' sur ' + fN(total)),
-        el('button', {
-          cls: 'btn btn-ghost', type: 'button', disabled: page >= nbPages - 1 ? true : null,
-          on: { click: () => aller(1) },
-        }, '20 suivants →'),
-      )
-    : null;
+  // Même navigation en tête et en pied de carte : la tête sert quand on vient
+  // d'ouvrir l'historique, le pied quand on a lu la page jusqu'en bas.
+  const pager = (pied) => {
+    if (total <= MP_MVT_PAGE) return null;
+    const bouton = (delta, libelle, inactif) => el('button', {
+      cls: 'mp-mvt-pager-btn', type: 'button',
+      disabled: inactif ? true : null,
+      title: delta < 0 ? '20 mouvements plus récents' : '20 mouvements plus anciens',
+      'aria-label': delta < 0 ? '20 précédents' : '20 suivants',
+      on: { click: () => aller(delta) },
+    }, libelle);
+    return el('div', { cls: 'mp-mvt-pager' + (pied ? ' pied' : '') },
+      bouton(-1, '← 20 précédents', page <= 0),
+      el('span', { cls: 'mp-mvt-pager-info' },
+        el('b', null, fN(debut + 1) + '–' + fN(debut + visibles.length)),
+        ' sur ', el('b', null, fN(total))),
+      bouton(1, '20 suivants →', page >= nbPages - 1),
+    );
+  };
   // marginTop : sépare visuellement l'historique du tableau « Stocks par laize »
   // qui le précède sur la fiche matière (les deux cartes se touchaient).
   carte = el('div', { cls: 'card', style: { marginTop: '14px' } },
-    el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements')),
+    el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements'), pager(false)),
     mouvements.length ? mpMvtSynthese(mouvements) : null,
     !mouvements.length
       ? el('div', { cls: 'card-empty' }, 'Aucun mouvement')
@@ -6909,7 +6921,7 @@ function buildMpMvtHistory(mouvements, matiere) {
             ),
           );
         })),
-    nav,
+    pager(true),
   );
   return carte;
 }
