@@ -38,7 +38,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
-from app.services.ao_produit_fiche import format_printing_area
+from app.services.ao_produit_fiche import cle_libre, format_printing_area
 
 
 # ── Coordonnées SIFA (siège social) ─────────────────────────────────
@@ -761,7 +761,8 @@ def _build_blocks(c: canvas.Canvas, produit: dict, matieres_map: dict,
     def mp_of(key: str, src: dict) -> str:
         val = src.get(key)
         if val is None or val == "":
-            return "—"
+            # Composant hors MyStock : sa désignation libre, telle que saisie.
+            return str(src.get(cle_libre(key)) or "").strip() or "—"
         try:
             return _mp_label(matieres_map.get(int(val)))
         except (TypeError, ValueError):

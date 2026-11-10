@@ -783,8 +783,13 @@ function formatProduitConditionnement(p) {
   return parts.join(' · ');
 }
 
-function matiereNameById(cat, id) {
-  if (!id) return '<span style="color:var(--muted)">\u2014</span>';
+function matiereNameById(cat, id, libre) {
+  if (!id) {
+    // Composant hors MyStock : sa désignation libre, en italique pour qu'on ne
+    // la confonde pas avec une référence du stock.
+    const txt = String(libre || '').trim();
+    return txt ? '<em title="Hors MyStock">'+escHtml(txt)+'</em>' : '<span style="color:var(--muted)">\u2014</span>';
+  }
   const list = (S.matieres && S.matieres[cat]) || [];
   const m = list.find(x => String(x.id) === String(id));
   if (!m) return '#' + id;
@@ -823,8 +828,8 @@ function renderProduitsRows() {
        et range le reste en paires libelle / valeur. */
     el.innerHTML = list.map(p => {
       const mat = (p.fiche && p.fiche.matiere) || {};
-      const frontalTxt = matiereNameById('frontal', mat.frontal_id);
-      const adhesifTxt = matiereNameById('adhesif', mat.adhesif_id);
+      const frontalTxt = matiereNameById('frontal', mat.frontal_id, mat.frontal_libre);
+      const adhesifTxt = matiereNameById('adhesif', mat.adhesif_id, mat.adhesif_libre);
       return '<article class="msf-card prod-carte">'+
         '<button type="button" class="prod-ref-link prod-carte-tete" data-id="'+p.id+'">'+
           '<div class="msf-card-head">'+
@@ -852,8 +857,8 @@ function renderProduitsRows() {
     list.forEach(p => {
       const mat = (p.fiche && p.fiche.matiere) || {};
       const clientTxt = p.client_nom ? escHtml(p.client_nom) : '<span style="color:var(--muted)">\u2014</span>';
-      const frontalTxt = matiereNameById('frontal', mat.frontal_id);
-      const adhesifTxt = matiereNameById('adhesif', mat.adhesif_id);
+      const frontalTxt = matiereNameById('frontal', mat.frontal_id, mat.frontal_libre);
+      const adhesifTxt = matiereNameById('adhesif', mat.adhesif_id, mat.adhesif_libre);
       rows += '<tr>'+
         '<td class="prod-ref-cell"><a href="#" class="prod-ref-link" data-id="'+p.id+'">'+escHtml(p.ref)+'</a></td>'+
         '<td>'+clientTxt+'</td>'+

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.ao_produit_fiche import libelle_composant
+
 DEVISES = frozenset({"EUR", "USD"})
 UNITES_QUOTATION = frozenset({"mille", "bobine"})
 # Unités de vente possibles (définies dans la fiche produit). "mille" = au
@@ -344,8 +346,8 @@ def ligne_context_from_produit(
             des = (m.get("designation") or "").strip()
             return f"{ref} — {des}".strip(" —") or None
 
-        frontal = mp_label(mat.get("frontal_id"))
-        adhesif = mp_label(mat.get("adhesif_id"))
+        frontal = libelle_composant(mat, "frontal_id", mp_label)
+        adhesif = libelle_composant(mat, "adhesif_id", mp_label)
         etiquettes_par_bobine = _float_or_none(bob.get("nb_etiquettes"))
         cond = fiche.get("conditionnement") or {}
         cart = cond.get("carton") or {}

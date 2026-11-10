@@ -190,6 +190,10 @@ def completer_vides(fiche: dict, apport: dict) -> int:
             if k not in fiche:
                 fiche[k] = v
         elif _vide(fiche.get(k)):
+            # Un composant saisi en libre (``frontal_libre``…) est une valeur :
+            # la référence MyStock de la fiche technique ne l'écrase pas.
+            if k.endswith("_id") and str(fiche.get(k[:-3] + "_libre") or "").strip():
+                continue
             fiche[k] = v
             n += 1
     return n

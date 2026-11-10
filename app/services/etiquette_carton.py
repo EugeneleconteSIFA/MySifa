@@ -30,6 +30,8 @@ import io
 import re
 from typing import Any, Dict, List, Optional
 
+from app.services.ao_produit_fiche import libelle_composant
+
 # ---------------------------------------------------------------------------
 # Geometrie (millimetres) — page = etiquette, aucune marge d'impression
 # ---------------------------------------------------------------------------
@@ -209,8 +211,8 @@ def build_etiquette_spec(
     # --- matiere / adhesif --------------------------------------------------
     # La sous-categorie du frontal prime sur le champ "support" de la fiche
     # technique, qui est une saisie libre : ce dernier ne sert que de repli.
-    matiere_txt = mp_label(matiere.get("frontal_id")) or _s(ft.get("support"))
-    adhesif_txt = mp_label(matiere.get("adhesif_id"))
+    matiere_txt = libelle_composant(matiere, "frontal_id", mp_label) or _s(ft.get("support"))
+    adhesif_txt = libelle_composant(matiere, "adhesif_id", mp_label) or ""
 
     # --- conditionnement ----------------------------------------------------
     nb_etiq = _i(ft.get("nb_etiq_bobin")) or _i(bobines.get("nb_etiquettes"))

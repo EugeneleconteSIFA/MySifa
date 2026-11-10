@@ -123,6 +123,8 @@ border:1px solid var(--border);color:var(--text);width:100%}
 .pf-check-row .pf-lbl{text-transform:none;letter-spacing:0;font-size:13px}
 .pf-check-row input[type=number]{width:64px;padding:5px 8px;font-size:12px}
 .pf-hidden{display:none!important}
+.pf-mat-wrap{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pf-mat-libre{background:var(--card)}
 .pf-imp-col{display:flex;flex-direction:column;gap:6px}
 .pf-actions .btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 .pf-client-picker{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -258,7 +260,8 @@ function defaultProduitFiche() {
     impressions: true,
     etiquette: { laize: '', longueur: '', rayon: '', perforation: '' },
     echenillage: { droite: '', gauche: '', avance: '' },
-    matiere: { frontal_id: '', adhesif_id: '', grammage_adhesif: '', glassine_id: '', couleur_glassine: '' },
+    matiere: { frontal_id: '', frontal_libre: '', adhesif_id: '', adhesif_libre: '', grammage_adhesif: '',
+               glassine_id: '', glassine_libre: '', couleur_glassine: '' },
     bobines: { diametre_mandrin: '', sens_sortie: 1, enroulement: 'exterieur', diametre_bobine: '', nb_etiquettes: '' },
     impressions_detail: {
       aplat: false, aplat_pourcent: '', recto: 0, verso: 0,
@@ -266,7 +269,7 @@ function defaultProduitFiche() {
     },
     conditionnement: {
       carton: { matiere_id: '', bobines_sol: '', nb_etages: '', bobines_carton: '' },
-      palette: { matiere_id: '', cartons_sol: '', nb_etages: '', cartons_palette: '' }
+      palette: { matiere_id: '', matiere_libre: '', cartons_sol: '', nb_etages: '', cartons_palette: '' }
     },
     // Unité de vente du produit : type + quantité (ex. type 'carton' qté 1,
     // ou type 'bobine' qté 100). Sert au calcul du prix conditionné dans MyAO.
@@ -313,13 +316,41 @@ function computeFormatEtiquette(et) {
   return Math.round(l) + 'mm X ' + Math.round(lg) + 'mm';
 }
 
-function mpOptionsHtml(list, selectedId) {
+function mpOptionsHtml(list, selectedId, libreChoisi) {
   let h = '<option value="">—</option>';
   (list || []).forEach(m => {
     const lbl = escHtml(m.reference) + ' — ' + escHtml(m.designation);
-    h += '<option value="'+m.id+'"'+(String(m.id)===String(selectedId)?' selected':'')+'>'+lbl+'</option>';
+    h += '<option value="'+m.id+'"'+(!libreChoisi && String(m.id)===String(selectedId)?' selected':'')+'>'+lbl+'</option>';
   });
+  h += '<option value="'+PF_LIBRE+'"'+(libreChoisi?' selected':'')+'>Autre — saisie libre</option>';
   return h;
+}
+
+/* Composant hors MyStock : une désignation libre, volontairement non
+   référencée (fourniture du client, matière d'un concurrent chiffrée en AO…).
+   Elle ne porte ni prix ni stock : elle s'affiche sur la fiche, rien de plus. */
+const PF_LIBRE = '__libre__';
+function pfMatSelect(id, list, selId, libre) {
+  const estLibre = !selId && !!String(libre || '').trim();
+  return '<div class="pf-mat-wrap">'+
+    '<select id="'+id+'" class="pf-mat-select">'+mpOptionsHtml(list, selId, estLibre)+'</select>'+
+    '<input id="'+id+'-libre" class="pf-mat-libre'+(estLibre ? '' : ' pf-hidden')+'" maxlength="200" '+
+      'placeholder="Désignation libre — non référencée dans MyStock" value="'+escAttr(libre || '')+'">'+
+  '</div>';
+}
+function pfMatLire(id) {
+  const v = document.getElementById(id)?.value || '';
+  if (v === PF_LIBRE) {
+    return { id: null, libre: (document.getElementById(id+'-libre')?.value || '').trim() };
+  }
+  return { id: v || null, libre: '' };
+}
+function pfMatBasculer(sel) {
+  const inp = document.getElementById(sel.id+'-libre');
+  if (!inp) return;
+  const libre = sel.value === PF_LIBRE;
+  inp.classList.toggle('pf-hidden', !libre);
+  if (libre) requestAnimationFrame(() => inp.focus());
 }
 
 function pfLbl(text) {
@@ -453,10 +484,10 @@ function renderProduitForm() {
 
     '<div class="pf-cols-2" style="margin-bottom:10px">'+
     '<div class="pf-block"><div class="pf-block-title">Matière</div>'+
-  pfRow('Frontal', '<select id="pf-mat-frontal">'+mpOptionsHtml(frontal, f.matiere.frontal_id)+'</select>', 'pf-inline-wide')+
-  pfRow('Adhésif', '<select id="pf-mat-adhesif">'+mpOptionsHtml(adhesif, f.matiere.adhesif_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Frontal', pfMatSelect('pf-mat-frontal', frontal, f.matiere.frontal_id, f.matiere.frontal_libre), 'pf-inline-wide')+
+  pfRow('Adhésif', pfMatSelect('pf-mat-adhesif', adhesif, f.matiere.adhesif_id, f.matiere.adhesif_libre), 'pf-inline-wide')+
   pfRow('Grammage gsm', '<input type="number" step="1" min="0" id="pf-mat-gram" value="'+escAttr(f.matiere.grammage_adhesif)+'">')+
-  pfRow('Glassine', '<select id="pf-mat-glassine">'+mpOptionsHtml(glassine, f.matiere.glassine_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Glassine', pfMatSelect('pf-mat-glassine', glassine, f.matiere.glassine_id, f.matiere.glassine_libre), 'pf-inline-wide')+
   pfRow('Couleur', '<input id="pf-mat-couleur" readonly value="'+escAttr(f.matiere.couleur_glassine)+'">')+
     '</div>'+
     '<div class="pf-block"><div class="pf-block-title">Bobines</div>'+
@@ -491,7 +522,7 @@ function renderProduitForm() {
   pfRow('Bobines / carton', '<input type="number" step="1" min="0" id="pf-cart-bob" value="'+escAttr(f.conditionnement.carton.bobines_carton)+'">')+
     '</div>'+
     '<div class="pf-block"><div class="pf-block-title">Palettes</div>'+
-  pfRow('Type', '<select id="pf-pal-type">'+mpOptionsHtml(palette, f.conditionnement.palette.matiere_id)+'</select>', 'pf-inline-wide')+
+  pfRow('Type', pfMatSelect('pf-pal-type', palette, f.conditionnement.palette.matiere_id, f.conditionnement.palette.matiere_libre), 'pf-inline-wide')+
   pfRow('Cartons / sol', '<input type="number" step="1" min="0" id="pf-pal-sol" value="'+escAttr(f.conditionnement.palette.cartons_sol)+'">')+
   pfRow('Étages', '<input type="number" step="1" min="0" id="pf-pal-etages" value="'+escAttr(f.conditionnement.palette.nb_etages)+'">')+
   pfRow('Cartons / pal.', '<input type="number" step="1" min="0" id="pf-pal-cart" value="'+escAttr(f.conditionnement.palette.cartons_palette)+'">')+
@@ -839,11 +870,15 @@ function collectProduitForm() {
     gauche: pfNum(document.getElementById('pf-ech-g')?.value),
     avance: pfNum(document.getElementById('pf-ech-a')?.value)
   };
+  const pfFro = pfMatLire('pf-mat-frontal');
+  const pfAdh = pfMatLire('pf-mat-adhesif');
+  const pfGla = pfMatLire('pf-mat-glassine');
+  const pfPal = pfMatLire('pf-pal-type');
   f.matiere = {
-    frontal_id: document.getElementById('pf-mat-frontal')?.value || null,
-    adhesif_id: document.getElementById('pf-mat-adhesif')?.value || null,
+    frontal_id: pfFro.id, frontal_libre: pfFro.libre,
+    adhesif_id: pfAdh.id, adhesif_libre: pfAdh.libre,
     grammage_adhesif: pfInt(document.getElementById('pf-mat-gram')?.value),
-    glassine_id: document.getElementById('pf-mat-glassine')?.value || null,
+    glassine_id: pfGla.id, glassine_libre: pfGla.libre,
     couleur_glassine: document.getElementById('pf-mat-couleur')?.value.trim() || ''
   };
   const pfSens = parseInt(document.getElementById('pf-bob-sens')?.value, 10) || 1;
@@ -872,7 +907,7 @@ function collectProduitForm() {
       bobines_carton: pfInt(document.getElementById('pf-cart-bob')?.value)
     },
     palette: {
-      matiere_id: document.getElementById('pf-pal-type')?.value || null,
+      matiere_id: pfPal.id, matiere_libre: pfPal.libre,
       cartons_sol: pfInt(document.getElementById('pf-pal-sol')?.value),
       nb_etages: pfInt(document.getElementById('pf-pal-etages')?.value),
       cartons_palette: pfInt(document.getElementById('pf-pal-cart')?.value)
@@ -1000,6 +1035,9 @@ function pfUpdateGlassineCouleur() {
   const out = document.getElementById('pf-mat-couleur');
   if (!sel || !out) return;
   const id = sel.value;
+  // Glassine hors MyStock : sa couleur ne peut pas se déduire, on la saisit.
+  out.readOnly = id !== PF_LIBRE;
+  if (id === PF_LIBRE) return;
   const glassines = (S.matieres && S.matieres.glassine) ? S.matieres.glassine : [];
   const g = glassines.find(x => String(x.id) === String(id));
   out.value = g ? (g.couleur || g.designation || '') : '';
@@ -1216,6 +1254,9 @@ function bindProduitFormEvents() {
     document.getElementById(id)?.addEventListener('input', pfUpdateFormatDisplay);
   });
   document.getElementById('pf-impressions')?.addEventListener('change', pfToggleImpressionsBloc);
+  document.querySelectorAll('.pf-mat-select').forEach(sel => {
+    sel.addEventListener('change', () => pfMatBasculer(sel));
+  });
   document.getElementById('pf-mat-glassine')?.addEventListener('change', pfUpdateGlassineCouleur);
   document.getElementById('pf-imp-aplat')?.addEventListener('change', e => {
     const pct = document.getElementById('pf-imp-aplat-pct');
@@ -1237,7 +1278,8 @@ function bindProduitFormEvents() {
   // Champs qui entrent dans la composition de la référence. Tout autre champ de
   // la fiche (rayon, échenillage, conditionnement…) n'y figure pas et n'a donc
   // pas à déclencher de recalcul.
-  ['pf-et-laize', 'pf-et-long', 'pf-bob-mand'].forEach(id => {
+  ['pf-et-laize', 'pf-et-long', 'pf-bob-mand',
+   'pf-mat-frontal-libre', 'pf-mat-adhesif-libre'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', pfScheduleComposeRef);
   });
   ['pf-mat-frontal', 'pf-mat-adhesif', 'pf-impressions',
@@ -1357,7 +1399,10 @@ function pfCompleterVides(dst, src) {
     } else {
       const cur = dst[k];
       const vide = cur == null || String(cur).trim() === '' || String(cur).trim() === '0';
-      if (vide) { dst[k] = v; n++; }
+      // Un composant saisi en libre est une valeur : la référence MyStock de
+      // la fiche technique ne le remplace pas.
+      const libre = /_id$/.test(k) && String(dst[k.replace(/_id$/, '_libre')] || '').trim();
+      if (vide && !libre) { dst[k] = v; n++; }
     }
   });
   return n;

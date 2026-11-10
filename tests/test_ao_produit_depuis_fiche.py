@@ -94,7 +94,27 @@ def test_nom_des_fiches_dans_la_recherche():
     assert rows[1]["client"] is None
 
 
+def test_composant_libre():
+    """Un composant hors MyStock : stocké en texte, affiché, jamais écrasé."""
+    from app.services.ao_produit_fiche import default_fiche, libelle_composant, normalize_fiche
+    f = default_fiche()
+    f["matiere"].update(frontal_id="", frontal_libre="  Papier fourni client ",
+                        adhesif_id="12", adhesif_libre="reste d'une saisie")
+    f["conditionnement"]["palette"].update(matiere_id=None, matiere_libre="Palette CHEP")
+    f = normalize_fiche(f)
+    assert f["matiere"]["frontal_libre"] == "Papier fourni client"
+    # Une référence choisie fait tomber le texte libre.
+    assert f["matiere"]["adhesif_libre"] == ""
+    lbl = lambda m: "REF %s" % m
+    assert libelle_composant(f["matiere"], "frontal_id", lbl) == "Papier fourni client"
+    assert libelle_composant(f["matiere"], "adhesif_id", lbl) == "REF 12"
+    assert libelle_composant(f["conditionnement"]["palette"], "matiere_id", lbl) == "Palette CHEP"
+    # Compléter depuis une fiche technique ne remplace pas la saisie libre.
+    n = completer_vides(f, {"matiere": {"frontal_id": "5", "glassine_id": "7"}})
+    assert n == 1 and f["matiere"]["frontal_id"] is None and f["matiere"]["glassine_id"] == "7"
+
+
 if __name__ == "__main__":
     test_mandrin_et_enroulement(); test_traduction(); test_completer_ne_reecrit_rien()
-    test_nom_des_fiches_dans_la_recherche()
+    test_nom_des_fiches_dans_la_recherche(); test_composant_libre()
     print("OK")
