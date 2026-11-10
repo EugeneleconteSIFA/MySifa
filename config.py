@@ -708,6 +708,9 @@ EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE = ("autre",)
 
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
+# Espace Réunions (/reunions, écoute) : direction, administration, superadmin.
+# Les points de production de MyProd (onglet Actions) restent ouverts à ROLES_PROD.
+ROLES_REUNIONS = set(ROLES_ADMIN)
 # MyRH (suivi des nouveaux employés) : au lancement, les mêmes rôles que
 # MyCompta, où l'Outil RH vivait. Réglable ensuite dans Paramètres › Accès.
 ROLES_MYRH = set(ROLES_COMPTA)
@@ -739,6 +742,11 @@ ERP2_DOC_MAX_OCTETS = int(os.getenv("ERP2_DOC_MAX_OCTETS", str(15 * 1024 * 1024)
 ROLES_PRICING = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_PRICING_WRITE = ROLES_PRICING
 ROLES_DEVIS = ROLES_PRICING  # alias rétrocompat
+# Administration des ventes : la liste des matières, pour corriger un prix
+# d'achat, et rien d'autre. Ni produits, ni fournisseurs, ni paramétrage : coûts
+# au m², transport, taxes et marges restent à la Direction. Le serveur filtre
+# les routes et les champs (`_prix_achat_seul` de app/routers/pricing.py).
+ROLES_PRICING_PRIX_ACHAT = {ROLE_ADMINISTRATION_VENTES}
 ROLES_PLANNING_VIEW = {
     ROLE_DIRECTION,
     ROLE_FABRICATION,
@@ -1102,7 +1110,7 @@ def default_app_access_for_role(role: str) -> dict:
         "compta": role in ROLES_COMPTA,
         "myrh": role in ROLES_MYRH,
         "expe": role in ROLES_EXPE,
-        "pricing": role in ROLES_PRICING,
+        "pricing": role in ROLES_PRICING or role in ROLES_PRICING_PRIX_ACHAT,
         "fabrication": role in ROLES_FABRICATION_APP,
         "settings": role in ROLES_SETTINGS,
         # Tout employé ouvre Planning RH pour y déposer ses demandes ; la vue
