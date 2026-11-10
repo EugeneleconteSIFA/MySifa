@@ -1620,6 +1620,7 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-inact-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
 .mp-inact-btn:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent)}
 /* Synthèse colorée des mouvements */
+.mp-mvt-pager{justify-content:flex-end;padding:10px 16px;border-top:1px solid var(--border)}
 .mvt-sum{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border)}
 .mvt-sum-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
 .mvt-sum-chip.entree{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success)}
@@ -6713,6 +6714,7 @@ async function refreshSelMatiere() {
       mouvements: Array.isArray(mouvements) ? mouvements : [],
       variantes: await mpFetchVariantes(id, varInactives),
       varInactives,
+      mvtPage: (S.selMatiere && S.selMatiere.mvtPage) || 0,
       vue: (S.selMatiere && S.selMatiere.vue) || 'stock',
       ouvert: (S.selMatiere && S.selMatiere.ouvert) || null,
     };
@@ -6817,16 +6819,51 @@ function mpMvtSynthese(mouvements) {
       el('span', { cls: 'mvt-sum-chip ' + t }, fN(n[t]) + ' ' + lib[t] + (n[t] > 1 ? 's' : ''))));
 }
 
+const MP_MVT_PAGE = 20;
+
 function buildMpMvtHistory(mouvements, matiere) {
   const mpCat = matiere || null;
+  // Pagination par 20 : la page courante vit sur S.selMatiere (remise à zéro à
+  // l'ouverture d'une autre matière). Hors adresse, comme toute pagination.
+  const sel = S.selMatiere || {};
+  const total = mouvements.length;
+  const nbPages = Math.max(1, Math.ceil(total / MP_MVT_PAGE));
+  const page = Math.min(Math.max(0, sel.mvtPage || 0), nbPages - 1);
+  sel.mvtPage = page;
+  const debut = page * MP_MVT_PAGE;
+  const visibles = mouvements.slice(debut, debut + MP_MVT_PAGE);
+  let carte = null;
+  const aller = (delta) => {
+    sel.mvtPage = page + delta;
+    const neuve = buildMpMvtHistory(mouvements, matiere);
+    if (carte && carte.parentNode) {
+      carte.replaceWith(neuve);
+      const tete = neuve.querySelector('.card-header');
+      if (tete && tete.getBoundingClientRect().top < 0) tete.scrollIntoView({ block: 'start' });
+    }
+  };
+  const nav = total > MP_MVT_PAGE
+    ? el('div', { cls: 'hist-results-head-nav mp-mvt-pager' },
+        el('button', {
+          cls: 'btn btn-ghost', type: 'button', disabled: page <= 0 ? true : null,
+          on: { click: () => aller(-1) },
+        }, '← 20 précédents'),
+        el('span', { cls: 'hist-pagination-info' },
+          fN(debut + 1) + '–' + fN(debut + visibles.length) + ' sur ' + fN(total)),
+        el('button', {
+          cls: 'btn btn-ghost', type: 'button', disabled: page >= nbPages - 1 ? true : null,
+          on: { click: () => aller(1) },
+        }, '20 suivants →'),
+      )
+    : null;
   // marginTop : sépare visuellement l'historique du tableau « Stocks par laize »
   // qui le précède sur la fiche matière (les deux cartes se touchaient).
-  return el('div', { cls: 'card', style: { marginTop: '14px' } },
+  carte = el('div', { cls: 'card', style: { marginTop: '14px' } },
     el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements')),
     mouvements.length ? mpMvtSynthese(mouvements) : null,
     !mouvements.length
       ? el('div', { cls: 'card-empty' }, 'Aucun mouvement')
-      : el('div', null, ...mouvements.slice(0, 30).map(m => {
+      : el('div', null, ...visibles.map(m => {
           const icons = { entree: '↓', sortie: '↑', ajustement: '=', transfert: '↔', inventaire: '≡' };
           const rawType = (m.type_mouvement || '').toLowerCase();
           // Un ajustement issu d'un inventaire (note « Inventaire du … ») est traité comme "inventaire"
@@ -6872,7 +6909,9 @@ function buildMpMvtHistory(mouvements, matiere) {
             ),
           );
         })),
+    nav,
   );
+  return carte;
 }
 
 // Ordre de navigation précédent/suivant sur une fiche matière : on suit la liste

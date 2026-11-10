@@ -7730,6 +7730,7 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
             raise HTTPException(404, "Matière non trouvée.")
         # La laize est jointe ici : sur une matière laizée, un mouvement sans sa
         # laize est illisible (« +1 bob. » sur laquelle des 4 laizes ?).
+        # Tout l'historique est rendu : la fiche le pagine par 20.
         rows = conn.execute(
             """
             SELECT m.*, mp.reference, mp.designation,
@@ -7738,8 +7739,7 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
             JOIN matieres_premieres mp ON mp.id = m.matiere_id
             LEFT JOIN mp_laizes l ON l.id = m.laize_id
             WHERE m.matiere_id=?
-            ORDER BY m.created_at DESC
-            LIMIT 50
+            ORDER BY m.created_at DESC, m.id DESC
             """,
             (matiere_id,),
         ).fetchall()
