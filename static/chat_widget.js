@@ -686,6 +686,20 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   #cw-panel #cw-messages,#cw-panel-left{overscroll-behavior:contain}
   #cw-panel #cw-messages{padding-bottom:4px}
   #cw-panel #cw-input-row{padding-top:6px}
+  /* « + » Nouvelle discussion / Nouveau canal : ces fenêtres vivent dans le
+     volet de conversation, masqué sur la liste. Tant que l'une est ouverte, ce
+     volet passe en plein écran à la place de la liste. */
+  body.cw-mobile.cw-panel-open #cw-panel:has(#cw-dm-picker:not(.cw-hidden)) #cw-panel-right,
+  body.cw-mobile.cw-panel-open #cw-panel:has(#cw-overlay:not(.cw-hidden)) #cw-panel-right{
+    display:flex!important;visibility:visible!important;pointer-events:auto!important;
+    flex:1!important;width:auto!important;overflow:hidden!important;
+  }
+  body.cw-mobile.cw-panel-open #cw-panel:has(#cw-dm-picker:not(.cw-hidden)) #cw-panel-left,
+  body.cw-mobile.cw-panel-open #cw-panel:has(#cw-overlay:not(.cw-hidden)) #cw-panel-left{
+    display:none!important;
+  }
+  /* Clavier ouvert : la marge de l'encoche du bas n'a plus lieu d'être. */
+  body.cw-kb-open #cw-panel #cw-input-row{padding-bottom:6px}
 }
 `;
 
@@ -972,6 +986,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<div id="cw-panel-right">' +
       '<div id="cw-overlay" class="cw-hidden"></div>' +
       '<div id="cw-dm-picker" class="cw-hidden">' +
+      '<div class="cw-overlay-head"><button type="button" class="cw-overlay-back" id="cw-dm-back" aria-label="Retour">×</button><h3>Nouvelle discussion</h3></div>' +
       '<input type="search" id="cw-dm-search" placeholder="Rechercher un collègue…" autocomplete="off">' +
       '<div id="cw-dm-list"></div></div>' +
       '<div id="cw-panel-header">' +
@@ -1052,6 +1067,9 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     }
     document.getElementById('cw-send').addEventListener('click', () => sendMessage());
     document.getElementById('cw-add-dm').addEventListener('click', () => openNewDm());
+    document.getElementById('cw-dm-back').addEventListener('click', () => {
+      document.getElementById('cw-dm-picker').classList.add('cw-hidden');
+    });
     document.getElementById('cw-add-channel').addEventListener('click', () => openNewChannel());
     document.getElementById('cw-channel-info').addEventListener('click', () => openChannelSettings());
     syncAdminButtons();
@@ -1250,7 +1268,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
      clavier. Le haut passe sous un bandeau fixe éventuel (bandeau rouge de v1).
      Le dock repositionne le panneau en styles en ligne sans priorité : chaque
      passage du dock est suivi d'un recalage (scheduleCwKeyboardFit). */
-  const CW_KB_PROPS = ['top', 'bottom', 'height', 'max-height', 'min-height'];
+  const CW_KB_PROPS = ['top', 'bottom', 'height', 'max-height', 'min-height', 'padding-bottom'];
   let cwKbFrame = 0;
 
   function cwTopObstacle() {
@@ -1272,12 +1290,19 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       const vTop = Math.round(vv.offsetTop);
       const vBottom = Math.round(vv.offsetTop + vv.height);
       const top = Math.max(vTop, cwTopObstacle());
-      const h = Math.max(160, vBottom - top);
+      /* Le panneau descend jusqu'en bas de l'écran, derrière le clavier : sur
+         iOS récent, le haut du clavier est translucide et laissait voir la page
+         d'accueil sous un panneau arrêté au clavier. Seul le contenu remonte
+         au-dessus du clavier, par une marge intérieure basse. */
+      const layoutBottom = Math.max(window.innerHeight, document.documentElement.clientHeight, vBottom);
+      const h = Math.max(160, layoutBottom - top);
+      const under = Math.max(0, layoutBottom - vBottom);
       panel.style.setProperty('top', top + 'px', 'important');
       panel.style.setProperty('bottom', 'auto', 'important');
       panel.style.setProperty('height', h + 'px', 'important');
       panel.style.setProperty('max-height', h + 'px', 'important');
       panel.style.setProperty('min-height', '0', 'important');
+      panel.style.setProperty('padding-bottom', under + 'px', 'important');
       panel.dataset.cwVv = '1';
       document.body.classList.toggle('cw-kb-open', window.innerHeight - vv.height > 120);
     } else if (panel.dataset.cwVv) {
