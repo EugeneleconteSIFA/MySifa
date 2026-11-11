@@ -669,6 +669,24 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-poll-reopen-btn:hover{background:var(--accent-bg)}
 
 .cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:14px;line-height:1;pointer-events:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:default}
+/* Téléphone : la messagerie prend tout l'écran, et la page derrière ne défile
+   plus (html.cw-scroll-lock, posé par syncMobileChatUi). Placé en fin de feuille
+   pour l'emporter sur les règles portrait et paysage ci-dessus ; le calage au
+   clavier (fitCwPanelToKeyboard) passe par des styles en ligne !important. */
+@media (max-width:900px){
+  body.cw-mobile.cw-panel-open #cw-panel:not(.cw-hidden){
+    top:0!important;left:0!important;right:0!important;bottom:0!important;
+    width:100%!important;max-width:none!important;margin:0!important;
+    height:100vh!important;height:100dvh!important;max-height:none!important;min-height:0!important;
+    border:none!important;border-radius:0!important;box-shadow:none!important;
+    box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);
+  }
+  body.cw-mobile.cw-panel-open .cw-list-topbar{border-radius:0}
+  html.cw-scroll-lock,html.cw-scroll-lock body{overflow:hidden!important;overscroll-behavior:none}
+  #cw-panel #cw-messages,#cw-panel-left{overscroll-behavior:contain}
+  #cw-panel #cw-messages{padding-bottom:4px}
+  #cw-panel #cw-input-row{padding-top:6px}
+}
 `;
 
   function escAttr(s) {
@@ -1244,9 +1262,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const box = document.getElementById('cw-messages');
     const stick = box && isNearBottom(box, 60);
     if (kbOpen) {
-      const m = 8;
-      const h = Math.max(160, Math.round(vv.height - 2 * m));
-      panel.style.setProperty('top', Math.round(vv.offsetTop + m) + 'px', 'important');
+      const h = Math.max(160, Math.round(vv.height));
+      panel.style.setProperty('top', Math.round(vv.offsetTop) + 'px', 'important');
       panel.style.setProperty('bottom', 'auto', 'important');
       panel.style.setProperty('height', h + 'px', 'important');
       panel.style.setProperty('max-height', h + 'px', 'important');
@@ -1322,6 +1339,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     document.body.classList.toggle('cw-mobile-landscape', mobile && landscape);
     document.body.classList.toggle('cw-panel-open', bubbleTrigger && CW.open);
     document.body.classList.toggle('cw-chat-active', mobile && CW.open && !!CW.activeId);
+    document.documentElement.classList.toggle('cw-scroll-lock', mobile && bubbleTrigger && !!CW.open);
     const backBtn = document.getElementById('cw-back-list');
     if (backBtn) {
       backBtn.classList.toggle('cw-hidden', !mobile || !CW.activeId);
@@ -3066,7 +3084,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     CW._inited = false;
     CW._initPromise = null;
     CW.open = false;
-    document.body.classList.remove('cw-mobile', 'cw-panel-open', 'cw-chat-active');
+    document.body.classList.remove('cw-mobile', 'cw-panel-open', 'cw-chat-active', 'cw-kb-open');
+    document.documentElement.classList.remove('cw-scroll-lock');
     dockLayout();
   };
 
