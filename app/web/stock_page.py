@@ -2692,7 +2692,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/stock_url.js?v=8"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=14"></script>
+<script src="/static/chat_widget.js?v=15"></script>
 <script src="/static/chat_widget_v2.js?v=10"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>

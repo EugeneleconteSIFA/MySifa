@@ -1220,11 +1220,51 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (stick) box.scrollTop = box.scrollHeight;
   }
 
+  /* Téléphone, clavier ouvert : iOS ne réduit pas la fenêtre, seulement la
+     zone visible (visualViewport). Le panneau, placé par le dock au-dessus de
+     la barre du bas, restait alors à mi-hauteur avec un trou jusqu'au clavier.
+     Pendant la saisie, on l'accroche à la zone visible ; à la fermeture du
+     clavier, le dock reprend la main. */
+  const CW_KB_PROPS = ['top', 'bottom', 'height', 'max-height', 'min-height'];
+  let cwKbFrame = 0;
+
+  function fitCwPanelToKeyboard() {
+    cwKbFrame = 0;
+    const vv = window.visualViewport;
+    const panel = document.getElementById('cw-panel');
+    if (!vv || !panel) return;
+    const kbOpen = window.matchMedia('(max-width: 900px)').matches &&
+      !panel.classList.contains('cw-hidden') &&
+      window.innerHeight - vv.height > 120;
+    const box = document.getElementById('cw-messages');
+    const stick = box && isNearBottom(box, 60);
+    if (kbOpen) {
+      const m = 8;
+      const h = Math.max(160, Math.round(vv.height - 2 * m));
+      panel.style.setProperty('top', Math.round(vv.offsetTop + m) + 'px', 'important');
+      panel.style.setProperty('bottom', 'auto', 'important');
+      panel.style.setProperty('height', h + 'px', 'important');
+      panel.style.setProperty('max-height', h + 'px', 'important');
+      panel.style.setProperty('min-height', '0', 'important');
+      document.body.classList.add('cw-kb-open');
+    } else if (document.body.classList.contains('cw-kb-open')) {
+      CW_KB_PROPS.forEach((k) => panel.style.removeProperty(k));
+      document.body.classList.remove('cw-kb-open');
+      dockLayout();
+    }
+    const el = document.getElementById('cw-input');
+    if (el && el.value) resizeCwInput(el);
+    if (stick) box.scrollTop = box.scrollHeight;
+  }
+
+  function scheduleCwKeyboardFit() {
+    if (cwKbFrame) return;
+    cwKbFrame = requestAnimationFrame(fitCwPanelToKeyboard);
+  }
+
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-      const el = document.getElementById('cw-input');
-      if (el && el.value) resizeCwInput(el);
-    });
+    window.visualViewport.addEventListener('resize', scheduleCwKeyboardFit);
+    window.visualViewport.addEventListener('scroll', scheduleCwKeyboardFit);
   }
 
   const CW_MOBILE_BP = '(max-width: 900px)';

@@ -51,7 +51,9 @@ MESSAGES_HTML = r"""<!DOCTYPE html>
 body.light{--muted:#64748b;--ok:#059669;}
 *{box-sizing:border-box}
 body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-#chat-app{display:flex;min-height:100vh}
+/* Page en hauteur fixe (écran visible) : seule la liste des messages défile,
+   la barre de saisie reste collée en bas et grandit vers le haut. */
+#chat-app{display:flex;height:100vh;height:100dvh;overflow:hidden}
 .sidebar{
   width:var(--sidebar-w);background:var(--card);border-right:1px solid var(--border);
   padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;
@@ -71,10 +73,10 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 /* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
    latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
 .sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
-#chat-wrap{flex:1;display:flex;min-width:0;min-height:100vh}
+#chat-wrap{flex:1;display:flex;min-width:0;min-height:0;position:relative}
 #chat-left{
   width:280px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;min-height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
 }
 .chat-list-section{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .chat-list-section-dms{border-top:1px solid var(--border)}
@@ -135,7 +137,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   display:inline-flex;align-items:center;justify-content:center;
 }
 .chat-unread-badge.hidden{display:none}
-#chat-main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+#chat-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
 #chat-header{
   padding:14px 18px;border-bottom:1px solid var(--border);background:var(--card);
   flex-shrink:0;
@@ -154,7 +156,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 }
 .hbtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 #chat-messages{
-  flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 18px;display:flex;flex-direction:column;
   gap:8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;
 }
 #chat-messages #chat-load-more{
@@ -574,6 +576,9 @@ body.sb-open .sidebar-overlay{display:block}
   body.chat-active #chat-left{transform:translateX(-105%)}
   /* iOS : pas de zoom auto au focus (font-size < 16px). */
   #chat-input{font-size:16px}
+  /* Téléphone : la page suit la zone visible au-dessus du clavier
+     (--chat-app-top / --chat-app-h, posés par fitChatAppToViewport). */
+  #chat-app{position:fixed;left:0;right:0;top:var(--chat-app-top,0px);height:var(--chat-app-h,100dvh)}
 }
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
@@ -584,8 +589,10 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
-<div class="sidebar-overlay" id="sb-ov" onclick="document.body.classList.remove('sb-open')"></div>
 <div id="chat-app">
+  <!-- Dans #chat-app : sur téléphone, #chat-app est en position fixe et forme son
+       propre empilement ; l'overlay doit y être pour rester sous la sidebar. -->
+  <div class="sidebar-overlay" id="sb-ov" onclick="document.body.classList.remove('sb-open')"></div>
   <aside class="sidebar msb-nav">
     <div class="logo">
       <div class="logo-brand">My<span>Sifa</span></div>
@@ -694,7 +701,7 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=14"></script>
+<script src="/static/chat_widget.js?v=15"></script>
 <script src="/static/chat_widget_v2.js?v=10"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_humeur.js"></script>
@@ -1636,8 +1643,30 @@ function autoGrowChatInput(el){
   el.style.overflowY=full>maxH?'auto':'hidden';
   if(stick)box.scrollTop=box.scrollHeight;
 }
+/* Téléphone : iOS ne réduit pas la fenêtre à l'ouverture du clavier, seulement
+   la zone visible. La page s'y cale pour que la barre de saisie reste collée au
+   clavier, sans trou ni défilement de la page entière. */
+let chatVvFrame=0;
+function fitChatAppToViewport(){
+  chatVvFrame=0;
+  const vv=window.visualViewport;
+  const root=document.documentElement.style;
+  const box=document.getElementById('chat-messages');
+  const stick=box&&isNearBottom(box);
+  if(vv&&window.matchMedia('(max-width:900px)').matches){
+    root.setProperty('--chat-app-top',Math.round(vv.offsetTop)+'px');
+    root.setProperty('--chat-app-h',Math.round(vv.height)+'px');
+  }else{
+    root.removeProperty('--chat-app-top');
+    root.removeProperty('--chat-app-h');
+  }
+  autoGrowChatInput(document.getElementById('chat-input'));
+  if(stick)box.scrollTop=box.scrollHeight;
+}
 if(window.visualViewport){
-  window.visualViewport.addEventListener('resize',()=>autoGrowChatInput(document.getElementById('chat-input')));
+  const planifier=()=>{if(!chatVvFrame)chatVvFrame=requestAnimationFrame(fitChatAppToViewport);};
+  window.visualViewport.addEventListener('resize',planifier);
+  window.visualViewport.addEventListener('scroll',planifier);
 }
 function scrollToBottom(){
   const box=document.getElementById('chat-messages');
