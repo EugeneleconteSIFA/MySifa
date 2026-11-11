@@ -1243,34 +1243,46 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (stick) box.scrollTop = box.scrollHeight;
   }
 
-  /* Téléphone, clavier ouvert : iOS ne réduit pas la fenêtre, seulement la
-     zone visible (visualViewport). Le panneau, placé par le dock au-dessus de
-     la barre du bas, restait alors à mi-hauteur avec un trou jusqu'au clavier.
-     Pendant la saisie, on l'accroche à la zone visible ; à la fermeture du
-     clavier, le dock reprend la main. */
+  /* Téléphone : le panneau ouvert est calé en permanence sur la zone visible
+     (visualViewport), clavier ouvert ou non. iOS ne réduit pas la fenêtre à
+     l'ouverture du clavier, seulement la zone visible : sans ce calage, le
+     panneau gardait sa hauteur et laissait voir la page entre la saisie et le
+     clavier. Le haut passe sous un bandeau fixe éventuel (bandeau rouge de v1).
+     Le dock repositionne le panneau en styles en ligne sans priorité : chaque
+     passage du dock est suivi d'un recalage (scheduleCwKeyboardFit). */
   const CW_KB_PROPS = ['top', 'bottom', 'height', 'max-height', 'min-height'];
   let cwKbFrame = 0;
+
+  function cwTopObstacle() {
+    const ban = document.getElementById('msf-staging-bandeau');
+    if (!ban || getComputedStyle(ban).display === 'none') return 0;
+    return Math.max(0, Math.round(ban.getBoundingClientRect().bottom));
+  }
 
   function fitCwPanelToKeyboard() {
     cwKbFrame = 0;
     const vv = window.visualViewport;
     const panel = document.getElementById('cw-panel');
     if (!vv || !panel) return;
-    const kbOpen = window.matchMedia('(max-width: 900px)').matches &&
-      !panel.classList.contains('cw-hidden') &&
-      window.innerHeight - vv.height > 120;
+    const active = window.matchMedia('(max-width: 900px)').matches &&
+      !panel.classList.contains('cw-hidden');
     const box = document.getElementById('cw-messages');
     const stick = box && isNearBottom(box, 60);
-    if (kbOpen) {
-      const h = Math.max(160, Math.round(vv.height));
-      panel.style.setProperty('top', Math.round(vv.offsetTop) + 'px', 'important');
+    if (active) {
+      const vTop = Math.round(vv.offsetTop);
+      const vBottom = Math.round(vv.offsetTop + vv.height);
+      const top = Math.max(vTop, cwTopObstacle());
+      const h = Math.max(160, vBottom - top);
+      panel.style.setProperty('top', top + 'px', 'important');
       panel.style.setProperty('bottom', 'auto', 'important');
       panel.style.setProperty('height', h + 'px', 'important');
       panel.style.setProperty('max-height', h + 'px', 'important');
       panel.style.setProperty('min-height', '0', 'important');
-      document.body.classList.add('cw-kb-open');
-    } else if (document.body.classList.contains('cw-kb-open')) {
+      panel.dataset.cwVv = '1';
+      document.body.classList.toggle('cw-kb-open', window.innerHeight - vv.height > 120);
+    } else if (panel.dataset.cwVv) {
       CW_KB_PROPS.forEach((k) => panel.style.removeProperty(k));
+      delete panel.dataset.cwVv;
       document.body.classList.remove('cw-kb-open');
       dockLayout();
     }
@@ -1284,10 +1296,25 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     cwKbFrame = requestAnimationFrame(fitCwPanelToKeyboard);
   }
 
+  /* L'animation du clavier iOS dure ~300 ms et ne se termine pas toujours par
+     un évènement visualViewport : on remesure aussi après coup. */
+  function scheduleCwKeyboardFitSettled() {
+    scheduleCwKeyboardFit();
+    [120, 350, 700].forEach((ms) => setTimeout(scheduleCwKeyboardFit, ms));
+  }
+
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', scheduleCwKeyboardFit);
     window.visualViewport.addEventListener('scroll', scheduleCwKeyboardFit);
   }
+  window.addEventListener('resize', scheduleCwKeyboardFit);
+  window.addEventListener('orientationchange', scheduleCwKeyboardFitSettled);
+  document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#cw-panel')) scheduleCwKeyboardFitSettled();
+  });
+  document.addEventListener('focusout', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#cw-panel')) scheduleCwKeyboardFitSettled();
+  });
 
   const CW_MOBILE_BP = '(max-width: 900px)';
   const CW_MOBILE_LANDSCAPE_BP = '(max-width: 900px) and (orientation: landscape)';
@@ -1377,6 +1404,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (window.MySifaDock && typeof window.MySifaDock.layout === 'function') {
       window.MySifaDock.layout();
     }
+    if (typeof scheduleCwKeyboardFit === 'function') scheduleCwKeyboardFit();
   }
 
   /** Desktop portail : panneau au-dessus de la barre messagerie (bas-gauche). */
