@@ -398,10 +398,13 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   padding:10px 14px;border-top:1px solid var(--border);
   display:flex;gap:8px;align-items:flex-end;flex-shrink:0;background:var(--card);
 }
+/* Bulle de saisie : s'agrandit ligne par ligne (cf. autoGrowChatInput),
+   jusqu'à ~40 % de la hauteur visible, puis défile. */
 #chat-input{
-  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
-  color:var(--text);font-size:13px;font-family:inherit;padding:8px 12px;
-  resize:none;max-height:80px;min-height:36px;outline:none;line-height:1.4;
+  display:block;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:18px;
+  color:var(--text);font-size:13px;font-family:inherit;padding:8px 14px;
+  resize:none;min-height:36px;height:36px;outline:none;line-height:1.4;
+  overflow-y:hidden;overscroll-behavior:contain;
   transition:border-color .15s;
 }
 #chat-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)}
@@ -569,6 +572,8 @@ body.sb-open .sidebar-overlay{display:block}
     transform:translateX(-105%);transition:transform .18s ease}
   body.chat-list-open #chat-left{transform:translateX(0)}
   body.chat-active #chat-left{transform:translateX(-105%)}
+  /* iOS : pas de zoom auto au focus (font-size < 16px). */
+  #chat-input{font-size:16px}
 }
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
@@ -689,8 +694,8 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=13"></script>
-<script src="/static/chat_widget_v2.js?v=9"></script>
+<script src="/static/chat_widget.js?v=14"></script>
+<script src="/static/chat_widget_v2.js?v=10"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
@@ -1613,6 +1618,27 @@ function appendNewMessages(msgs){
 function isNearBottom(el){
   return el.scrollHeight-el.scrollTop-el.clientHeight<80;
 }
+/* Hauteur max de la bulle : 40 % de la zone visible sur ordi, 35 % sur mobile
+   (visualViewport = hauteur réelle au-dessus du clavier virtuel). */
+function chatInputMaxH(){
+  const vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
+  const ratio=window.matchMedia('(max-width:900px)').matches?0.35:0.4;
+  return Math.max(80,Math.min(Math.round(vh*ratio),360));
+}
+function autoGrowChatInput(el){
+  if(!el)return;
+  const box=document.getElementById('chat-messages');
+  const stick=box&&isNearBottom(box);
+  const maxH=chatInputMaxH();
+  el.style.height='auto';
+  const full=el.scrollHeight+(el.offsetHeight-el.clientHeight);
+  el.style.height=Math.min(full,maxH)+'px';
+  el.style.overflowY=full>maxH?'auto':'hidden';
+  if(stick)box.scrollTop=box.scrollHeight;
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',()=>autoGrowChatInput(document.getElementById('chat-input')));
+}
 function scrollToBottom(){
   const box=document.getElementById('chat-messages');
   requestAnimationFrame(()=>{box.scrollTop=box.scrollHeight;});
@@ -1693,7 +1719,7 @@ async function sendMessage(){
     }
     inp.value='';
     closeChatActions();
-    inp.style.height='auto';
+    autoGrowChatInput(inp);
     pendingChatFile=null;
     renderPendingChatFile();
     cancelReply();
@@ -2190,6 +2216,7 @@ function insertMention(nom){
   inp.focus();
   const pos=before.length+nom.length+2;
   inp.setSelectionRange(pos,pos);
+  autoGrowChatInput(inp);
   closeMentionDropdown();
 }
 function showMentionToast(from,body,chanId){
@@ -2253,8 +2280,7 @@ document.getElementById('chat-input').addEventListener('keydown',e=>{
   if(e.key==='Enter'){e.preventDefault();sendMessage();}
 });
 document.getElementById('chat-input').addEventListener('input',function(){
-  this.style.height='auto';
-  this.style.height=Math.min(this.scrollHeight,80)+'px';
+  autoGrowChatInput(this);
   const val=this.value;
   const cur=this.selectionStart;
   const before=val.substring(0,cur);

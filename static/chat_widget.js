@@ -368,10 +368,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-read-receipt{text-align:right;font-size:10px;padding:0 2px 4px;display:flex;align-items:center;justify-content:flex-end;gap:4px}
 .cw-read-receipt.cw-read-vu{color:var(--accent)}
 .cw-read-receipt.cw-read-count{color:var(--muted)}
-#cw-input-row{position:relative;padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
-#cw-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;
+#cw-input-row{position:relative;padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end}
+#cw-input{flex:1;display:block;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:19px;padding:9px 14px;
   font-size:13px;line-height:1.3;color:var(--text);resize:none;font-family:inherit;
-  height:38px;min-height:38px;max-height:96px;box-sizing:border-box;overflow-y:auto;outline:none}
+  height:38px;min-height:38px;box-sizing:border-box;overflow-y:hidden;overscroll-behavior:contain;outline:none}
 #cw-input:focus{border-color:var(--accent)}
 #cw-send{width:38px;height:38px;box-sizing:border-box;background:var(--accent-bg);
   border:1px solid color-mix(in srgb,var(--accent,#22d3ee) 30%,transparent);border-radius:10px;padding:0;
@@ -1192,12 +1192,39 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 
   const CW_INPUT_MIN_H = 38;
 
+  /* Bulle de saisie qui grandit ligne par ligne (façon iMessage), jusqu'à
+     ~40 % de la hauteur du panneau (35 % sur mobile, clavier déduit via
+     visualViewport), puis défile. La liste reste collée en bas si elle l'était. */
+  function cwInputMaxH() {
+    const vv = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const panel = document.getElementById('cw-panel');
+    const base = panel && panel.clientHeight ? Math.min(panel.clientHeight, vv) : vv;
+    const ratio = window.matchMedia('(max-width: 900px)').matches ? 0.35 : 0.4;
+    return Math.max(80, Math.min(Math.round(base * ratio), 320));
+  }
+
   function resizeCwInput(el) {
     if (!el) return;
-    el.style.height = CW_INPUT_MIN_H + 'px';
-    if (!el.value) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(Math.max(CW_INPUT_MIN_H, el.scrollHeight), 96) + 'px';
+    const box = document.getElementById('cw-messages');
+    const stick = box && isNearBottom(box, 60);
+    if (!el.value) {
+      el.style.height = CW_INPUT_MIN_H + 'px';
+      el.style.overflowY = 'hidden';
+    } else {
+      const maxH = cwInputMaxH();
+      el.style.height = 'auto';
+      const full = Math.max(CW_INPUT_MIN_H, el.scrollHeight + (el.offsetHeight - el.clientHeight));
+      el.style.height = Math.min(full, maxH) + 'px';
+      el.style.overflowY = full > maxH ? 'auto' : 'hidden';
+    }
+    if (stick) box.scrollTop = box.scrollHeight;
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      const el = document.getElementById('cw-input');
+      if (el && el.value) resizeCwInput(el);
+    });
   }
 
   const CW_MOBILE_BP = '(max-width: 900px)';

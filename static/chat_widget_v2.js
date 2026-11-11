@@ -398,6 +398,7 @@
     const pos = before.length + nom.length + 2;
     inp.focus();
     inp.setSelectionRange(pos, pos);
+    if (window._CW && typeof window._CW.resizeCwInput === 'function') window._CW.resizeCwInput(inp);
     closeMentionDd();
   }
 

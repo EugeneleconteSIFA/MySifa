@@ -3246,8 +3246,8 @@ __SETTINGS_FAMILLES__
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=13"></script>
-<script src="/static/chat_widget_v2.js?v=9"></script>
+<script src="/static/chat_widget.js?v=14"></script>
+<script src="/static/chat_widget_v2.js?v=10"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_notifs_admin.js?v=2"></script>
 <script>
