@@ -701,7 +701,7 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=15"></script>
+<script src="/static/chat_widget.js?v=16"></script>
 <script src="/static/chat_widget_v2.js?v=10"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_humeur.js"></script>

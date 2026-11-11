@@ -187,7 +187,7 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 #cw-close{background:none;border:none;color:var(--muted);font-size:20px;
   cursor:pointer;line-height:1;padding:0 4px;font-family:inherit;flex-shrink:0}
 #cw-close:hover{color:var(--text)}
-#cw-messages{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:0}
+#cw-messages{flex:1;overflow-y:auto;padding:12px 14px 8px;display:flex;flex-direction:column;gap:10px;min-height:0}
 .cw-msg-wrap{position:relative;display:flex;flex-direction:column;max-width:82%;word-break:break-word}
 .cw-msg-wrap.cw-mine{align-self:flex-end;align-items:flex-end}
 .cw-msg-wrap.cw-theirs{align-self:flex-start;align-items:flex-start}
@@ -361,6 +361,8 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
   white-space:pre-wrap;word-break:break-word}
 body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 #cw-typing-bar{height:20px;padding:0 14px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;min-height:20px;transition:opacity .2s;flex-shrink:0}
+/* Personne n'écrit : la ligne ne réserve pas d'espace sous le dernier message. */
+#cw-typing-bar:empty{height:0;min-height:0}
 .cw-typing-dot{width:5px;height:5px;border-radius:50%;background:var(--muted);display:inline-block;animation:cwTypDot 1.2s ease-in-out infinite}
 .cw-typing-dot:nth-child(2){animation-delay:.2s}
 .cw-typing-dot:nth-child(3){animation-delay:.4s}
@@ -1103,6 +1105,8 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       } else {
         label = typists.length + ' personnes écrivent';
       }
+      const tBox = document.getElementById('cw-messages');
+      const tStick = tBox && !bar.firstChild && isNearBottom(tBox, 60);
       bar.innerHTML =
         '<span class="cw-typing-dot"></span>' +
         '<span class="cw-typing-dot"></span>' +
@@ -1110,6 +1114,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         '<span style="margin-left:4px">' +
         label +
         '</span>';
+      if (tStick) tBox.scrollTop = tBox.scrollHeight;
     } catch (e) {}
   }
 
