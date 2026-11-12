@@ -210,7 +210,7 @@
 #cw-reply-bar.cw-show{display:flex}
 .cw-reply-preview{flex:1;min-width:0;padding:5px 9px;border-left:3px solid var(--accent);
   background:var(--accent-bg);border-radius:6px;font-size:12px}
-.cw-reply-preview-name{font-weight:700;color:var(--text)}
+.cw-reply-preview-name{font-weight:700;color:var(--accent)}
 .cw-reply-preview-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cw-reply-cancel{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);
   background:transparent;color:var(--muted);cursor:pointer;font-size:16px;
@@ -642,6 +642,9 @@
     cwReplyTo = null;
     const bar = document.getElementById('cw-reply-bar');
     if (bar) bar.classList.remove('cw-show');
+    // Le « Répondre » du menu passe par chat_widget.js (CW._replyToId) : sans
+    // ceci, le × masquait la barre mais le message suivant restait une réponse.
+    if (window._CW && typeof window._CW.cancelReply === 'function') window._CW.cancelReply();
   }
   // ── Delete ───────────────────────────────────────────────
   async function cwDeleteMsg(CW, msgId) {
