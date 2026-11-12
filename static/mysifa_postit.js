@@ -507,6 +507,9 @@
       '<button type="button" class="postit-add-task-btn" onclick="postitOuvrirCommandes(' +
       p.id +
       ')" title="Ajouter un bloc — ou taper « / » dans le texte">/ Insérer</button>' +
+      '<a class="postit-ouvrir-btn" href="/note?note=' +
+      p.id +
+      '" onmousedown="event.stopPropagation()" title="Ouvrir dans Mes notes, en pleine page">Ouvrir ↗</a>' +
       '<button type="button" class="postit-multipage-btn' +
       (multiOn ? ' on' : '') +
       '" onclick="togglePostitMultiPage(' +

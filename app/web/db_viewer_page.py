@@ -331,10 +331,10 @@ body.light .tbl-rows-badge{{background:color-mix(in srgb,var(--accent,#0891b2) 1
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=7">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=8">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_postit.js?v=7"></script>
+<script src="/static/mysifa_postit.js?v=8"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=20"></script>
