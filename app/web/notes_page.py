@@ -114,8 +114,8 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=3" data-nted="1">
-<link rel="stylesheet" href="/static/mysifa_notes.css?v=6">
+<link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=5" data-nted="1">
+<link rel="stylesheet" href="/static/mysifa_notes.css?v=10">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -169,10 +169,11 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_notes_editeur.js?v=6"></script>
-<script src="/static/mysifa_notes.js?v=6"></script>
+<script src="/static/mysifa_notes_editeur.js?v=8"></script>
+<script src="/static/mysifa_notes.js?v=8"></script>
 <script src="/static/mysifa_notes_recherche.js?v=1"></script>
-<script src="/static/mysifa_notes_outils.js?v=1"></script>
+<script src="/static/mysifa_notes_outils.js?v=2"></script>
+<script src="/static/mysifa_notes_mobile.js?v=3"></script>
 </body>
 </html>
 """
@@ -205,6 +206,14 @@ IMPRESSION_HTML = r"""<!DOCTYPE html>
   td,th{border:1px solid #d1d5db;padding:5px 7px;text-align:left;vertical-align:top} th{background:#f3f4f6} /* hex-ok */
   figure{margin:8px 0} img{max-width:100%;border-radius:4px} figcaption{color:#6b7280;font-size:9pt} /* hex-ok */
   a{color:#0e7490} .bascule{font-weight:650} .page{color:#6b7280} /* hex-ok */
+  .nt-c-rouge{color:#dc2626}.nt-c-orange{color:#c2410c}.nt-c-vert{color:#15803d}.nt-c-bleu{color:#1d4ed8} /* hex-ok */
+  .nt-c-violet{color:#7e22ce}.nt-c-rose{color:#be185d}.nt-c-gris{color:#6b7280} /* hex-ok */
+  .nt-f-jaune{background:#fde68a}.nt-f-vert{background:#bbf7d0}.nt-f-bleu{background:#bfdbfe} /* hex-ok */
+  .nt-f-rose{background:#fbcfe8}.nt-f-orange{background:#fed7aa}.nt-f-gris{background:#e5e7eb} /* hex-ok */
+  .nt-t-petit{font-size:.82em}.nt-t-grand{font-size:1.3em}.nt-t-tres-grand{font-size:1.7em}
+  .nt-p-serif{font-family:Georgia,'Times New Roman',serif}.nt-p-mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .nt-p-manuscrite{font-family:'Segoe Print','Bradley Hand','Comic Sans MS',cursive}
+  @media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 </head>
 <body>

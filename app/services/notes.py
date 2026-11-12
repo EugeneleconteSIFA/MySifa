@@ -71,6 +71,24 @@ def maintenant() -> str:
 
 # ── Texte riche ─────────────────────────────────────────────────────────
 
+# Styles posés sur une sélection (miroir de STYLES_TEXTE de l'éditeur) : une
+# classe par famille — c couleur, f surlignage, t taille, p police.
+STYLES_TEXTE = {
+    "c": ("rouge", "orange", "vert", "bleu", "violet", "rose", "gris", "defaut"),
+    "f": ("jaune", "vert", "bleu", "rose", "orange", "gris", "aucun"),
+    "t": ("petit", "normal", "grand", "tres-grand"),
+    "p": ("sans", "serif", "mono", "manuscrite"),
+}
+ALIGNEMENTS = ("gauche", "centre", "droite", "justifie")
+FONDS_CELLULE = ("jaune", "vert", "bleu", "rose", "orange", "gris")
+_CLASSE_RE = re.compile(r"^nt-([cftp])-([a-z-]+)$")
+
+
+def classe_valide(c: str) -> bool:
+    m = _CLASSE_RE.match(c or "")
+    return bool(m and m.group(2) in STYLES_TEXTE[m.group(1)])
+
+
 _BALISES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "s": "s", "strike": "s",
             "del": "s", "code": "code", "a": "a"}
 _LIEN_RE = re.compile(r"^(https?://|mailto:|/)[^\s\"'<>]*$", re.IGNORECASE)
@@ -83,6 +101,7 @@ class _Assainisseur(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.out: list[str] = []
         self.pile: list[str] = []
+        self.spans: list[bool] = []  # chaque <span> ouvert : gardé ou non
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
@@ -93,6 +112,14 @@ class _Assainisseur(HTMLParser):
             self.out.append("<br>")
             return
         nom = _BALISES.get(tag)
+        if tag == "span":
+            classe = (dict(attrs).get("class") or "").strip()
+            garde = classe_valide(classe)
+            self.spans.append(garde)
+            if garde:
+                self.out.append('<span class="%s">' % classe)
+                self.pile.append("span")
+            return
         if not nom:
             return
         if nom == "a":
@@ -106,7 +133,11 @@ class _Assainisseur(HTMLParser):
         self.pile.append(nom)
 
     def handle_endtag(self, tag):
-        nom = _BALISES.get(tag.lower())
+        if tag.lower() == "span":
+            # Ne ferme un span gardé que si c'est lui qui se termine.
+            if not self.spans or not self.spans.pop():
+                return
+        nom = "span" if tag.lower() == "span" else _BALISES.get(tag.lower())
         if not nom or nom not in self.pile:
             return
         # Ferme proprement jusqu'à la balise visée.
@@ -161,12 +192,34 @@ def _bloc_propre(b: dict) -> dict:
             propres.append(cellules)
         out["lignes"] = propres
         out["entete"] = bool(b.get("entete"))
+        # Styles des cellules : « fond-jaune al-centre », mêmes dimensions que les lignes.
+        styles_in = b.get("styles") if isinstance(b.get("styles"), list) else []
+        styles, utile = [], False
+        for r, l in enumerate(propres):
+            ligne = []
+            for c in range(len(l)):
+                brut = ""
+                try:
+                    brut = str(styles_in[r][c] or "")
+                except (IndexError, TypeError):
+                    pass
+                jetons = []
+                for j in brut.split():
+                    fam, _, val = j.partition("-")
+                    if (fam == "fond" and val in FONDS_CELLULE) or (fam == "al" and val in ALIGNEMENTS[1:]):
+                        if not any(x.startswith(fam + "-") for x in jetons):
+                            jetons.append(j)
+                ligne.append(" ".join(jetons))
+                utile = utile or bool(jetons)
+            styles.append(ligne)
+        if utile:
+            out["styles"] = styles
         out["texte"] = "\n".join(" · ".join(texte_depuis_html(c).replace("\n", " ") for c in l) for l in propres)
     elif b.get("html") not in (None, ""):
         h = assainir_html(b.get("html"))
         out["texte"] = texte_depuis_html(h)
         # Un HTML sans aucune mise en forme n'est que du texte : on ne le garde pas.
-        if re.search(r"<(b|i|u|s|code|a)[ >]", h):
+        if re.search(r"<(b|i|u|s|code|a|span)[ >]", h):
             out["html"] = h
     else:
         out["texte"] = str(b.get("texte") if b.get("texte") is not None else "")
@@ -176,6 +229,8 @@ def _bloc_propre(b: dict) -> dict:
         retrait = 0
     if retrait:
         out["retrait"] = retrait
+    if t not in ("sep", "image", "page", "tableau") and b.get("aligne") in ALIGNEMENTS[1:]:
+        out["aligne"] = b.get("aligne")
     if t == "todo":
         out["coche"] = bool(b.get("coche"))
     if t in ("page", "image"):

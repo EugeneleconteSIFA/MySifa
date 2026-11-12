@@ -187,6 +187,7 @@
 
   function fermerEditeur() {
     crochets('fermeture');
+    S.feuilleOuverte = false;
     if (_titreTimer) { clearTimeout(_titreTimer); _titreTimer = null; enregistrerTitre(); }
     if (S.ed) { S.ed.detruire(); S.ed = null; }
     S.presences = [];
@@ -606,7 +607,12 @@
   var MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
   var TOUCHE = MAC ? '⌘' : 'Ctrl';
 
+  /* Sur téléphone, le panneau est une feuille du bas : fermée à chaque note,
+     sans hériter de la préférence de l'ordinateur. */
+  function petitEcran() { return window.innerWidth <= 768; }
+
   function panneauPrefere() {
+    if (petitEcran()) return !!S.feuilleOuverte;
     try {
       var v = localStorage.getItem('mysifa_notes_panneau');
       if (v === '1' || v === '0') return v === '1';
@@ -633,7 +639,8 @@
 
   function basculerPanneau(force) {
     var ouvert = force == null ? !panneauPrefere() : !!force;
-    try { localStorage.setItem('mysifa_notes_panneau', ouvert ? '1' : '0'); } catch (e) {}
+    if (petitEcran()) S.feuilleOuverte = ouvert;
+    else try { localStorage.setItem('mysifa_notes_panneau', ouvert ? '1' : '0'); } catch (e) {}
     rendrePanneau();
   }
 
@@ -704,7 +711,10 @@
     }).join('');
     el.innerHTML = onglets +
       '<div class="nt-pa-section">Mise en forme</div><div class="nt-pa-formats">' + formats + '</div>' +
-      '<p class="nt-pa-aide">Sélectionnez du texte, puis cliquez.</p>' +
+      '<p class="nt-pa-aide">Sélectionnez du texte, puis cliquez. Un style de titre ou de liste s\'applique au paragraphe du curseur.</p>' +
+      '<div class="nt-pa-styles">' + window.MySifaNotesEditeur.sousMenu('couleur') + window.MySifaNotesEditeur.sousMenu('texte') +
+      window.MySifaNotesEditeur.sousMenu('aligne') +
+      '<button type="button" class="nt-pa-effacer" data-cmd="effacer_format">Effacer la mise en forme</button></div>' +
       '<div class="nt-pa-section">Insérer</div><div class="nt-pa-grille">' + inserer + '</div>' +
       '<div class="nt-pa-section">Bloc</div><div class="nt-pa-grille">' +
       bouton('dupliquer', 'Dupliquer', '⧉', 'Copie le bloc juste en dessous') +

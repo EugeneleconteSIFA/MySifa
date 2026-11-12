@@ -287,3 +287,48 @@ html body .msb-nav .nav-btn.nt-nouvelle:hover{filter:brightness(1.08)}
 .nt-hist-corps{flex:1;overflow-y:auto;padding:14px 18px}
 .nt-hist-titre{font-size:22px;font-weight:800;margin-bottom:10px}
 @media(max-width:768px){.nt-hist{flex-direction:column}.nt-hist-liste{width:auto;max-height:30vh}}
+
+/* ── Téléphone et tablette (static/mysifa_notes_mobile.js) ── */
+/* Barre d'outils au-dessus du clavier */
+.nt-clavier{position:fixed;left:0;right:0;top:0;z-index:9300;display:flex;align-items:center;gap:4px;height:50px;padding:4px 6px calc(4px + env(safe-area-inset-bottom,0px) * 0);background:var(--card);border-top:1px solid var(--border);box-shadow:0 -6px 18px rgba(0,0,0,.12)}
+.nt-clavier[hidden]{display:none}
+.nt-clavier-defile{flex:1;min-width:0;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.nt-clavier-defile::-webkit-scrollbar{display:none}
+.nt-clavier button{flex-shrink:0;min-width:42px;height:42px;padding:0 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font:600 15px/1 inherit;font-family:inherit;display:flex;align-items:center;justify-content:center;touch-action:manipulation}
+.nt-clavier button:active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.nt-clavier .nt-clavier-fini{background:var(--accent);border-color:var(--accent);color:white;font-weight:800;padding:0 14px}
+.nt-clavier.lecture .nt-clavier-defile button:not([data-k="commenter"]){display:none}
+body.nt-clavier-actif .nt-content{padding-bottom:45vh}
+body.nt-clavier-actif .msb-dock,body.nt-clavier-actif #mysifa-dock-barre{display:none}
+/* Au doigt, la barre de mise en forme flottante gêne le menu natif de sélection :
+   la barre du clavier la remplace. */
+@media (pointer:coarse){#nted-barre{display:none!important}}
+
+/* Panneau en feuille du bas */
+.nt-feuille-fond{display:none}
+@media(max-width:768px){
+  .nt-panneau{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;height:min(78vh,640px);z-index:8700;border-left:none;border-top:1px solid var(--border);border-radius:18px 18px 0 0;box-shadow:0 -18px 48px rgba(0,0,0,.3);padding:22px 16px calc(24px + env(safe-area-inset-bottom,0px));transition:transform .18s ease;overscroll-behavior:contain}
+  .nt-panneau::before{content:'';position:absolute;top:8px;left:50%;width:42px;height:5px;margin-left:-21px;border-radius:3px;background:var(--border)}
+  body.nt-panneau-ouvert .nt-feuille-fond{display:block;position:fixed;inset:0;z-index:8650;background:rgba(0,0,0,.4)}
+  .nt-pa-grille{grid-template-columns:1fr 1fr 1fr}
+  .nt-pa-btn{flex-direction:column;align-items:center;gap:4px;padding:10px 4px;text-align:center;font-size:11.5px}
+  .nt-pa-formats{grid-template-columns:repeat(6,1fr)}
+  .nt-pa-fmt{height:42px}
+  .nt-pa-raccourcis,.nt-pa-raccourcis + .nt-pa-section{display:none}
+  .nt-actions{gap:6px}
+  .nt-barre{position:static}
+}
+/* Le titre reste un titre sur téléphone (la règle commune met les champs à 16 px ;
+   26 px reste au-dessus du seuil de zoom d'iOS). */
+@media(max-width:768px){html body .nt-page textarea.nt-titre{font-size:26px!important;line-height:1.2}}
+/* Mise en forme dans le panneau et sur la barre du clavier */
+.nt-pa-styles{margin-top:8px}
+.nt-pa-styles .nted-pastilles{gap:6px}
+.nt-pa-effacer{margin-top:6px;padding:6px 10px;border:1px dashed var(--border);border-radius:8px;background:var(--bg);color:var(--muted);font:600 12px/1.2 inherit;font-family:inherit;cursor:pointer}
+.nt-pa-effacer:hover{color:var(--accent);border-color:var(--accent)}
+.nt-clavier{flex-wrap:wrap;height:auto;min-height:50px}
+.nt-clavier-styles{flex-basis:100%;max-height:38vh;overflow-y:auto;padding:4px 2px 2px;border-top:1px solid var(--border)}
+.nt-clavier-styles[hidden]{display:none}
+.nt-clavier-styles .nted-pastille{width:38px;height:38px}
+.nt-clavier-styles .nted-choix button{min-height:38px;min-width:0}
+.nt-clavier button.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}

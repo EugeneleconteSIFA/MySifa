@@ -272,7 +272,7 @@
   z-index:8032;
 }
 #nted-barre.open{display:flex}
-#nted-barre button{
+#nted-barre .nted-barre-ligne button{
   min-width:30px;
   height:30px;
   padding:0 8px;
@@ -285,8 +285,8 @@
   cursor:pointer;
   white-space:nowrap;
 }
-#nted-barre button:hover{background:var(--bg)}
-#nted-barre button.actif{background:var(--accent-bg);color:var(--accent)}
+#nted-barre .nted-barre-ligne button:hover{background:var(--bg)}
+#nted-barre .nted-barre-ligne button.actif{background:var(--accent-bg);color:var(--accent)}
 #nted-barre code{font-size:11.5px;font-family:ui-monospace,Menlo,Consolas,monospace}
 .nted-bulle{
   position:fixed;
@@ -363,3 +363,57 @@
 @media(max-width:900px){.pb-com{right:0}}
 .pb-txt a[href^="/"],.pb-cellule a[href^="/"]{text-decoration:none;padding:0 .3em;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-weight:600}
 #nted-barre .nted-commenter{border-left:1px solid var(--border);border-radius:0 7px 7px 0;padding-left:10px;margin-left:2px}
+
+/* ── Mise en forme façon Word (classes nt-c-*, nt-f-*, nt-t-*, nt-p-*) ──
+   Palette choisie par l'utilisateur pour son texte : deux jeux de teintes,
+   lisibles sur le thème sombre comme sur le clair (et le papier des post-its). */
+.nted,#nted-barre,.nt-panneau,.pb-tableau-menu{
+  --ntc-rouge:#f87171;--ntc-orange:#fb923c;--ntc-vert:#4ade80;--ntc-bleu:#60a5fa;--ntc-violet:#c084fc;--ntc-rose:#f472b6;--ntc-gris:#9ca3af; /* hex-ok : palette de texte */
+  --ntf-jaune:rgba(250,204,21,.38);--ntf-vert:rgba(74,222,128,.3);--ntf-bleu:rgba(96,165,250,.32);--ntf-rose:rgba(244,114,182,.3);--ntf-orange:rgba(251,146,60,.34);--ntf-gris:rgba(156,163,175,.3);
+}
+body.light .nted,body.light #nted-barre,body.light .nt-panneau,body.light .pb-tableau-menu,.postit .nted{
+  --ntc-rouge:#dc2626;--ntc-orange:#c2410c;--ntc-vert:#15803d;--ntc-bleu:#1d4ed8;--ntc-violet:#7e22ce;--ntc-rose:#be185d;--ntc-gris:#6b7280; /* hex-ok : palette de texte, thème clair */
+  --ntf-jaune:rgba(250,204,21,.45);--ntf-vert:rgba(34,197,94,.25);--ntf-bleu:rgba(59,130,246,.22);--ntf-rose:rgba(236,72,153,.22);--ntf-orange:rgba(249,115,22,.25);--ntf-gris:rgba(107,114,128,.2);
+}
+.nt-c-rouge{color:var(--ntc-rouge)}.nt-c-orange{color:var(--ntc-orange)}.nt-c-vert{color:var(--ntc-vert)}.nt-c-bleu{color:var(--ntc-bleu)}
+.nt-c-violet{color:var(--ntc-violet)}.nt-c-rose{color:var(--ntc-rose)}.nt-c-gris{color:var(--ntc-gris)}.nt-c-defaut{color:var(--nted-ink-d,var(--text))}
+.nt-f-jaune{background:var(--ntf-jaune)}.nt-f-vert{background:var(--ntf-vert)}.nt-f-bleu{background:var(--ntf-bleu)}
+.nt-f-rose{background:var(--ntf-rose)}.nt-f-orange{background:var(--ntf-orange)}.nt-f-gris{background:var(--ntf-gris)}.nt-f-aucun{background:transparent}
+span.nt-f-jaune,span.nt-f-vert,span.nt-f-bleu,span.nt-f-rose,span.nt-f-orange,span.nt-f-gris{border-radius:3px;padding:0 .1em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.nt-t-petit{font-size:.82em}.nt-t-normal{font-size:var(--nted-taille-d,1em)}.nt-t-grand{font-size:1.3em}.nt-t-tres-grand{font-size:1.7em;line-height:1.25}
+.nt-p-sans{font-family:'Segoe UI',system-ui,sans-serif}.nt-p-serif{font-family:Georgia,'Times New Roman',serif}
+.nt-p-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.95em}
+.nt-p-manuscrite{font-family:'Segoe Print','Bradley Hand','Comic Sans MS','Chalkboard SE',cursive}
+.pb-al-centre .pb-txt{text-align:center}.pb-al-droite .pb-txt{text-align:right}.pb-al-justifie .pb-txt{text-align:justify}
+.nt-cel-fond-jaune{background:var(--ntf-jaune)}.nt-cel-fond-vert{background:var(--ntf-vert)}.nt-cel-fond-bleu{background:var(--ntf-bleu)}
+.nt-cel-fond-rose{background:var(--ntf-rose)}.nt-cel-fond-orange{background:var(--ntf-orange)}.nt-cel-fond-gris{background:var(--ntf-gris)}
+.nt-cel-al-centre .pb-cellule{text-align:center}.nt-cel-al-droite .pb-cellule{text-align:right}.nt-cel-al-justifie .pb-cellule{text-align:justify}
+
+/* Barre de sélection : sous-menus */
+#nted-barre{flex-direction:column;align-items:stretch}
+#nted-barre.open{display:flex}
+.nted-barre-ligne{display:flex;gap:2px;flex-wrap:wrap}
+.nted-a{border-bottom:3px solid var(--ntc-rouge);line-height:1;padding:0 2px}
+.nted-sous{padding:6px 4px 2px;border-top:1px solid var(--border);margin-top:4px;max-width:340px}
+.nted-sous[hidden]{display:none}
+.nted-sous-titre{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:4px 2px}
+.nted-pastilles{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+.nted-pastille{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font:800 14px/1 inherit;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.nted-pastille.nt-f-aucun,.nted-pastille.nt-c-defaut{position:relative}
+.nted-pastille.nt-f-aucun::after{content:'';position:absolute;left:4px;right:4px;top:50%;height:2px;background:var(--danger);transform:rotate(-40deg)}
+.nted-pastille:hover{border-color:var(--accent)}
+.nted-choix{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.nted-choix button{padding:5px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:600 12px/1.2 inherit;cursor:pointer}
+.nted-choix button.nt-p-sans,.nted-choix button.nt-p-serif,.nted-choix button.nt-p-mono,.nted-choix button.nt-p-manuscrite{font-size:12.5px}
+.nted-choix button.nt-t-petit,.nted-choix button.nt-t-normal,.nted-choix button.nt-t-grand,.nted-choix button.nt-t-tres-grand{font-size:12px}
+.nted-choix button:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Menu « Cellule » du tableau */
+.pb-tableau-outils{flex-wrap:wrap;right:0}
+.pb.pb-tableau{padding-bottom:3.6em}
+.pb-tableau-menu{position:absolute;left:0;bottom:2.2em;z-index:5;padding:8px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.22)}
+.pb-tableau-menu[hidden]{display:none}
+
+/* Pastilles des menus : leur teinte passe avant les styles génériques de boutons. */
+.nted-pastille.nt-c-rouge{color:var(--ntc-rouge)}.nted-pastille.nt-c-orange{color:var(--ntc-orange)}.nted-pastille.nt-c-vert{color:var(--ntc-vert)}.nted-pastille.nt-c-bleu{color:var(--ntc-bleu)}.nted-pastille.nt-c-violet{color:var(--ntc-violet)}.nted-pastille.nt-c-rose{color:var(--ntc-rose)}.nted-pastille.nt-c-gris{color:var(--ntc-gris)}.nted-pastille.nt-c-defaut{color:var(--text)}
+.nted-pastille.nt-f-jaune{background:var(--ntf-jaune)}.nted-pastille.nt-f-vert{background:var(--ntf-vert)}.nted-pastille.nt-f-bleu{background:var(--ntf-bleu)}.nted-pastille.nt-f-rose{background:var(--ntf-rose)}.nted-pastille.nt-f-orange{background:var(--ntf-orange)}.nted-pastille.nt-f-gris{background:var(--ntf-gris)}.nted-pastille.nt-f-aucun{background:var(--bg)}
