@@ -682,6 +682,7 @@
     if (!blocs.length) out = '<div class="nted-vide">Note vide</div>';
     this.corps.innerHTML = out;
     this.peindrePresences();
+    if (this._sel) this.peindreChoix();
     if (focusI != null) this.focus(focusI, pos);
     else if (garde && garde.uid) {
       var k = this.indexUid(garde.uid);
@@ -770,7 +771,7 @@
 
   P.memoriser = function (immediat) {
     var self = this;
-    if (this.lecture || this._restauration) return;
+    if (this.lecture || this._restauration || this._lot) return;
     clearTimeout(this._tHisto);
     var faire = function () {
       self._tHisto = null;
@@ -1196,6 +1197,7 @@
   /* Commande lancée depuis le panneau d'actions de /note. */
   P.commande = function (cle) {
     if (this.lecture) return;
+    if (this._sel && !this._lot && commandeBlocs(this, cle)) return;
     var el0 = this.cible();
     var c0 = el0 && this.ctx(el0);
     if (cle === 'photo' || cle === 'galerie') return this.choisirImage(c0 ? c0.i : null, cle === 'photo');
@@ -1433,6 +1435,7 @@
     var txt = (cd && cd.getData('text/plain')) || '';
     var html = (cd && cd.getData('text/html')) || '';
     e.preventDefault();
+    if (collerBlocs(ed, el, c, cd)) return;
     /* Une adresse collée sur du texte sélectionné en fait un lien. */
     var sel = window.getSelection();
     var url = normaliserLien(txt);
@@ -1880,6 +1883,7 @@
   function etatFormat(ed) {
     var sel = window.getSelection();
     var out = { couleur: null, fond: null, taille: null, police: 'standard', gras: false, italique: false, souligne: false, barre: false, type: null, aligne: 'gauche', cellule: false };
+    if (ed && ed._sel) return etatBlocs(ed, out);
     if (!sel || !sel.rangeCount) return out;
     var r = sel.getRangeAt(0);
     var n = r.startContainer;
@@ -2360,13 +2364,17 @@
       var k = (e.key || '').toLowerCase();
       if (mod && !e.altKey && (k === 'z' || (k === 'y' && !e.metaKey))) {
         e.preventDefault();
+        if (ed._sel) ed.deschoisir();
         ed.annuler(k === 'y' || e.shiftKey);
         return;
       }
+      if (ed._sel) { toucheChoix(ed, e); return; }
+      if (entrerChoix(ed, e)) return;
       surTouche(ed, e);
     });
     corps.addEventListener('change', function (e) { surChangement(ed, e); });
     corps.addEventListener('paste', function (e) { surCollage(ed, e); });
+    brancherChoix(ed);
     corps.addEventListener('mousedown', function (e) {
       if (e.target.closest && e.target.closest('[data-tab], [data-basculer], .pb-tableau-menu')) { e.preventDefault(); return; }
       if (e.target !== corps) return;
@@ -2437,6 +2445,8 @@
       ouvrirBulleLien(ed, a);
     });
     corps.addEventListener('focusin', function (e) {
+      /* Le curseur revient dans un bloc : la sélection de blocs s'efface. */
+      if (ed._sel && !ed._lot && e.target !== corps) ed.deschoisir();
       var row = e.target.closest && e.target.closest('.pb');
       ed.signalerFocus(row ? row.dataset.uid : null);
       if (row && e.target.classList.contains('pb-txt')) ed._dernierUid = row.dataset.uid;
@@ -2455,6 +2465,440 @@
     });
     if (!ed.lecture) brancherGlisser(ed);
   }
+
+  /* ── Sélection de plusieurs blocs (comme Notion) ──
+     Chaque bloc est sa propre zone d'écriture : le navigateur ne sait pas
+     étendre une sélection de l'une à l'autre. Dès que la souris quitte le
+     bloc de départ, ou avec Maj + clic, Maj + flèche au bord d'un bloc,
+     Cmd/Ctrl + A deux fois ou Échap, on passe en sélection de blocs : les
+     blocs entiers sont surlignés, et la mise en forme, la casse, le retrait,
+     la suppression, la copie s'appliquent à tous. La sélection est gardée par
+     identifiant de bloc (elle survit aux modifications d'un autre auteur). */
+  var _choix = null;
+
+  P.choisis = function () {
+    if (!this._sel) return [];
+    var ia = this.indexUid(this._sel.a);
+    var ib = this.indexUid(this._sel.b);
+    if (ia < 0 || ib < 0) return [];
+    var a = Math.min(ia, ib);
+    var z = Math.max(ia, ib);
+    /* Un titre repliable fermé emporte ce qu'il cache. */
+    while (this._caches && this._caches[z + 1]) z++;
+    var out = [];
+    for (var i = a; i <= z; i++) out.push(i);
+    return out;
+  };
+
+  P.choisir = function (uidA, uidB) {
+    if (!uidA || !uidB) return;
+    if (_choix && _choix !== this) _choix.deschoisir();
+    var neuf = !this._sel || this._sel.a !== uidA || this._sel.b !== uidB;
+    this._sel = { a: uidA, b: uidB };
+    _choix = this;
+    fermerSlash();
+    fermerRef();
+    var s = window.getSelection();
+    if (s && s.rangeCount) s.removeAllRanges();
+    if (document.activeElement !== this.corps) {
+      this.corps.setAttribute('tabindex', '-1');
+      this.corps.focus({ preventScroll: true });
+    }
+    if (neuf) { this.peindreChoix(); majBarre(); }
+  };
+
+  P.deschoisir = function () {
+    if (!this._sel) return;
+    this._sel = null;
+    if (_choix === this) _choix = null;
+    this.peindreChoix();
+    if (_barre) { _barre.classList.remove('open', 'nted-barre-blocs'); var so = _barre.querySelector('.nted-sous'); if (so) so.hidden = true; }
+  };
+
+  P.peindreChoix = function () {
+    var dans = {};
+    this.choisis().forEach(function (i) { dans[i] = 1; });
+    this.corps.querySelectorAll('.pb').forEach(function (row) { row.classList.toggle('pb-choisi', !!dans[row.dataset.i]); });
+    this.corps.classList.toggle('nted-multi', !!this._sel);
+    try { document.dispatchEvent(new CustomEvent('nted:choix')); } catch (e) {}
+    if (this._sel && !this.choisis().length) this.deschoisir();
+  };
+
+  /* Bloc sous le pointeur, d'après la hauteur seulement : la marge, la
+     poignée et le vide sous la note comptent aussi. */
+  function blocSous(ed, y) {
+    var rows = ed.corps.querySelectorAll('.pb');
+    var dernier = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].offsetParent) continue;
+      var r = rows[i].getBoundingClientRect();
+      if (!dernier && y < r.top) return rows[i];
+      if (y <= r.bottom) return rows[i];
+      dernier = rows[i];
+    }
+    return dernier;
+  }
+
+  function brancherChoix(ed) {
+    var corps = ed.corps;
+    var depart = null;
+    corps.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      var row = e.target.closest && e.target.closest('.pb');
+      var bloc = e.target.closest && e.target.closest('.pb-txt');
+      if (e.shiftKey && row && corps.contains(row)) {
+        var ae = document.activeElement;
+        var ici = ae && corps.contains(ae) && ae.closest('.pb');
+        var origine = ed._sel ? ed._sel.a : (ici ? ici.dataset.uid : null);
+        if (origine && origine !== row.dataset.uid) {
+          e.preventDefault();
+          ed.choisir(origine, row.dataset.uid);
+          return;
+        }
+      }
+      if (ed._sel) ed.deschoisir();
+      depart = bloc && row && !e.shiftKey ? { uid: row.dataset.uid, blocs: false } : null;
+    }, true);
+    document.addEventListener('mousemove', function (e) {
+      if (!depart) return;
+      if (!(e.buttons & 1)) { depart = null; return; }
+      var row = blocSous(ed, e.clientY);
+      if (!row) return;
+      if (!depart.blocs && row.dataset.uid === depart.uid) return;
+      depart.blocs = true;
+      e.preventDefault();
+      ed.choisir(depart.uid, row.dataset.uid);
+      /* Le glissé natif continuerait de sélectionner du texte dans le bloc de départ. */
+      var s = window.getSelection();
+      if (s && s.rangeCount) s.removeAllRanges();
+    });
+    document.addEventListener('mouseup', function () { depart = null; });
+  }
+
+  /* Dans un bloc de texte : les gestes qui passent en sélection de blocs. */
+  function entrerChoix(ed, e) {
+    var t = e.target;
+    if (!t.classList || !t.classList.contains('pb-txt') || ed.lecture) return false;
+    if ((_slash && _slash.el === t) || (_ref && _ref.el === t)) return false;
+    var c = ed.ctx(t);
+    if (!c) return false;
+    var mod = e.metaKey || e.ctrlKey;
+    var k = e.key;
+    var cur = curseur(t);
+    var long = texteDe(t).length;
+    var blocs = c.blocs;
+    if (mod && !e.altKey && !e.shiftKey && k.toLowerCase() === 'a') {
+      /* Premier Cmd/Ctrl + A : le texte du bloc. Second : toute la note. */
+      if (long && !(cur.debut === 0 && cur.fin >= long)) return false;
+      e.preventDefault();
+      relire(ed, c.b, t);
+      ed.choisir(blocs[0].uid, blocs[blocs.length - 1].uid);
+      return true;
+    }
+    if (e.shiftKey && !mod && !e.altKey && (k === 'ArrowUp' || k === 'ArrowDown')) {
+      var haut = k === 'ArrowUp';
+      if (haut ? cur.debut !== 0 : cur.fin < long) return false;
+      var j = c.i + (haut ? -1 : 1);
+      while (ed._caches && ed._caches[j]) j += haut ? -1 : 1;
+      e.preventDefault();
+      relire(ed, c.b, t);
+      ed.choisir(c.b.uid, (blocs[j] || c.b).uid);
+      return true;
+    }
+    if (k === 'Escape' && !mod && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      relire(ed, c.b, t);
+      ed.choisir(c.b.uid, c.b.uid);
+      return true;
+    }
+    return false;
+  }
+
+  /* Touches pendant une sélection de blocs. */
+  function toucheChoix(ed, e) {
+    var idx = ed.choisis();
+    var blocs = ed.blocs();
+    if (!idx.length) { ed.deschoisir(); return; }
+    var mod = e.metaKey || e.ctrlKey;
+    var k = e.key;
+    var kl = k.toLowerCase();
+    var premier = idx[0];
+    var dernier = idx[idx.length - 1];
+    if (k === 'Shift' || k === 'Meta' || k === 'Control' || k === 'Alt') return;
+    if (mod && !e.altKey && kl === 'a') { e.preventDefault(); return ed.choisir(blocs[0].uid, blocs[blocs.length - 1].uid); }
+    if (mod && !e.altKey && !e.shiftKey && (kl === 'c' || kl === 'x')) { e.preventDefault(); return copierBlocs(ed, kl === 'x'); }
+    if (mod && !e.altKey && !e.shiftKey && kl === 'v') {
+      /* Coller remplace les blocs choisis, comme une sélection de texte. */
+      if (ed.lecture) return;
+      remplacerParVide(ed, idx);
+      return;
+    }
+    if (mod && !e.altKey) {
+      var f = !e.shiftKey && kl === 'b' ? 'gras' : !e.shiftKey && kl === 'i' ? 'italique' : !e.shiftKey && kl === 'u' ? 'souligne'
+        : e.shiftKey && (kl === 's' || kl === 'x') ? 'barre' : null;
+      if (f) { e.preventDefault(); ed.commande(f); }
+      return;
+    }
+    if (e.shiftKey && (k === 'ArrowUp' || k === 'ArrowDown')) {
+      e.preventDefault();
+      var j = ed.indexUid(ed._sel.b) + (k === 'ArrowUp' ? -1 : 1);
+      while (ed._caches && ed._caches[j]) j += k === 'ArrowUp' ? -1 : 1;
+      if (blocs[j]) ed.choisir(ed._sel.a, blocs[j].uid);
+      return;
+    }
+    if (k === 'Tab') { e.preventDefault(); if (!ed.lecture) ed.commande(e.shiftKey ? 'recaler' : 'decaler'); return; }
+    if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); if (!ed.lecture) supprimerBlocs(ed, idx); return; }
+    if (k === 'Escape' || k === 'ArrowUp' || k === 'ArrowLeft') { e.preventDefault(); ed.deschoisir(); ed.focus(premier, 0); return; }
+    if (k === 'ArrowDown' || k === 'ArrowRight' || k === 'Enter') { e.preventDefault(); ed.deschoisir(); ed.focus(dernier, -1); return; }
+    /* Une lettre tapée ne remplace pas les blocs (trop facile à faire par erreur). */
+    if (k.length === 1) e.preventDefault();
+  }
+
+  /* Applique fn à chaque bloc choisi, son texte entier sélectionné, en une
+     seule étape d'annulation. */
+  function surBlocs(ed, idx, fn, memeVides) {
+    var uids = idx.map(function (i) { return ed.blocs()[i].uid; });
+    /* La frappe en cours devient d'abord sa propre étape d'annulation. */
+    if (ed._tHisto) { clearTimeout(ed._tHisto); ed._tHisto = null; ed.memoriser(true); }
+    ed._lot = true;
+    try {
+      uids.forEach(function (u) {
+        var i = ed.indexUid(u);
+        var el = i >= 0 ? ed.elTexte(i) : null;
+        if (!el || (!memeVides && (!texteDe(el).trim() || ed.blocs()[i].type === 'code'))) return;
+        el.focus({ preventScroll: true });
+        var r = document.createRange();
+        r.selectNodeContents(el);
+        var s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+        fn(el, ed.blocs()[i]);
+      });
+    } finally {
+      ed._lot = false;
+    }
+    var s2 = window.getSelection();
+    if (s2) s2.removeAllRanges();
+    ed.corps.focus({ preventScroll: true });
+    ed.peindreChoix();
+    ed.memoriser(true);
+    ed.modifie();
+    majBarre();
+  }
+
+  function commandeBlocs(ed, cle) {
+    var idx = ed.choisis();
+    if (!idx.length) { ed.deschoisir(); return false; }
+    if (cle === 'annuler' || cle === 'retablir') { ed.deschoisir(); return false; }
+    var blocs = ed.blocs();
+    if (cle === 'decaler' || cle === 'recaler') {
+      var d = cle === 'decaler' ? 1 : -1;
+      idx.forEach(function (i) {
+        var r = Math.max(0, Math.min(RETRAIT_MAX, (blocs[i].retrait || 0) + d));
+        if (r) blocs[i].retrait = r; else delete blocs[i].retrait;
+      });
+      ed.restructure();
+      return true;
+    }
+    var fmt = { gras: 'bold', italique: 'italic', souligne: 'underline', barre: 'strikeThrough' }[cle];
+    if (fmt) {
+      /* Comme Word : tout est déjà en gras → on l'enlève, sinon on le met partout. */
+      var tous = true;
+      surBlocs(ed, idx, function () { try { if (!document.queryCommandState(fmt)) tous = false; } catch (e) { tous = false; } });
+      surBlocs(ed, idx, function (el, b) {
+        var on = false;
+        try { on = document.queryCommandState(fmt); } catch (e) {}
+        if (on === tous) document.execCommand(fmt, false);
+        ed.lire(b, el);
+      });
+      return true;
+    }
+    if (/^(style|taille|casse|couleur|fond|police):/.test(cle) || cle === 'effacer_format') {
+      surBlocs(ed, idx, function () { ed.commande(cle); });
+      return true;
+    }
+    if (/^aligne:/.test(cle)) {
+      var al = cle.slice(7);
+      if (ALIGNEMENTS.indexOf(al) < 0) return true;
+      idx.forEach(function (i) {
+        if (NON_TEXTE[blocs[i].type]) return;
+        if (al === 'gauche') delete blocs[i].aligne; else blocs[i].aligne = al;
+      });
+      ed.restructure();
+      return true;
+    }
+    var cmd = null;
+    commandesDe(ed).forEach(function (x) { if (x.cle === cle) cmd = x; });
+    if (cmd && cmd.type && TYPES_TEXTE[cmd.type]) {
+      var textes = idx.filter(function (i) { return TYPES_TEXTE[blocs[i].type]; });
+      var deja = textes.every(function (i) { return blocs[i].type === cmd.type; });
+      textes.forEach(function (i) {
+        var b = blocs[i];
+        b.type = deja && cmd.type !== 'p' ? 'p' : cmd.type;
+        if (b.type === 'todo') b.coche = !!b.coche; else delete b.coche;
+        if (b.type === 'code') delete b.html;
+      });
+      ed.restructure();
+      return true;
+    }
+    if (cle === 'commenter') return true;
+    /* Insertion (image, tableau, date…) : sous le dernier bloc choisi. */
+    var der = idx[idx.length - 1];
+    ed.deschoisir();
+    ed.focus(der, -1);
+    return false;
+  }
+
+  function supprimerBlocs(ed, idx) {
+    var blocs = ed.blocs();
+    var premier = idx[0];
+    for (var j = idx.length - 1; j >= 0; j--) blocs.splice(idx[j], 1);
+    ed.deschoisir();
+    if (!blocs.length) blocs.push({ uid: uid(), type: 'p', texte: '' });
+    ed.restructure(Math.max(0, premier - 1), premier > 0 ? -1 : 0);
+  }
+
+  function remplacerParVide(ed, idx) {
+    var blocs = ed.blocs();
+    var premier = idx[0];
+    for (var j = idx.length - 1; j >= 0; j--) blocs.splice(idx[j], 1);
+    blocs.splice(premier, 0, { uid: uid(), type: 'p', texte: '' });
+    ed.deschoisir();
+    ed.restructure(premier, 0);
+  }
+
+  /* Copie : texte simple (puces et numéros compris, relus au collage),
+     HTML pour Word ou un e-mail, et les blocs eux-mêmes pour une note. */
+  var TYPE_BLOCS = 'application/x-mysifa-blocs';
+  function copierBlocs(ed, couper) {
+    var idx = ed.choisis();
+    var blocs = ed.blocs();
+    var liste = idx.map(function (i) { return copie(blocs[i]); });
+    var lignes = [];
+    var html = [];
+    idx.forEach(function (i) {
+      var b = blocs[i];
+      var texte = b.type === 'image' ? (b.legende || '') : (b.texte || '');
+      if (b.type === 'sep') texte = '';
+      var marque = b.type === 'puce' ? '• ' : b.type === 'num' ? marqueNum(ed.numero(blocs, i), b.retrait || 0) + ' ' : b.type === 'todo' ? (b.coche ? '[x] ' : '[ ] ') : '';
+      lignes.push(new Array((b.retrait || 0) + 1).join('  ') + marque + texte);
+      var corpsH = b.type === 'tableau' || b.type === 'image' || b.type === 'sep' ? esc(texte) : htmlDe(b);
+      var balise = /^h[123]$/.test(b.type) ? b.type : 'p';
+      var marge = b.retrait ? ' style="margin-left:' + (b.retrait * 1.5) + 'em"' : '';
+      html.push('<' + balise + marge + '>' + esc(marque) + corpsH + '</' + balise + '>');
+    });
+    var fait = false;
+    function surCopie(e) {
+      e.preventDefault();
+      e.clipboardData.setData('text/plain', lignes.join('\n'));
+      e.clipboardData.setData('text/html', html.join(''));
+      try { e.clipboardData.setData(TYPE_BLOCS, JSON.stringify(liste)); } catch (x) {}
+      fait = true;
+    }
+    document.addEventListener('copy', surCopie, true);
+    try { document.execCommand('copy'); } catch (x) {} finally { document.removeEventListener('copy', surCopie, true); }
+    if (!fait) {
+      if (ed.opts.signaler) ed.opts.signaler('Copie refusée par le navigateur — sélectionnez le texte d\'un bloc.', 'info');
+      return;
+    }
+    if (couper && !ed.lecture) supprimerBlocs(ed, idx);
+  }
+
+  /* Blocs copiés depuis une note : collés tels quels (styles, cases, retraits). */
+  function collerBlocs(ed, el, c, cd) {
+    var brut = '';
+    try { brut = (cd && cd.getData(TYPE_BLOCS)) || ''; } catch (x) {}
+    if (!brut || c.b.type === 'code') return false;
+    var liste;
+    try { liste = JSON.parse(brut); } catch (x) { return false; }
+    if (!Array.isArray(liste) || !liste.length) return false;
+    liste = liste.filter(function (b) { return b && typeof b === 'object' && TYPES[b.type] && b.type !== 'page'; }).map(function (b) {
+      var n = copie(b);
+      n.uid = uid();
+      if (n.html) { n.html = assainir(n.html); if (!aMiseEnForme(n.html)) delete n.html; }
+      return n;
+    });
+    if (!liste.length) return false;
+    if (liste.length + c.blocs.length > BLOCS_MAX) {
+      if (ed.opts.signaler) ed.opts.signaler('Note trop longue — ' + BLOCS_MAX + ' blocs au plus.');
+      return true;
+    }
+    relire(ed, c.b, el);
+    var remplace = c.b.type === 'p' && !c.b.texte.trim();
+    Array.prototype.splice.apply(c.blocs, [remplace ? c.i : c.i + 1, remplace ? 1 : 0].concat(liste));
+    var der = (remplace ? c.i : c.i + 1) + liste.length - 1;
+    ed.restructure(der, -1);
+    return true;
+  }
+
+  /* État affiché par les barres pendant une sélection de blocs : celui du
+     premier bloc qui a du texte ; le type n'est donné que s'il est commun. */
+  function etatBlocs(ed, out) {
+    var idx = ed.choisis();
+    var blocs = ed.blocs();
+    var types = {};
+    idx.forEach(function (i) { types[blocs[i].type] = 1; });
+    var tk = Object.keys(types);
+    out.type = tk.length === 1 ? tk[0] : null;
+    var el = null;
+    for (var j = 0; j < idx.length && !el; j++) {
+      var x = ed.elTexte(idx[j]);
+      if (x && texteDe(x).trim()) { el = x; out.aligne = blocs[idx[j]].aligne || 'gauche'; }
+    }
+    if (!el) return out;
+    var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    var n = w.nextNode();
+    while (n && !n.data.trim()) n = w.nextNode();
+    var e = n ? n.parentNode : el;
+    out.taille = Math.round(parseFloat(window.getComputedStyle(e).fontSize) * 0.75) || null;
+    for (var y = e; y && y !== el; y = y.parentNode) {
+      var t = y.tagName;
+      if (t === 'B' || t === 'STRONG') out.gras = true;
+      if (t === 'I' || t === 'EM') out.italique = true;
+      if (t === 'U') out.souligne = true;
+      if (t === 'S' || t === 'STRIKE' || t === 'DEL') out.barre = true;
+      if (t !== 'SPAN') continue;
+      if (!out.couleur && porte(y, 'color')) out.couleur = versHex(window.getComputedStyle(y).color);
+      if (!out.fond && porte(y, 'background-color')) out.fond = versHex(window.getComputedStyle(y).backgroundColor);
+      if (out.police === 'standard' && y.style.fontFamily) { var p0 = policeDe(y.style.fontFamily); if (p0) out.police = p0.cle; }
+    }
+    return out;
+  }
+
+  /* Barre flottante au-dessus des blocs choisis (sans lien, code ni commentaire). */
+  function barreBlocs(b, ed) {
+    var idx = ed.choisis();
+    var rows = idx.map(function (i) { return ed.corps.querySelector('.pb[data-i="' + i + '"]'); }).filter(function (r) { return r && r.offsetParent; });
+    if (!rows.length || ed.lecture) { b.classList.remove('open'); return; }
+    b._ed = ed;
+    b._el = ed.elTexte(idx[0]) || ed.corps;
+    b.classList.add('nted-barre-blocs');
+    b.querySelectorAll('.nted-fmt').forEach(function (x) { x.hidden = false; });
+    var bc = b.querySelector('.nted-commenter');
+    if (bc) bc.hidden = true;
+    var et = etatBlocs(ed, { gras: false, italique: false, souligne: false, barre: false });
+    [['bold', 'gras'], ['italic', 'italique'], ['underline', 'souligne'], ['strikeThrough', 'barre']].forEach(function (k) {
+      var btn = b.querySelector('[data-cmd="' + k[0] + '"]');
+      if (btn) btn.classList.toggle('actif', !!et[k[1]]);
+    });
+    var sous = b.querySelector('.nted-sous');
+    var fixe = b.classList.contains('open') && sous && !sous.hidden;
+    b.classList.add('open');
+    if (fixe) return;
+    var r0 = rows[0].getBoundingClientRect();
+    var r1 = rows[rows.length - 1].getBoundingClientRect();
+    var rect = { left: r0.left, width: Math.max(r0.width, 1), top: Math.max(r0.top, 0), bottom: Math.min(r1.bottom, window.innerHeight) };
+    placerBarre(b, rect);
+  }
+
+  /* Un clic ailleurs que dans les barres d'outils défait la sélection de blocs. */
+  document.addEventListener('mousedown', function (e) {
+    if (!_choix) return;
+    var t = e.target;
+    if (_choix.corps.contains(t)) return;
+    if (t.closest && t.closest('#nted-barre, .ntf, .ntf-pop, #nt-panneau, .nt-clavier, .nted-sous')) return;
+    _choix.deschoisir();
+  }, true);
 
   /* ── Barre de mise en forme (au-dessus d'une sélection) ── */
 
@@ -2488,10 +2932,14 @@
       var menu = e.target.closest('[data-menu]');
       if (menu) {
         var sous = _barre.querySelector('.nted-sous');
-        var meme = !sous.hidden && sous.dataset.menu === menu.dataset.menu;
+        /* Le menu ouvert est noté dans data-ouvert, pas data-menu : sinon un
+           clic dans le sous-menu serait pris pour un clic sur son bouton. */
+        var meme = !sous.hidden && sous.dataset.ouvert === menu.dataset.menu;
         sous.hidden = meme;
-        sous.dataset.menu = menu.dataset.menu;
+        sous.dataset.ouvert = menu.dataset.menu;
         if (!meme) { sous.innerHTML = sousMenu(menu.dataset.menu); peindreEtat(sous, _barre._ed); }
+        var selM = window.getSelection();
+        if (selM && selM.rangeCount) placerBarre(_barre, selM.getRangeAt(0).getBoundingClientRect());
         return;
       }
       var btn = e.target.closest('[data-cmd]');
@@ -2508,6 +2956,11 @@
         var citation = sel ? sel.toString() : '';
         _barre.classList.remove('open');
         if (_barre._ed.opts.surCommenter) _barre._ed.opts.surCommenter({ bloc_uid: row ? row.dataset.uid : null, citation: citation });
+        return;
+      }
+      if (_barre._ed._sel) {
+        var cle = { bold: 'gras', italic: 'italique', underline: 'souligne', strikeThrough: 'barre' }[btn.dataset.cmd];
+        if (cle) _barre._ed.commande(cle);
         return;
       }
       formater(_barre._ed, _barre._el, btn.dataset.cmd);
@@ -2639,6 +3092,8 @@
   function majBarre() {
     var sel = window.getSelection();
     var b = barre();
+    if (_choix && _choix._sel) return barreBlocs(b, _choix);
+    b.classList.remove('nted-barre-blocs');
     if (!sel || !sel.rangeCount || sel.isCollapsed) {
       b.classList.remove('open');
       var sous0 = b.querySelector('.nted-sous');
@@ -2665,12 +3120,36 @@
       try { actif = document.queryCommandState(k); } catch (e) {}
       if (btn) btn.classList.toggle('actif', !!actif);
     });
-    var rect = sel.getRangeAt(0).getBoundingClientRect();
+    /* Sous-menu ouvert sur le même texte : la barre ne bouge plus, sinon le
+       clic suivant tomberait à côté de la case visée. */
+    var sousO = b.querySelector('.nted-sous');
+    var fixe = b.classList.contains('open') && sousO && !sousO.hidden && b._elPose === el;
+    b._elPose = el;
     b.classList.add('open');
+    if (!fixe) placerBarre(b, sel.getRangeAt(0).getBoundingClientRect());
+  }
+
+  /* Au-dessus de la sélection si la barre (et son sous-menu) y tient, sinon
+     en dessous : jamais par-dessus le texte sélectionné. */
+  function placerBarre(b, rect) {
     var w = b.offsetWidth || 240;
+    var sous = b.querySelector('.nted-sous');
+    if (sous) { sous.style.maxHeight = ''; sous.style.overflowY = ''; }
+    var h = b.offsetHeight;
+    var dessus = rect.top - 16;
+    var dessous = window.innerHeight - rect.bottom - 16;
+    if (sous && !sous.hidden && h > Math.max(dessus, dessous)) {
+      /* Trop haut des deux côtés : le sous-menu défile dans la place disponible. */
+      var ligne = h - sous.offsetHeight;
+      sous.style.maxHeight = Math.max(120, Math.max(dessus, dessous) - ligne) + 'px';
+      sous.style.overflowY = 'auto';
+      h = b.offsetHeight;
+      if (dessus < dessous) { b.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, rect.left + rect.width / 2 - w / 2)) + 'px'; b.style.top = (rect.bottom + 8) + 'px'; return; }
+    }
     var left = Math.max(8, Math.min(window.innerWidth - w - 8, rect.left + rect.width / 2 - w / 2));
-    var top = rect.top - b.offsetHeight - 8;
+    var top = rect.top - h - 8;
     if (top < 8) top = rect.bottom + 8;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, window.innerHeight - h - 8);
     b.style.left = left + 'px';
     b.style.top = top + 'px';
   }

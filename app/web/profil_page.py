@@ -351,7 +351,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_humeur.js"></script>
-<script src="/static/mysifa_postit.js?v=13"></script>
+<script src="/static/mysifa_postit.js?v=15"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>

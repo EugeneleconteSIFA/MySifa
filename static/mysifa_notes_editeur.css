@@ -453,3 +453,12 @@ span.nt-f-jaune,span.nt-f-vert,span.nt-f-bleu,span.nt-f-rose,span.nt-f-orange,sp
 .nted-casses button{padding:7px 10px;border:none;border-radius:6px;background:transparent;color:var(--text);font:500 13px/1.2 inherit;font-family:inherit;text-align:left;cursor:pointer}
 .nted-casses button:hover{background:var(--bg)}
 .nted-choix button.actif{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
+/* Sélection de plusieurs blocs (glissé d'un bloc à l'autre, Maj + clic,
+   Cmd/Ctrl + A deux fois, Échap). */
+.nted:focus{outline:none}
+.pb.pb-choisi{background:color-mix(in srgb,var(--nted-accent-d) 16%,transparent);border-radius:4px}
+.pb.pb-choisi + .pb.pb-choisi{border-top-left-radius:0;border-top-right-radius:0}
+.nted-multi .pb-txt{caret-color:transparent}
+.nted-multi .pb-txt::selection,.nted-multi .pb-txt *::selection{background:transparent}
+#nted-barre.nted-barre-blocs [data-cmd="lien"],#nted-barre.nted-barre-blocs [data-cmd="code"]{display:none}
