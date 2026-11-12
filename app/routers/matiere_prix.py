@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, 
 from database import get_db
 from services.auth_service import get_current_user, user_has_app_access
 from config import DATA_DIR
+from app.routers.pricing import _prix_achat_seul
 
 router = APIRouter()
 
@@ -24,6 +25,10 @@ def _require_pricing(request: Request) -> dict:
     user = get_current_user(request)
     if not user_has_app_access(user, "pricing"):
         raise HTTPException(status_code=403, detail="Accès Coûts matières requis")
+    # L'ADV n'a de Coûts matières que la saisie du prix d'achat : cette API
+    # (marges, paramètres, imports) lui reste fermée.
+    if _prix_achat_seul(user):
+        raise HTTPException(status_code=403, detail="Accès limité à la saisie du prix d'achat des matières.")
     return user
 
 

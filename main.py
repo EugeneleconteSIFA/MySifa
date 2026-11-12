@@ -779,6 +779,16 @@ def _boutons_flottants(request: Request, body: bytes) -> tuple[bytes, bytes]:
     if not request.cookies.get("sifa_token") or "widget" in q or q.get("embed") == "1":
         return tete, b""
     off = set(_bf.coupes(reglages, appli))
+    if "ecoute" not in off:
+        # L'écoute appartient à l'espace Réunions (ROLES_REUNIONS) : pas de
+        # bouton pour les autres rôles.
+        try:
+            from config import ROLES_REUNIONS as _rr
+            from services.auth_service import effective_role as _er, get_current_user as _gcu
+            if _er(_gcu(request)) not in _rr:
+                off.add("ecoute")
+        except Exception:
+            off.add("ecoute")
     pied = b""
     for chemin, cle in _BOUTONS_CSS:
         if chemin not in body and (cle is None or cle not in off):

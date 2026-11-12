@@ -1,7 +1,8 @@
 """MySifa — Reunions : espace commun, points de production, actions (endpoints).
 
 Deux publics :
-  - l'espace Reunions (`/reunions`) : tout utilisateur connecte. Chaque lecture
+  - l'espace Reunions (`/reunions`) : direction, administration, superadmin
+    (ROLES_REUNIONS). Chaque lecture
     passe par `rn.peut_voir` — liste, detail, precedente. Les chiffres de
     production d'une reunion ne sont servis qu'aux roles de production.
   - l'onglet Actions de MyProd : roles de production (`_autorise`). Le suivi
@@ -20,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from config import (CODE_ANNUL_DOS, CODE_ARRIVEE, CODE_DEBUT_DOS,
                     CODE_DEPART, CODE_FIN_DOS, PROD_VITESSE_MAX_M_MIN, ROLE_LABELS,
-                    ROLES_PROD)
+                    ROLES_PROD, ROLES_REUNIONS)
 from database import get_db
 from services.auth_service import (can_access_settings_communication, effective_role,
                                    get_current_user, is_superadmin)
@@ -43,9 +44,20 @@ def _auteur(user: Dict[str, Any]) -> str:
 
 
 def _lecteur(request: Request):
-    """(user, qui) pour l'espace Reunions : tout utilisateur connecte."""
+    """(user, qui) pour les lectures de reunions. L'espace Reunions est reserve
+    a ROLES_REUNIONS ; ROLES_PROD garde l'acces pour l'onglet Actions de MyProd,
+    qui passe par les memes endpoints."""
     user = get_current_user(request)
+    if effective_role(user) not in (ROLES_REUNIONS | ROLES_PROD):
+        raise HTTPException(status_code=403, detail="Acces reserve.")
     return user, rn.lecteur(user, effective_role(user), is_superadmin(user))
+
+
+def _espace(request: Request) -> Dict[str, Any]:
+    user = get_current_user(request)
+    if effective_role(user) not in ROLES_REUNIONS:
+        raise HTTPException(status_code=403, detail="Espace Reunions reserve a la direction et a l'administration.")
+    return user
 
 
 def _voit_prod(user: Dict[str, Any]) -> bool:
@@ -273,7 +285,7 @@ async def lancer_reunion(request: Request):
     `espace: true`, une reunion de l'espace commun, toujours creee."""
     body = await request.json()
     espace = bool(body.get("espace"))
-    user = get_current_user(request) if espace else _autorise(request)
+    user = _espace(request) if espace else _autorise(request)
     roles = body.get("roles_visibles")
     with get_db() as conn:
         r = rn.lancer(

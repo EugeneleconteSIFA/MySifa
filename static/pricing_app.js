@@ -9,6 +9,10 @@
 
   const S = {
     canWrite: !!INIT.canWrite,
+    // ADV : la liste des matières seule, pour corriger un prix d'achat. Ni
+    // produits, ni fournisseurs, ni paramétrage, ni coût au m² — le serveur
+    // refuse ces routes et retire ces champs, l'écran ne les propose pas.
+    prixAchatSeul: !!INIT.prixAchatSeul,
     msOuvertes: new Set(),
     msOuvertesF: new Set(),
     user: INIT.user || {},
@@ -645,6 +649,7 @@
 
   // `path` : route d'un chemin donné (navigate() en a besoin avant de l'empiler).
   function parseRoute(path) {
+    if (S.prixAchatSeul) return { name: "materials", id: null };
     const p = (path || window.location.pathname).replace(/\/+$/, "") || "/pricing";
     const parts = p.split("/").filter(Boolean);
     // Plus de tableau de bord : /pricing ouvre directement les matières.
@@ -774,6 +779,9 @@
   async function pricingFicheUrl(complet) {
     let u;
     try { u = new URLSearchParams(window.location.search); } catch (e) { return; }
+    // Aucune fenêtre du module n'est ouverte à l'ADV (tarifs, historique,
+    // fiche technique) : une adresse qui en demande une ouvre la liste seule.
+    if (S.prixAchatSeul) return;
     const mr = document.getElementById("modal-root");
     const cles = ["parametres", "tarif", "historique_prix", "panneau_matiere"];
     const k = cles.find((c) => u.has(c));
@@ -788,6 +796,7 @@
       else if (k === "panneau_matiere" && /^[0-9]+$/.test(v)) await openMaterialDrawer(v);
       return;
     }
+    if (S.prixAchatSeul) return;
     let v = u.get("fiche");
     const ouverte = document.getElementById("ft-back");
     if (!v) { if (ouverte && complet && !k) ouverte.remove(); _ficheUrl = null; return; }
@@ -891,6 +900,7 @@
       // fiche fournisseur de Réglages en porte un raccourci.
       { path: "/pricing/fournisseurs", label: "Fournisseurs", route: "fournisseurs", icon: "truck" },
     ];
+    if (S.prixAchatSeul) items.splice(1);
     if (S.canWrite) {
       items.push({ path: "/pricing/settings", label: "Paramètres", route: "settings", icon: "settings" });
     }
@@ -980,6 +990,11 @@
   }
 
   async function loadBaseData() {
+    if (S.prixAchatSeul) {
+      const cats = await api("/api/pricing/categories");
+      S.categories = cats.categories || [];
+      return;
+    }
     const [cats, sups, fourn, settings] = await Promise.all([
       api("/api/pricing/categories"),
       api("/api/pricing/suppliers?active_only=false"),
@@ -1374,7 +1389,9 @@
   function msLibelleLienHtml(m) {
     const lib = m.designation || m.reference || "";
     const decls = m.declinaisons || [];
-    const lien = decls.length
+    const lien = S.prixAchatSeul
+      ? `<span class="msl-lib">${escHtml(lib)}</span>`
+      : decls.length
       ? `<a class="msl-lib" href="/pricing/mystock/${decls[0].id}" title="${escAttr(lib + " — ouvrir la fiche")}">${escHtml(lib)}</a>`
       : `<a class="msl-lib" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="${escAttr(lib + " — ouvrir dans MyStock")}">${escHtml(lib)}</a>`;
     // Libellés techniques des variantes fournisseur, sous le commercial.
@@ -1587,7 +1604,7 @@
     // saisie les aligne, mais il ne prétend pas afficher « le » prix.
     const memePrix = m.prix_min != null
       && Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9;
-    const editable = S.canWrite && decls.length > 0 && fourns.length <= 1;
+    const editable = (S.canWrite || S.prixAchatSeul) && decls.length > 0 && fourns.length <= 1;
 
     let prixCell;
     if (editable) {
@@ -1611,7 +1628,9 @@
       const raison = !decls.length
         ? "Matière sans ligne de prix — à compléter dans MyStock"
         : (fourns.length > 1
-            ? "Plusieurs fournisseurs sur cette matière — à régler sur la fiche"
+            ? (S.prixAchatSeul
+                ? "Plusieurs fournisseurs sur cette matière — prix à régler par la Direction"
+                : "Plusieurs fournisseurs sur cette matière — à régler sur la fiche")
             : "Lecture seule");
       prixCell = `<span title="${escAttr(raison)}">${mystockPrixResume(m)}</span>`;
     }
@@ -1625,18 +1644,19 @@
       ? ((decls[0].lignes || []).find((l) => l.principal) || (decls[0].lignes || [])[0])
       : null;
     const fid = principale && principale.fournisseur_id != null ? principale.fournisseur_id : null;
-    const tarifBtn = fid
+    const tarifBtn = fid && !S.prixAchatSeul
       ? `<button type="button" class="ms-tarif-btn" data-ms-tarif="${fid}|${m.id}"
            title="Tarif de ${escAttr(principale.fournisseur_nom || "ce fournisseur")} pour ${escAttr(m.reference)} : transport, taxes, base de prix${principale.a_tarif === false ? " — aucun tarif propre, réglages hérités" : ""}">${icon("truck", 13)}${principale.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
       : "";
 
-    const fiche = decls.length
+    const fiche = decls.length && !S.prixAchatSeul
       ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé du coût">Paramétrage</a>`
       : "";
-    const ficheTech = `<button type="button" class="btn btn-soft btn-sm" data-ft-matiere="${m.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>`;
+    const ficheTech = S.prixAchatSeul ? "" : `<button type="button" class="btn btn-soft btn-sm" data-ft-matiere="${m.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>`;
 
-    const ouvert = S.msOuvertes.has(m.id);
-    const chev = `<button type="button" class="msl-chev${ouvert ? " on" : ""}" data-ms-chev="${m.id}"
+    // Le détail par fournisseur montre les coûts au m² : pas pour l'ADV.
+    const ouvert = !S.prixAchatSeul && S.msOuvertes.has(m.id);
+    const chev = S.prixAchatSeul ? "" : `<button type="button" class="msl-chev${ouvert ? " on" : ""}" data-ms-chev="${m.id}"
         aria-expanded="${ouvert}" title="${ouvert ? "Masquer" : "Voir"} les prix de chaque fournisseur">▸</button>`;
     return `<tr class="msl-row${ouvert ? " msl-ouverte" : ""}" data-ms-mat="${m.id}">
         <td>${chev}${categorieBadge(m.categorie)}</td>
@@ -1672,7 +1692,7 @@
 
     const memePrix = m.prix_min != null
       && Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9;
-    const editable = S.canWrite && decls.length > 0 && fourns.length <= 1;
+    const editable = (S.canWrite || S.prixAchatSeul) && decls.length > 0 && fourns.length <= 1;
 
     let prixBloc;
     if (editable) {
@@ -1698,7 +1718,9 @@
       const raison = !decls.length
         ? "Matière sans ligne de prix — à compléter dans MyStock"
         : (fourns.length > 1
-            ? "Plusieurs fournisseurs sur cette matière — à régler sur la fiche"
+            ? (S.prixAchatSeul
+                ? "Plusieurs fournisseurs sur cette matière — prix à régler par la Direction"
+                : "Plusieurs fournisseurs sur cette matière — à régler sur la fiche")
             : "Lecture seule");
       prixBloc = `<div class="msf-prix-lock">${icon("lock", 15)}
           <span><strong>${mystockPrixResume(m)}</strong> · ${escHtml(raison)}</span></div>`;
@@ -1708,15 +1730,15 @@
       ? ((decls[0].lignes || []).find((l) => l.principal) || (decls[0].lignes || [])[0])
       : null;
     const fid = principale && principale.fournisseur_id != null ? principale.fournisseur_id : null;
-    const tarifBtn = fid
+    const tarifBtn = fid && !S.prixAchatSeul
       ? `<button type="button" class="ms-tarif-btn msf-icon-btn msl-card-tarif" data-ms-tarif="${fid}|${m.id}"
            title="Tarif de ${escAttr(principale.fournisseur_nom || "ce fournisseur")} pour ${escAttr(m.reference)} : transport, taxes, base de prix${principale.a_tarif === false ? " — aucun tarif propre, réglages hérités" : ""}"
            aria-label="Tarif fournisseur">${icon("truck", 17)}${principale.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
       : "";
-    const fiche = decls.length
+    const fiche = decls.length && !S.prixAchatSeul
       ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé du coût">Paramétrage</a>`
       : "";
-    const ficheTech = `<button type="button" class="btn btn-soft btn-sm" data-ft-matiere="${m.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>`;
+    const ficheTech = S.prixAchatSeul ? "" : `<button type="button" class="btn btn-soft btn-sm" data-ft-matiere="${m.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>`;
 
     return `<article class="msf-card msl-card" data-ms-mat="${m.id}">
         <div class="msf-card-head">

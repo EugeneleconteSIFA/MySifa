@@ -14,7 +14,7 @@ import httpx
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from config import ROLES_PRICING_WRITE, ROLES_SETTINGS_LOGISTIQUE
+from config import ROLES_PRICING_PRIX_ACHAT, ROLES_PRICING_WRITE, ROLES_SETTINGS_LOGISTIQUE
 from database import get_db
 from app.services.auth_service import get_current_user, effective_role, user_has_app_access
 from app.services import encres_rvgi
@@ -78,11 +78,74 @@ _FX_API_URL = "https://api.exchangerate.host/latest"
 _FX_SOURCE = "exchangerate.host"
 
 
+# ─── Accès « prix d'achat seul » (administration des ventes) ───────
+# L'ADV ouvre la liste des matières pour corriger un prix d'achat. Elle ne voit
+# ni produits, ni fournisseurs, ni paramétrage, ni coût au m² : seules ces
+# routes lui répondent, toutes les autres renvoient 403 même si un écran les
+# appelait. Liste fermée : une route ajoutée au module reste réservée tant
+# qu'on ne l'inscrit pas ici.
+_ROUTES_PRIX_ACHAT = frozenset({
+    "/api/pricing/categories",
+    "/api/pricing/mystock/materials",
+    "/api/pricing/mystock/prix-matiere",
+})
+
+# Ce que la liste des matières garde pour elle : de quoi afficher et saisir le
+# prix d'achat, le fournisseur et la date. Transport, taxes, devise de calcul,
+# perte, marge et coût au m² sont retirés AVANT de partir.
+_CLES_DECL_PRIX_ACHAT = ("id", "libelle", "laize_mm", "prix_principal", "unit_price")
+_CLES_LIGNE_PRIX_ACHAT = (
+    "id", "fournisseur_id", "fournisseur_nom", "fournisseur_fsc",
+    "prix", "principal", "updated_at", "updated_by_name",
+)
+
+
+def _prix_achat_seul(user: dict) -> bool:
+    """Vrai pour un rôle limité à la saisie du prix d'achat.
+
+    Rôle effectif : un super admin qui joue l'ADV voit exactement son écran.
+    """
+    role = effective_role(user)
+    return role in ROLES_PRICING_PRIX_ACHAT and role not in ROLES_PRICING_WRITE
+
+
+def _materiaux_prix_achat(materials: list[dict]) -> list[dict]:
+    out = []
+    for m in materials:
+        decls = []
+        for d in m.get("declinaisons", []):
+            dd = {k: d.get(k) for k in _CLES_DECL_PRIX_ACHAT}
+            dd["lignes"] = [
+                {k: l.get(k) for k in _CLES_LIGNE_PRIX_ACHAT} for l in d.get("lignes", [])
+            ]
+            decls.append(dd)
+        mm = {k: v for k, v in m.items() if k not in ("nb_appairees", "nb_parametrees", "nb_chiffrees")}
+        mm["declinaisons"] = decls
+        out.append(mm)
+    return out
+
+
 def _require_read(request: Request) -> dict:
     user = get_current_user(request)
     if not user_has_app_access(user, "pricing"):
         raise HTTPException(status_code=403, detail="Accès Coûts matières requis")
+    if _prix_achat_seul(user) and request.url.path not in _ROUTES_PRIX_ACHAT:
+        raise HTTPException(
+            status_code=403,
+            detail="Accès limité à la saisie du prix d'achat des matières.",
+        )
     return user
+
+
+def _require_prix_achat(request: Request) -> dict:
+    """Saisie du prix d'achat d'une matière : Direction, ou ADV."""
+    user = _require_read(request)
+    if user.get("role") in ROLES_PRICING_WRITE or _prix_achat_seul(user):
+        return user
+    raise HTTPException(
+        status_code=403,
+        detail="Saisie du prix d'achat réservée à la Direction et à l'ADV.",
+    )
 
 
 def _require_write(request: Request) -> dict:
@@ -1421,7 +1484,7 @@ def list_mystock_materials(
     active_only: bool = Query(True),
 ):
     """Une ligne par matière MyStock devisable, avec ses déclinaisons et prix."""
-    _require_read(request)
+    user = _require_read(request)
     with get_db() as conn:
         # Les encres naissent du miroir RVGI : sans cette relecture, une encre
         # nouvelle n'apparaîtrait qu'après un passage par la valorisation.
@@ -1493,6 +1556,9 @@ def list_mystock_materials(
             ).fetchall()
             if (r["categorie"] or "").strip().lower() in mystock_prix.CATEGORIES_VISIBLES
         )
+        if _prix_achat_seul(user):
+            return {"materials": _materiaux_prix_achat(materials), "categories": cats,
+                    "laizes": [], "grammages": []}
         return {
             "materials": materials,
             "categories": cats,
@@ -1647,8 +1713,10 @@ def set_mystock_prix_matiere(request: Request, body: dict = Body(...)):
     changent le prix à l'unité, une seule saisie suffit. Le détail par
     déclinaison reste accessible sur la fiche, pour les cas où un fournisseur
     diffère d'une laize à l'autre.
+
+    Seule écriture ouverte à l'ADV (`_require_prix_achat`).
     """
-    user = _require_write(request)
+    user = _require_prix_achat(request)
     try:
         prix = float(body.get("prix"))
     except (TypeError, ValueError):

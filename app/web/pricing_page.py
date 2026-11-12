@@ -10,7 +10,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_VERSION, ROLES_PRICING_WRITE
+from config import APP_VERSION, ROLES_PRICING_PRIX_ACHAT, ROLES_PRICING_WRITE
+from app.services.auth_service import effective_role
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 
@@ -64,12 +65,22 @@ def _pricing_html_response(request: Request) -> HTMLResponse:
     if not user_has_app_access(user, "pricing"):
         return access_denied_response("Coûts matières")
     can_write = user.get("role") in ROLES_PRICING_WRITE
+    # ADV : la liste des matières seule, pour saisir le prix d'achat. Toute
+    # autre adresse du module la ramène à la liste — l'API refuserait de
+    # toute façon de servir la page demandée.
+    role = effective_role(user)
+    prix_achat_seul = role in ROLES_PRICING_PRIX_ACHAT and role not in ROLES_PRICING_WRITE
+    if prix_achat_seul:
+        can_write = False
+        if request.url.path not in ("/pricing", "/pricing/materials"):
+            return RedirectResponse(url="/pricing/materials", status_code=302)
     html = (
         PRICING_SHELL.replace("__V__", f"v{APP_VERSION}")
         # Empreinte des fichiers statiques : elle change dès qu'on touche au CSS
         # ou au JS, donc le navigateur recharge au lieu de servir son cache.
         .replace("__ASSETS__", _empreinte_assets())
         .replace("__CAN_WRITE__", "true" if can_write else "false")
+        .replace("__PRIX_ACHAT_SEUL__", "true" if prix_achat_seul else "false")
         .replace(
             "__USER__",
             json.dumps(
@@ -189,7 +200,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
     </div>
   </main>
 </div>
-<script>window.__PRICING__={canWrite:__CAN_WRITE__,user:__USER__};</script>
+<script>window.__PRICING__={canWrite:__CAN_WRITE__,prixAchatSeul:__PRIX_ACHAT_SEUL__,user:__USER__};</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V__"></script>

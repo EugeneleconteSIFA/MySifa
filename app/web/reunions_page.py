@@ -25,7 +25,7 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME, APP_VERSION, ECOUTE_DUREE_MAX_H
+from config import APP_ORG_NAME, APP_VERSION, ECOUTE_DUREE_MAX_H, ROLES_REUNIONS
 from services.auth_service import effective_role, get_current_user
 
 router = APIRouter()
@@ -44,12 +44,15 @@ def _json_script(obj) -> str:
 
 def _utilisateur(request: Request, retour: str):
     try:
-        return get_current_user(request), None
+        user = get_current_user(request)
     except HTTPException as e:
         if e.status_code == 401:
             suite = retour + (("?" + request.url.query) if request.url.query else "")
             return None, RedirectResponse(url="/?next=" + suite, status_code=302)
         raise
+    if effective_role(user) not in ROLES_REUNIONS:
+        return None, RedirectResponse(url="/", status_code=302)
+    return user, None
 
 
 def _boot(user: dict) -> dict:

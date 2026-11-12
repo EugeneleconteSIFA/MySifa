@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from config import (ECOUTE_DIR, ECOUTE_DUREE_MAX_H, ECOUTE_MORCEAU_MAX_MO,
-                    ECOUTE_RETENTION_JOURS, ROLE_LABELS)
+                    ECOUTE_RETENTION_JOURS, ROLE_LABELS, ROLES_REUNIONS)
 from database import get_db
 from services.auth_service import effective_role, get_current_user, is_superadmin
 from app.services import reunion as rn
@@ -32,6 +32,8 @@ router = APIRouter()
 
 def _qui(request: Request):
     user = get_current_user(request)
+    if effective_role(user) not in ROLES_REUNIONS:
+        raise HTTPException(status_code=403, detail="Espace Reunions reserve a la direction et a l'administration.")
     return user, rn.lecteur(user, effective_role(user), is_superadmin(user))
 
 

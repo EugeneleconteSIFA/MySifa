@@ -2937,6 +2937,28 @@ def list_operation_codes(request: Request):
             "formulaires": [{"code": c, "label": l} for c, l in OPERATION_FORMULAIRES]}
 
 
+@router.get("/api/settings/operation-codes/affiche.pdf")
+def operation_codes_affiche_pdf(request: Request):
+    """Affiche A4 des codes opération à poser aux postes de conduite,
+    générée à la demande depuis le référentiel en base."""
+    require_settings(request)
+    from fastapi.responses import Response as _Response
+    from database import get_db
+    from app.services.operations_config import list_operation_codes as _list
+    from app.services.operation_codes_pdf import generer_pdf_codes_operation
+
+    with get_db() as conn:
+        items = _list(conn)
+    if not items:
+        raise HTTPException(status_code=404, detail="Aucun code opération en base.")
+    pdf = generer_pdf_codes_operation(items)
+    return _Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="codes-operation.pdf"'},
+    )
+
+
 @router.post("/api/settings/operation-codes")
 async def create_operation_code(request: Request):
     require_settings(request)

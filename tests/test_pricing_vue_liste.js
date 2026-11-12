@@ -30,7 +30,7 @@ function extraire(nom) {
   throw new Error('accolades non fermées : ' + nom);
 }
 
-const ctx = { S: { canWrite: true, filters: {}, mystock: [] }, Intl };
+const ctx = { S: { canWrite: true, filters: {}, mystock: [], msOuvertes: new Set(), msOuvertesF: new Set() }, Intl };
 vm.createContext(ctx);
 vm.runInContext(
   [
@@ -144,6 +144,23 @@ ctx.S.canWrite = false;
 check('lecture seule : aucun champ', ctx.mystockMatiereRowHtml(adhesif).includes('data-ms-prix='), false);
 ctx.S.canWrite = true;
 
+console.log('\n--- ADV : prix d\'achat seul ---');
+// L'ADV corrige le prix d'achat, rien d'autre : pas de tarif (transport,
+// taxes), pas de paramétrage, pas de fiche, pas de détail des coûts au m².
+ctx.S.canWrite = false;
+ctx.S.prixAchatSeul = true;
+ctx.S.msOuvertes.add(adhesif.id);
+const lAdv = ctx.mystockMatiereRowHtml(adhesif);
+check('ADV : le prix est saisissable', lAdv.includes('data-ms-prix='), true);
+check('ADV : pas de tarif fournisseur', lAdv.includes('data-ms-tarif='), false);
+check('ADV : pas de parametrage', lAdv.includes('/pricing/mystock/'), false);
+check('ADV : pas de fiche technique', lAdv.includes('data-ft-matiere='), false);
+check('ADV : pas de detail par fournisseur', lAdv.includes('data-ms-chev='), false);
+check('ADV : aucun cout au m2', lAdv.includes('msl-sous-cout'), false);
+ctx.S.msOuvertes.clear();
+ctx.S.prixAchatSeul = false;
+ctx.S.canWrite = true;
+
 console.log('\n--- ce que la ligne garde, et ce qu\'elle a rendu ---');
 // Le paramétrage détaillé — poids, devise, taxes, transport, et le coût €/m²
 // qui en sort — vit sur la fiche. La liste y mène et ne le recopie plus.
@@ -195,8 +212,9 @@ check('enregistrement à la sortie du champ',
   /function bindMsPrixInline[^]{0,3000}inp\.onchange = async/.test(src), true);
 check('Échap annule', /function bindMsPrixInline[^]{0,3000}e\.key === "Escape"/.test(src), true);
 check('la route existe', api.includes('@router.post("/api/pricing/mystock/prix-matiere")'), true);
-check('elle exige le droit d\'écrire',
-  /prix-matiere"\)[^]{0,900}_require_write\(request\)/.test(api), true);
+// Direction, ou ADV (prix d'achat seul) : jamais un simple lecteur.
+check('elle exige le droit de saisir le prix',
+  /prix-matiere"\)[^]{0,900}_require_prix_achat\(request\)/.test(api), true);
 check('le service pousse sur toutes les déclinaisons',
   svc.includes('def set_prix_matiere('), true);
 check('et refuse plusieurs fournisseurs',
