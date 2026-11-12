@@ -347,11 +347,11 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='profil';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<script src="/static/mysifa_dock.js?v=4"></script>
+<script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_humeur.js"></script>
-<script src="/static/mysifa_postit.js?v=5"></script>
+<script src="/static/mysifa_postit.js?v=7"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=20"></script>

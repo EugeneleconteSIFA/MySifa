@@ -22,6 +22,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from config import UPLOAD_DIR
@@ -58,7 +59,7 @@ _POSTIT_DEFAULT_COLORS = {"today": "#22d3ee", "someday": "#fbbf24"}
 _COLOR_HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 FLUX_ATTENTE_S = 20
-FLUX_PAS_S = 0.35
+FLUX_PAS_S = 0.6
 IMAGE_MAX_MO = 10
 # Signatures binaires des formats acceptés : jamais de SVG (script possible).
 _IMAGES = (
@@ -430,7 +431,9 @@ async def flux(postit_id: int, request: Request, depuis: int = 0, client: str = 
     bloc = bloc or None
     fin = asyncio.get_event_loop().time() + FLUX_ATTENTE_S
     while True:
-        rev, ops, reset, pres = _etat_flux(postit_id, user_id, client, depuis, bloc)
+        # Base lue hors de la boucle d'événements : une attente de verrou
+        # SQLite ne doit jamais bloquer les autres requêtes du serveur.
+        rev, ops, reset, pres = await run_in_threadpool(_etat_flux, postit_id, user_id, client, depuis, bloc)
         signature = _signature(pres)
         if rev > depuis or reset or signature != sig or asyncio.get_event_loop().time() >= fin:
             return {"revision": rev, "ops": ops, "reset": reset, "presences": pres, "sig": signature}

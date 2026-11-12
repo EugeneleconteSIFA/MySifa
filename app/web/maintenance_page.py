@@ -109,7 +109,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=7">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
@@ -11143,7 +11143,7 @@ async function deleteUpdate(id) {
 
 </script>
 <script>window.__MYSIFA_APP__='maintenance';</script>
-<script src="/static/mysifa_dock.js?v=4"></script>
+<script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script>
 if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){

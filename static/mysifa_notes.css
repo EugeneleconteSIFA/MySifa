@@ -176,3 +176,28 @@ html body .msb-nav .nav-btn.nt-nouvelle:hover{filter:brightness(1.08)}
 .nt-partage-ligne .nt-present{margin-left:0}
 .nt-partage-nom{flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nt-partage-droit{font-size:12px;color:var(--muted)}
+
+/* ── Panneau d'actions rapides (droite) ── */
+.nt-panneau{width:288px;flex-shrink:0;height:100vh;overflow-y:auto;background:var(--card);border-left:1px solid var(--border);padding:16px 14px 40px;scrollbar-width:thin}
+@media(max-width:1100px){
+  .nt-panneau{position:fixed;right:0;top:0;bottom:0;z-index:8500;box-shadow:-16px 0 48px rgba(0,0,0,.25)}
+}
+.nt-btn-panneau{padding:6px 9px}
+.nt-pa-tete{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:13px;font-weight:800;color:var(--text)}
+.nt-pa-section{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 2px 8px}
+.nt-pa-formats{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.nt-pa-fmt{height:34px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font:600 13px/1 inherit;font-family:inherit;cursor:pointer}
+.nt-pa-fmt:hover{border-color:var(--accent);color:var(--accent)}
+.nt-pa-aide{font-size:11px;color:var(--muted);margin:6px 2px 0}
+.nt-pa-grille{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.nt-pa-btn{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 8px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font:600 12px/1.2 inherit;font-family:inherit;cursor:pointer;text-align:left}
+.nt-pa-btn span:last-child{min-width:0;line-height:1.15;overflow-wrap:anywhere}
+.nt-pa-btn:hover{border-color:var(--accent);color:var(--accent)}
+.nt-pa-ico{width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--card);border:1px solid var(--border);font-size:10.5px;font-weight:800;color:var(--muted)}
+.nt-pa-btn:hover .nt-pa-ico{color:var(--accent);border-color:var(--accent)}
+.nt-pa-raccourcis{display:flex;flex-direction:column;gap:6px}
+.nt-pa-rac{display:flex;align-items:baseline;gap:8px;font-size:11.5px;color:var(--text2)}
+.nt-pa-rac kbd{flex-shrink:0;min-width:44px;text-align:center;padding:2px 6px;border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;background:var(--bg);font:600 11px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--text)}
+@media (hover:none){.nt-pa-btn:hover,.nt-pa-fmt:hover{border-color:var(--border);color:var(--text)}}
+/* La barre d'outils flottants laisse la place au panneau (static/mysifa_dock.js). */
+@media(min-width:1101px){body.nt-panneau-ouvert{--mysifa-dock-droite:288px}}

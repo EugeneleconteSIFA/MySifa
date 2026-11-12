@@ -520,5 +520,52 @@ class TestCollaboration(TestMesNotes):
             self.assertEqual(r.status_code, 400)
 
 
+class TestIncidentPromotion(unittest.TestCase):
+    """12/11/2026 : contenu renvoyé en entier par une page désynchronisée."""
+
+    def test_set_sur_bloc_inconnu_ignore(self):
+        import json as _json
+
+        from database import get_db
+        from app.services.notes import appliquer_ops
+
+        with get_db() as conn:
+            conn.execute("INSERT OR IGNORE INTO users (id, email, nom, password_hash, role, actif, created_at) "
+                         "VALUES (1, 'test@local', 'Test', 'x', 'direction', 1, '2026-01-01')")
+            pid = conn.execute("INSERT INTO postits (user_id, type, title, contenu) VALUES (1,'someday','I',?)",
+                               (_json.dumps([{"uid": "a", "type": "p", "texte": "A"}]),)).lastrowid
+            conn.commit()
+            appliquer_ops(conn, pid, 1, "x", [{"t": "set", "bloc": {"uid": "zz", "type": "p", "texte": "A"}}])
+            blocs = _json.loads(conn.execute("SELECT contenu FROM postits WHERE id=?", (pid,)).fetchone()[0])
+        self.assertEqual([b["uid"] for b in blocs], ["a"])
+
+    def test_reparation_retire_les_copies_exactes(self):
+        import importlib
+        import json as _json
+
+        from database import get_db
+
+        mig = importlib.import_module("app.core.migrations.2026_11_12_notes_doublons_promotion")
+        d = [{"uid": "x1", "type": "h2", "texte": "Titre"}, {"uid": "x2", "type": "p", "texte": "Texte"},
+             {"uid": "x3", "type": "p", "texte": "Modifié depuis"}]
+        o = [{"uid": "a1", "type": "h2", "texte": "Titre"}, {"uid": "a2", "type": "p", "texte": "Texte"},
+             {"uid": "a3", "type": "p", "texte": "Original"}]
+        with get_db() as conn:
+            conn.execute("INSERT OR IGNORE INTO users (id, email, nom, password_hash, role, actif, created_at) "
+                         "VALUES (1, 'test@local', 'Test', 'x', 'direction', 1, '2026-01-01')")
+            pid = conn.execute("INSERT INTO postits (user_id, type, title, contenu, revision) VALUES (1,'someday','D',?,3)",
+                               (_json.dumps(d + o, ensure_ascii=False),)).lastrowid
+            for i, b in enumerate(d, 1):
+                conn.execute("INSERT INTO note_ops (note_id, revision, user_id, client, op, cree_le) VALUES (?,?,?,?,?,?)",
+                             (pid, i, 1, "c", _json.dumps({"t": "ins", "apres": None, "bloc": b}), "2026-11-12T11:15:17"))
+            conn.commit()
+            mig.appliquer(conn)
+            mig.appliquer(conn)
+            blocs = _json.loads(conn.execute("SELECT contenu FROM postits WHERE id=?", (pid,)).fetchone()[0])
+            dernier = conn.execute("SELECT op FROM note_ops WHERE note_id=? ORDER BY revision DESC LIMIT 1", (pid,)).fetchone()[0]
+        self.assertEqual([b["uid"] for b in blocs], ["x3", "a1", "a2", "a3"])
+        self.assertEqual(_json.loads(dernier), {"t": "reset"})
+
+
 if __name__ == "__main__":
     unittest.main()

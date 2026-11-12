@@ -6,8 +6,9 @@
  * Adresse : `note=<id>` (+ `partage=1`), `vue=corbeille`, `nouvelle=1` (lu puis remplacé).
  * Partage et rédaction à plusieurs : l'éditeur suit le flux de la note
  * ouverte (opérations des autres, présence) ; la page affiche qui est là.
- * Hors adresse : la recherche (saisie en cours) et les branches dépliées de
- * l'arbre (préférence d'affichage, localStorage `mysifa_notes_ouvertes`).
+ * Hors adresse : la recherche (saisie en cours), les branches dépliées de
+ * l'arbre et le panneau d'actions rapides (préférences d'affichage,
+ * localStorage `mysifa_notes_ouvertes` et `mysifa_notes_panneau`).
  */
 (function () {
   'use strict';
@@ -339,6 +340,11 @@
   function rendreContenu() {
     var c = document.getElementById('content');
     if (!c) return;
+    if (S.vue !== 'note') {
+      var pa = document.getElementById('nt-panneau');
+      if (pa) { pa.hidden = true; pa.dataset.note = ''; }
+      document.body.classList.remove('nt-panneau-ouvert');
+    }
     if (S.vue === 'note' && S.courante) return rendreNote(c);
     if (S.vue === 'corbeille') return rendreCorbeille(c);
     rendreAccueil(c);
@@ -419,7 +425,7 @@
     var fil = ancetres(n).map(function (a) {
       return '<a href="/note?note=' + a.id + '" data-id="' + a.id + '" class="nt-fil-lien">' + esc(titre(a)) + '</a><span class="nt-fil-sep">/</span>';
     }).join('');
-    var actions = '';
+    var actions = '<button type="button" class="btn btn-petit nt-btn-panneau" data-act="panneau" aria-label="Actions rapides" hidden>' + ICONE_PANNEAU + '</button>';
     if (d === 'proprio') {
       var nbP = (n.partages || []).length;
       actions +=
@@ -452,6 +458,9 @@
     ajusterTitre(ta);
     monterEditeur(document.getElementById('nt-corps'), n);
     rendrePresences();
+    var pa = document.getElementById('nt-panneau');
+    if (pa) pa.dataset.note = '';
+    rendrePanneau();
   }
 
   /* Qui d'autre a la note ouverte : initiales, une fois par personne. */
@@ -570,6 +579,115 @@
         if (r) n.modifie_le = r.modifie_le;
       })
       .catch(function (e) { toast(e.message || 'Titre non enregistré.', 'danger'); });
+  }
+
+  /* ── Panneau d'actions rapides (droite) ─────────────────────────────── */
+
+  var MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+  var TOUCHE = MAC ? '⌘' : 'Ctrl';
+
+  function panneauPrefere() {
+    try {
+      var v = localStorage.getItem('mysifa_notes_panneau');
+      if (v === '1' || v === '0') return v === '1';
+    } catch (e) {}
+    return window.innerWidth >= 1200;
+  }
+
+  function panneauDisponible() {
+    return S.vue === 'note' && S.courante && S.ed && droit() !== 'lire';
+  }
+
+  function basculerPanneau(force) {
+    var ouvert = force == null ? !panneauPrefere() : !!force;
+    try { localStorage.setItem('mysifa_notes_panneau', ouvert ? '1' : '0'); } catch (e) {}
+    rendrePanneau();
+  }
+
+  function rendrePanneau() {
+    var el = document.getElementById('nt-panneau');
+    if (!el) return;
+    var dispo = panneauDisponible();
+    var ouvert = dispo && panneauPrefere();
+    el.hidden = !ouvert;
+    document.body.classList.toggle('nt-panneau-ouvert', ouvert);
+    var btn = document.querySelector('[data-act="panneau"]');
+    if (btn) {
+      btn.hidden = !dispo;
+      btn.classList.toggle('actif', ouvert);
+      btn.title = (ouvert ? 'Masquer' : 'Afficher') + ' les actions rapides (' + TOUCHE + ' + \\)';
+    }
+    if (!ouvert || el.dataset.note === String(S.courante.id)) return;
+    el.dataset.note = String(S.courante.id);
+    var cmds = window.MySifaNotesEditeur.commandes(S.ed);
+    var parCle = {};
+    cmds.forEach(function (c) { parCle[c.cle] = c; });
+    function bouton(cle, libelle, icone, aide) {
+      return '<button type="button" class="nt-pa-btn" data-cmd="' + cle + '" title="' + esc(aide || libelle) + '">' +
+        '<span class="nt-pa-ico">' + icone + '</span><span>' + esc(libelle) + '</span></button>';
+    }
+    var inserer = ['p', 'h1', 'h2', 'h3', 'todo', 'puce', 'num', 'citation', 'encadre', 'code', 'sep', 'image', 'page', 'date', 'heure']
+      .filter(function (k) { return parCle[k]; })
+      .map(function (k) { var c = parCle[k]; return bouton(k, c.libelle, esc(c.icone), c.aide); }).join('');
+    var formats = [
+      ['gras', 'Gras', '<b>G</b>', TOUCHE + ' + B'],
+      ['italique', 'Italique', '<i>I</i>', TOUCHE + ' + I'],
+      ['souligne', 'Souligné', '<u>S</u>', TOUCHE + ' + U'],
+      ['barre', 'Barré', '<s>B</s>', TOUCHE + ' + Maj + S'],
+      ['code_ligne', 'Code', '&lt;/&gt;', TOUCHE + ' + E'],
+      ['lien_texte', 'Lien', '↗', TOUCHE + ' + K'],
+    ].map(function (f) {
+      return '<button type="button" class="nt-pa-fmt" data-cmd="' + f[0] + '" title="' + esc(f[1] + ' (' + f[3] + ')') + '" aria-label="' + esc(f[1]) + '">' + f[2] + '</button>';
+    }).join('');
+    var raccourcis = [
+      ['/', 'menu d\'insertion'],
+      ['# ', 'titre (## et ### : plus petits)'],
+      ['- ', 'liste à puces'],
+      ['1. ', 'liste numérotée'],
+      ['[] ', 'case à cocher'],
+      ['> ', 'citation'],
+      ['---', 'séparateur'],
+      ['-->', 'flèche →'],
+      ['Tab', 'décaler (Maj + Tab : revenir)'],
+      [TOUCHE + ' + Entrée', 'cocher la case'],
+      ['Maj + Entrée', 'retour à la ligne dans le bloc'],
+      [TOUCHE + ' + K', 'rechercher une note (hors texte)'],
+    ].map(function (r) {
+      return '<div class="nt-pa-rac"><kbd>' + esc(r[0]) + '</kbd><span>' + esc(r[1]) + '</span></div>';
+    }).join('');
+    el.innerHTML =
+      '<div class="nt-pa-tete"><span>Actions rapides</span>' +
+      '<button type="button" class="nt-fermer" data-cmd="fermer" title="Masquer (' + TOUCHE + ' + \\)" aria-label="Masquer les actions rapides">×</button></div>' +
+      '<div class="nt-pa-section">Mise en forme</div><div class="nt-pa-formats">' + formats + '</div>' +
+      '<p class="nt-pa-aide">Sélectionnez du texte, puis cliquez.</p>' +
+      '<div class="nt-pa-section">Insérer</div><div class="nt-pa-grille">' + inserer + '</div>' +
+      '<div class="nt-pa-section">Bloc</div><div class="nt-pa-grille">' +
+      bouton('dupliquer', 'Dupliquer', '⧉', 'Copie le bloc juste en dessous') +
+      bouton('supprimer', 'Supprimer', '×', 'Retire le bloc où est le curseur') +
+      bouton('effacer_cochees', 'Effacer cochées', '✓', 'Retire les cases cochées de la note') +
+      '</div>' +
+      '<div class="nt-pa-section">Raccourcis</div><div class="nt-pa-raccourcis">' + raccourcis + '</div>';
+  }
+
+  function brancherPanneau() {
+    var el = document.getElementById('nt-panneau');
+    if (!el) return;
+    /* mousedown empêché : le curseur et la sélection restent dans la note. */
+    el.addEventListener('mousedown', function (e) {
+      if (e.target.closest('[data-cmd]')) e.preventDefault();
+    });
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cmd]');
+      if (!b || !S.ed) return;
+      var cmd = b.dataset.cmd;
+      if (cmd === 'fermer') return basculerPanneau(false);
+      if (cmd === 'effacer_cochees') {
+        if (!S.ed.aCoche()) return toast('Aucune case cochée dans cette note.', 'info');
+        return S.ed.effacerCochees();
+      }
+      S.ed.commande(cmd);
+      if (window.innerWidth < 1100) basculerPanneau(false);
+    });
   }
 
   /* ── Partage ────────────────────────────────────────────────────────── */
@@ -898,6 +1016,7 @@
       if (act === 'accueil') { e.preventDefault(); return allerAccueil(); }
       if (act === 'ecran') return basculerEcran();
       if (act === 'partager') return ouvrirPartage();
+      if (act === 'panneau') return basculerPanneau();
       if (act === 'quitter') return quitterPartage();
       if (act === 'sous' && S.courante) return creerNote(S.courante.id);
       if (act === 'supprimer' && S.courante) return supprimer(S.courante.id);
@@ -949,6 +1068,10 @@
         q.focus();
         q.select();
       }
+      if (mod && (e.key === '\\' || e.code === 'Backslash') && panneauDisponible()) {
+        e.preventDefault();
+        basculerPanneau();
+      }
       if (mod && e.altKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         creerNote(null);
@@ -963,6 +1086,7 @@
   /* ── Icônes ─────────────────────────────────────────────────────────── */
 
   var ICONE_PARTAGE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 13.6c2.3.1 4 1.5 4.5 4"/></svg>';
+  var ICONE_PANNEAU = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>';
   var ICONE_NOTE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h4"/></svg>';
   var ICONE_CHEV = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
   var ICONE_PLUS = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
@@ -977,6 +1101,7 @@
   async function demarrer() {
     lireOuvertes();
     brancher();
+    brancherPanneau();
     try {
       await chargerArbre();
     } catch (e) {
