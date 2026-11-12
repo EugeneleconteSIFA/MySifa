@@ -777,7 +777,7 @@ _PDF_FORMAT_VALUES = ("A4", "A5", "A3", "Letter", "Legal")
 
 
 class PdfPrintRequest(BaseModel):
-    entity_type: str = Field(..., description="'of' ou 'fiche'")
+    entity_type: str = Field(..., description="'of', 'fiche' ou 'note'")
     entity_id: int
     imprimante_id: Optional[int] = None
     copies: int = 1
@@ -788,7 +788,7 @@ class PdfPrintRequest(BaseModel):
     color: str = "color"                   # color | monochrome
 
 
-def _fetch_pdf_bytes(entity_type: str, entity_id: int) -> tuple[bytes, str]:
+def _fetch_pdf_bytes(entity_type: str, entity_id: int, user: dict | None = None) -> tuple[bytes, str]:
     """Retourne (pdf_bytes, filename_suggere) pour l'entite demandee.
 
     - 'of'    : lit le PDF importe depuis of_imports.pdf_filename (sur disque).
@@ -797,8 +797,12 @@ def _fetch_pdf_bytes(entity_type: str, entity_id: int) -> tuple[bytes, str]:
     Leve HTTPException si l'entite est introuvable ou le PDF absent.
     """
     et = (entity_type or "").strip().lower()
-    if et not in ("of", "fiche"):
-        raise HTTPException(status_code=400, detail="entity_type invalide (attendu: 'of' ou 'fiche').")
+    if et not in ("of", "fiche", "note"):
+        raise HTTPException(status_code=400, detail="entity_type invalide (attendu: 'of', 'fiche' ou 'note').")
+    if et == "note":
+        # Note personnelle (Mes notes) : PDF généré à la volée, droits de la note.
+        from app.routers.notes_outils import pdf_pour_impression
+        return pdf_pour_impression(user or {}, entity_id)
 
     with get_db() as conn:
         if et == "of":
@@ -876,11 +880,13 @@ def emit_pdf_print(payload: PdfPrintRequest, request: Request):
         usage_key = "of_document"
     elif et == "fiche":
         usage_key = "fiche_technique"
+    elif et == "note":
+        usage_key = "note_document"
     else:
         raise HTTPException(status_code=400, detail="entity_type invalide (attendu: 'of' ou 'fiche').")
 
     # Recupere le PDF (leve HTTPException si probleme)
-    pdf_bytes, filename = _fetch_pdf_bytes(et, payload.entity_id)
+    pdf_bytes, filename = _fetch_pdf_bytes(et, payload.entity_id, user)
 
     with get_db() as conn:
         # Resolution imprimante

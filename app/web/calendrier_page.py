@@ -533,10 +533,10 @@ body.cal-dragging{user-select:none}
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/calendrier_url.js?v=1"></script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=8">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=9">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_postit.js?v=8"></script>
+<script src="/static/mysifa_postit.js?v=9"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>

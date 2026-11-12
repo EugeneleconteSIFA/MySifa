@@ -72,7 +72,7 @@ async function openPrintModal(opts){
     entityId: opts.entityId,
     printers: [],
     defaults: {},
-    usageKey: opts.entityType === 'of' ? 'of_document' : 'fiche_technique',
+    usageKey: opts.usageKey || (opts.entityType === 'of' ? 'of_document' : 'fiche_technique'),
     form: null,
   };
   await _mysifaPrintLoad();

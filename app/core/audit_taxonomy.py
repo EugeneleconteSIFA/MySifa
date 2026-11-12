@@ -459,6 +459,8 @@ SKIP_SUFFIXES: tuple[str, ...] = (
     # images restent journalisés.
     "/frappe",
     "/presence-fin",
+    # Ouverture d'une note (liste « Récentes ») : consultation, pas un changement.
+    "/consultee",
 )
 
 

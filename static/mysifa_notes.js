@@ -178,7 +178,15 @@
 
   /* ── Navigation ─────────────────────────────────────────────────────── */
 
+  /* Modules de la page (static/mysifa_notes_*.js) : ils s'abonnent aux rendus,
+     ajoutent des actions (data-act) et lisent l'état par window.MySifaNotesPage. */
+  var PAGE = { actions: {}, abonnes: {} };
+  function crochets(quoi, arg) {
+    (PAGE.abonnes[quoi] || []).forEach(function (fn) { try { fn(arg); } catch (e) { console.error(e); } });
+  }
+
   function fermerEditeur() {
+    crochets('fermeture');
     if (_titreTimer) { clearTimeout(_titreTimer); _titreTimer = null; enregistrerTitre(); }
     if (S.ed) { S.ed.detruire(); S.ed = null; }
     S.presences = [];
@@ -237,6 +245,9 @@
       p.note = S.courante.id;
       nav = 'note';
       if (S.partage) { p.partage = 1; nav = 'note/partage'; }
+      Object.keys(PAGE.adresse).forEach(function (k) {
+        if (PAGE.adresse[k] != null && PAGE.adresse[k] !== '') { p[k] = PAGE.adresse[k]; nav += '/' + k; }
+      });
     }
     else if (S.vue === 'corbeille') { p.vue = 'corbeille'; nav = 'corbeille'; }
     window.MySifaUrl.ecrire(p, { navigation: nav });
@@ -247,6 +258,10 @@
     var id = u.get('note', null);
     if (id && /^\d+$/.test(id)) {
       if (!(S.vue === 'note' && S.courante && String(S.courante.id) === id)) await ouvrir(Number(id));
+      crochets('adresse', u);
+      if (u.get('commentaires', null) === '1' && !(document.body.classList.contains('nt-panneau-ouvert') && ongletPanneau() === 'commentaires')) {
+        ouvrirOngletPanneau('commentaires');
+      }
       var veut = u.get('partage', null) === '1' && droit() === 'proprio';
       if (veut && !S.partage) ouvrirPartage();
       else if (!veut && S.partage) fermerPartage(true);
@@ -381,12 +396,14 @@
       html += '<div class="nt-section">Modifiées récemment</div><div class="nt-grille">' +
         recentes.map(carte).join('') + '</div>';
     }
+    html += '<div id="nt-accueil-plus"></div>';
     var racinesPartagees = S.partagees.filter(function (n) { return n.racine_partage; });
     if (racinesPartagees.length) {
       html += '<div class="nt-section nt-section-espace">Partagées avec moi</div><div class="nt-grille">' +
         racinesPartagees.map(carte).join('') + '</div>';
     }
     c.innerHTML = html;
+    crochets('accueil', document.getElementById('nt-accueil-plus'));
   }
 
   function rendreCorbeille(c) {
@@ -425,7 +442,8 @@
     var fil = ancetres(n).map(function (a) {
       return '<a href="/note?note=' + a.id + '" data-id="' + a.id + '" class="nt-fil-lien">' + esc(titre(a)) + '</a><span class="nt-fil-sep">/</span>';
     }).join('');
-    var actions = '<button type="button" class="btn btn-petit nt-btn-panneau" data-act="panneau" aria-label="Actions rapides" hidden>' + ICONE_PANNEAU + '</button>';
+    var actions = '<span class="nt-outils" id="nt-outils"></span>' +
+      '<button type="button" class="btn btn-petit nt-btn-panneau" data-act="panneau" aria-label="Panneau : actions et commentaires" hidden>' + ICONE_PANNEAU + '</button>';
     if (d === 'proprio') {
       var nbP = (n.partages || []).length;
       actions +=
@@ -461,6 +479,7 @@
     var pa = document.getElementById('nt-panneau');
     if (pa) pa.dataset.note = '';
     rendrePanneau();
+    crochets('note', n);
   }
 
   /* Qui d'autre a la note ouverte : initiales, une fois par personne. */
@@ -500,7 +519,7 @@
   function monterEditeur(corps, note) {
     if (!corps || !window.MySifaNotesEditeur) return;
     var d = droit();
-    S.ed = window.MySifaNotesEditeur.monter(corps, note, {
+    S.ed = window.MySifaNotesEditeur.monter(corps, note, Object.assign({
       noteId: note.id,
       flux: true,
       lectureSeule: d === 'lire',
@@ -563,7 +582,8 @@
         return p ? titre(p) : null;
       },
       signaler: function (msg, type) { toast(msg, type || 'danger'); },
-    });
+      surCommentaires: function () { crochets('com-distant'); },
+    }, PAGE.optionsEditeur ? PAGE.optionsEditeur(note) : {}));
   }
 
   function enregistrerTitre() {
@@ -595,7 +615,20 @@
   }
 
   function panneauDisponible() {
-    return S.vue === 'note' && S.courante && S.ed && droit() !== 'lire';
+    return S.vue === 'note' && S.courante && S.ed;
+  }
+
+  /* Onglet du panneau : actions rapides (qui peut écrire) ou commentaires. */
+  function ongletPanneau() {
+    if (droit() === 'lire') return 'commentaires';
+    return S.ongletPanneau === 'commentaires' ? 'commentaires' : 'actions';
+  }
+
+  function ouvrirOngletPanneau(onglet) {
+    S.ongletPanneau = onglet;
+    var el = document.getElementById('nt-panneau');
+    if (el) el.dataset.note = '';
+    basculerPanneau(true);
   }
 
   function basculerPanneau(force) {
@@ -615,10 +648,22 @@
     if (btn) {
       btn.hidden = !dispo;
       btn.classList.toggle('actif', ouvert);
-      btn.title = (ouvert ? 'Masquer' : 'Afficher') + ' les actions rapides (' + TOUCHE + ' + \\)';
+      btn.title = (ouvert ? 'Masquer' : 'Afficher') + ' le panneau : actions et commentaires (' + TOUCHE + ' + \\)';
     }
-    if (!ouvert || el.dataset.note === String(S.courante.id)) return;
-    el.dataset.note = String(S.courante.id);
+    var onglet = ongletPanneau();
+    PAGE.adresse.commentaires = ouvert && onglet === 'commentaires' ? 1 : null;
+    if (!ouvert || el.dataset.note === String(S.courante.id) + onglet) return;
+    el.dataset.note = String(S.courante.id) + onglet;
+    var onglets = '<div class="nt-pa-onglets" role="tablist">' +
+      (droit() !== 'lire' ? '<button type="button" role="tab" data-onglet="actions"' + (onglet === 'actions' ? ' class="sel" aria-selected="true"' : '') + '>Actions</button>' : '') +
+      '<button type="button" role="tab" data-onglet="commentaires"' + (onglet === 'commentaires' ? ' class="sel" aria-selected="true"' : '') +
+      '>Commentaires<span class="nt-pa-nb" id="nt-pa-nb-com"></span></button>' +
+      '<button type="button" class="nt-fermer" data-cmd="fermer" title="Masquer (' + TOUCHE + ' + \\)" aria-label="Masquer le panneau">×</button></div>';
+    if (onglet === 'commentaires') {
+      el.innerHTML = onglets + '<div id="nt-coms"></div>';
+      crochets('commentaires', document.getElementById('nt-coms'));
+      return;
+    }
     var cmds = window.MySifaNotesEditeur.commandes(S.ed);
     var parCle = {};
     cmds.forEach(function (c) { parCle[c.cle] = c; });
@@ -626,7 +671,7 @@
       return '<button type="button" class="nt-pa-btn" data-cmd="' + cle + '" title="' + esc(aide || libelle) + '">' +
         '<span class="nt-pa-ico">' + icone + '</span><span>' + esc(libelle) + '</span></button>';
     }
-    var inserer = ['p', 'h1', 'h2', 'h3', 'todo', 'puce', 'num', 'citation', 'encadre', 'code', 'sep', 'image', 'page', 'date', 'heure']
+    var inserer = ['p', 'h1', 'h2', 'h3', 'todo', 'puce', 'num', 'bascule', 'tableau', 'citation', 'encadre', 'code', 'sep', 'image', 'page', 'mysifa', 'modele', 'date', 'heure']
       .filter(function (k) { return parCle[k]; })
       .map(function (k) { var c = parCle[k]; return bouton(k, c.libelle, esc(c.icone), c.aide); }).join('');
     var formats = [
@@ -651,13 +696,13 @@
       ['Tab', 'décaler (Maj + Tab : revenir)'],
       [TOUCHE + ' + Entrée', 'cocher la case'],
       ['Maj + Entrée', 'retour à la ligne dans le bloc'],
+      ['@', 'lier un dossier, une machine, un client, une note'],
+      [TOUCHE + ' + F', 'rechercher dans la note'],
       [TOUCHE + ' + K', 'rechercher une note (hors texte)'],
     ].map(function (r) {
       return '<div class="nt-pa-rac"><kbd>' + esc(r[0]) + '</kbd><span>' + esc(r[1]) + '</span></div>';
     }).join('');
-    el.innerHTML =
-      '<div class="nt-pa-tete"><span>Actions rapides</span>' +
-      '<button type="button" class="nt-fermer" data-cmd="fermer" title="Masquer (' + TOUCHE + ' + \\)" aria-label="Masquer les actions rapides">×</button></div>' +
+    el.innerHTML = onglets +
       '<div class="nt-pa-section">Mise en forme</div><div class="nt-pa-formats">' + formats + '</div>' +
       '<p class="nt-pa-aide">Sélectionnez du texte, puis cliquez.</p>' +
       '<div class="nt-pa-section">Insérer</div><div class="nt-pa-grille">' + inserer + '</div>' +
@@ -674,9 +719,13 @@
     if (!el) return;
     /* mousedown empêché : le curseur et la sélection restent dans la note. */
     el.addEventListener('mousedown', function (e) {
-      if (e.target.closest('[data-cmd]')) e.preventDefault();
+      if (e.target.closest('#nt-coms')) return;
+      if (e.target.closest('[data-cmd], [data-onglet]')) e.preventDefault();
     });
     el.addEventListener('click', function (e) {
+      var o = e.target.closest('[data-onglet]');
+      if (o) { ouvrirOngletPanneau(o.dataset.onglet); ecrireAdresse(); return; }
+      if (e.target.closest('#nt-coms')) return;
       var b = e.target.closest('[data-cmd]');
       if (!b || !S.ed) return;
       var cmd = b.dataset.cmd;
@@ -1016,6 +1065,7 @@
       if (act === 'accueil') { e.preventDefault(); return allerAccueil(); }
       if (act === 'ecran') return basculerEcran();
       if (act === 'partager') return ouvrirPartage();
+      if (act && PAGE.actions[act]) { e.preventDefault(); return PAGE.actions[act](a, e); }
       if (act === 'panneau') return basculerPanneau();
       if (act === 'quitter') return quitterPartage();
       if (act === 'sous' && S.courante) return creerNote(S.courante.id);
@@ -1094,6 +1144,18 @@
   var ICONE_CORBEILLE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
   /* ── Démarrage ──────────────────────────────────────────────────────── */
+
+  Object.assign(PAGE, {
+    S: S, api: api, toast: toast, esc: esc, quand: quand, titre: titre, parId: parId, droit: droit, moi: moi,
+    ouvrir: ouvrir, rendre: rendre, rendreArbre: rendreArbre, chargerArbre: chargerArbre,
+    confirmer: confirmer, ecrireAdresse: ecrireAdresse, allerAccueil: allerAccueil,
+    carte: carte, ouvrirOngletPanneau: ouvrirOngletPanneau, basculerPanneau: basculerPanneau,
+    rendrePanneau: rendrePanneau, ongletPanneau: ongletPanneau, creerNote: creerNote,
+    sur: function (quoi, fn) { (PAGE.abonnes[quoi] = PAGE.abonnes[quoi] || []).push(fn); },
+    /* Paramètres d'adresse ajoutés par les modules : {cle: valeur} quand la note est ouverte. */
+    adresse: {},
+  });
+  window.MySifaNotesPage = PAGE;
 
   window.toggleSidebar = function () { document.body.classList.toggle('sb-open'); };
   window.closeSidebar = function () { document.body.classList.remove('sb-open'); };

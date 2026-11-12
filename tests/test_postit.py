@@ -567,5 +567,155 @@ class TestIncidentPromotion(unittest.TestCase):
         self.assertEqual(_json.loads(dernier), {"t": "reset"})
 
 
+class TestOutilsNotes(TestMesNotes):
+    """Historique, modèles, favoris et récentes, commentaires, liens @, export."""
+
+    def setUp(self):
+        super().setUp()
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.routers.notes_outils import router as outils
+        from app.routers.postit import router as postit
+
+        app = FastAPI()
+        app.include_router(outils)
+        app.include_router(postit)
+        self.c = TestClient(app)
+
+    def _as(self, uid, methode, url, **kw):
+        with patch("app.routers.postit.get_current_user", return_value={"id": uid, "nom": f"U{uid}"}), \
+             patch("app.routers.notes_outils.get_current_user", return_value={"id": uid, "nom": f"U{uid}", "role": "direction"}):
+            return getattr(self.c, methode)(url, **kw)
+
+    def test_historique_et_restauration(self):
+        from database import get_db
+
+        n = self._creer(title="Hist", sur_ecran=0, blocs=[{"uid": "a", "type": "p", "texte": "v1"}])
+        with get_db() as conn:  # une photo existe déjà depuis plus de 10 minutes
+            conn.execute("DELETE FROM note_versions WHERE note_id=?", (n["id"],))
+            conn.commit()
+        self._as(1, "post", f"/api/postits/{n['id']}/frappe",
+                 json={"client": "x", "ops": [{"t": "set", "bloc": {"uid": "a", "type": "p", "texte": "v2"}}]})
+        versions = self._as(1, "get", f"/api/postits/{n['id']}/versions").json()["versions"]
+        self.assertEqual(len(versions), 1)
+        v = self._as(1, "get", f"/api/postits/{n['id']}/versions/{versions[0]['id']}").json()
+        self.assertEqual(v["blocs"][0]["texte"], "v1")
+        self.assertEqual(self._as(1, "post", f"/api/postits/{n['id']}/versions/{versions[0]['id']}/restaurer").status_code, 200)
+        note = self._as(1, "get", f"/api/postits/{n['id']}").json()
+        self.assertEqual(note["blocs"][0]["texte"], "v1")
+        self.assertEqual(len(self._as(1, "get", f"/api/postits/{n['id']}/versions").json()["versions"]), 2)
+        self.assertEqual(self._as(2, "get", f"/api/postits/{n['id']}/versions").status_code, 404)
+
+    def test_modeles(self):
+        communs = self._as(1, "get", "/api/postits/modeles").json()
+        self.assertTrue(any(m["commun"] and m["nom"] == "Réunion" for m in communs))
+        n = self._creer(title="Trame", sur_ecran=0, blocs=[{"type": "h2", "texte": "Ma trame"}])
+        r = self._as(1, "post", "/api/postits/modeles", json={"note_id": n["id"], "nom": "Ma trame"})
+        self.assertEqual(r.status_code, 200)
+        mid = r.json()["id"]
+        self.assertNotIn(mid, [m["id"] for m in self._as(2, "get", "/api/postits/modeles").json()])
+        self.assertEqual(self._as(2, "delete", f"/api/postits/modeles/{mid}").status_code, 404)
+        self.assertEqual(self._as(1, "delete", f"/api/postits/modeles/{mid}").status_code, 200)
+
+    def test_favoris_recentes(self):
+        n = self._creer(title="Fav", sur_ecran=0)
+        self._as(1, "put", f"/api/postits/{n['id']}/favori", json={"favori": True})
+        self._as(1, "post", f"/api/postits/{n['id']}/consultee")
+        d = self._as(1, "get", "/api/postits/raccourcis").json()
+        self.assertIn(n["id"], [f["id"] for f in d["favoris"]])
+        self.assertIn(n["id"], [r["id"] for r in d["recentes"]])
+        self.assertEqual(self._as(2, "put", f"/api/postits/{n['id']}/favori", json={"favori": True}).status_code, 404)
+
+    def test_commentaires_et_mentions(self):
+        n = self._creer(title="Com", sur_ecran=0, blocs=[{"uid": "b1", "type": "p", "texte": "texte"}])
+        with patch("app.routers.push.send_push_safe") as push:
+            r = self._as(1, "post", f"/api/postits/{n['id']}/commentaires",
+                         json={"texte": "@U2 regarde", "bloc_uid": "b1", "citation": "texte", "mentions": [2]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(len(r.json()["sans_acces"]), 1)  # U2 n'a pas accès : pas de notification
+        push.assert_not_called()
+        self._as(1, "put", f"/api/postits/{n['id']}/partages", json={"user_id": 2, "droit": "lire"})
+        with patch("app.routers.push.send_push_safe") as push:
+            r = self._as(1, "post", f"/api/postits/{n['id']}/commentaires", json={"texte": "@U2 et maintenant ?", "mentions": [2]})
+        push.assert_called_once()
+        self.assertEqual(len(self._as(2, "get", "/api/postits/raccourcis").json()["mentions"]), 1)
+        coms = self._as(2, "get", f"/api/postits/{n['id']}/commentaires").json()["commentaires"]
+        self.assertEqual(len(coms), 2)
+        self.assertEqual(self._as(2, "get", "/api/postits/raccourcis").json()["mentions"], [])  # lues
+        # Lecture seule : on commente, mais on ne résout pas le fil d'un autre.
+        cid = coms[0]["id"]
+        self.assertEqual(self._as(2, "patch", f"/api/postits/{n['id']}/commentaires/{cid}", json={"resolu": True}).status_code, 403)
+        rep = self._as(2, "post", f"/api/postits/{n['id']}/commentaires", json={"texte": "Vu", "parent_id": cid})
+        self.assertEqual(rep.json()["bloc_uid"], "b1")
+        self.assertEqual(self._as(1, "patch", f"/api/postits/{n['id']}/commentaires/{cid}", json={"resolu": True}).status_code, 200)
+        self.assertEqual(self._as(1, "delete", f"/api/postits/{n['id']}/commentaires/{cid}").status_code, 200)
+        restants = self._as(1, "get", f"/api/postits/{n['id']}/commentaires").json()["commentaires"]
+        self.assertEqual(len(restants), 1)
+
+    def test_references(self):
+        n = self._creer(title="Référence unique zz", sur_ecran=0)
+        with patch("app.routers.notes_outils.user_has_app_access", return_value=False):
+            d = self._as(1, "get", "/api/postits/references?q=unique zz").json()["resultats"]
+        self.assertEqual(d[0]["url"], f"/note?note={n['id']}")
+        with patch("app.routers.notes_outils.user_has_app_access", return_value=False):
+            self.assertEqual(self._as(2, "get", "/api/postits/references?q=unique zz").json()["resultats"], [])
+
+    def test_references_dossier_client(self):
+        from database import get_db
+
+        with get_db() as conn:
+            mid = conn.execute("SELECT id FROM machines ORDER BY id LIMIT 1").fetchone()
+            mid = mid[0] if mid else 1
+            pid = conn.execute("INSERT INTO planning_entries (machine_id, position, reference, client, description) VALUES (?,?,?,?,?)",
+                               (mid, 9999, "ZZ-4521", "Client Test", "Étiquettes")).lastrowid
+            cid = conn.execute("INSERT INTO clients (raison_sociale, code, ville, created_at, updated_at) VALUES (?,?,?,?,?)",
+                               ("Zzclient SA", "ZZC", "Lyon", "2026-11-13", "2026-11-13")).lastrowid
+            conn.commit()
+        with patch("app.routers.notes_outils.user_has_app_access", side_effect=lambda u, a: a == "prod"):
+            d = self._as(1, "get", "/api/postits/references?q=ZZ-45").json()["resultats"]
+        self.assertIn({"type": "dossier", "libelle": "ZZ-4521", "url": "/prod?page=traceabilite&dossier=ZZ-4521"},
+                      [{k: x[k] for k in ("type", "libelle", "url")} for x in d])
+        with patch("app.routers.notes_outils.user_has_app_access", side_effect=lambda u, a: a == "planning"):
+            d = self._as(1, "get", "/api/postits/references?q=ZZ-45").json()["resultats"]
+        self.assertEqual([x["url"] for x in d if x["type"] == "dossier"], [f"/planning?machine={mid}&dossier={pid}"])
+        with patch("app.routers.notes_outils.user_has_app_access", return_value=False), \
+             patch("app.routers.notes_outils.can_access_settings", return_value=True), \
+             patch("app.routers.notes_outils.can_access_settings_contacts", return_value=True):
+            d = self._as(1, "get", "/api/postits/references?q=Zzclient").json()["resultats"]
+        self.assertEqual([x["url"] for x in d if x["type"] == "client"], [f"/settings?onglet=clients&client={cid}"])
+        with patch("app.routers.notes_outils.user_has_app_access", return_value=False), \
+             patch("app.routers.notes_outils.can_access_settings", return_value=False):
+            d = self._as(1, "get", "/api/postits/references?q=Zzclient").json()["resultats"]
+        self.assertEqual([x for x in d if x["type"] in ("client", "dossier")], [])
+
+    def test_exports(self):
+        n = self._creer(title="Export", sur_ecran=0, blocs=[
+            {"type": "h2", "texte": "Titre → suite"}, {"type": "todo", "texte": "a", "coche": True},
+            {"type": "tableau", "entete": True, "lignes": [["A", "B"], ["<b>1</b>", "2"]]}])
+        pdf = self._as(1, "get", f"/api/postits/{n['id']}/export.pdf")
+        self.assertEqual(pdf.status_code, 200)
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+        self.assertIn("attachment", pdf.headers["content-disposition"])
+        n2 = self._creer(title="Cœur → suite", sur_ecran=0)
+        r2 = self._as(1, "get", f"/api/postits/{n2['id']}/export.pdf")
+        self.assertEqual(r2.status_code, 200)
+        self.assertIn("filename*=UTF-8''", r2.headers["content-disposition"])
+        doc = self._as(1, "get", f"/api/postits/{n['id']}/export.docx")
+        self.assertTrue(doc.content.startswith(b"PK"))
+        self.assertEqual(self._as(2, "get", f"/api/postits/{n['id']}/export.pdf").status_code, 404)
+
+    def test_impression_reseau_note(self):
+        from app.routers.print import _fetch_pdf_bytes
+
+        n = self._creer(title="Imprimer", sur_ecran=0, blocs=[{"type": "p", "texte": "x"}])
+        pdf, nom = _fetch_pdf_bytes("note", n["id"], {"id": 1})
+        self.assertTrue(pdf.startswith(b"%PDF"))
+        self.assertEqual(nom, "Imprimer.pdf")
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException):
+            _fetch_pdf_bytes("note", n["id"], {"id": 2})
+
+
 if __name__ == "__main__":
     unittest.main()

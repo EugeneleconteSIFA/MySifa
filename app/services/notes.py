@@ -39,12 +39,18 @@ from fastapi import HTTPException
 # Format d'édition (pas un référentiel métier) : les types que l'éditeur sait
 # afficher (static/mysifa_notes_editeur.js). Un type inconnu est refusé plutôt
 # que perdu en silence.
-BLOC_TYPES = ("p", "h1", "h2", "h3", "todo", "puce", "num", "citation", "encadre", "code", "sep", "page", "image")
+BLOC_TYPES = ("p", "h1", "h2", "h3", "todo", "puce", "num", "citation", "encadre", "code", "sep", "page", "image",
+              "bascule", "tableau")
 SANS_TEXTE = ("sep", "image")
+TAB_LIGNES_MAX = 60
+TAB_COLONNES_MAX = 12
+TAB_CELLULE_MAX = 3000
 BLOC_HTML_MAX = 12000
 OPS_PAR_ENVOI = 1000
 OPS_GARDEES = 1000
 PRESENCE_DUREE_S = 25
+VERSION_PAS_S = 600          # une photo au plus toutes les 10 minutes d'écriture
+VERSIONS_GARDEES = 300
 DROITS_PARTAGE = ("lire", "ecrire")
 _UID_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 BLOCS_MAX = 400
@@ -145,6 +151,17 @@ def _bloc_propre(b: dict) -> dict:
     out = {"uid": uid, "type": t}
     if t in SANS_TEXTE:
         out["texte"] = ""
+    elif t == "tableau":
+        lignes = b.get("lignes") if isinstance(b.get("lignes"), list) else []
+        lignes = [l for l in lignes if isinstance(l, list)][:TAB_LIGNES_MAX] or [["", ""], ["", ""]]
+        largeur = max(1, min(TAB_COLONNES_MAX, max(len(l) for l in lignes)))
+        propres = []
+        for l in lignes:
+            cellules = [assainir_html(c)[:TAB_CELLULE_MAX] for c in (list(l) + [""] * largeur)[:largeur]]
+            propres.append(cellules)
+        out["lignes"] = propres
+        out["entete"] = bool(b.get("entete"))
+        out["texte"] = "\n".join(" · ".join(texte_depuis_html(c).replace("\n", " ") for c in l) for l in propres)
     elif b.get("html") not in (None, ""):
         h = assainir_html(b.get("html"))
         out["texte"] = texte_depuis_html(h)
@@ -194,7 +211,10 @@ def normaliser_blocs(valeur) -> list[dict]:
         if t not in BLOC_TYPES:
             raise HTTPException(400, f"Type de bloc inconnu : {t}.")
         propre = _bloc_propre(b)
-        if len(propre["texte"]) > BLOC_TEXTE_MAX or len(propre.get("html") or "") > BLOC_HTML_MAX:
+        trop_long = len(propre.get("html") or "") > BLOC_HTML_MAX
+        if propre["type"] != "tableau":  # un tableau est borné cellule par cellule
+            trop_long = trop_long or len(propre["texte"]) > BLOC_TEXTE_MAX
+        if trop_long:
             raise HTTPException(400, f"Bloc trop long — {BLOC_TEXTE_MAX} caractères au plus.")
         out.append(propre)
     vus = set()
@@ -420,6 +440,47 @@ def _index_uid(blocs: list[dict], uid) -> int:
     return -1
 
 
+def photographier(conn, note_id: int, raison: str = "auto", forcer: bool = False) -> bool:
+    """Garde l'état actuel de la note dans `note_versions` (avant de la modifier).
+
+    Sans `forcer`, rien si la dernière photo a moins de 10 minutes : une
+    version = une séance d'écriture, pas une frappe. Ne fait pas de commit.
+    """
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='note_versions'").fetchall()}
+    if not tables:
+        return False
+    der = conn.execute(
+        "SELECT cree_le, contenu, titre FROM note_versions WHERE note_id=? ORDER BY id DESC LIMIT 1", (note_id,)
+    ).fetchone()
+    row = conn.execute("SELECT title, contenu FROM postits WHERE id=?", (note_id,)).fetchone()
+    if not row:
+        return False
+    if der and der["contenu"] == row["contenu"] and der["titre"] == row["title"]:
+        return False
+    if der and not forcer:
+        try:
+            ecart = (datetime.now() - datetime.strptime(der["cree_le"], "%Y-%m-%dT%H:%M:%S")).total_seconds()
+        except ValueError:
+            ecart = VERSION_PAS_S
+        if ecart < VERSION_PAS_S:
+            return False
+    depuis = der["cree_le"] if der else "0000"
+    auteurs = [str(r[0]) for r in conn.execute(
+        "SELECT DISTINCT user_id FROM note_ops WHERE note_id=? AND cree_le > ? AND user_id IS NOT NULL",
+        (note_id, depuis)).fetchall()]
+    conn.execute(
+        "INSERT INTO note_versions (note_id, titre, contenu, auteurs, raison, cree_le) VALUES (?,?,?,?,?,?)",
+        (note_id, row["title"], row["contenu"], ",".join(auteurs), raison, maintenant()),
+    )
+    conn.execute(
+        """DELETE FROM note_versions WHERE note_id=? AND id NOT IN
+           (SELECT id FROM note_versions WHERE note_id=? ORDER BY id DESC LIMIT ?)""",
+        (note_id, note_id, VERSIONS_GARDEES),
+    )
+    return True
+
+
 def appliquer_ops(conn, note_id: int, user_id: int, client: str, ops) -> dict:
     """Applique une suite d'opérations à la note, dans l'ordre, et les journalise.
 
@@ -438,6 +499,7 @@ def appliquer_ops(conn, note_id: int, user_id: int, client: str, ops) -> dict:
     # Verrou d'écriture dès la lecture : deux envois simultanés ne lisent pas
     # la même révision.
     conn.execute("BEGIN IMMEDIATE")
+    photographier(conn, note_id)
     row = conn.execute("SELECT contenu, revision, title FROM postits WHERE id=?", (note_id,)).fetchone()
     blocs = lire_blocs(row["contenu"])
     rev = int(row["revision"] or 0)
