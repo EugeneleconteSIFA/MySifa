@@ -11,7 +11,8 @@ from app.services.dossier_stats import vitesse_plausible
 from config import PROD_VITESSE_MAX_M_MIN
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
 from services.prod_machine_filter import append_machine_filter
-from config import OPERATION_SEVERITY, ton_statut_machine
+import config as _cfg
+from config import ton_statut_machine
 import logging
 _log = logging.getLogger(__name__)
 
@@ -20,10 +21,25 @@ router = APIRouter()
 # ── Codes spéciaux ───────────────────────────────────────────────────────────
 _CODES_CALAGE     = {'02','10','11','59','60','74','75','01'}
 _CODES_PRODUCTION = {'03','88'}
-_CODES_ARRET      = {c for c,v in OPERATION_SEVERITY.items()
-                     if (v.get('category') or '').lower() == 'arret'}
-_CODES_NETTOYAGE  = {c for c,v in OPERATION_SEVERITY.items()
-                     if (v.get('category') or '').lower() == 'nettoyage'}
+
+
+# Le référentiel des opérations vit en base et s'édite dans Paramètres :
+# toujours le relire dans `config` au moment du calcul. Un
+# `from config import OPERATION_SEVERITY` le fige au démarrage, parfois sur
+# le repli operations.json (base pas encore prête) — c'est ce qui affichait
+# « Op 83 » sur une machine en changement de couteaux (code présent en base,
+# absent du fichier).
+def _ops() -> dict:
+    return _cfg.OPERATION_SEVERITY or {}
+
+
+def _categorie(code: str, saisie: Optional[str] = None) -> str:
+    """Catégorie de la saisie, sinon celle du référentiel pour ce code."""
+    return (saisie or _ops().get(code or '', {}).get('category') or '').lower()
+
+
+def _codes_de(categorie: str) -> set:
+    return {c for c, v in _ops().items() if (v.get('category') or '').lower() == categorie}
 _CODE_ARRIVEE     = '86'
 _CODE_DEPART      = '87'
 _CODE_FIN_DOS     = '89'
@@ -75,7 +91,7 @@ def _derive_status(rows_today: list) -> tuple:
 
     last = rows_today[-1]
     code = last['operation_code'] or ''
-    cat  = (last['operation_category'] or '').lower()
+    cat  = _categorie(code, last['operation_category'])
 
     # Cherche le dernier dossier connu (non vide, non '0')
     last_dos_row = None
@@ -91,16 +107,16 @@ def _derive_status(rows_today: list) -> tuple:
         return 'changement', 'Changement de dossier', last_dos_row
     if code in _CODES_CALAGE or cat == 'calage':
         return 'calage', 'Calage', last_dos_row
-    if code in _CODES_NETTOYAGE or cat == 'nettoyage':
+    if code in _codes_de('nettoyage') or cat == 'nettoyage':
         return 'nettoyage', 'Nettoyage', last_dos_row
     if code in _CODES_PRODUCTION or cat == 'production':
         return 'production', 'Production', last_dos_row
     if cat == 'arret':
-        op_label = OPERATION_SEVERITY.get(code, {}).get('label', 'Arrêt')
+        op_label = _ops().get(code, {}).get('label', 'Arrêt')
         return 'arret', f'Arrêt — {op_label}', last_dos_row
 
     # Catch-all : affiche le label de l'opération
-    op_label = OPERATION_SEVERITY.get(code, {}).get('label', f'Op {code}')
+    op_label = _ops().get(code, {}).get('label', f'Op {code}')
     return 'autre', op_label, last_dos_row
 
 def _compute_duree_min(status_key: str, rows_today: list, now: _dt_cls) -> Optional[int]:
@@ -114,12 +130,13 @@ def _compute_duree_min(status_key: str, rows_today: list, now: _dt_cls) -> Optio
 
     if status_key == 'production':
         earliest_prod = None
+        codes_arret = _codes_de('arret')
         for r in reversed(rows_today):
             c   = r.get('operation_code') or ''
-            cat = (r.get('operation_category') or '').lower()
+            cat = _categorie(c, r.get('operation_category'))
             if c in _CODES_PRODUCTION:
                 earliest_prod = r
-            elif c in _CODES_ARRET or cat == 'arret':
+            elif c in codes_arret or cat == 'arret':
                 pass
             else:
                 break
