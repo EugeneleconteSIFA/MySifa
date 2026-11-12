@@ -2140,7 +2140,7 @@ function renderOfEditModal(){
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
       ${creation?_sec('Fiche technique',_secFiche(),true):''}
-      ${_sec('Commandes RVGI',`
+      ${_sec(creation?"Commandes RVGI et numéro d'OF":'Commandes RVGI',`
         <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <button type="button" onclick="ofeChoisirCommandes()"
             style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">
@@ -2153,6 +2153,7 @@ function renderOfEditModal(){
           </div>
         </div>
         <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>
+        ${creation?_f('ofe-numero','OF n°',m.of_numero):''}
         ${m._rvgiOf?`
         <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
           ${(function(r){
@@ -2167,13 +2168,15 @@ function renderOfEditModal(){
           })(m._rvgiOf)}
           ${(m._rvgiOf.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
         </div>`:''}`,true)}
-      ${_sec('Identification',[
-        _f('ofe-numero','OF n°',m.of_numero),
+      ${_sec(creation?'Identification — reprise de la fiche':'Identification',[
+        // En création, le numéro vit avec les commandes qui le proposent, et
+        // le reste est déjà rempli par la fiche : le bloc part replié.
+        creation?'':_f('ofe-numero','OF n°',m.of_numero),
         _f('ofe-reference','Référence',m.reference),
         _f('ofe-date','Date création',(m.date_creation||'').slice(0,10),'date'),
         creation?'':_f('ofe-delai','Délai client',m.delai_client),
         _f('ofe-machine','Machine',m.machine),
-      ].join(''),true)}
+      ].join(''),!creation)}
       ${_sec('Matière / Support',[
         _f('ofe-laize','Laize',m.laize,'number'),
         _f('ofe-format','Format',m.format),
