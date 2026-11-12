@@ -136,6 +136,18 @@ def _now_paris_iso() -> str:
     return datetime.now(_PARIS).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+# Date de création comparable, en SQL. Access l'envoie au format français
+# (« 05/11/2026 »), MySifa l'écrit en ISO (« 2026-11-12 ») : triées comme du
+# texte, un OF créé aujourd'hui passait derrière tous les « 3x/… » et
+# « 2x/… » d'Access, et n'apparaissait jamais en tête de liste. À date
+# égale, le dernier enregistré d'abord.
+_SQL_DATE_CREATION_ISO = (
+    "CASE WHEN substr(COALESCE(o.date_creation,''),3,1) = '/' "
+    "THEN substr(o.date_creation,7,4)||'-'||substr(o.date_creation,4,2)||'-'||substr(o.date_creation,1,2) "
+    "ELSE substr(COALESCE(o.date_creation, o.date_import),1,10) END"
+)
+
+
 def _require_of_access(request: Request) -> dict:
     user = get_current_user(request)
     if user.get("role") not in OF_ALLOWED_ROLES:
@@ -582,7 +594,7 @@ def list_of_imports(request: Request):
                 LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
                 WHERE 1=1 {search_filter}
                 GROUP BY o.id
-                ORDER BY COALESCE(o.date_creation, o.date_import) DESC
+                ORDER BY {_SQL_DATE_CREATION_ISO} DESC, o.id DESC
                 LIMIT ? OFFSET ?""",
             params_rows,
         ).fetchall()

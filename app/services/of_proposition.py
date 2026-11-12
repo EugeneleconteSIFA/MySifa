@@ -72,6 +72,12 @@ CHAMPS_CALCULES = (
 )
 
 _TUBE_RE = re.compile(r"\btube\s*(\d+(?:[.,]\d+)?)\s*[x×]", re.IGNORECASE)
+# Désignation MyStock : « Tube carton Ø 40 mm, Lg. 1500 mm, ép. 4 mm ».
+_TUBE_LG_RE = re.compile(r"\b(?:lg|long(?:ueur)?)\.?\s*:?\s*(\d[\d\s\u202f]*(?:[.,]\d+)?)\s*mm",
+                         re.IGNORECASE)
+# Conditionnement de la fiche : « Bobine de 1 000 étiquettes ».
+_BOBINE_DE_RE = re.compile(r"^\s*bobines?\s+de\s+(\d[\d\s\u202f.]*)\s*[ée]tiquettes?\b",
+                           re.IGNORECASE)
 
 
 def _nombre(v: Any) -> Optional[float]:
@@ -94,8 +100,31 @@ def _vide(v: Any) -> bool:
 
 def longueur_tube(mandrin: Any) -> Optional[float]:
     """« Tube 1500x40 » → 1500. Une bague ou un libellé libre → None."""
-    m = _TUBE_RE.search(str(mandrin or ""))
-    return _nombre(m.group(1)) if m else None
+    txt = str(mandrin or "")
+    m = _TUBE_RE.search(txt)
+    if m:
+        return _nombre(m.group(1))
+    if re.search(r"\btube\b", txt, re.IGNORECASE):
+        m = _TUBE_LG_RE.search(txt)
+        if m:
+            return _nombre(re.sub(r"[\s\u202f]", "", m.group(1)))
+    return None
+
+
+def etiquettes_par_bobine(fiche: Dict[str, Any]):
+    """(nombre, origine). La fiche le porte (`nbetiquette` d'Access) ; à
+    défaut on le lit dans son conditionnement, « Bobine de 1 000 étiquettes »,
+    que l'OF imprime mot pour mot. Rien d'autre n'est deviné : « Paravent de
+    1000 plis de 4 étiquettes » ne dit pas un nombre par bobine."""
+    lu = _nombre(fiche.get("nb_etiq_bobin"))
+    if lu:
+        return lu, "fiche"
+    m = _BOBINE_DE_RE.search(str(fiche.get("conditionnement") or ""))
+    if m:
+        n = _nombre(re.sub(r"[\s\u202f.]", "", m.group(1)))
+        if n:
+            return n, "conditionnement"
+    return None, None
 
 
 def qte_au_mille(fiche: Dict[str, Any]) -> Optional[float]:
@@ -137,9 +166,12 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
     else:
         manques.append("Qté au mille absente de la fiche — métrage non calculé.")
 
-    eb = _nombre(fiche.get("nb_etiq_bobin"))
+    eb, origine_eb = etiquettes_par_bobine(fiche)
     bobines = None
     if eb:
+        if origine_eb == "conditionnement":
+            out["_info"] = ("Nb étiquettes par bobine absent de la fiche — "
+                            "%d lu dans le conditionnement." % eb)
         bobines = math.ceil(round(q / eb, 6))
         out["qte_bobines"] = bobines
         out["nb_mandrins"] = bobines
@@ -247,6 +279,8 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[s
     calc = calculer_quantites(fiche, qte_etiquettes,
                               laize=champs.get("laize"), grammage=grammage)
     manques = calc.pop("_manques", [])
+    if calc.get("_info"):
+        manques.insert(0, calc.pop("_info"))
     for col, val in calc.items():
         poser(col, val, "adhésif d'un OF précédent" if col == "qte_adhesif_g" else "calcul")
 

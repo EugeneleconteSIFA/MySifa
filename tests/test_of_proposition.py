@@ -96,6 +96,23 @@ verifier("sans quantité : rien", op.calculer_quantites(FICHE_1164, ""), {"_manq
 verifier("longueur du tube lue dans le libellé", op.longueur_tube("Tube 1500x76 7mm"), 1500.0)
 verifier("pas de tube supposé", op.longueur_tube("Mandrin 76"), None)
 
+print("Étiquettes par bobine et tube lus dans les libellés")
+verifier("« Bobine de 1 000 étiquettes » (fiche 945/0003)",
+         op.etiquettes_par_bobine({"conditionnement": "Bobine de 1 000 étiquettes"}), (1000.0, "conditionnement"))
+verifier("la colonne de la fiche prime",
+         op.etiquettes_par_bobine({"nb_etiq_bobin": 500, "conditionnement": "Bobine de 1 000 étiquettes"}), (500.0, "fiche"))
+verifier("un paravent ne donne pas de nombre par bobine",
+         op.etiquettes_par_bobine({"conditionnement": "Paravent de 1000 plis de 4 étiquettes"}), (None, None))
+c = op.calculer_quantites({"conditionnement": "Bobine de 1 000 étiquettes", "outil1_nb_front": 4,
+                           "nb_bobines_carton": 10, "qte_au_mille": 31.75}, 70_000)
+verifier("945/0003, 70 000 étiq. : 70 bobines", c.get("qte_bobines"), 70)
+verifier("945/0003 : 18 levées", c.get("nb_levees"), 18)
+verifier("945/0003 : 7 cartons", c.get("nb_cartons"), 7)
+verifier("le repli est signalé", "conditionnement" in (c.get("_info") or ""), True)
+verifier("désignation MyStock du tube",
+         op.longueur_tube("Tube carton Ø 40 mm, Lg. 1500 mm, ép. 4 mm"), 1500.0)
+verifier("« Lg » hors d'un tube : rien", op.longueur_tube("Bague Lg. 20 mm"), None)
+
 print("Proposition complète depuis la fiche")
 conn = sqlite3.connect(":memory:")
 conn.row_factory = sqlite3.Row
@@ -156,6 +173,19 @@ print("Route déclarée avant /api/of/{of_id}")
 src = open("app/routers/of_import.py", encoding="utf-8").read()
 verifier("ordre des routes",
          src.index('@router.get("/api/of/proposition")') < src.index('@router.get("/api/of/{of_id}")'), True)
+
+print("Tri de la liste des OF")
+src_r = open("app/routers/of_import.py", encoding="utf-8").read()
+expr = re.search(r'_SQL_DATE_CREATION_ISO = \((.*?)\n\)', src_r, re.S).group(1)
+expr = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', expr))
+t = sqlite3.connect(":memory:")
+t.execute("CREATE TABLE o (id INTEGER, date_creation TEXT, date_import TEXT)")
+t.executemany("INSERT INTO o VALUES (?,?,?)", [
+    (1, "31/10/2026", "2026-10-31T10:00:00"), (2, "05/11/2026", "2026-11-05T10:00:00"),
+    (3, "2026-11-12", "2026-11-12T22:11:16"), (4, "12/11/2026", "2026-11-12T09:00:00"),
+    (5, None, "2026-11-01T08:00:00")])
+ordre = [r[0] for r in t.execute("SELECT id FROM o ORDER BY %s DESC, o.id DESC" % expr)]
+verifier("OF créé aujourd'hui en tête, dates françaises et ISO mêlées", ordre, [4, 3, 2, 5, 1])
 
 print("Dates de l'OF imprimé")
 gen = open("app/services/of_pdf_generator.py", encoding="utf-8").read()
