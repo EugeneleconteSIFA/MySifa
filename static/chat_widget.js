@@ -319,7 +319,7 @@ body.light .cw-channel-item:hover{background:rgba(0,0,0,.04)}
 #cw-reply-bar.cw-show{display:flex}
 .cw-rp-preview{flex:1;min-width:0;padding:4px 9px;border-left:3px solid var(--accent);
   background:var(--accent-bg);border-radius:6px;font-size:12px}
-.cw-rp-name{font-weight:700;color:var(--text)}
+.cw-rp-name{font-weight:700;color:var(--accent)}
 .cw-rp-body{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cw-rp-cancel{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);
   background:transparent;color:var(--muted);cursor:pointer;font-size:14px;
@@ -669,6 +669,17 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-poll-reopen-btn:hover{background:var(--accent-bg)}
 
 .cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:14px;line-height:1;pointer-events:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:default}
+/* Appui long : la bulle s'enfonce pendant l'appui, puis reste entourée tant
+   que son menu est ouvert. Le message auquel on répond est entouré aussi. */
+.cw-msg-mine,.cw-msg-theirs{transition:transform .18s ease,box-shadow .18s ease}
+.cw-msg-wrap.cw-msg-pressing .cw-msg-mine,.cw-msg-wrap.cw-msg-pressing .cw-msg-theirs{transform:scale(.97)}
+.cw-msg-wrap.cw-msg-selected .cw-msg-mine,.cw-msg-wrap.cw-msg-selected .cw-msg-theirs,
+.cw-msg-wrap.cw-msg-replying .cw-msg-mine,.cw-msg-wrap.cw-msg-replying .cw-msg-theirs{box-shadow:0 0 0 2px var(--accent)}
+@media (hover:none){
+  .cw-msg-wrap{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .cw-msg-wrap textarea,.cw-msg-wrap input{-webkit-user-select:text;user-select:text}
+  .cw-msg-menu-btn{display:none}
+}
 /* Téléphone : la messagerie prend tout l'écran, et la page derrière ne défile
    plus (html.cw-scroll-lock, posé par syncMobileChatUi). Placé en fin de feuille
    pour l'emporter sur les règles portrait et paysage ci-dessus ; le calage au
@@ -1853,17 +1864,26 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     cwEnsureReplyBar();
     const bar = document.getElementById('cw-reply-bar');
     if (bar) bar.classList.add('cw-show');
-    const n = document.getElementById('cw-rp-name');
-    const b = document.getElementById('cw-rp-body');
-    if (n) n.textContent = msg.user_nom || '';
-    if (b) b.textContent = (msg.body || '(pièce jointe)').substring(0,80);
+    // La barre peut venir de chat_widget_v2.js (ids cw-reply-p*) : sans ce
+    // repli, elle s'affichait vide et rien ne distinguait une réponse.
+    const n = document.getElementById('cw-rp-name') || document.getElementById('cw-reply-pname');
+    const b = document.getElementById('cw-rp-body') || document.getElementById('cw-reply-pbody');
+    const mine = Number(msg.user_id) === Number(CW.uid) || msg.is_mine;
+    if (n) n.textContent = mine ? 'Réponse à votre message' : 'Réponse à ' + (msg.user_nom || '');
+    if (b) b.textContent = (msg.body || '(pièce jointe)').substring(0,120);
+    document.querySelectorAll('.cw-msg-wrap.cw-msg-replying').forEach(w => w.classList.remove('cw-msg-replying'));
+    const target = document.querySelector('.cw-msg-wrap[data-id="'+msg.id+'"]');
+    if (target) target.classList.add('cw-msg-replying');
     const inp = document.getElementById('cw-input');
-    if (inp) inp.focus();
+    if (inp) { inp.placeholder = 'Votre réponse…'; inp.focus(); }
   }
   function cwCancelReply() {
     CW._replyToId = null;
     const bar = document.getElementById('cw-reply-bar');
     if (bar) bar.classList.remove('cw-show');
+    document.querySelectorAll('.cw-msg-wrap.cw-msg-replying').forEach(w => w.classList.remove('cw-msg-replying'));
+    const inp = document.getElementById('cw-input');
+    if (inp) inp.placeholder = 'Message…';
   }
   // ── Delete ────────────────────────────────────────────────
   async function cwDeleteMsg(msgId) {
@@ -1943,6 +1963,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   // ── Close menus on outside click ──────────────────────────
   document.addEventListener('click',()=>{
     document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m=>m.classList.remove('cw-open'));
+    document.querySelectorAll('.cw-msg-wrap.cw-msg-selected').forEach(w=>w.classList.remove('cw-msg-selected'));
   });
 
   function renderMsg(msg) {
@@ -2070,6 +2091,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       pin:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v7z"/></svg>',
       unpin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2" y1="2" x2="22" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9"/></svg>',
       tache: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+      copy:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
       del:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
     };
 
@@ -2090,6 +2112,13 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     };
 
     menu.appendChild(mkItem(ICO.reply, 'Répondre', '', ()=>cwStartReply(msg)));
+    // Sur téléphone, l'appui long ouvre ce menu au lieu de sélectionner le
+    // texte : « Copier » rend ce que la sélection permettait.
+    if (msg.body && navigator.clipboard && navigator.clipboard.writeText) {
+      menu.appendChild(mkItem(ICO.copy, 'Copier', '', ()=>{
+        navigator.clipboard.writeText(msg.body).then(()=>cwToast('Message copié.', 'success')).catch(()=>{});
+      }));
+    }
     if (canEdit) menu.appendChild(mkItem(ICO.edit, 'Modifier', '', ()=>cwStartEdit(wrap,msg)));
     menu.appendChild(mkItem(ICO.fwd, 'Transférer', '', ()=>cwStartForward(msg)));
     // Créer une tâche à partir du message — super admin uniquement, et
@@ -2114,6 +2143,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     const closeMenu = () => {
       menu.classList.remove('cw-open','cw-menu-up');
       menuBtn.setAttribute('aria-expanded', 'false');
+      wrap.classList.remove('cw-msg-selected');
     };
     const openMenu = () => {
       // Décision flip up/down : si pas assez de place sous le bouton, on ouvre vers le haut.
@@ -2137,6 +2167,53 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
         if (b) b.setAttribute('aria-expanded', 'false');
       });
       if (!was) openMenu();
+    });
+
+    // Appui long (téléphone) ou clic droit : ouvre le même menu, comme dans
+    // les messageries courantes. Sur écran tactile le ⋮ est masqué (CSS).
+    const openFromGesture = () => {
+      document.querySelectorAll('.cw-msg-menu.cw-open').forEach(m => {
+        m.classList.remove('cw-open','cw-menu-up');
+        const b = m.parentElement && m.parentElement.querySelector('.cw-msg-menu-btn');
+        if (b) b.setAttribute('aria-expanded', 'false');
+      });
+      document.querySelectorAll('.cw-msg-wrap.cw-msg-selected').forEach(w => w.classList.remove('cw-msg-selected'));
+      wrap.classList.add('cw-msg-selected');
+      openMenu();
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+    };
+    const LP_EXCLUS = 'button,a,input,textarea,.cw-msg-menu,.cw-edit-ta,.cw-reactions,.cw-react-picker';
+    let lpTimer = 0, lpX = 0, lpY = 0, lpFired = false;
+    const lpCancel = () => {
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = 0; }
+      wrap.classList.remove('cw-msg-pressing');
+    };
+    wrap.addEventListener('touchstart', e => {
+      lpFired = false;
+      if (e.touches.length !== 1 || (e.target.closest && e.target.closest(LP_EXCLUS))) return;
+      lpX = e.touches[0].clientX; lpY = e.touches[0].clientY;
+      wrap.classList.add('cw-msg-pressing');
+      lpTimer = setTimeout(() => {
+        lpTimer = 0;
+        lpFired = true;
+        wrap.classList.remove('cw-msg-pressing');
+        openFromGesture();
+      }, 450);
+    }, { passive: true });
+    wrap.addEventListener('touchmove', e => {
+      const t = e.touches[0];
+      if (lpTimer && t && Math.hypot(t.clientX - lpX, t.clientY - lpY) > 10) lpCancel();
+    }, { passive: true });
+    wrap.addEventListener('touchend', e => {
+      lpCancel();
+      // Le relâché enverrait un clic, qui refermerait aussitôt le menu.
+      if (lpFired) { e.preventDefault(); lpFired = false; }
+    });
+    wrap.addEventListener('touchcancel', lpCancel);
+    wrap.addEventListener('contextmenu', e => {
+      if (e.target.closest && e.target.closest('a,input,textarea,.cw-edit-ta')) return;
+      e.preventDefault();
+      if (!menu.classList.contains('cw-open')) openFromGesture();
     });
 
     // Ordre DOM : [⋮, menu, nom/heure]
@@ -3549,6 +3626,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   CW.fmtTime = fmtTime;
   CW.checkChatUpdates = checkChatUpdates;
   CW.resizeCwInput = resizeCwInput;
+  CW.cancelReply = cwCancelReply;
 
   boot();
   window._CW = CW;

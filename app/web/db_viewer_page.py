@@ -337,8 +337,8 @@ body.light .tbl-rows-badge{{background:color-mix(in srgb,var(--accent,#0891b2) 1
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=20"></script>
-<script src="/static/chat_widget_v2.js?v=10"></script>
+<script src="/static/chat_widget.js?v=21"></script>
+<script src="/static/chat_widget_v2.js?v=11"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/db_url.js?v=1"></script>
