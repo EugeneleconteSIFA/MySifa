@@ -24,6 +24,7 @@ Dépendances : reportlab, pypdf.
 from __future__ import annotations
 
 import os
+import re
 from io import BytesIO
 from typing import Any, Optional
 
@@ -53,6 +54,15 @@ def _fmt(v: Any) -> str:
     if isinstance(v, float) and v == int(v):
         return str(int(v))
     return str(v)
+
+
+def _fmt_date(v: Any) -> str:
+    """« 2026-11-18 » → « 18/11/2026 ». Un OF saisi dans MySifa porte ses
+    dates en ISO (champ date du navigateur) ; Access les envoie déjà au
+    format français, qui passe tel quel."""
+    brut = _fmt(v)
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", brut)
+    return "%s/%s/%s" % (m.group(3), m.group(2), m.group(1)) if m else brut
 
 
 def _fmt_qte(v: Any) -> str:
@@ -101,8 +111,8 @@ _CHAMPS = [
     # En-tête
     ("of_numero",              54.7,  33.5, 11,   True,  "g", _fmt),
     ("reference",              54.7,  43.9, 10,   True,  "g", _fmt),
-    ("date_creation",         231.0,  30.0, 10,   True,  "g", _fmt),
-    ("delai_client",          337.7,  29.8, 10,   True,  "g", _fmt),
+    ("date_creation",         231.0,  30.0, 10,   True,  "g", _fmt_date),
+    ("delai_client",          337.7,  29.8, 10,   True,  "g", _fmt_date),
     ("format",                289.0,  44.1, 10,   True,  "g", _fmt),
     # Matière et substitution
     ("matiere",                86.0,  60.9, 10,   True,  "g", _fmt),
@@ -185,7 +195,7 @@ def _lignes_bobinettes(d: dict) -> list:
     if brut:
         return brut.splitlines()[:4]
 
-    date = _fmt(d.get("delai_client")) or _fmt(d.get("date_creation"))
+    date = _fmt_date(d.get("delai_client")) or _fmt_date(d.get("date_creation"))
     adhesif = (d.get("adhesif_label") or "").replace("Adhésif", "").strip()
     # « Permanent 2028Y - 1 » → « Permanent » : l'étiquette ne porte que la
     # nature de la colle et celle du support.
