@@ -417,3 +417,39 @@ span.nt-f-jaune,span.nt-f-vert,span.nt-f-bleu,span.nt-f-rose,span.nt-f-orange,sp
 /* Pastilles des menus : leur teinte passe avant les styles génériques de boutons. */
 .nted-pastille.nt-c-rouge{color:var(--ntc-rouge)}.nted-pastille.nt-c-orange{color:var(--ntc-orange)}.nted-pastille.nt-c-vert{color:var(--ntc-vert)}.nted-pastille.nt-c-bleu{color:var(--ntc-bleu)}.nted-pastille.nt-c-violet{color:var(--ntc-violet)}.nted-pastille.nt-c-rose{color:var(--ntc-rose)}.nted-pastille.nt-c-gris{color:var(--ntc-gris)}.nted-pastille.nt-c-defaut{color:var(--text)}
 .nted-pastille.nt-f-jaune{background:var(--ntf-jaune)}.nted-pastille.nt-f-vert{background:var(--ntf-vert)}.nted-pastille.nt-f-bleu{background:var(--ntf-bleu)}.nted-pastille.nt-f-rose{background:var(--ntf-rose)}.nted-pastille.nt-f-orange{background:var(--ntf-orange)}.nted-pastille.nt-f-gris{background:var(--ntf-gris)}.nted-pastille.nt-f-aucun{background:var(--bg)}
+
+/* ── Menus de mise en forme façon traitement de texte (nuancier, tailles, polices, casse) ── */
+.nted-pals{min-width:216px}
+.nted-onglets{display:flex;gap:2px;padding:2px;margin:0 0 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+.nted-onglets button{flex:1;padding:5px 8px;border:none;border-radius:6px;background:transparent;color:var(--muted);font:600 12px/1.2 inherit;font-family:inherit;cursor:pointer}
+.nted-onglets button.actif{background:var(--card);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.nted-pal[hidden]{display:none}
+.nted-pal-reset{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:6px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font:600 12px/1.2 inherit;font-family:inherit;cursor:pointer;text-align:left}
+.nted-pal-reset:hover,.nted-pal-reset.actif{border-color:var(--accent);color:var(--accent)}
+.nted-sans{width:14px;height:14px;border:1px solid var(--border);border-radius:3px;position:relative;background:var(--card)}
+.nted-sans::after{content:'';position:absolute;left:-1px;right:-1px;top:50%;height:2px;background:var(--danger);transform:rotate(-45deg)}
+.nted-grille{display:grid;grid-template-columns:repeat(10,18px);gap:3px}
+.nted-grille .nted-case:nth-child(-n+10){margin-bottom:3px}
+.nted-grille .nted-case:nth-child(n+11):nth-child(-n+20){margin-bottom:3px}
+.nted-case{width:18px;height:18px;padding:0;border:1px solid rgba(128,128,128,.35);border-radius:50%;cursor:pointer;transition:transform .08s}
+.nted-case:hover{transform:scale(1.18);border-color:var(--text)}
+.nted-case.actif{box-shadow:0 0 0 2px var(--card),0 0 0 3.5px var(--accent)}
+.nted-perso{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+.nted-plus{position:relative;width:18px;height:18px;border-radius:50%;border:1px dashed var(--muted);color:var(--muted);display:flex;align-items:center;justify-content:center;font:700 13px/1 inherit;font-family:inherit;cursor:pointer;overflow:hidden}
+.nted-plus:hover{border-color:var(--accent);color:var(--accent)}
+.nted-plus input{position:absolute;inset:0;opacity:0;width:100%;height:100%;padding:0;border:0;cursor:pointer}
+.nted-pas{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:6px}
+.nted-pas button{width:30px;height:28px;border:none;background:var(--bg);color:var(--text);font:600 15px/1 inherit;font-family:inherit;cursor:pointer}
+.nted-pas button:hover{color:var(--accent)}
+.nted-pas-val{min-width:34px;text-align:center;font:600 12.5px/28px inherit;font-family:inherit;font-variant-numeric:tabular-nums;border-left:1px solid var(--border);border-right:1px solid var(--border)}
+.nted-tailles{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-bottom:6px}
+.nted-tailles button{padding:4px 0;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:600 11.5px/1.2 inherit;font-family:inherit;font-variant-numeric:tabular-nums;cursor:pointer}
+.nted-tailles button:hover,.nted-tailles button.actif{border-color:var(--accent);color:var(--accent)}
+.nted-polices{display:flex;flex-direction:column;max-height:260px;overflow-y:auto;margin-bottom:4px}
+.nted-polices button{padding:6px 10px 6px 26px;border:none;border-radius:6px;background:transparent;color:var(--text);font-size:14px;line-height:1.3;text-align:left;cursor:pointer;position:relative}
+.nted-polices button:hover{background:var(--bg)}
+.nted-polices button.actif::before{content:'✓';position:absolute;left:9px;color:var(--accent);font:700 12px/1.6 system-ui,sans-serif}
+.nted-casses{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
+.nted-casses button{padding:7px 10px;border:none;border-radius:6px;background:transparent;color:var(--text);font:500 13px/1.2 inherit;font-family:inherit;text-align:left;cursor:pointer}
+.nted-casses button:hover{background:var(--bg)}
+.nted-choix button.actif{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}

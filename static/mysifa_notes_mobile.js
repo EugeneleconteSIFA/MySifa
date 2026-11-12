@@ -66,7 +66,8 @@
       return '<button type="button" data-k="' + b[0] + '" title="' + b[1] + '" aria-label="' + b[1] + '">' + I[b[0]] + '</button>';
     }).join('') + '</div><button type="button" class="nt-clavier-fini" data-k="fini" aria-label="Fermer le clavier">' + I.fini + '</button>' +
       '<div class="nt-clavier-styles nted" hidden>' + window.MySifaNotesEditeur.sousMenu('couleur') +
-      window.MySifaNotesEditeur.sousMenu('texte') + window.MySifaNotesEditeur.sousMenu('aligne') + '</div>';
+      window.MySifaNotesEditeur.sousMenu('texte') + window.MySifaNotesEditeur.sousMenu('aligne') +
+      window.MySifaNotesEditeur.sousMenu('casse') + '</div>';
     document.body.appendChild(barre);
     /* Le doigt ne doit pas retirer le curseur du texte (sinon le clavier se
        ferme) : le focus change au « mousedown » simulé après le toucher. Le
@@ -76,7 +77,11 @@
     });
     barre.addEventListener('click', function (e) {
       var st = e.target.closest('[data-cmd]');
-      if (st && S.ed) { S.ed.commande(st.dataset.cmd); return; }
+      if (st && S.ed) {
+        S.ed.commande(st.dataset.cmd);
+        window.MySifaNotesEditeur.peindreEtat(barre.querySelector('.nt-clavier-styles'), S.ed);
+        return;
+      }
       var b = e.target.closest('[data-k]');
       if (!b || !S.ed) return;
       var k = b.dataset.k;
@@ -86,6 +91,7 @@
         var pan = barre.querySelector('.nt-clavier-styles');
         pan.hidden = !pan.hidden;
         b.classList.toggle('actif', !pan.hidden);
+        if (!pan.hidden) window.MySifaNotesEditeur.peindreEtat(pan, S.ed);
         return placer();
       }
       S.ed.commande(k);

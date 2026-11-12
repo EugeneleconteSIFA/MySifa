@@ -520,6 +520,41 @@ class TestCollaboration(TestMesNotes):
                                "styles": [["fond-jaune al-centre fond-rose", "fond-noir"], ["al-droite"]]}])[0]
         self.assertEqual(t["styles"], [["fond-jaune al-centre", ""], ["al-droite", ""]])
 
+    def test_styles_libres(self):
+        """Mise en forme façon Docs : couleur, surlignage, taille, police en style en ligne."""
+        from app.services.notes import assainir_html
+
+        self.assertEqual(
+            assainir_html('<span style="color: rgb(204, 0, 0); font-size: 18pt; position:fixed">a</span>'),
+            '<span style="color:#cc0000;font-size:18pt">a</span>')
+        # Police hors liste, taille hors bornes, couleur non opaque ou invalide : refusées.
+        self.assertEqual(assainir_html('<span style="font-family:Papyrus;font-size:200pt;color:red">a</span>'), "a")
+        self.assertEqual(assainir_html('<span style="background-color:rgba(0,0,0,0.1)">a</span>'), "a")
+        self.assertEqual(assainir_html('<span style="color:#f00;background-color:#ffff00">a</span>'),
+                         '<span style="color:#ff0000;background-color:#ffff00">a</span>')
+        # Guillemets de la pile : écrits comme le navigateur les écrit (même HTML des deux côtés).
+        h = assainir_html('<span style="font-family:&quot;Times New Roman&quot;, Times, serif">a</span>')
+        self.assertEqual(h, '<span style="font-family:&#39;Times New Roman&#39;,Times,serif">a</span>')
+        self.assertEqual(assainir_html(h), h)
+        # Classe et style sur le même span, injection d'attribut impossible.
+        self.assertEqual(assainir_html('<span class="nt-c-rouge" style="font-size:12pt" onclick="x">a</span>'),
+                         '<span class="nt-c-rouge" style="font-size:12pt">a</span>')
+        self.assertEqual(assainir_html('<span style="color:#123456&quot; onmouseover=&quot;x">a</span>'), "a")
+
+    def test_export_styles_libres_et_numeros(self):
+        from app.services.notes_export import marques_num, segments, style_de
+
+        segs = segments('<span style="color:#cc0000"><span style="font-size:18pt">a</span>b</span>'
+                        '<span class="nt-f-jaune" style="font-family:Georgia,serif">c</span>')
+        styles = [(t, style_de(st)) for t, st, _l in segs]
+        self.assertEqual(styles[0], ("a", {"couleur": "#cc0000", "taille": 18.0}))
+        self.assertEqual(styles[1], ("b", {"couleur": "#cc0000"}))
+        self.assertEqual(styles[2][1]["police"], "georgia")
+        self.assertTrue(styles[2][1]["fond"].startswith("#"))
+        blocs = [{"type": "num"}, {"type": "num", "retrait": 1}, {"type": "num", "retrait": 1},
+                 {"type": "puce", "retrait": 2}, {"type": "num"}, {"type": "num", "retrait": 2}, {"type": "p"}]
+        self.assertEqual(marques_num(blocs), ["1.", "a.", "b.", None, "2.", "i.", None])
+
     def test_image_controlee_et_protegee(self):
         import tempfile as _tf
 
@@ -708,7 +743,10 @@ class TestOutilsNotes(TestMesNotes):
     def test_exports(self):
         n = self._creer(title="Export", sur_ecran=0, blocs=[
             {"type": "h2", "texte": "Titre → suite"}, {"type": "todo", "texte": "a", "coche": True},
-            {"type": "tableau", "entete": True, "lignes": [["A", "B"], ["<b>1</b>", "2"]]}])
+            {"type": "tableau", "entete": True, "lignes": [["A", "B"], ["<b>1</b>", "2"]]},
+            {"type": "p", "html": '<span style="color:#cc0000;background-color:#d9ead3;font-size:18pt;'
+                                  'font-family:&#39;Brush Script MT&#39;,&#39;Snell Roundhand&#39;,cursive">x</span>'},
+            {"type": "num", "texte": "un"}, {"type": "num", "texte": "sous", "retrait": 1}])
         pdf = self._as(1, "get", f"/api/postits/{n['id']}/export.pdf")
         self.assertEqual(pdf.status_code, 200)
         self.assertTrue(pdf.content.startswith(b"%PDF"))
