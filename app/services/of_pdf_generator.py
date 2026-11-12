@@ -139,7 +139,10 @@ _CHAMPS = [
     ("tolerance",             119.9, 263.1, 10,   True,  "g", _fmt),
     ("cartons_type",          120.0, 281.1, 10,   True,  "g", _fmt),
     ("cales_sachets",         119.9, 294.5, 10,   True,  "g", _fmt),
-    ("mandrins_dia",          119.9, 309.7, 10,   True,  "g", _fmt),
+    # Commence juste après « Mandrins dia. » plutôt que dans la colonne des
+    # valeurs : une désignation MyStock (« Tube carton Ø 40 mm, Lg. 1500 mm,
+    # ép. 4 mm ») n'y tiendrait pas avant « Long. ».
+    ("mandrins_dia",           84.0, 309.7, 10,   True,  "g", _fmt),
     ("mandrin_longueur",      253.4, 309.7, 10,   True,  "g", _fmt_fr),
     ("nb_cartons",            429.5, 247.9, 10,   True,  "g", _fmt),
     ("nb_mandrins",           429.0, 277.0, 10,   True,  "g", _fmt),
@@ -171,6 +174,28 @@ _CHAMPS = [
     ("plieuse_pignon",        179.4, 639.4, 10,   True,  "g", _fmt),
     ("nb_pouces",             505.4, 639.4, 10,   True,  "g", _fmt),
 ]
+
+# Largeur disponible avant le libellé suivant du modèle, relevée sur
+# data/of_template.pdf. Sans elle, un libellé long venu de MyStock (« Tube
+# carton Ø 40 mm, Lg. 1500 mm, ép. 4 mm ») écrivait par-dessus « Long. » et sa
+# valeur, une glassine par-dessus « Subst. ». Le texte se resserre jusqu'à
+# 6 pt, puis se coupe avec « … » : l'OF reste lisible, la valeur complète
+# reste dans MySifa.
+_LARGEURS = {
+    "of_numero":        124.0,   # « Date créa. » à x = 182
+    "reference":        190.0,   # « Format » à x = 250
+    "format":           185.0,   # cadre « Contrôlé » à x = 477
+    "matiere":          158.0,   # « Laize » à x = 250
+    "ref_matiere":      148.0,
+    "glassine":         112.0,   # « Subst. » à x = 185
+    "adhesif_label":    280.0,   # bord du bloc de gauche, x ≈ 340
+    "conditionnement":  220.0,
+    "tolerance":        220.0,
+    "cartons_type":     220.0,
+    "cales_sachets":    220.0,
+    "mandrins_dia":     138.0,   # « Long. » à x = 224,8
+    "palette_type":     104.0,   # bord droit du second cadre, x ≈ 538
+}
 
 # Zones de texte libre : (clé, x, y_bas de la première ligne, largeur, taille,
 # interligne, nombre de lignes maximum).
@@ -226,6 +251,19 @@ def _couper(texte: str, largeur: float, police: str, taille: float) -> list:
     return lignes
 
 
+def _ajuster(texte: str, police: str, taille: float, largeur: float):
+    """(texte, taille) qui tiennent dans `largeur` : on resserre jusqu'à
+    6 pt, puis on coupe en finissant par « … »."""
+    t = float(taille)
+    while stringWidth(texte, police, t) > largeur and t > 6.0:
+        t -= 0.5
+    if stringWidth(texte, police, t) <= largeur:
+        return texte, t
+    while texte and stringWidth(texte + "…", police, t) > largeur:
+        texte = texte[:-1]
+    return texte.rstrip() + "…", t
+
+
 def _terminer_le_flux(page) -> None:
     """Garantit que le flux du modèle se termine par un séparateur.
 
@@ -264,10 +302,12 @@ def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes
     c = canvas.Canvas(buf, pagesize=(_PAGE_W, _PAGE_H))
     c.setFillColorRGB(0, 0, 0)
 
-    def _poser(x, y_bas, texte, taille=10, gras=True, align="g"):
+    def _poser(x, y_bas, texte, taille=10, gras=True, align="g", largeur=None):
         if texte in (None, ""):
             return
         police = _GRAS if gras else _REGULIER
+        if largeur:
+            texte, taille = _ajuster(texte, police, taille, largeur)
         # y1 est le bas de la case dans le repère du PDF d'origine ; la ligne
         # de base remonte de la descendante de la police.
         base = _PAGE_H - y_bas + 0.21 * taille
@@ -278,7 +318,7 @@ def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes
             c.drawString(x, base, texte)
 
     for cle, x, y, taille, gras, align, fmt in _CHAMPS:
-        _poser(x, y, fmt(d.get(cle)), taille, gras, align)
+        _poser(x, y, fmt(d.get(cle)), taille, gras, align, _LARGEURS.get(cle))
 
     for cle, x, y, largeur, taille, interligne, maxi in _ZONES:
         valeur = d.get(cle)
