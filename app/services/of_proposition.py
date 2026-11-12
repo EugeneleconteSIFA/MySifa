@@ -18,6 +18,8 @@ Deux familles de cases
        métrage    = nb étiquettes × qté au mille ÷ 1000      139 / 142
        bobines    = ⌈ nb étiquettes ÷ nb étiq. par bobine ⌉   60 / 65
        mandrins   = bobines                                   141 / 141
+       levées     = ⌈ bobines ÷ nb fronts de l'outil ⌉        relevé sur les OF qui
+                    ont une fiche (8 000 ÷ 10 = 800, 1 120 ÷ 9 = 124,4 → 125)
        cartons    = ⌈ bobines ÷ nb bobines par carton ⌉       140 / 141
        tubes      = ⌈ mandrins ÷ ⌊ long. du tube ÷ long. du mandrin ⌋ ⌉
                                                               134 / 138
@@ -65,7 +67,7 @@ REFERENCES = (
 # Cases que le calcul remplit. L'écran ne les écrase plus dès qu'un humain
 # les a touchées.
 CHAMPS_CALCULES = (
-    "metrage", "qte_bobines", "nb_mandrins", "nb_tubes", "nb_cartons",
+    "metrage", "qte_bobines", "nb_mandrins", "nb_levees", "nb_tubes", "nb_cartons",
     "qte_adhesif_g", "qte_adhesif_kg",
 )
 
@@ -145,6 +147,14 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
         manques.append("Nb étiquettes par bobine absent de la fiche — bobines non calculées.")
 
     if bobines:
+        # Une levée sort une bobine par front de l'outil : arrondi au-dessus,
+        # la dernière levée est entamée même incomplète. Jamais mod_nb_front.
+        fronts = _nombre(fiche.get("outil1_nb_front"))
+        if fronts:
+            out["nb_levees"] = math.ceil(round(bobines / fronts, 6))
+        else:
+            manques.append("Nb de fronts de l'outil absent de la fiche — levées non calculées.")
+
         bc = _nombre(fiche.get("nb_bobines_carton"))
         if bc:
             out["nb_cartons"] = math.ceil(round(bobines / bc, 6))
@@ -226,9 +236,12 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[s
     for col_ft, col_of in REFERENCES:
         poser(col_of, fiche.get(col_ft), "fiche")
 
+    # La fiche stocke la qté au mille en simple précision (2,7639999389…) :
+    # on l'arrondit au dix-millième, la précision d'Access.
     qam = qte_au_mille(fiche)
-    if qam and "qte_au_mille" not in champs:
-        poser("qte_au_mille", round(qam, 4), "calcul")
+    if qam:
+        poser("qte_au_mille", round(qam, 4),
+              "fiche" if _nombre(fiche.get("qte_au_mille")) else "calcul")
 
     grammage = grammage_adhesif(conn, champs.get("adhesif_label"))
     calc = calculer_quantites(fiche, qte_etiquettes,
