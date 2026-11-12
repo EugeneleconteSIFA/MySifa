@@ -371,10 +371,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='paie';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<script src="/static/mysifa_dock.js?v=4"></script>
-<script src="/static/mysifa_postit.js?v=5"></script>
+<script src="/static/mysifa_dock.js?v=5"></script>
+<script src="/static/mysifa_postit.js?v=7"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>

@@ -325,8 +325,17 @@
     if (this.opts.poignees && !this.lecture) corps.classList.add('nted-poignees');
     /* Référence = ce que le serveur a vraiment : sans le bloc vide ajouté ici. */
     this.envoye = (Array.isArray(note.blocs) ? note.blocs : []).map(copie);
+    /* Des blocs sans identifiant ne viennent pas d'un serveur à jour (page
+       chargée pendant une mise à jour) : on n'envoie rien tant que la note
+       n'a pas été relue. Sinon tout le contenu repartirait comme « nouveau »
+       et serait doublé (incident du 12/11/2026). */
+    this._fiable = this.envoye.every(function (b) { return !!b.uid; });
     this.blocs();
     brancher(this);
+    if (!this._fiable && this.opts.noteId && this.opts.recharger) {
+      var moi = this;
+      setTimeout(function () { if (!moi._fiable) moi.opts.recharger(); }, 0);
+    }
     this.redessiner();
     _editeurs.push(this);
     if (this.opts.flux && this.opts.noteId) this.suivre();
@@ -511,6 +520,7 @@
 
   P.envoyer = function (immediat) {
     var self = this;
+    if (!this._fiable || this._bloque) return Promise.resolve();
     if (this._envoi) { this._relancer = true; return this._envoi; }
     var ops = this.ops();
     if (!ops.length) return Promise.resolve();
@@ -525,16 +535,33 @@
     }).then(function (r) {
       if (!r.ok) {
         return r.json().catch(function () { return {}; }).then(function (j) {
-          throw new Error((j && j.detail) || 'Note non enregistrée.');
+          var err = new Error((j && j.detail) || 'Note non enregistrée.');
+          err.statut = r.status;
+          throw err;
         });
       }
       return r.json();
     }).then(function (res) {
+      self._erreurEnvoi = 0;
       if (self.opts.surEnregistre) { try { self.opts.surEnregistre(res); } catch (e) {} }
     }).catch(function (e) {
       /* Échec : on repartira de l'état d'avant pour renvoyer ces changements. */
       self.envoye = avant;
-      if (self.opts.signaler) self.opts.signaler(e.message || 'Note non enregistrée.');
+      var definitif = e.statut === 403 || (e.statut === 404 && e.message !== 'Not Found');
+      if (definitif) {
+        /* Note retirée ou devenue en lecture seule : on arrête d'envoyer. */
+        self._bloque = true;
+        if (self.opts.signaler) self.opts.signaler(e.message);
+        return;
+      }
+      /* Serveur injoignable ou en cours de mise à jour (route encore absente) :
+         un seul message, puis on réessaie sans bruit. */
+      self._erreurEnvoi = (self._erreurEnvoi || 0) + 1;
+      if (self._erreurEnvoi === 1 && self.opts.signaler) {
+        self.opts.signaler('Connexion au serveur interrompue — vos modifications seront renvoyées.', 'info');
+      }
+      clearTimeout(self._reessai);
+      self._reessai = setTimeout(function () { self.envoyer(false); }, Math.min(30000, 3000 * self._erreurEnvoi));
     }).then(function () {
       self._envoi = null;
       if (self._relancer) { self._relancer = false; self.envoyer(false); }
@@ -700,6 +727,7 @@
     this.note.revision = note.revision;
     this.rev = Number(note.revision || 0);
     this.envoye = this.note.blocs.map(copie);
+    this._fiable = this.envoye.every(function (b) { return !!b.uid; });
     this.blocs();
     this.redessiner();
   };
@@ -742,6 +770,44 @@
     this.redessiner(i, 1);
     var el = this.elTexte(i);
     if (el) ouvrirSlash(this, el, 0);
+  };
+
+  /* Bloc où agit le panneau d'actions : celui qui a le curseur, sinon le
+     dernier visité, sinon une ligne vide en bas de la note. */
+  P.cible = function () {
+    var ae = document.activeElement;
+    if (ae && this.corps.contains(ae) && ae.classList.contains('pb-txt')) return ae;
+    var k = this._dernierUid ? this.indexUid(this._dernierUid) : -1;
+    if (k >= 0 && this.elTexte(k)) {
+      var pos = this._dernierPos == null ? -1 : this._dernierPos;
+      this.focus(k, pos);
+      return this.elTexte(k);
+    }
+    this.focusFin();
+    var bl = this.blocs();
+    return this.elTexte(bl.length - 1);
+  };
+
+  /* Commande lancée depuis le panneau d'actions de /note. */
+  P.commande = function (cle) {
+    if (this.lecture) return;
+    var fmt = { gras: 'bold', italique: 'italic', souligne: 'underline', barre: 'strikeThrough', code_ligne: 'code', lien_texte: 'lien' }[cle];
+    var el = this.cible();
+    if (!el) return;
+    if (fmt) {
+      var sel = window.getSelection();
+      if (fmt !== 'lien' && (!sel || sel.isCollapsed)) {
+        if (this.opts.signaler) this.opts.signaler('Sélectionnez d\'abord le texte à mettre en forme.', 'info');
+        return;
+      }
+      return formater(this, el, fmt);
+    }
+    var cmd = null;
+    commandesDe(this).forEach(function (x) { if (x.cle === cle) cmd = x; });
+    var c = this.ctx(el);
+    if (!cmd || !c) return;
+    this.lire(c.b, el);
+    executer(this, el, c, cmd, curseur(el).debut, true);
   };
 
   P.focusFin = function () {
@@ -1313,8 +1379,10 @@
     corps.addEventListener('focusin', function (e) {
       var row = e.target.closest && e.target.closest('.pb');
       ed.signalerFocus(row ? row.dataset.uid : null);
+      if (row && e.target.classList.contains('pb-txt')) ed._dernierUid = row.dataset.uid;
     });
     corps.addEventListener('focusout', function (e) {
+      if (e.target.classList && e.target.classList.contains('pb-txt')) ed._dernierPos = curseur(e.target).fin;
       var vers = e.relatedTarget;
       if (vers && corps.contains(vers)) return;
       if (_slash && _slash.ed === ed) fermerSlash();
@@ -1597,8 +1665,23 @@
     var fin = Math.max(debut + 1, curseur(el).debut);
     remplacerTexte(el, debut, fin, '');
     ed.lire(c.b, el);
+    executer(ed, el, c, cmd, debut, false);
+  }
+
+  /* Exécute une commande sur le bloc `el` : depuis le menu « / » (le bloc prend
+     le type demandé) ou depuis le panneau d'actions (un bloc non vide reste tel
+     quel, le nouveau bloc s'insère dessous). */
+  function executer(ed, el, c, cmd, debut, depuisPanneau) {
     var b = c.b;
     var vide = !b.texte.trim();
+    if (depuisPanneau && cmd.type && !vide && !OBJETS[cmd.type] && cmd.type !== 'page' && cmd.type !== 'image') {
+      var neuf = { uid: uid(), type: cmd.type, texte: '' };
+      if (cmd.type === 'todo') neuf.coche = false;
+      if (b.retrait && LISTES[cmd.type]) neuf.retrait = b.retrait;
+      c.blocs.splice(c.i + 1, 0, neuf);
+      ed.restructure(c.i + 1, 0);
+      return;
+    }
     if (cmd.action === 'date' || cmd.action === 'heure') {
       var d = new Date();
       var ins = cmd.action === 'date'
@@ -1676,6 +1759,10 @@
 
   window.MySifaNotesEditeur = {
     monter: function (corps, note, opts) { return new Editeur(corps, note, opts); },
+    /* Commandes d'insertion proposées à cet éditeur (menu « / » et panneau d'actions). */
+    commandes: function (ed) {
+      return commandesDe(ed).map(function (c) { return { cle: c.cle, libelle: c.libelle, aide: c.aide, icone: c.icone }; });
+    },
     types: TYPES,
     texte: texteBlocs,
     toutVider: toutVider,

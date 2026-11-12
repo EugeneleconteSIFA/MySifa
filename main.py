@@ -757,11 +757,11 @@ _VERSION_ASSET = {
     b"/static/mysifa_ai_chat.js": b"?v=4",
     b"/static/chat_url.js": b"?v=1",
     b"/static/mysifa_ecoute_fab.js": b"?v=1",
-    b"/static/mysifa_dock.js": b"?v=4",
+    b"/static/mysifa_dock.js": b"?v=5",
     b"/static/mysifa_dock_fenetres.js": b"?v=2",
     b"/static/mysifa_outils_mobile.js": b"?v=4",
-    b"/static/mysifa_postit.css": b"?v=5",
-    b"/static/mysifa_postit.js": b"?v=5",
+    b"/static/mysifa_postit.css": b"?v=7",
+    b"/static/mysifa_postit.js": b"?v=7",
 }
 
 

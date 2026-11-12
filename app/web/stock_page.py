@@ -84,7 +84,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
@@ -2679,8 +2679,8 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_scanner.js?v=1"></script>
 <script src="/static/mysifa_donnees_prod.js?v=18"></script>
 <script src="/static/mysifa_destockage.js?v=12"></script>
-<script src="/static/mysifa_dock.js?v=4"></script>
-<script src="/static/mysifa_postit.js?v=5"></script>
+<script src="/static/mysifa_dock.js?v=5"></script>
+<script src="/static/mysifa_postit.js?v=7"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <!-- Reprendre une réception de RVGI : fournisseur, BL, matière, laize.

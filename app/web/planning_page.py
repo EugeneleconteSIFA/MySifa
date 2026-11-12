@@ -1059,10 +1059,10 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script>window.__MYSIFA_APP__='planning';</script>
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<script src="/static/mysifa_dock.js?v=4"></script>
-<script src="/static/mysifa_postit.js?v=5"></script>
+<script src="/static/mysifa_dock.js?v=5"></script>
+<script src="/static/mysifa_postit.js?v=7"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>

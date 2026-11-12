@@ -10,6 +10,10 @@ Partage : une note (et ses sous-pages) se partage avec des collègues, en
 lecture ou en écriture ; plusieurs personnes y écrivent en même temps, chacun
 voit où écrivent les autres.
 
+Panneau d'actions rapides à droite (insérer un bloc, mettre en forme,
+raccourcis) : affiché ou masqué par un bouton de la barre de la note ou
+Cmd/Ctrl + \ ; préférence d'affichage gardée dans le navigateur, hors adresse.
+
 Adresse : `?note=<id>` (note ouverte) et `&partage=1` (fenêtre de partage),
 `?vue=corbeille`, `?nouvelle=1`
 (crée une note puis l'ouvre — lien « Nouvelle note » de l'explorateur
@@ -85,7 +89,7 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=2" data-nted="1">
-<link rel="stylesheet" href="/static/mysifa_notes.css?v=3">
+<link rel="stylesheet" href="/static/mysifa_notes.css?v=5">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -132,12 +136,14 @@ NOTES_HTML = r"""<!DOCTYPE html>
     </div>
     <div class="content nt-content" id="content"><div class="nt-chargement">Chargement…</div></div>
   </main>
+  <!-- Actions rapides de la note ouverte (static/mysifa_notes.js), masquable. -->
+  <aside class="nt-panneau" id="nt-panneau" aria-label="Actions rapides" hidden></aside>
 </div>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_notes_editeur.js?v=3"></script>
-<script src="/static/mysifa_notes.js?v=4"></script>
+<script src="/static/mysifa_notes_editeur.js?v=5"></script>
+<script src="/static/mysifa_notes.js?v=5"></script>
 </body>
 </html>
 """

@@ -453,16 +453,12 @@ def appliquer_ops(conn, note_id: int, user_id: int, client: str, ops) -> dict:
                 raise HTTPException(400, "Bloc sans identifiant.")
             i = _index_uid(blocs, b["uid"])
             if t == "set":
+                # Bloc inconnu : ignoré. L'ajouter dupliquerait le contenu d'un
+                # éditeur désynchronisé (incident du 12/11/2026).
                 if i < 0:
-                    # Bloc inconnu du serveur (créé hors ligne, ou supprimé par un
-                    # autre pendant qu'on y écrivait) : on le garde, en fin de note.
-                    if len(blocs) >= BLOCS_MAX:
-                        continue
-                    blocs.append(b)
-                    op = {"t": "ins", "apres": blocs[-2]["uid"] if len(blocs) > 1 else None, "bloc": b}
-                else:
-                    blocs[i] = b
-                    op = {"t": "set", "bloc": b}
+                    continue
+                blocs[i] = b
+                op = {"t": "set", "bloc": b}
             else:
                 if i >= 0:
                     blocs.pop(i)
@@ -545,10 +541,18 @@ def ops_depuis(conn, note_id: int, depuis: int) -> tuple[list[dict], bool]:
 # ── Présence ─────────────────────────────────────────────────────────────
 
 def noter_presence(conn, note_id: int, user_id: int, client: str, bloc) -> None:
+    """Présence d'un onglet. Écrite seulement si le bloc change ou toutes les
+    5 s : le flux interroge la base trois fois par seconde, une écriture à
+    chaque tour mettrait la base sous verrou pour toute l'application."""
+    client = str(client)[:40]
+    bloc = str(bloc)[:32] if bloc else None
+    r = conn.execute("SELECT bloc, vu_le FROM note_presences WHERE note_id=? AND client=?", (note_id, client)).fetchone()
+    if r and r[0] == bloc and time.time() - float(r[1]) < 5:
+        return
     conn.execute(
         """INSERT INTO note_presences (note_id, client, user_id, bloc, vu_le) VALUES (?,?,?,?,?)
            ON CONFLICT(note_id, client) DO UPDATE SET bloc=excluded.bloc, vu_le=excluded.vu_le, user_id=excluded.user_id""",
-        (note_id, str(client)[:40], user_id, (str(bloc)[:32] if bloc else None), time.time()),
+        (note_id, client, user_id, bloc, time.time()),
     )
     conn.execute("DELETE FROM note_presences WHERE vu_le < ?", (time.time() - PRESENCE_DUREE_S * 4,))
     conn.commit()

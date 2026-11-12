@@ -36,11 +36,12 @@
     document.body.classList.toggle('mysifa-dock-landscape', isMobileLandscape());
   }
 
+  /* --mysifa-dock-droite : place qu'une page réserve au bord droit (panneau
+     d'actions de Mes notes) ; la barre se décale d'autant. 0 par défaut. */
   function safeRight(extraPx) {
     const x = extraPx || 0;
-    return x
-      ? 'calc(max(24px, env(safe-area-inset-right, 0px)) + ' + x + 'px)'
-      : 'max(24px, env(safe-area-inset-right, 0px))';
+    return 'calc(max(24px, env(safe-area-inset-right, 0px)) + var(--mysifa-dock-droite, 0px)' +
+      (x ? ' + ' + x + 'px' : '') + ')';
   }
 
   function safeBottom(extraPx) {
