@@ -1777,12 +1777,12 @@ window.ofCreerDossierProd = ofCreerDossierProd;
    que l'ADV a corrigée à la main (`m._manuels`). */
 const OFE_CALCULES = {
   metrage:'ofe-metrage', qte_bobines:'ofe-bobines', nb_mandrins:'ofe-mandrins',
-  nb_tubes:'ofe-tubes', nb_cartons:'ofe-cartons',
+  nb_levees:'ofe-nb-levees', nb_tubes:'ofe-tubes', nb_cartons:'ofe-cartons',
   qte_adhesif_g:'ofe-qte-adhesif-g', qte_adhesif_kg:'ofe-qte-adhesif-kg',
 };
 const OFE_CALCULES_LIBELLES = {
   metrage:'métrage', qte_bobines:'bobines', nb_mandrins:'mandrins',
-  nb_tubes:'tubes', nb_cartons:'cartons',
+  nb_levees:'levées', nb_tubes:'tubes', nb_cartons:'cartons',
   qte_adhesif_g:'grammage adhésif', qte_adhesif_kg:'adhésif (kg)',
 };
 let _ofeFicheTimer=null, _ofeCalcTimer=null;
