@@ -5,7 +5,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from config import CODE_PRODUCTION, CODE_REPRISE, OPERATION_SEVERITY
+import config as _cfg
+from config import CODE_PRODUCTION, CODE_REPRISE
 from database import parse_datetime
 from services.timings import compute_dossier_times
 from config import PROD_VITESSE_MAX_M_MIN
@@ -176,11 +177,12 @@ def _by_operation(rows: List[dict]) -> List[dict]:
         code = str(r.get("operation_code") or "").strip() or "?"
         cat = str(r.get("operation_category") or "").strip().lower()
         if not cat:
-            info = OPERATION_SEVERITY.get(code, {})
+            # Relu à chaque appel : le référentiel s'édite en base (Paramètres).
+            info = _cfg.OPERATION_SEVERITY.get(code, {})
             cat = str(info.get("category") or "autre").lower()
         label = str(r.get("operation") or "").strip()
         if not label:
-            label = OPERATION_SEVERITY.get(code, {}).get("label", f"Op {code}")
+            label = _cfg.OPERATION_SEVERITY.get(code, {}).get("label", f"Op {code}")
         acc = agg.setdefault(
             code,
             {

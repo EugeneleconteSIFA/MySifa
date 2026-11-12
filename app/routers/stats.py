@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request
 from database import get_db
 from services.auth_service import require_admin
-from config import APP_VERSION, OPERATION_SEVERITY
+from config import APP_VERSION
 
 router = APIRouter()
 
