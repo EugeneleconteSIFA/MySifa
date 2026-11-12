@@ -46,6 +46,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.services.auth_service import get_current_user
 from app.services.ged_extract import extract_text
+from app.services import notes as notes_srv
 from config import UPLOAD_DIR, GED_MAX_FILE_MB, GED_BLOCKED_EXTENSIONS
 
 router = APIRouter()
@@ -411,8 +412,16 @@ def ged_tree(request: Request):
 
 @router.get("/api/qualite/ged/folders/{folder_id}")
 def ged_folder_content(folder_id: int, request: Request):
-    """Contenu d'un dossier + fil d'Ariane. folder_id = 0 -> racine."""
-    _require_ged(request)
+    """Contenu d'un dossier + fil d'Ariane. folder_id = 0 -> racine.
+
+    folder_id = -1 : dossier virtuel « Mes notes », propre à chaque
+    utilisateur (ses notes personnelles, app/services/notes.py). Il n'existe
+    pas dans qualite_ged_folders : rien ne s'y dépose ni ne s'y déplace.
+    """
+    user = _require_ged(request)
+    if folder_id == notes_srv.DOSSIER_GED_NOTES:
+        with get_db() as conn:
+            return notes_srv.contenu_ged(conn, int(user["id"]))
     fid = folder_id or None
     with get_db() as conn:
         folder = None
@@ -447,10 +456,14 @@ def ged_folder_content(folder_id: int, request: Request):
 
         bc = _breadcrumb(conn, fid)
 
+        dossiers = [dict(r) for r in subs]
+        if fid is None:
+            dossiers.insert(0, notes_srv.dossier_ged(conn, int(user["id"])))
+
     return {
         "folder": folder,
         "breadcrumb": bc,
-        "folders": [dict(r) for r in subs],
+        "folders": dossiers,
         "files": [dict(r) for r in files],
     }
 

@@ -111,7 +111,7 @@ __TITRE_SEO__
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=5">
 <link rel="stylesheet" href="/static/mysifa_resize.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
@@ -1703,7 +1703,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_portail_tour.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_dock.js?v=4"></script>
 <script src="/static/mysifa_resize.js"></script>
-<script src="/static/mysifa_postit.js?v=2"></script>
+<script src="/static/mysifa_postit.js?v=5"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>

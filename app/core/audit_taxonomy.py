@@ -415,7 +415,9 @@ SKIP_PREFIXES: tuple[str, ...] = (
 BODY_BLIND_MODULES: frozenset[str] = frozenset(
     {"chat", "messages", "coffre", "rh_coffre", "rh_outil", "paie", "ai",
      # Le brief validé reprend ce qui s'est dit en réunion (direction, RH…).
-     "reunions_ecoute"}
+     "reunions_ecoute",
+     # Notes personnelles (post-its, Mes notes) : le contenu reste à son auteur.
+     "postit"}
 )
 
 # Clés dont la valeur ne doit jamais atterrir dans le journal.
@@ -452,6 +454,11 @@ SKIP_SUFFIXES: tuple[str, ...] = (
     # aucun geste humain. Démarrage, arrêt et validation sont journalisés
     # explicitement (app/routers/reunions_ecoute.py).
     "/morceau",
+    # Mes notes : opérations de frappe envoyées toutes les ~400 ms pendant
+    # qu'on écrit, et fermeture de la note. Création, partage, corbeille et
+    # images restent journalisés.
+    "/frappe",
+    "/presence-fin",
 )
 
 

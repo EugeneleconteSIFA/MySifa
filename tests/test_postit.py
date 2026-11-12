@@ -24,6 +24,13 @@ if _src_db.is_file():
     shutil.copy2(_src_db, _test_db)
 
 
+def sans_uid(x):
+    """Les blocs portent un identifiant aléatoire : on le retire pour comparer."""
+    if isinstance(x, list):
+        return [sans_uid(b) for b in x]
+    return {k: v for k, v in x.items() if k != "uid"}
+
+
 class TestPostitMultiPage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -236,8 +243,8 @@ class TestPostitBlocs(unittest.TestCase):
             liste = client.get("/api/postits").json()
         p = next(x for x in liste if x["id"] == pid)
         self.assertNotIn("contenu", p)
-        self.assertEqual(p["blocs"][0], {"type": "h1", "texte": "Réunion"})
-        self.assertEqual(p["blocs"][1], {"type": "todo", "texte": "Appeler", "retrait": 1, "coche": True})
+        self.assertEqual(sans_uid(p["blocs"][0]), {"type": "h1", "texte": "Réunion"})
+        self.assertEqual(sans_uid(p["blocs"][1]), {"type": "todo", "texte": "Appeler", "retrait": 1, "coche": True})
         self.assertEqual(p["blocs"][2]["texte"], "")
         self.assertEqual(p["blocs"][3]["texte"], "Libre\nsur deux lignes")
 
@@ -246,7 +253,7 @@ class TestPostitBlocs(unittest.TestCase):
         with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
             r = client.patch(f"/api/postits/{self.pid}", json={"blocs": [{"type": "citation", "texte": "x"}]})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()["blocs"], [{"type": "citation", "texte": "x"}])
+        self.assertEqual(sans_uid(r.json()["blocs"]), [{"type": "citation", "texte": "x"}])
 
     def test_type_inconnu_refuse(self):
         client = self._client()
@@ -267,7 +274,7 @@ class TestPostitBlocs(unittest.TestCase):
             r = client.post(f"/api/postits/{self.pid}/tasks", json={"text": "Relancer"})
             self.assertEqual(r.status_code, 200)
             p = next(x for x in client.get("/api/postits").json() if x["id"] == self.pid)
-        self.assertEqual(p["blocs"][-1], {"type": "todo", "texte": "Relancer", "coche": False})
+        self.assertEqual(sans_uid(p["blocs"][-1]), {"type": "todo", "texte": "Relancer", "coche": False})
 
     def test_migration_reprend_les_taches(self):
         import importlib
@@ -291,6 +298,226 @@ class TestPostitBlocs(unittest.TestCase):
             json.loads(brut),
             [{"type": "todo", "texte": "A", "coche": False}, {"type": "todo", "texte": "B", "coche": True}],
         )
+
+
+class TestMesNotes(unittest.TestCase):
+    """Espace Mes notes : écran, arbre, corbeille, dossier virtuel de l'explorateur."""
+
+    def _client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.routers.postit import router
+
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app)
+
+    def setUp(self):
+        from database import get_db
+
+        with get_db() as conn:
+            for uid, mail in ((1, "test@local"), (2, "autre@local")):
+                conn.execute(
+                    "INSERT OR IGNORE INTO users (id, email, nom, password_hash, role, actif, created_at) "
+                    "VALUES (?, ?, 'Test', 'x', 'direction', 1, '2026-01-01')",
+                    (uid, mail),
+                )
+            conn.commit()
+        self.c = self._client()
+
+    def _creer(self, uid=1, **corps):
+        corps.setdefault("type", "someday")
+        corps.setdefault("title", "N")
+        with patch("app.routers.postit.get_current_user", return_value={"id": uid}):
+            r = self.c.post("/api/postits", json=corps)
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()
+
+    def _get(self, url, uid=1):
+        with patch("app.routers.postit.get_current_user", return_value={"id": uid}):
+            return self.c.get(url)
+
+    def test_note_hors_ecran_absente_des_postits(self):
+        hors = self._creer(title="Hors écran", sur_ecran=0)
+        sur = self._creer(title="Sur écran")
+        ids = {p["id"] for p in self._get("/api/postits?ecran=1").json()}
+        self.assertIn(sur["id"], ids)
+        self.assertNotIn(hors["id"], ids)
+        arbre = {n["id"] for n in self._get("/api/postits/notes").json()["notes"]}
+        self.assertTrue({hors["id"], sur["id"]} <= arbre)
+
+    def test_retirer_de_l_ecran_garde_la_note(self):
+        n = self._creer(title="Garder")
+        with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
+            r = self.c.patch(f"/api/postits/{n['id']}", json={"sur_ecran": False})
+        self.assertEqual(r.json()["sur_ecran"], 0)
+        self.assertEqual(self._get(f"/api/postits/{n['id']}").status_code, 200)
+
+    def test_corbeille_restaure_avec_sous_pages(self):
+        p = self._creer(title="Parent", sur_ecran=0)
+        e = self._creer(title="Enfant", sur_ecran=0, parent_id=p["id"])
+        with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
+            self.assertEqual(self.c.delete(f"/api/postits/{p['id']}").json()["nb"], 2)
+            vivants = {n["id"] for n in self.c.get("/api/postits/notes").json()["notes"]}
+            jetes = {n["id"] for n in self.c.get("/api/postits/notes?corbeille=1").json()["notes"]}
+            self.assertFalse({p["id"], e["id"]} & vivants)
+            self.assertTrue({p["id"], e["id"]} <= jetes)
+            self.assertEqual(self.c.post(f"/api/postits/{p['id']}/restaurer").status_code, 200)
+            vivants = {n["id"] for n in self.c.get("/api/postits/notes").json()["notes"]}
+        self.assertTrue({p["id"], e["id"]} <= vivants)
+
+    def test_suppression_definitive_exige_la_corbeille(self):
+        n = self._creer(title="Définitif", sur_ecran=0)
+        with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
+            self.assertEqual(self.c.delete(f"/api/postits/{n['id']}/definitif").status_code, 400)
+            self.c.delete(f"/api/postits/{n['id']}")
+            self.assertEqual(self.c.delete(f"/api/postits/{n['id']}/definitif").status_code, 200)
+            self.assertEqual(self.c.get(f"/api/postits/{n['id']}").status_code, 404)
+
+    def test_pas_de_cycle(self):
+        a = self._creer(title="A", sur_ecran=0)
+        b = self._creer(title="B", sur_ecran=0, parent_id=a["id"])
+        with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
+            r = self.c.patch(f"/api/postits/{a['id']}", json={"parent_id": b["id"]})
+        self.assertEqual(r.status_code, 400)
+
+    def test_notes_personnelles(self):
+        n = self._creer(title="Privée", sur_ecran=0)
+        self.assertEqual(self._get(f"/api/postits/{n['id']}", uid=2).status_code, 404)
+        autres = {x["id"] for x in self._get("/api/postits/notes", uid=2).json()["notes"]}
+        self.assertNotIn(n["id"], autres)
+        with patch("app.routers.postit.get_current_user", return_value={"id": 2}):
+            r = self.c.post("/api/postits", json={"type": "someday", "title": "x", "parent_id": n["id"]})
+        # 404 et non 403 : on ne révèle pas qu'une note non partagée existe.
+        self.assertEqual(r.status_code, 404)
+
+    def test_bloc_page(self):
+        n = self._creer(title="Avec lien", sur_ecran=0)
+        with patch("app.routers.postit.get_current_user", return_value={"id": 1}):
+            r = self.c.patch(f"/api/postits/{n['id']}", json={"blocs": [{"type": "page", "texte": "Sous", "ref": "12"}]})
+        self.assertEqual(sans_uid(r.json()["blocs"]), [{"type": "page", "texte": "Sous", "ref": 12}])
+
+    def test_dossier_virtuel_de_l_explorateur(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.routers.qualite_ged import router as ged
+
+        n = self._creer(title="Dans la GED", sur_ecran=0)
+        app = FastAPI()
+        app.include_router(ged)
+        c = TestClient(app)
+        user = {"id": 1, "role": "direction"}
+        with patch("app.routers.qualite_ged.get_current_user", return_value=user):
+            racine = c.get("/api/qualite/ged/folders/0").json()
+            dossier = c.get("/api/qualite/ged/folders/-1").json()
+        self.assertEqual(racine["folders"][0]["virtuel"], "notes")
+        self.assertEqual(dossier["breadcrumb"], [{"id": -1, "nom": "Mes notes"}])
+        lignes = {f["id"]: f for f in dossier["files"]}
+        self.assertIn(n["id"], lignes)
+        self.assertEqual(lignes[n["id"]]["lien"], f"/note?note={n['id']}")
+        with patch("app.routers.qualite_ged.get_current_user", return_value={"id": 2, "role": "direction"}):
+            autre = c.get("/api/qualite/ged/folders/-1").json()
+        self.assertNotIn(n["id"], {f["id"] for f in autre["files"]})
+
+
+class TestCollaboration(TestMesNotes):
+    """Partage, opérations par bloc, flux temps réel, texte riche, images."""
+
+    def _as(self, uid, methode, url, **kw):
+        with patch("app.routers.postit.get_current_user", return_value={"id": uid}):
+            return getattr(self.c, methode)(url, **kw)
+
+    def _note_partagee(self, droit="ecrire"):
+        n = self._creer(title="Commune", sur_ecran=0,
+                        blocs=[{"uid": "a1", "type": "p", "texte": "un"}, {"uid": "b2", "type": "p", "texte": "deux"}])
+        r = self._as(1, "put", f"/api/postits/{n['id']}/partages", json={"user_id": 2, "droit": droit})
+        self.assertEqual(r.status_code, 200, r.text)
+        return n
+
+    def test_partage_donne_acces_a_l_invite(self):
+        n = self._note_partagee()
+        r = self._as(2, "get", f"/api/postits/{n['id']}")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["droit"], "ecrire")
+        partagees = self._as(2, "get", "/api/postits/notes").json()["partagees"]
+        self.assertIn(n["id"], {x["id"] for x in partagees})
+
+    def test_partage_couvre_les_sous_pages(self):
+        n = self._note_partagee()
+        sous = self._creer(uid=2, title="Sous de l'invité", sur_ecran=0, parent_id=n["id"])
+        self.assertEqual(sous["user_id"], 1)  # rangée chez l'auteur de la note
+        self.assertEqual(self._as(2, "get", f"/api/postits/{sous['id']}").status_code, 200)
+
+    def test_lecture_seule_refuse_l_ecriture(self):
+        n = self._note_partagee("lire")
+        r = self._as(2, "post", f"/api/postits/{n['id']}/frappe",
+                     json={"client": "x", "ops": [{"t": "set", "bloc": {"uid": "a1", "type": "p", "texte": "pirate"}}]})
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(self._as(2, "put", f"/api/postits/{n['id']}/partages", json={"user_id": 1}).status_code, 403)
+
+    def test_ops_et_flux(self):
+        n = self._note_partagee()
+        rev0 = self._as(1, "get", f"/api/postits/{n['id']}").json()["revision"]
+        ops = [
+            {"t": "set", "bloc": {"uid": "a1", "type": "h2", "texte": "Titre"}},
+            {"t": "ins", "apres": "a1", "bloc": {"uid": "c3", "type": "todo", "texte": "Nouveau"}},
+            {"t": "mov", "uid": "b2", "apres": None},
+            {"t": "del", "uid": "inexistant"},
+            {"t": "titre", "titre": "Commune v2"},
+        ]
+        r = self._as(2, "post", f"/api/postits/{n['id']}/frappe", json={"client": "c-invite", "ops": ops})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["appliquees"], 4)
+        note = self._as(1, "get", f"/api/postits/{n['id']}").json()
+        self.assertEqual([b["uid"] for b in note["blocs"]], ["b2", "a1", "c3"])
+        self.assertEqual(note["title"], "Commune v2")
+        f = self._as(1, "get", f"/api/postits/{n['id']}/flux?depuis={rev0}&client=c-auteur").json()
+        self.assertEqual(len(f["ops"]), 4)
+        self.assertEqual(f["ops"][0]["client"], "c-invite")
+        self.assertFalse(f["reset"])
+        # Présence : l'invité, vu par l'auteur.
+        self._as(2, "get", f"/api/postits/{n['id']}/flux?depuis={f['revision']}&client=c-invite&bloc=a1&sig=x")
+        f2 = self._as(1, "get", f"/api/postits/{n['id']}/flux?depuis={f['revision']}&client=c-auteur&sig=x").json()
+        self.assertIn({"client": "c-invite", "bloc": "a1"}, [{"client": p["client"], "bloc": p["bloc"]} for p in f2["presences"]])
+
+    def test_patch_complet_force_le_rechargement(self):
+        n = self._note_partagee()
+        rev = self._as(1, "get", f"/api/postits/{n['id']}").json()["revision"]
+        self._as(1, "patch", f"/api/postits/{n['id']}", json={"blocs": [{"type": "p", "texte": "neuf"}]})
+        f = self._as(2, "get", f"/api/postits/{n['id']}/flux?depuis={rev}&client=z").json()
+        self.assertTrue(f["reset"])
+
+    def test_html_assaini(self):
+        from app.services.notes import assainir_html, normaliser_blocs
+
+        self.assertEqual(assainir_html('<b>gras</b> <script>alert(1)</script><i onclick="x">it</i>'),
+                         "<b>gras</b> alert(1)<i>it</i>")
+        self.assertEqual(assainir_html('<a href="javascript:alert(1)">x</a>'), "x")
+        self.assertEqual(assainir_html('<a href="https://sifa.fr" target="_blank">site</a>'),
+                         '<a href="https://sifa.fr">site</a>')
+        self.assertEqual(assainir_html("<strong>a<em>b</strong>"), "<b>a<i>b</i></b>")
+        b = normaliser_blocs([{"type": "p", "html": "<u>sous</u>ligné &amp; <img src=x onerror=1>"}])[0]
+        self.assertEqual(b["html"], "<u>sous</u>ligné &amp; ")
+        self.assertEqual(b["texte"], "sousligné & ")
+        brut = normaliser_blocs([{"type": "p", "html": "sans mise en forme"}])[0]
+        self.assertNotIn("html", brut)
+
+    def test_image_controlee_et_protegee(self):
+        import tempfile as _tf
+
+        n = self._creer(title="Image", sur_ecran=0)
+        png = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+        with patch("app.routers.postit.UPLOAD_DIR", _tf.mkdtemp()):
+            r = self._as(1, "post", f"/api/postits/{n['id']}/images", files={"fichier": ("a.png", png, "image/png")})
+            self.assertEqual(r.status_code, 200, r.text)
+            url = r.json()["url"]
+            self.assertEqual(self._as(1, "get", url).status_code, 200)
+            self.assertEqual(self._as(2, "get", url).status_code, 404)
+            svg = b"<svg onload=alert(1)></svg>"
+            r = self._as(1, "post", f"/api/postits/{n['id']}/images", files={"fichier": ("a.svg", svg, "image/svg+xml")})
+            self.assertEqual(r.status_code, 400)
 
 
 if __name__ == "__main__":

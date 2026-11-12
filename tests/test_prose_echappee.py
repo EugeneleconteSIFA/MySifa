@@ -64,6 +64,10 @@ TOLERES = {
     "icon(\"message-square\",12)": "nom d'icone, pas une donnee",
     "icon(\"message-square\",11)": "nom d'icone, pas une donnee",
     "notesCell": "cellule HTML assemblee plus haut",
+    # Explorateur MyQualite, dossier virtuel « Mes notes » : icone SVG ecrite
+    # dans le code et message de colonne vide litteral.
+    "GED_NOTES_SVG": "icone SVG constante",
+    "n ? '' : '<div class=\"ged-col-empty\">Aucune note": "message litteral de colonne vide",
 }
 
 # Sites identifies comme a revoir, mais dont la correction demande de verifier

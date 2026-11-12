@@ -135,6 +135,7 @@ from app.routers.rapports_prod import router as rapports_prod_api_router
 from app.routers.reunions_ecoute import router as reunions_ecoute_router
 from app.routers.reunions import router as reunions_api_router
 from app.web.reunions_page import router as reunions_page_router
+from app.web.notes_page import router as notes_page_router
 from app.routers.coffre import router as coffre_api_router
 from app.routers.rh_coffre import router as rh_coffre_api_router
 from app.web.coffre_page import router as coffre_page_router
@@ -759,8 +760,8 @@ _VERSION_ASSET = {
     b"/static/mysifa_dock.js": b"?v=4",
     b"/static/mysifa_dock_fenetres.js": b"?v=2",
     b"/static/mysifa_outils_mobile.js": b"?v=4",
-    b"/static/mysifa_postit.css": b"?v=2",
-    b"/static/mysifa_postit.js": b"?v=2",
+    b"/static/mysifa_postit.css": b"?v=5",
+    b"/static/mysifa_postit.js": b"?v=5",
 }
 
 
@@ -1013,6 +1014,7 @@ app.include_router(rapports_prod_api_router)
 app.include_router(reunions_ecoute_router)
 app.include_router(reunions_api_router)
 app.include_router(reunions_page_router)
+app.include_router(notes_page_router)
 app.include_router(coffre_api_router)
 app.include_router(rh_coffre_api_router)
 app.include_router(coffre_page_router)

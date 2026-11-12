@@ -101,6 +101,11 @@ function gedLinkBadge(t){
   return `<span class="ged-link-badge">${escHtml(lbl)}</span>`;
 }
 
+// Dossier virtuel « Mes notes » : les notes personnelles de l'utilisateur
+// (app/services/notes.py). Ses lignes ouvrent /note ; rien ne s'y dépose.
+const GED_NOTES_ID = -1;
+const GED_NOTES_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h12l4 4v10H5V5z"/><path d="M17 5v4h4"/><path d="M9 13h7M9 16h5"/></svg>';
+
 // ─── Chargement des colonnes ─────────────────────────────────────────
 async function gedFetchCol(folderId){
   const r = await api('/api/qualite/ged/folders/' + (folderId||0));
@@ -254,6 +259,21 @@ function gedBrowseHtml(){
 
   const cols = S.ged.cols.map((c, i) => gedColumnHtml(c, i)).join('');
 
+  if (String(gedCwd()) === String(GED_NOTES_ID)) {
+    return `
+    <div class="ged-bc">${bcParts}</div>
+    <div class="ged-toolbar">
+      <a class="btn btn-accent ged-btn" href="/note?nouvelle=1">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nouvelle note
+      </a>
+      <a class="btn btn-ghost ged-btn" href="/note">Ouvrir Mes notes</a>
+      <div class="ged-toolbar-sp"></div>
+    </div>
+    <div class="ged-cols" id="ged-cols">${cols}</div>
+    <div class="ged-hint-bar">Vos notes personnelles : visibles de vous seul. Elles s'écrivent et se rangent dans Mes notes.</div>
+  `;
+  }
   return `
     <div class="ged-bc">${bcParts}</div>
     <div class="ged-toolbar">
@@ -283,7 +303,14 @@ function gedColumnHtml(c, i){
   const nextId = S.ged.path[i+1] || null;   // dossier ouvert dans la colonne suivante
   const titre = i === 0 ? 'Racine' : ((c.folder && c.folder.nom) || '...');
 
-  const folders = (c.folders||[]).map(f => `
+  const folders = (c.folders||[]).map(f => f.virtuel === 'notes' ? `
+    <div class="ged-row ged-row-folder ged-row-notes${nextId===f.id?' open':''}"
+         onclick="gedSelectFolder(${i}, ${f.id})" title="${escAttr(f.description||'')}">
+      <span class="ged-row-ico folder">${GED_NOTES_SVG}</span>
+      <span class="ged-row-name">${escHtml(f.nom)}</span>
+      <span class="ged-perso-badge">Perso</span>
+      <span class="ged-row-chev">${GED_CHEVRON_SVG}</span>
+    </div>` : `
     <div class="ged-row ged-row-folder${nextId===f.id?' open':''}"
          draggable="true" ondragstart="gedDragStart(event,'folder',${f.id})"
          ondragover="gedDragOver(event,this)" ondragleave="gedDragLeave(this)"
@@ -307,7 +334,14 @@ function gedColumnHtml(c, i){
     </div>
   `).join('');
 
-  const files = (c.files||[]).map(f => `
+  const files = (c.files||[]).map(f => f.note ? `
+    <a class="ged-row ged-row-file ged-row-note" href="${escAttr(f.lien)}" title="Ouvrir dans Mes notes">
+      <span class="ged-row-ico"><span class="ged-ext ged-ext-note">NOTE</span></span>
+      <span class="ged-row-body">
+        <span class="ged-row-name">${escHtml(f.nom)}</span>
+        <span class="ged-row-meta">${f.description ? escHtml(f.description) : 'Note vide'}</span>
+      </span>
+    </a>` : `
     <div class="ged-row ged-row-file${S.ged.selFile===f.id?' sel':''}"
          draggable="true" ondragstart="gedDragStart(event,'file',${f.id})"
          onclick="gedOpenFile(${f.id})">
@@ -332,6 +366,19 @@ function gedColumnHtml(c, i){
 
   const n = (c.folders||[]).length + (c.files||[]).length;
 
+  if (fid === GED_NOTES_ID || String(fid) === String(GED_NOTES_ID)) {
+    return `
+    <div class="ged-col ged-col-notes${i === S.ged.cols.length-1 ? ' last' : ''}">
+      <div class="ged-col-hd">
+        <span class="ged-col-title">${escHtml(titre)}</span>
+        <span class="ged-col-n">${n}</span>
+      </div>
+      <div class="ged-col-bd">
+        ${files}
+        ${n ? '' : '<div class="ged-col-empty">Aucune note<br><span>Créez-en une depuis Mes notes</span></div>'}
+      </div>
+    </div>`;
+  }
   return `
     <div class="ged-col${i === S.ged.cols.length-1 ? ' last' : ''}"
          ondragover="gedDragOver(event,this)" ondragleave="gedDragLeave(this)"
@@ -1008,6 +1055,11 @@ async function gedTrashPurge(tid){
   .ged-ext-ppt{background:rgba(251,146,60,.16);color:#fb923c}
   .ged-ext-img{background:rgba(167,139,250,.16);color:#a78bfa}
   .ged-ext-zip{background:rgba(251,191,36,.16);color:#fbbf24}
+  .ged-ext-note{background:var(--accent-bg);color:var(--accent)}
+  .ged-row-note{text-decoration:none;color:inherit}
+  .ged-row-notes .ged-row-ico{color:var(--accent)}
+  .ged-perso-badge{flex:0 0 auto;font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:999px;
+    background:var(--accent-bg);color:var(--accent)}
 
   .ged-link-badge{flex:0 0 auto;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:999px;
     background:var(--bg);border:1px solid var(--border);color:var(--muted)}

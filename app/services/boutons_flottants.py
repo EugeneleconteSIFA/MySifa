@@ -75,6 +75,7 @@ APPLIS: tuple[Appli, ...] = (
     Appli("coffre", "Coffres", ("/coffre",)),
     Appli("erp", "ERP RVGI", ("/erp",)),
     Appli("reunions", "Réunions", ("/reunions",)),
+    Appli("notes", "Mes notes", ("/note",)),
     Appli("taches", "Tâches", ("/taches",)),
     Appli("messages", "Messagerie", ("/messages",)),
     Appli("calendrier", "Calendrier", ("/calendrier",)),
@@ -109,8 +110,9 @@ BOUTONS: tuple[Bouton, ...] = (
 PAR_CLE = {b.cle: b for b in BOUTONS}
 CODES_APPLIS = {a.code for a in APPLIS}
 
-# Coupés tant que personne n'a rien réglé.
-DEFAUTS_OFF = {("messages", "messagerie")}
+# Coupés tant que personne n'a rien réglé. Mes notes : la page édite déjà les
+# notes ; un post-it de la même note, édité à côté, écraserait l'un ou l'autre.
+DEFAUTS_OFF = {("messages", "messagerie"), ("notes", "postit")}
 
 
 def appli_de_chemin(chemin: str) -> str | None:
