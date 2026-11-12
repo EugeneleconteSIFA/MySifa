@@ -45,6 +45,8 @@
     tableau: { libelle: 'Tableau', aide: 'Lignes et colonnes', icone: '▦', ph: '', mots: 'tableau table grille colonnes lignes excel' },
   };
   var LISTES = { todo: 1, puce: 1, num: 1 };
+  /* Styles de paragraphe (ce qu'on peut appliquer à un paragraphe existant). */
+  var TYPES_TEXTE = { p: 1, h1: 1, h2: 1, h3: 1, todo: 1, puce: 1, num: 1, citation: 1, encadre: 1, code: 1, bascule: 1 };
   var OBJETS = { sep: 1, page: 1, image: 1 };
   /* Blocs sans texte propre : on ne fusionne pas de texte avec eux. */
   var NON_TEXTE = { sep: 1, page: 1, image: 1, tableau: 1 };
@@ -124,10 +126,28 @@
   }
   function signature(b) {
     return JSON.stringify([b.type, b.html || '', b.html ? '' : (b.texte || ''), !!b.coche, b.retrait || 0, b.ref || 0, b.legende || '', b.largeur || 0,
-      b.lignes || null, !!b.entete]);
+      b.lignes || null, !!b.entete, b.aligne || '', b.styles || null]);
   }
 
   /* ── Texte riche : assainissement (miroir de app/services/notes.py) ── */
+
+  /* Styles de texte posés sur une sélection (comme dans Word), par familles :
+     c = couleur du texte, f = surlignage, t = taille, p = police. Rangés en
+     classes (jamais de style libre) : le serveur n'accepte que cette liste
+     (STYLES_TEXTE de app/services/notes.py). */
+  var STYLES_TEXTE = {
+    c: ['rouge', 'orange', 'vert', 'bleu', 'violet', 'rose', 'gris', 'defaut'],
+    f: ['jaune', 'vert', 'bleu', 'rose', 'orange', 'gris', 'aucun'],
+    t: ['petit', 'normal', 'grand', 'tres-grand'],
+    p: ['sans', 'serif', 'mono', 'manuscrite'],
+  };
+  var NEUTRE = { c: 'defaut', f: 'aucun', t: 'normal', p: 'sans' };
+  var ALIGNEMENTS = ['gauche', 'centre', 'droite', 'justifie'];
+  var FONDS_CELLULE = ['jaune', 'vert', 'bleu', 'rose', 'orange', 'gris'];
+  function classeValide(c) {
+    var m = /^nt-([cftp])-([a-z-]+)$/.exec(c || '');
+    return !!(m && STYLES_TEXTE[m[1]].indexOf(m[2]) >= 0);
+  }
 
   var BALISES = { B: 'b', STRONG: 'b', I: 'i', EM: 'i', U: 'u', S: 's', STRIKE: 's', DEL: 's', CODE: 'code', A: 'a' };
   var LIEN_OK = /^(https?:\/\/|mailto:|\/)[^\s"'<>]*$/i;
@@ -139,6 +159,13 @@
     if (tag === 'BR') { out.push('<br>'); return; }
     if ((tag === 'DIV' || tag === 'P') && out.length) out.push('<br>');
     var nom = BALISES[tag];
+    var classe = tag === 'SPAN' ? (n.getAttribute('class') || '').trim() : '';
+    if (classe && classeValide(classe)) {
+      out.push('<span class="' + classe + '">');
+      for (var c0 = n.firstChild; c0; c0 = c0.nextSibling) assainirNoeud(c0, out);
+      out.push('</span>');
+      return;
+    }
     /* Gras / italique posés en style par certains collages. */
     if (!nom && tag === 'SPAN' && n.style) {
       if (/^(bold|[6-9]00)$/.test(n.style.fontWeight)) nom = 'b';
@@ -164,7 +191,7 @@
   }
 
   function aMiseEnForme(html) {
-    return /<(b|i|u|s|code|a)[ >]/.test(html || '');
+    return /<(b|i|u|s|code|a|span)[ >]/.test(html || '');
   }
 
   function htmlDe(b) {
@@ -348,6 +375,8 @@
     this._fiable = this.envoye.every(function (b) { return !!b.uid; });
     this.blocs();
     brancher(this);
+    this._histo = [{ json: JSON.stringify(this.blocs()), pos: null }];
+    this._refaire = [];
     if (!this._fiable && this.opts.noteId && this.opts.recharger) {
       var moi = this;
       setTimeout(function () { if (!moi._fiable) moi.opts.recharger(); }, 0);
@@ -401,7 +430,8 @@
     var edit = this.lecture ? 'false' : 'true';
     var cache = this._caches && this._caches[i];
     var h = '<div class="pb pb-' + t + (t === 'todo' && b.coche ? ' coche' : '') + (cache ? ' pb-cache' : '') +
-      (t === 'bascule' && _plies[b.uid] ? ' ferme' : '') + '" data-i="' + i + '" data-uid="' + esc(b.uid) + '" style="--pb-r:' + r + '">';
+      (t === 'bascule' && _plies[b.uid] ? ' ferme' : '') + (b.aligne && ALIGNEMENTS.indexOf(b.aligne) > 0 ? ' pb-al-' + b.aligne : '') +
+      '" data-i="' + i + '" data-uid="' + esc(b.uid) + '" style="--pb-r:' + r + '">';
     if (this.opts.poignees && !this.lecture) {
       h += '<span class="pb-poignee" draggable="true" title="Glisser pour déplacer" aria-hidden="true">' + ICONE_POIGNEE + '</span>';
     }
@@ -441,19 +471,58 @@
     lignes.forEach(function (ligne, r) {
       h += '<tr>';
       ligne.forEach(function (cell, c) {
-        h += '<td><div class="pb-cellule" contenteditable="' + edit + '" spellcheck="true" data-r="' + r + '" data-c="' + c + '">' + assainir(cell || '') + '</div></td>';
+        h += '<td class="' + classesCellule(b, r, c) + '"><div class="pb-cellule" contenteditable="' + edit + '" spellcheck="true" data-r="' + r + '" data-c="' + c + '">' + assainir(cell || '') + '</div></td>';
       });
       h += '</tr>';
     });
     h += '</tbody></table></div>';
     if (!this.lecture) {
       h += '<div class="pb-tableau-outils" role="group" aria-label="Tableau">' +
-        '<button type="button" data-tab="ligne">+ Ligne</button><button type="button" data-tab="colonne">+ Colonne</button>' +
+        '<button type="button" data-tab="ligne-avant" title="Insérer une ligne au-dessus de la cellule active">+ Ligne au-dessus</button>' +
+        '<button type="button" data-tab="ligne" title="Insérer une ligne en dessous de la cellule active">+ Ligne en dessous</button>' +
+        '<button type="button" data-tab="colonne-avant" title="Insérer une colonne à gauche de la cellule active">+ Colonne à gauche</button>' +
+        '<button type="button" data-tab="colonne" title="Insérer une colonne à droite de la cellule active">+ Colonne à droite</button>' +
         '<button type="button" data-tab="moins-ligne">− Ligne</button><button type="button" data-tab="moins-colonne">− Colonne</button>' +
-        '<button type="button" data-tab="entete"' + (b.entete ? ' class="sel"' : '') + '>En-tête</button></div>';
+        '<button type="button" data-tab="entete"' + (b.entete ? ' class="sel"' : '') + '>En-tête</button>' +
+        '<button type="button" data-tab="menu-cellule" title="Fond et alignement de la cellule active">Cellule ▾</button>' +
+        '<div class="pb-tableau-menu" hidden>' +
+        '<div class="nted-sous-titre">Fond de la cellule</div><div class="nted-pastilles">' +
+        FONDS_CELLULE.concat(['aucun']).map(function (v) {
+          return '<button type="button" class="nted-pastille nt-f-' + v + '" data-cmd="cellule_fond:' + v + '" title="' + esc(LIBELLES[v]) + '" aria-label="' + esc(LIBELLES[v]) + '"></button>';
+        }).join('') + '</div><div class="nted-sous-titre">Alignement</div><div class="nted-choix">' +
+        ALIGNEMENTS.map(function (v) {
+          return '<button type="button" data-cmd="aligne:' + v + '" title="' + esc(LIBELLES[v]) + '">' + ICONES_ALIGNE[v] + '</button>';
+        }).join('') + '</div></div></div>';
     }
     return h;
   };
+
+  /* Style d'une cellule : « fond-jaune al-centre » (b.styles, parallèle à b.lignes). */
+  function classesCellule(b, r, c) {
+    var st = b.styles && b.styles[r] && b.styles[r][c] ? String(b.styles[r][c]).split(' ') : [];
+    return st.map(function (x) {
+      var m = /^(fond|al)-([a-z]+)$/.exec(x);
+      if (!m) return '';
+      if (m[1] === 'fond' && FONDS_CELLULE.indexOf(m[2]) >= 0) return 'nt-cel-fond-' + m[2];
+      if (m[1] === 'al' && ALIGNEMENTS.indexOf(m[2]) > 0) return 'nt-cel-al-' + m[2];
+      return '';
+    }).filter(Boolean).join(' ');
+  }
+
+  /* Le tableau des styles suit toujours les dimensions des cellules. */
+  function caleStyles(b) {
+    var L = b.lignes || [];
+    var S0 = Array.isArray(b.styles) ? b.styles : [];
+    var vide = true;
+    b.styles = L.map(function (l, r) {
+      return l.map(function (_, c) {
+        var v = S0[r] && S0[r][c] ? String(S0[r][c]) : '';
+        if (v) vide = false;
+        return v;
+      });
+    });
+    if (vide) delete b.styles;
+  }
 
   function texteTableau(lignes) {
     var d = document.createElement('div');
@@ -566,8 +635,74 @@
 
   /* ── Enregistrement : différences → opérations ── */
 
+  /* ── Annuler / rétablir (Cmd/Ctrl + Z) ──
+     Historique propre à l'éditeur : le « annuler » du navigateur se perd dès
+     qu'un bloc est redessiné. Une étape = une rafale de frappe (pause de
+     0,6 s) ou un changement de structure. Chaque étape garde aussi où était
+     le curseur. */
+  var HISTO_MAX = 100;
+
+  P.etatCourant = function () {
+    var ae = document.activeElement;
+    var pos = null;
+    if (ae && this.corps.contains(ae) && (ae.classList.contains('pb-txt') || ae.classList.contains('pb-cellule'))) {
+      var row = ae.closest('.pb');
+      pos = { uid: row && row.dataset.uid, c: curseur(ae), r: ae.dataset.r, col: ae.dataset.c };
+    }
+    return { json: JSON.stringify(this.blocs()), pos: pos };
+  };
+
+  P.memoriser = function (immediat) {
+    var self = this;
+    if (this.lecture || this._restauration) return;
+    clearTimeout(this._tHisto);
+    var faire = function () {
+      self._tHisto = null;
+      var e = self.etatCourant();
+      var h = self._histo || (self._histo = []);
+      if (h.length && h[h.length - 1].json === e.json) { h[h.length - 1].pos = e.pos; return; }
+      h.push(e);
+      if (h.length > HISTO_MAX) h.shift();
+      self._refaire = [];
+    };
+    if (immediat) faire(); else this._tHisto = setTimeout(faire, 600);
+  };
+
+  P.annuler = function (refaire) {
+    if (this.lecture) return;
+    if (this._tHisto) { clearTimeout(this._tHisto); this._tHisto = null; this.memoriser(true); }
+    var h = this._histo || [];
+    var r = this._refaire || (this._refaire = []);
+    var cible;
+    if (refaire) {
+      if (!r.length) return;
+      cible = r.pop();
+      h.push(cible);
+    } else {
+      if (h.length < 2) return;
+      r.push(h.pop());
+      cible = h[h.length - 1];
+    }
+    this._restauration = true;
+    try {
+      this.note.blocs = JSON.parse(cible.json);
+      this.redessiner();
+      /* Le curseur revient là où l'on écrivait : position de l'étape annulée, ou rétablie. */
+      var p = (refaire ? cible.pos : r[r.length - 1].pos) || cible.pos;
+      if (p && p.uid) {
+        var k = this.indexUid(p.uid);
+        if (k >= 0 && p.r != null) this.focusCellule(k, Number(p.r), Number(p.col), p.c.debut);
+        else if (k >= 0) this.focus(k, p.c.debut, p.c.fin);
+      }
+      this.modifie();
+    } finally {
+      this._restauration = false;
+    }
+  };
+
   P.modifie = function (immediat) {
     var self = this;
+    this.memoriser(false);
     if (this.opts.surChange) { try { this.opts.surChange(this); } catch (e) {} }
     if (this.lecture || !this.opts.noteId) return;
     if (this._timer) clearTimeout(this._timer);
@@ -576,7 +711,10 @@
   };
 
   P.restructure = function (focusI, pos) {
+    /* Avant un changement de structure, la frappe en cours devient une étape. */
+    if (this._tHisto) { clearTimeout(this._tHisto); this._tHisto = null; }
     this.redessiner(focusI, pos);
+    this.memoriser(true);
     this.modifie();
   };
 
@@ -720,6 +858,10 @@
 
   P.appliquerDistant = function (o) {
     if (o.client === _client) return;
+    /* Ce qu'un autre a écrit n'est pas « annulable » ici : l'historique repart de l'état reçu. */
+    var moi0 = this;
+    clearTimeout(this._tRebase);
+    this._tRebase = setTimeout(function () { moi0._histo = [moi0.etatCourant()]; moi0._refaire = []; }, 0);
     var op = o.op || {};
     var blocs = this.blocs();
     var ref = this.envoye;
@@ -830,6 +972,10 @@
 
   /* La note entière a changé ailleurs (contenu remplacé, restauration). */
   P.remplacer = function (note) {
+    this._histo = null;
+    this._refaire = [];
+    var moiR = this;
+    setTimeout(function () { moiR._histo = [moiR.etatCourant()]; }, 0);
     this.note.blocs = note.blocs || [];
     this.note.revision = note.revision;
     this.rev = Number(note.revision || 0);
@@ -934,6 +1080,51 @@
   /* Commande lancée depuis le panneau d'actions de /note. */
   P.commande = function (cle) {
     if (this.lecture) return;
+    var el0 = this.cible();
+    var c0 = el0 && this.ctx(el0);
+    if (cle === 'photo' || cle === 'galerie') return this.choisirImage(c0 ? c0.i : null, cle === 'photo');
+    if (cle === 'annuler' || cle === 'retablir') return this.annuler(cle === 'retablir');
+    if ((cle === 'decaler' || cle === 'recaler') && c0 && !el0.classList.contains('pb-cellule')) {
+      var pos = curseur(el0).debut;
+      var r = Math.max(0, Math.min(RETRAIT_MAX, (c0.b.retrait || 0) + (cle === 'decaler' ? 1 : -1)));
+      relire(this, c0.b, el0);
+      if (r) c0.b.retrait = r; else delete c0.b.retrait;
+      return this.restructure(c0.i, pos);
+    }
+    if (cle === 'commenter') {
+      var sel0 = window.getSelection();
+      if (!this.opts.surCommenter) return;
+      return this.opts.surCommenter({ bloc_uid: c0 ? c0.b.uid : null, citation: sel0 ? sel0.toString() : '' });
+    }
+    if (cle === 'texte_insere' || cle === 'arobase') {
+      /* « / » et « @ » tapés pour l'utilisateur : le menu s'ouvre comme au clavier. */
+      if (!el0) return;
+      var signe = cle === 'arobase' ? '@' : '/';
+      var av = texteDe(el0).slice(0, curseur(el0).debut);
+      /* Le menu ne s'ouvre qu'en début de mot : une espace devant si besoin. */
+      if (av && !/\s$/.test(av)) document.execCommand('insertText', false, ' ');
+      document.execCommand('insertText', false, signe);
+      return;
+    }
+    var deux = /^(couleur|fond|taille|police|aligne|cellule_fond):([a-z-]+)$/.exec(cle);
+    if (deux || cle === 'effacer_format') {
+      var elS = this.cible();
+      if (!elS) return;
+      if (cle === 'effacer_format') return effacerFormat(this, elS);
+      var fam = deux[1];
+      var val = deux[2];
+      if (fam === 'aligne') return aligner(this, elS, val);
+      var selS = window.getSelection();
+      /* Dans une cellule, sans sélection : le surlignage colore la cellule entière. */
+      if ((fam === 'cellule_fond' || (fam === 'fond' && selS && selS.isCollapsed)) && elS.classList.contains('pb-cellule')) {
+        return styleCellule(this, elS, 'fond', val === 'aucun' ? 'aucun' : val);
+      }
+      if (fam === 'cellule_fond') {
+        if (this.opts.signaler) this.opts.signaler('Placez le curseur dans une cellule du tableau.', 'info');
+        return;
+      }
+      return appliquerStyle(this, elS, { couleur: 'c', fond: 'f', taille: 't', police: 'p' }[fam], val);
+    }
     var fmt = { gras: 'bold', italique: 'italic', souligne: 'underline', barre: 'strikeThrough', code_ligne: 'code', lien_texte: 'lien' }[cle];
     var el = this.cible();
     if (!el) return;
@@ -985,8 +1176,8 @@
     var liste = Array.prototype.filter.call(fichiers || [], function (f) { return /^image\//.test(f.type); });
     if (!liste.length) return;
     var pos = apresIndex == null ? this.blocs().length - 1 : apresIndex;
-    liste.reduce(function (prom, f) {
-      return prom.then(function () {
+    liste.reduce(function (prom, f0) {
+      return prom.then(function () { return reduireImage(f0); }).then(function (f) {
         if (f.size > IMAGE_MAX) { if (self.opts.signaler) self.opts.signaler('Image trop lourde — 10 Mo au plus.'); return; }
         var fd = new FormData();
         fd.append('fichier', f, f.name || 'image.png');
@@ -1007,15 +1198,43 @@
     }, Promise.resolve());
   };
 
-  P.choisirImage = function (apresIndex) {
+  /* `capture` : ouvre directement l'appareil photo du téléphone (dos). */
+  P.choisirImage = function (apresIndex, capture) {
     var self = this;
     var inp = document.createElement('input');
     inp.type = 'file';
-    inp.accept = 'image/png,image/jpeg,image/gif,image/webp';
-    inp.multiple = true;
+    inp.accept = capture ? 'image/*' : 'image/png,image/jpeg,image/gif,image/webp';
+    if (capture) inp.setAttribute('capture', 'environment');
+    inp.multiple = !capture;
     inp.onchange = function () { self.insererImages(inp.files, apresIndex); };
     inp.click();
   };
+
+  /* Photo de téléphone (souvent 4 000 px, 3 à 8 Mo) : réduite à 2 000 px en
+     JPEG avant l'envoi. Une image déjà petite, un GIF (animation) ou un
+     format que le navigateur ne sait pas lire partent tels quels. */
+  var IMAGE_COTE_MAX = 2000;
+  function reduireImage(f) {
+    if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(f.type) || f.size < 600 * 1024 || !window.createImageBitmap) {
+      return Promise.resolve(f);
+    }
+    return createImageBitmap(f, { imageOrientation: 'from-image' }).then(function (bmp) {
+      var k = Math.min(1, IMAGE_COTE_MAX / Math.max(bmp.width, bmp.height));
+      if (k === 1 && f.size < 2.5 * 1024 * 1024 && f.type !== 'image/heic' && f.type !== 'image/heif') return f;
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(bmp.width * k);
+      cv.height = Math.round(bmp.height * k);
+      cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+      if (bmp.close) bmp.close();
+      return new Promise(function (ok) {
+        cv.toBlob(function (blob) {
+          if (!blob || blob.size >= f.size) return ok(f);
+          var nom = (f.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+          try { ok(new File([blob], nom, { type: 'image/jpeg' })); } catch (e) { blob.name = nom; ok(blob); }
+        }, 'image/jpeg', 0.85);
+      });
+    }).catch(function () { return f; });
+  }
 
   /* ── Présence : initiales et couleur ── */
 
@@ -1281,6 +1500,119 @@
     else ed.lire(b, el);
   }
 
+  /* ── Mise en forme façon Word : couleur, surlignage, taille, police ── */
+
+  function ancetreStyle(el, noeud, prefixe) {
+    var n = noeud && (noeud.nodeType === 1 ? noeud : noeud.parentNode);
+    while (n && n !== el) {
+      if (n.tagName === 'SPAN' && String(n.className).indexOf('nt-' + prefixe + '-') === 0) return n;
+      n = n.parentNode;
+    }
+    return null;
+  }
+
+  function deballer(n) {
+    var p = n.parentNode;
+    while (n.firstChild) p.insertBefore(n.firstChild, n);
+    p.removeChild(n);
+  }
+
+  /* Applique un style à la sélection (famille c, f, t ou p). La valeur neutre
+     retire le style ; dans un passage déjà stylé, elle le neutralise. */
+  function appliquerStyle(ed, el, prefixe, valeur) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      if (ed.opts.signaler) ed.opts.signaler('Sélectionnez d\'abord le texte à mettre en forme.', 'info');
+      return;
+    }
+    var r = sel.getRangeAt(0);
+    if (!el.contains(r.commonAncestorContainer)) return;
+    var dansStyle = ancetreStyle(el, r.commonAncestorContainer, prefixe);
+    var frag = r.extractContents();
+    var tmp = document.createElement('div');
+    tmp.appendChild(frag);
+    Array.prototype.slice.call(tmp.querySelectorAll('span[class^="nt-' + prefixe + '-"]')).forEach(deballer);
+    var noeud;
+    if (valeur === NEUTRE[prefixe] && !dansStyle) {
+      noeud = document.createDocumentFragment();
+      while (tmp.firstChild) noeud.appendChild(tmp.firstChild);
+    } else {
+      noeud = document.createElement('span');
+      noeud.className = 'nt-' + prefixe + '-' + valeur;
+      while (tmp.firstChild) noeud.appendChild(tmp.firstChild);
+    }
+    var debut = noeud.firstChild;
+    var fin = noeud.lastChild;
+    r.insertNode(noeud);
+    /* Les spans vides laissés par la découpe ne servent à rien. */
+    Array.prototype.slice.call(el.querySelectorAll('span')).forEach(function (s0) { if (!s0.textContent) s0.remove(); });
+    try {
+      var r2 = document.createRange();
+      if (noeud.nodeType === 1 && noeud.parentNode) r2.selectNodeContents(noeud);
+      else if (debut && fin && debut.parentNode) { r2.setStartBefore(debut); r2.setEndAfter(fin); }
+      sel.removeAllRanges();
+      sel.addRange(r2);
+    } catch (e) {}
+    var c = ed.ctx(el);
+    if (c) { relire(ed, c.b, el); ed.memoriser(true); ed.modifie(); }
+    majBarre();
+  }
+
+  /* Retire toute la mise en forme de la sélection : le texte reste. */
+  function effacerFormat(ed, el) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      if (ed.opts.signaler) ed.opts.signaler('Sélectionnez d\'abord le texte.', 'info');
+      return;
+    }
+    var r = sel.getRangeAt(0);
+    var tmp = document.createElement('div');
+    tmp.appendChild(r.extractContents());
+    var morceaux = texteDe(tmp).split('\n');
+    var frag = document.createDocumentFragment();
+    morceaux.forEach(function (m, k) {
+      if (k) frag.appendChild(document.createElement('br'));
+      if (m) frag.appendChild(document.createTextNode(m));
+    });
+    r.insertNode(frag);
+    var c = ed.ctx(el);
+    if (c) { relire(ed, c.b, el); ed.modifie(); }
+  }
+
+  /* Alignement d'un paragraphe (ou d'une cellule de tableau). */
+  function aligner(ed, el, valeur) {
+    var c = ed.ctx(el);
+    if (!c || ALIGNEMENTS.indexOf(valeur) < 0) return;
+    if (el.classList.contains('pb-cellule')) return styleCellule(ed, el, 'al', valeur);
+    if (NON_TEXTE[c.b.type]) return;
+    var cur = curseur(el);
+    relire(ed, c.b, el);
+    if (valeur === 'gauche') delete c.b.aligne; else c.b.aligne = valeur;
+    ed.redessiner();
+    var el2 = ed.elTexte(c.i);
+    if (el2) { el2.focus(); placer(el2, cur.debut, cur.fin); }
+    ed.modifie();
+  }
+
+  /* Fond ou alignement d'une cellule : « fond-jaune », « al-centre ». */
+  function styleCellule(ed, cell, famille, valeur) {
+    var c = ed.ctx(cell);
+    if (!c || c.b.type !== 'tableau') return;
+    var r = Number(cell.dataset.r);
+    var col = Number(cell.dataset.c);
+    caleStyles(c.b);
+    if (!c.b.styles) c.b.styles = c.b.lignes.map(function (l) { return l.map(function () { return ''; }); });
+    var jetons = String(c.b.styles[r][col] || '').split(' ').filter(function (x) { return x && x.indexOf(famille + '-') !== 0; });
+    var neutre = famille === 'al' ? 'gauche' : 'aucun';
+    if (valeur !== neutre) jetons.push(famille + '-' + valeur);
+    c.b.styles[r][col] = jetons.join(' ');
+    caleStyles(c.b);
+    var pos = curseur(cell).debut;
+    ed.redessiner();
+    ed.focusCellule(c.i, r, col, pos);
+    ed.modifie();
+  }
+
   function basculer(ed, b) {
     if (_plies[b.uid]) delete _plies[b.uid]; else _plies[b.uid] = 1;
     memoriserPlies();
@@ -1293,30 +1625,52 @@
     var b = c.b;
     var L = b.lignes;
     var nbCol = L[0] ? L[0].length : 1;
-    if (action === 'ligne') {
+    /* Les styles des cellules suivent les lignes et colonnes ajoutées ou retirées. */
+    caleStyles(b);
+    var SS = b.styles || L.map(function (l) { return l.map(function () { return ''; }); });
+    if (action === 'ligne-avant') {
+      if (L.length >= TAB_LIGNES_MAX) return ed.opts.signaler && ed.opts.signaler('Tableau limité à ' + TAB_LIGNES_MAX + ' lignes.');
+      var av = r == null ? 0 : r;
+      L.splice(av, 0, new Array(nbCol).fill(''));
+      SS.splice(av, 0, new Array(nbCol).fill(''));
+      r = av;
+    } else if (action === 'colonne-avant') {
+      if (nbCol >= TAB_COLONNES_MAX) return ed.opts.signaler && ed.opts.signaler('Tableau limité à ' + TAB_COLONNES_MAX + ' colonnes.');
+      var avc = col == null ? 0 : col;
+      L.forEach(function (l) { l.splice(avc, 0, ''); });
+      SS.forEach(function (l) { l.splice(avc, 0, ''); });
+      col = avc;
+    } else if (action === 'ligne') {
       if (L.length >= TAB_LIGNES_MAX) return ed.opts.signaler && ed.opts.signaler('Tableau limité à ' + TAB_LIGNES_MAX + ' lignes.');
       var at = r == null ? L.length : r + 1;
       L.splice(at, 0, new Array(nbCol).fill(''));
+      SS.splice(at, 0, new Array(nbCol).fill(''));
       r = at;
     } else if (action === 'colonne') {
       if (nbCol >= TAB_COLONNES_MAX) return ed.opts.signaler && ed.opts.signaler('Tableau limité à ' + TAB_COLONNES_MAX + ' colonnes.');
       var atc = col == null ? nbCol : col + 1;
       L.forEach(function (l) { l.splice(atc, 0, ''); });
+      SS.forEach(function (l) { l.splice(atc, 0, ''); });
       col = atc;
     } else if (action === 'moins-ligne') {
       if (L.length <= 1) return;
       L.splice(r == null ? L.length - 1 : r, 1);
+      SS.splice(r == null ? SS.length - 1 : r, 1);
       r = Math.min(r == null ? 0 : r, L.length - 1);
     } else if (action === 'moins-colonne') {
       if (nbCol <= 1) return;
       L.forEach(function (l) { l.splice(col == null ? nbCol - 1 : col, 1); });
+      SS.forEach(function (l) { l.splice(col == null ? nbCol - 1 : col, 1); });
       col = Math.min(col == null ? 0 : col, nbCol - 2);
     } else if (action === 'entete') {
       b.entete = !b.entete;
     }
+    b.styles = SS;
+    caleStyles(b);
     b.texte = texteTableau(L);
     ed.redessiner();
     ed.focusCellule(c.i, r || 0, col || 0, -1);
+    ed.memoriser(true);
     ed.modifie();
   }
 
@@ -1396,6 +1750,7 @@
         L[r][col] = esc(val).replace(/&#39;/g, "'").replace(/&quot;/g, '"');
       });
     });
+    caleStyles(c.b);
     c.b.texte = texteTableau(L);
     ed.redessiner();
     ed.focusCellule(c.i, r0, c0, -1);
@@ -1661,11 +2016,20 @@
   function brancher(ed) {
     var corps = ed.corps;
     corps.addEventListener('input', function (e) { surSaisie(ed, e); });
-    corps.addEventListener('keydown', function (e) { surTouche(ed, e); });
+    corps.addEventListener('keydown', function (e) {
+      var mod = e.metaKey || e.ctrlKey;
+      var k = (e.key || '').toLowerCase();
+      if (mod && !e.altKey && (k === 'z' || (k === 'y' && !e.metaKey))) {
+        e.preventDefault();
+        ed.annuler(k === 'y' || e.shiftKey);
+        return;
+      }
+      surTouche(ed, e);
+    });
     corps.addEventListener('change', function (e) { surChangement(ed, e); });
     corps.addEventListener('paste', function (e) { surCollage(ed, e); });
     corps.addEventListener('mousedown', function (e) {
-      if (e.target.closest && e.target.closest('[data-tab], [data-basculer]')) { e.preventDefault(); return; }
+      if (e.target.closest && e.target.closest('[data-tab], [data-basculer], .pb-tableau-menu')) { e.preventDefault(); return; }
       if (e.target !== corps) return;
       e.preventDefault();
       ed.focusFin();
@@ -1692,7 +2056,24 @@
         }
         return;
       }
+      var choixCel = e.target.closest && e.target.closest('.pb-tableau-menu [data-cmd]');
+      if (choixCel && !ed.lecture) {
+        var dern0 = ed._celluleActive;
+        var ct0 = ed.ctx(choixCel);
+        if (!ct0 || !dern0 || dern0.uid !== ct0.b.uid) {
+          if (ed.opts.signaler) ed.opts.signaler('Cliquez d\'abord dans une cellule du tableau.', 'info');
+          return;
+        }
+        ed.focusCellule(ct0.i, dern0.r, dern0.c, -1);
+        ed.commande(choixCel.dataset.cmd);
+        return;
+      }
       var outil = e.target.closest && e.target.closest('[data-tab]');
+      if (outil && outil.dataset.tab === 'menu-cellule') {
+        var mn = outil.parentNode.querySelector('.pb-tableau-menu');
+        if (mn) mn.hidden = !mn.hidden;
+        return;
+      }
       if (outil && !ed.lecture) {
         var ct = ed.ctx(outil);
         if (!ct) return;
@@ -1753,13 +2134,32 @@
     _barre.id = 'nted-barre';
     _barre.setAttribute('role', 'toolbar');
     _barre.setAttribute('aria-label', 'Mise en forme');
-    _barre.innerHTML = BOUTONS_BARRE.map(function (b) {
+    _barre.innerHTML = '<div class="nted-barre-ligne">' + BOUTONS_BARRE.map(function (b) {
       return '<button type="button" class="nted-fmt" data-cmd="' + b[0] + '" title="' + esc(b[2]) + '">' + b[1] + '</button>';
-    }).join('') + '<button type="button" class="nted-commenter" data-cmd="commenter" title="Commenter ce passage">Commenter</button>';
+    }).join('') +
+      '<button type="button" class="nted-fmt nted-menu-btn" data-menu="couleur" title="Couleur et surlignage"><span class="nted-a">A</span></button>' +
+      '<button type="button" class="nted-fmt nted-menu-btn" data-menu="texte" title="Taille et police">Aa</button>' +
+      '<button type="button" class="nted-fmt nted-menu-btn" data-menu="aligne" title="Alignement du paragraphe">' + ICONES_ALIGNE.gauche + '</button>' +
+      '<button type="button" class="nted-fmt" data-cmd="effacer_format" title="Effacer la mise en forme">⌫</button>' +
+      '<button type="button" class="nted-commenter" data-cmd="commenter" title="Commenter ce passage">Commenter</button></div>' +
+      '<div class="nted-sous" hidden></div>';
     _barre.addEventListener('mousedown', function (e) {
       e.preventDefault();
+      var menu = e.target.closest('[data-menu]');
+      if (menu) {
+        var sous = _barre.querySelector('.nted-sous');
+        var meme = !sous.hidden && sous.dataset.menu === menu.dataset.menu;
+        sous.hidden = meme;
+        sous.dataset.menu = menu.dataset.menu;
+        if (!meme) sous.innerHTML = sousMenu(menu.dataset.menu);
+        return;
+      }
       var btn = e.target.closest('[data-cmd]');
       if (!btn || !_barre._ed) return;
+      if (btn.dataset.cmd.indexOf(':') > 0 || btn.dataset.cmd === 'effacer_format') {
+        _barre._ed.commande(btn.dataset.cmd);
+        return;
+      }
       if (btn.dataset.cmd === 'commenter') {
         var sel = window.getSelection();
         var row = _barre._el.closest('.pb');
@@ -1774,10 +2174,52 @@
     return _barre;
   }
 
+  var ICONES_ALIGNE = {
+    gauche: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="10" x2="14" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="4" y1="18" x2="14" y2="18"/></svg>',
+    centre: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="7" y1="18" x2="17" y2="18"/></svg>',
+    droite: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="10" x2="20" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="10" y1="18" x2="20" y2="18"/></svg>',
+    justifie: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="14" x2="20" y2="14"/><line x1="4" y1="18" x2="20" y2="18"/></svg>',
+  };
+  var LIBELLES = {
+    rouge: 'Rouge', orange: 'Orange', vert: 'Vert', bleu: 'Bleu', violet: 'Violet', rose: 'Rose', gris: 'Gris', jaune: 'Jaune',
+    defaut: 'Couleur normale', aucun: 'Sans surlignage', petit: 'Petit', normal: 'Normal', grand: 'Grand', 'tres-grand': 'Très grand',
+    sans: 'Standard', serif: 'Classique', mono: 'Machine à écrire', manuscrite: 'Manuscrite',
+    gauche: 'À gauche', centre: 'Centré', droite: 'À droite', justifie: 'Justifié',
+  };
+
+  /* Choix d'un menu de la barre, réutilisés par le panneau d'actions de /note. */
+  function sousMenu(quoi) {
+    function pastilles(fam, cmd, valeurs) {
+      return valeurs.map(function (v) {
+        return '<button type="button" class="nted-pastille nt-' + fam + '-' + v + '" data-cmd="' + cmd + ':' + v + '" title="' + esc(LIBELLES[v]) + '" aria-label="' + esc(LIBELLES[v]) + '">' +
+          (fam === 'c' ? 'A' : '') + '</button>';
+      }).join('');
+    }
+    if (quoi === 'couleur') {
+      return '<div class="nted-sous-titre">Couleur du texte</div><div class="nted-pastilles">' + pastilles('c', 'couleur', STYLES_TEXTE.c) + '</div>' +
+        '<div class="nted-sous-titre">Surligner</div><div class="nted-pastilles">' + pastilles('f', 'fond', STYLES_TEXTE.f) + '</div>';
+    }
+    if (quoi === 'texte') {
+      return '<div class="nted-sous-titre">Taille</div><div class="nted-choix">' + STYLES_TEXTE.t.map(function (v) {
+        return '<button type="button" class="nt-t-' + v + '" data-cmd="taille:' + v + '">' + esc(LIBELLES[v]) + '</button>';
+      }).join('') + '</div><div class="nted-sous-titre">Police</div><div class="nted-choix">' + STYLES_TEXTE.p.map(function (v) {
+        return '<button type="button" class="nt-p-' + v + '" data-cmd="police:' + v + '">' + esc(LIBELLES[v]) + '</button>';
+      }).join('') + '</div>';
+    }
+    return '<div class="nted-sous-titre">Alignement</div><div class="nted-choix">' + ALIGNEMENTS.map(function (v) {
+      return '<button type="button" data-cmd="aligne:' + v + '" title="' + esc(LIBELLES[v]) + '">' + ICONES_ALIGNE[v] + '</button>';
+    }).join('') + '</div>';
+  }
+
   function majBarre() {
     var sel = window.getSelection();
     var b = barre();
-    if (!sel || !sel.rangeCount || sel.isCollapsed) { b.classList.remove('open'); return; }
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      b.classList.remove('open');
+      var sous0 = b.querySelector('.nted-sous');
+      if (sous0) sous0.hidden = true;
+      return;
+    }
     var n = sel.anchorNode;
     var el = n && (n.nodeType === 1 ? n : n.parentNode).closest && (n.nodeType === 1 ? n : n.parentNode).closest('.pb-txt, .pb-cellule');
     var ed = null;
@@ -2051,12 +2493,19 @@
       ed.restructure(c.i + 1, 0);
       return;
     }
-    if (depuisPanneau && cmd.type && !vide && !OBJETS[cmd.type] && cmd.type !== 'page' && cmd.type !== 'image') {
-      var neuf = { uid: uid(), type: cmd.type, texte: '' };
-      if (cmd.type === 'todo') neuf.coche = false;
-      if (b.retrait && LISTES[cmd.type]) neuf.retrait = b.retrait;
-      c.blocs.splice(c.i + 1, 0, neuf);
-      ed.restructure(c.i + 1, 0);
+    /* Depuis le panneau ou la barre du clavier, comme dans Word : un style de
+       texte s'applique au paragraphe où est le curseur (ou la sélection). Le
+       même style une seconde fois le remet en texte simple. */
+    if (depuisPanneau && cmd.type && TYPES_TEXTE[cmd.type] && TYPES_TEXTE[b.type]) {
+      var pos0 = curseur(el).debut;
+      var fin0 = curseur(el).fin;
+      b.type = b.type === cmd.type && cmd.type !== 'p' ? 'p' : cmd.type;
+      if (b.type === 'todo') b.coche = !!b.coche; else delete b.coche;
+      if (b.type === 'code') delete b.html;
+      ed.redessiner(c.i, pos0);
+      var el1 = ed.elTexte(c.i);
+      if (el1 && fin0 > pos0) placer(el1, pos0, fin0);
+      ed.modifie();
       return;
     }
     if (cmd.action === 'date' || cmd.action === 'heure') {
@@ -2258,6 +2707,7 @@
   window.MySifaNotesEditeur = {
     monter: function (corps, note, opts) { return new Editeur(corps, note, opts); },
     /* Commandes d'insertion proposées à cet éditeur (menu « / » et panneau d'actions). */
+    sousMenu: sousMenu,
     commandes: function (ed) {
       return commandesDe(ed).map(function (c) { return { cle: c.cle, libelle: c.libelle, aide: c.aide, icone: c.icone }; });
     },

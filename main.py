@@ -761,8 +761,8 @@ _VERSION_ASSET = {
     b"/static/mysifa_dock.js": b"?v=5",
     b"/static/mysifa_dock_fenetres.js": b"?v=2",
     b"/static/mysifa_outils_mobile.js": b"?v=4",
-    b"/static/mysifa_postit.css": b"?v=9",
-    b"/static/mysifa_postit.js": b"?v=9",
+    b"/static/mysifa_postit.css": b"?v=12",
+    b"/static/mysifa_postit.js": b"?v=12",
 }
 
 

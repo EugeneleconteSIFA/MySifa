@@ -504,6 +504,22 @@ class TestCollaboration(TestMesNotes):
         brut = normaliser_blocs([{"type": "p", "html": "sans mise en forme"}])[0]
         self.assertNotIn("html", brut)
 
+    def test_styles_word(self):
+        from app.services.notes import assainir_html, normaliser_blocs
+
+        self.assertEqual(assainir_html('<span class="nt-c-rouge">a</span><span class="nt-c-noir">b</span>'),
+                         '<span class="nt-c-rouge">a</span>b')
+        self.assertEqual(assainir_html('<span class="nt-f-jaune" style="background:url(x)">a</span>'),
+                         '<span class="nt-f-jaune">a</span>')
+        self.assertEqual(assainir_html('<span class="nt-c-rouge"><span class="x">a</span>b</span>'),
+                         '<span class="nt-c-rouge">ab</span>')
+        b = normaliser_blocs([{"type": "p", "html": '<span class="nt-t-grand">G</span>', "aligne": "centre"}])[0]
+        self.assertEqual((b["html"], b["aligne"]), ('<span class="nt-t-grand">G</span>', "centre"))
+        self.assertNotIn("aligne", normaliser_blocs([{"type": "p", "texte": "x", "aligne": "milieu"}])[0])
+        t = normaliser_blocs([{"type": "tableau", "lignes": [["a", "b"], ["c", "d"]],
+                               "styles": [["fond-jaune al-centre fond-rose", "fond-noir"], ["al-droite"]]}])[0]
+        self.assertEqual(t["styles"], [["fond-jaune al-centre", ""], ["al-droite", ""]])
+
     def test_image_controlee_et_protegee(self):
         import tempfile as _tf
 

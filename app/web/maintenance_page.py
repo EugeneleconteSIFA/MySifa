@@ -109,7 +109,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=7">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=9">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=12">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>

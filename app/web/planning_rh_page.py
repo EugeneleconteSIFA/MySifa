@@ -751,10 +751,10 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning_rh';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
-<link rel="stylesheet" href="/static/mysifa_postit.css?v=9">
+<link rel="stylesheet" href="/static/mysifa_postit.css?v=12">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_postit.js?v=9"></script>
+<script src="/static/mysifa_postit.js?v=12"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->

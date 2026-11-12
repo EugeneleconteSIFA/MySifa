@@ -16,6 +16,16 @@ from html.parser import HTMLParser
 
 from config import UPLOAD_DIR
 
+# Teintes d'impression des styles de texte (papier blanc). hex-ok : couleurs
+# d'export, hors thème de l'application — miroir clair de mysifa_notes_editeur.css.
+COULEURS = {"rouge": "#dc2626", "orange": "#c2410c", "vert": "#15803d", "bleu": "#1d4ed8",  # hex-ok
+            "violet": "#7e22ce", "rose": "#be185d", "gris": "#6b7280"}  # hex-ok
+SURLIGNAGES = {"jaune": "#fde68a", "vert": "#bbf7d0", "bleu": "#bfdbfe", "rose": "#fbcfe8",  # hex-ok
+               "orange": "#fed7aa", "gris": "#e5e7eb"}  # hex-ok
+TAILLES = {"petit": 0.82, "grand": 1.3, "tres-grand": 1.7}
+POLICES_CSS = {"serif": "Georgia,'Times New Roman',serif", "mono": "ui-monospace,Menlo,Consolas,monospace",
+               "manuscrite": "'Segoe Print','Bradley Hand','Comic Sans MS',cursive"}
+
 # ── Texte riche → segments ────────────────────────────────────────────
 
 class _Segments(HTMLParser):
@@ -25,6 +35,7 @@ class _Segments(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.styles: list[str] = []
         self.lien: str | None = None
+        self.spans: list[str] = []
         self.out: list[tuple[str, frozenset, str | None]] = []
 
     def handle_starttag(self, tag, attrs):
@@ -34,8 +45,20 @@ class _Segments(HTMLParser):
             self.styles.append(tag)
         elif tag == "a":
             self.lien = dict(attrs).get("href")
+        elif tag == "span":
+            m = re.match(r"^nt-([cftp])-([a-z-]+)$", dict(attrs).get("class") or "")
+            self.spans.append(f"{m.group(1)}:{m.group(2)}" if m else "")
+            if m:
+                self.styles.append(self.spans[-1])
 
     def handle_endtag(self, tag):
+        if tag == "span":
+            jeton = self.spans.pop() if self.spans else ""
+            if jeton and jeton in self.styles:
+                self.styles.reverse()
+                self.styles.remove(jeton)
+                self.styles.reverse()
+            return
         if tag in self.styles:
             self.styles.reverse()
             self.styles.remove(tag)
@@ -45,7 +68,11 @@ class _Segments(HTMLParser):
 
     def handle_data(self, data):
         if data:
-            self.out.append((data, frozenset(self.styles), self.lien))
+            # Un style imbriqué remplace celui de même famille (le plus intérieur gagne).
+            familles: dict[str, str] = {}
+            for st in self.styles:
+                familles[st.split(":")[0] if ":" in st else st] = st
+            self.out.append((data, frozenset(familles.values()), self.lien))
 
 
 def segments(bloc_ou_html) -> list[tuple[str, frozenset, str | None]]:
@@ -58,6 +85,39 @@ def segments(bloc_ou_html) -> list[tuple[str, frozenset, str | None]]:
     p.feed(h)
     p.close()
     return p.out
+
+
+def style_de(st) -> dict:
+    """Jetons de style d'un segment → {couleur, fond, taille, police} (valeurs de la palette)."""
+    out = {}
+    for j in st:
+        if ":" not in j:
+            continue
+        fam, val = j.split(":", 1)
+        if fam == "c" and val in COULEURS:
+            out["couleur"] = val
+        elif fam == "f" and val in SURLIGNAGES:
+            out["fond"] = val
+        elif fam == "t" and val in TAILLES:
+            out["taille"] = val
+        elif fam == "p" and val in POLICES_CSS:
+            out["police"] = val
+    return out
+
+
+def styles_cellule(b: dict, r: int, c: int) -> dict:
+    try:
+        jetons = str((b.get("styles") or [])[r][c] or "").split()
+    except (IndexError, TypeError):
+        jetons = []
+    out = {}
+    for j in jetons:
+        fam, _, val = j.partition("-")
+        if fam == "fond" and val in SURLIGNAGES:
+            out["fond"] = val
+        elif fam == "al":
+            out["aligne"] = val
+    return out
 
 
 def chemin_image(conn, image_id) -> tuple[str, str] | None:
@@ -84,7 +144,12 @@ def html_note(titre: str, blocs: list[dict], auteur: str = "", date: str = "") -
     for b in blocs_visibles(blocs):
         t = b.get("type")
         r = int(b.get("retrait") or 0)
-        style = f' style="margin-left:{r * 1.4}em"' if r else ""
+        regles = []
+        if r:
+            regles.append(f"margin-left:{r * 1.4}em")
+        if b.get("aligne") in ("centre", "droite", "justifie"):
+            regles.append("text-align:" + {"centre": "center", "droite": "right", "justifie": "justify"}[b["aligne"]])
+        style = f' style="{";".join(regles)}"' if regles else ""
         contenu = b.get("html") or esc(b.get("texte") or "").replace("\n", "<br>")
         num = num + 1 if t == "num" else 0
         if t in ("h1", "h2", "h3"):
@@ -117,7 +182,17 @@ def html_note(titre: str, blocs: list[dict], auteur: str = "", date: str = "") -
             corps = []
             for i, l in enumerate(lignes):
                 tag = "th" if i == 0 and b.get("entete") else "td"
-                corps.append("<tr>" + "".join(f"<{tag}>{c}</{tag}>" for c in l) + "</tr>")
+                cellules = []
+                for j, cel in enumerate(l):
+                    sc = styles_cellule(b, i, j)
+                    css = []
+                    if sc.get("fond"):
+                        css.append("background:" + SURLIGNAGES[sc["fond"]])
+                    if sc.get("aligne") in ("centre", "droite", "justifie"):
+                        css.append("text-align:" + {"centre": "center", "droite": "right", "justifie": "justify"}[sc["aligne"]])
+                    attr = f' style="{";".join(css)}"' if css else ""
+                    cellules.append(f"<{tag}{attr}>{cel}</{tag}>")
+                corps.append("<tr>" + "".join(cellules) + "</tr>")
             out.append(f'<table{style}>{"".join(corps)}</table>')
         else:
             out.append(f"<p{style}>{contenu}</p>")
@@ -173,13 +248,29 @@ def _glyphes(texte: str) -> str:
     return "".join(c if (ord(c) in cmap or c in "\n\t ") else _REPLI.get(c, "?") for c in texte)
 
 
-def _para_xml(segs) -> str:
+def _para_xml(segs, taille_base: float = 10.5) -> str:
     """Segments → balisage Paragraph de reportlab."""
     morceaux = []
     for txt, st, lien in segs:
         t = html_mod.escape(_glyphes(txt)).replace("\n", "<br/>")
         if "code" in st:
             t = f'<font face="Courier">{t}</font>'
+        sty = style_de(st)
+        attrs = []
+        if sty.get("couleur"):
+            attrs.append(f'color="{COULEURS[sty["couleur"]]}"')
+        if sty.get("fond"):
+            attrs.append(f'backColor="{SURLIGNAGES[sty["fond"]]}"')
+        if sty.get("taille"):
+            attrs.append(f'size="{round(taille_base * TAILLES[sty["taille"]], 1)}"')
+        if sty.get("police") == "serif":
+            attrs.append('face="Times-Roman"')
+        elif sty.get("police") == "mono":
+            attrs.append('face="Courier"')
+        if attrs:
+            t = f'<font {" ".join(attrs)}>{t}</font>'
+        if sty.get("police") == "manuscrite":
+            t = f"<i>{t}</i>"
         if "b" in st:
             t = f"<b>{t}</b>"
         if "i" in st:
@@ -209,10 +300,13 @@ def pdf_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str = 
     filet = colors.HexColor("#d1d5db")  # hex-ok : filets du PDF
     fond = colors.HexColor("#f3f4f6")  # hex-ok : fonds du PDF
 
-    def st(nom, taille, gras=False, avant=2, apres=3, couleur=encre, retrait=0):
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
+    alignements = {"centre": TA_CENTER, "droite": TA_RIGHT, "justifie": TA_JUSTIFY}
+
+    def st(nom, taille, gras=False, avant=2, apres=3, couleur=encre, retrait=0, aligne=None):
         return ParagraphStyle(nom, fontName=police, fontSize=taille, leading=taille * 1.35,
                               spaceBefore=avant, spaceAfter=apres, textColor=couleur,
-                              leftIndent=retrait, alignment=TA_LEFT)
+                              leftIndent=retrait, alignment=alignements.get(aligne, TA_LEFT))
 
     flux = [Paragraph(f"<b>{html_mod.escape(_glyphes(titre or 'Sans titre'))}</b>", st("t", 20, avant=0, apres=4))]
     if auteur or date:
@@ -226,15 +320,15 @@ def pdf_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str = 
         segs = segments(b)
         if t in ("h1", "h2", "h3"):
             taille = {"h1": 16, "h2": 13.5, "h3": 11.5}[t]
-            flux.append(Paragraph(f"<b>{_para_xml(segs)}</b>", st(t, taille, avant=8, apres=3, retrait=retrait)))
+            flux.append(Paragraph(f"<b>{_para_xml(segs, taille)}</b>", st(t, taille, avant=8, apres=3, retrait=retrait, aligne=b.get("aligne"))))
         elif t in ("todo", "puce", "num", "bascule"):
             prefixe = {"todo": ("☑ " if b.get("coche") else "☐ "), "puce": "• ", "num": f"{num}. ", "bascule": "▾ "}[t]
             corps = _para_xml(segs)
             if t == "todo" and b.get("coche"):
                 corps = f'<font color="#9ca3af"><strike>{corps}</strike></font>'  # hex-ok : case cochée
-            flux.append(Paragraph(html_mod.escape(_glyphes(prefixe)) + corps, st("l", 10.5, retrait=retrait + 3 * mm)))
+            flux.append(Paragraph(html_mod.escape(_glyphes(prefixe)) + corps, st("l", 10.5, retrait=retrait + 3 * mm, aligne=b.get("aligne"))))
         elif t == "citation":
-            flux.append(Paragraph(f"<i>{_para_xml(segs)}</i>", st("c", 10.5, couleur=discret, retrait=retrait + 6 * mm)))
+            flux.append(Paragraph(f"<i>{_para_xml(segs)}</i>", st("c", 10.5, couleur=discret, retrait=retrait + 6 * mm, aligne=b.get("aligne"))))
         elif t == "encadre":
             tb = Table([[Paragraph(_para_xml(segs), st("e", 10.5))]], colWidths=[largeur_utile - retrait])
             tb.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), fond), ("BOX", (0, 0), (-1, -1), 0.6, filet),
@@ -271,16 +365,23 @@ def pdf_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str = 
             lignes = b.get("lignes") or []
             if lignes:
                 nb = max(len(l) for l in lignes)
-                donnees = [[Paragraph(_para_xml(segments(c)) or "", st("cel", 9.5, avant=0, apres=0)) for c in (l + [""] * nb)[:nb]]
-                           for l in lignes]
+                donnees = [[Paragraph(_para_xml(segments(c), 9.5) or "",
+                                      st("cel", 9.5, avant=0, apres=0, aligne=styles_cellule(b, r, k).get("aligne")))
+                             for k, c in enumerate((l + [""] * nb)[:nb])]
+                           for r, l in enumerate(lignes)]
                 tb = Table(donnees, colWidths=[(largeur_utile - retrait) / nb] * nb, repeatRows=1 if b.get("entete") else 0)
                 style = [("GRID", (0, 0), (-1, -1), 0.5, filet), ("VALIGN", (0, 0), (-1, -1), "TOP")]
                 if b.get("entete"):
                     style.append(("BACKGROUND", (0, 0), (-1, 0), fond))
+                for r in range(len(lignes)):
+                    for k in range(nb):
+                        f = styles_cellule(b, r, k).get("fond")
+                        if f:
+                            style.append(("BACKGROUND", (k, r), (k, r), colors.HexColor(SURLIGNAGES[f])))
                 tb.setStyle(TableStyle(style))
                 flux += [Spacer(1, 4), tb, Spacer(1, 4)]
         else:
-            flux.append(Paragraph(_para_xml(segs) or "&nbsp;", st("p", 10.5, retrait=retrait)))
+            flux.append(Paragraph(_para_xml(segs) or "&nbsp;", st("p", 10.5, retrait=retrait, aligne=b.get("aligne"))))
 
     tampon = io.BytesIO()
 
@@ -314,8 +415,22 @@ def docx_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str =
         p.runs[0].font.size = Pt(9)
         p.runs[0].font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
 
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    surligne = {"jaune": WD_COLOR_INDEX.YELLOW, "vert": WD_COLOR_INDEX.BRIGHT_GREEN, "bleu": WD_COLOR_INDEX.TURQUOISE,
+                "rose": WD_COLOR_INDEX.PINK, "orange": WD_COLOR_INDEX.YELLOW, "gris": WD_COLOR_INDEX.GRAY_25}
+    polices = {"serif": "Georgia", "mono": "Consolas", "manuscrite": "Segoe Print"}
+    aligne_docx = {"centre": WD_ALIGN_PARAGRAPH.CENTER, "droite": WD_ALIGN_PARAGRAPH.RIGHT,
+                   "justifie": WD_ALIGN_PARAGRAPH.JUSTIFY}
+
+    def rgb(h):
+        h = h.lstrip("#")
+        return RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
     def remplir(par, segs):
         for txt, st, lien in segs:
+            sty = style_de(st)
             morceaux = txt.split("\n")
             for k, m in enumerate(morceaux):
                 if k:
@@ -332,6 +447,14 @@ def docx_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str =
                     run.font.highlight_color = WD_COLOR_INDEX.GRAY_25
                 if lien:
                     run.font.color.rgb = RGBColor(0x0E, 0x74, 0x90)
+                if sty.get("couleur"):
+                    run.font.color.rgb = rgb(COULEURS[sty["couleur"]])
+                if sty.get("fond"):
+                    run.font.highlight_color = surligne[sty["fond"]]
+                if sty.get("taille"):
+                    run.font.size = Pt(11 * TAILLES[sty["taille"]])
+                if sty.get("police"):
+                    run.font.name = polices[sty["police"]]
 
     num = 0
     for b in blocs_visibles(blocs):
@@ -398,12 +521,23 @@ def docx_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str =
                         sg = segments(cel)
                         if r == 0 and b.get("entete"):
                             sg = [(x, st | {"b"}, li) for x, st, li in sg]
-                        remplir(tb.cell(r, c).paragraphs[0], sg)
+                        cellule = tb.cell(r, c)
+                        remplir(cellule.paragraphs[0], sg)
+                        sc = styles_cellule(b, r, c)
+                        if sc.get("aligne") in aligne_docx:
+                            cellule.paragraphs[0].alignment = aligne_docx[sc["aligne"]]
+                        if sc.get("fond"):
+                            ombre = OxmlElement("w:shd")
+                            ombre.set(qn("w:val"), "clear")
+                            ombre.set(qn("w:fill"), SURLIGNAGES[sc["fond"]].lstrip("#"))
+                            cellule._tc.get_or_add_tcPr().append(ombre)
         else:
             par = doc.add_paragraph()
             remplir(par, segs)
         if par is not None and retrait:
             par.paragraph_format.left_indent = retrait
+        if par is not None and b.get("aligne") in aligne_docx:
+            par.alignment = aligne_docx[b["aligne"]]
     tampon = io.BytesIO()
     doc.save(tampon)
     return tampon.getvalue()
