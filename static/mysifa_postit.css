@@ -157,6 +157,15 @@
   font-family:inherit;
 }
 .postit-add-task-btn:hover{text-decoration:underline}
+.postit-ouvrir-btn{
+  font-size:12px;
+  font-weight:700;
+  color:var(--postit-ink-soft);
+  text-decoration:none;
+  padding:2px 4px;
+  margin-right:auto;
+}
+.postit-ouvrir-btn:hover{color:var(--postit-ink-strong);text-decoration:underline}
 .postit-multipage-btn{
   font-size:11px;
   color:var(--postit-ink-soft);
