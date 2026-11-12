@@ -327,3 +327,39 @@
 }
 .nted-bulle .nted-bulle-ok{background:var(--accent);border-color:var(--accent);color:white}
 .nted-bulle-url{font-size:12px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+
+/* Bloc repliable */
+.pb-cache{display:none!important}
+.pb-chevron{flex-shrink:0;width:1.35em;height:1.35em;margin-top:.1em;display:flex;align-items:center;justify-content:center;border:none;border-radius:5px;background:transparent;color:var(--nted-ink-muted-d);cursor:pointer;transition:transform .15s}
+.pb-chevron:hover{background:color-mix(in srgb,var(--nted-ink-d) 8%,transparent);color:var(--nted-ink-d)}
+.pb-bascule .pb-chevron{transform:rotate(90deg)}
+.pb-bascule.ferme .pb-chevron{transform:none}
+.pb-bascule .pb-txt{font-weight:650}
+.pb-bascule-vide{margin-left:calc(var(--pb-r,0) * 1.3em);padding:.15em .3em;font-size:.9em;color:var(--nted-ink-muted-d);cursor:pointer;border-radius:6px}
+.nted-poignees .pb-bascule-vide{margin-left:calc(var(--pb-r,0) * 1.3em + 22px - 22px);padding-left:calc(22px + .3em)}
+.pb-bascule-vide:hover{background:color-mix(in srgb,var(--nted-ink-d) 6%,transparent)}
+
+/* Tableau */
+.pb-tableau-zone{flex:1;min-width:0;overflow-x:auto;margin:.3em 0}
+.pb-grille{border-collapse:collapse;min-width:100%;font-size:.95em}
+.pb-grille td{border:1px solid var(--nted-sep-d);padding:0;vertical-align:top;min-width:90px}
+.pb-grille.entete tr:first-child td{background:color-mix(in srgb,var(--nted-ink-d) 6%,transparent);font-weight:700}
+.pb-cellule{padding:.35em .55em;min-height:1.6em;outline:none;color:var(--nted-ink-d);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.pb-cellule:focus{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--nted-accent-d) 55%,transparent)}
+.pb-cellule a{color:var(--nted-accent-d);text-decoration:underline}
+.pb-tableau-outils{position:absolute;left:22px;bottom:.1em;display:flex;gap:3px;opacity:0;transition:opacity .12s;z-index:2}
+.pb-tableau-zone:focus-within + .pb-tableau-outils,.pb-tableau-outils:hover,.pb-tableau-zone:hover + .pb-tableau-outils{opacity:1}
+.pb-tableau-outils button{padding:3px 7px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--muted);font:600 11px/1.2 inherit;font-family:inherit;cursor:pointer}
+.pb-tableau-outils button:hover{color:var(--accent);border-color:var(--accent)}
+.pb-tableau-outils button.sel{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.pb-grille{margin-bottom:.2em}
+.pb.pb-tableau{padding-bottom:1.8em}
+@media (hover:none){.pb-tableau-outils{opacity:1}}
+
+/* Commentaires en marge, liens MySifa */
+.pb-com{position:absolute;right:-30px;top:.1em;min-width:22px;height:20px;padding:0 5px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--accent);font:700 10.5px/1 inherit;font-family:inherit;cursor:pointer}
+.pb-com::before{content:'';display:inline-block;width:8px;height:8px;margin-right:3px;border-radius:2px 2px 2px 0;background:currentColor;vertical-align:-1px}
+.pb-com:hover{border-color:var(--accent)}
+@media(max-width:900px){.pb-com{right:0}}
+.pb-txt a[href^="/"],.pb-cellule a[href^="/"]{text-decoration:none;padding:0 .3em;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-weight:600}
+#nted-barre .nted-commenter{border-left:1px solid var(--border);border-radius:0 7px 7px 0;padding-left:10px;margin-left:2px}

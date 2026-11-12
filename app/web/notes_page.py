@@ -21,6 +21,7 @@ MyQualité).
 """
 from __future__ import annotations
 
+import html
 import json
 
 from fastapi import APIRouter, HTTPException, Request
@@ -61,6 +62,31 @@ def notes_page(request: Request):
     return HTMLResponse(content=html, headers=_SANS_CACHE)
 
 
+@router.get("/note/{note_id}/imprimer", response_class=HTMLResponse)
+def note_imprimer(note_id: int, request: Request):
+    """Page imprimable d'une note : la boîte d'impression du navigateur s'ouvre
+    seule (toute imprimante du poste, ou « Enregistrer en PDF »)."""
+    from database import get_db
+    from app.services.notes import exiger_droit, lire_blocs
+    from app.services.notes_export import html_note
+    try:
+        user = get_current_user(request)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return RedirectResponse(url=f"/?next=/note/{note_id}/imprimer", status_code=302)
+        raise
+    with get_db() as conn:
+        _, note = exiger_droit(conn, int(user["id"]), note_id, "lire")
+        auteur = conn.execute("SELECT nom FROM users WHERE id=?", (note["user_id"],)).fetchone()
+    quand = (note.get("modifie_le") or note.get("created_at") or "")[:10]
+    date = "/".join(reversed(quand.split("-"))) if quand else ""
+    corps = html_note(note.get("title") or "Sans titre", lire_blocs(note.get("contenu")),
+                      auteur[0] if auteur else "", date)
+    titre = html.escape(note.get("title") or "Note")
+    page = IMPRESSION_HTML.replace("__TITRE__", titre).replace("__CORPS__", corps)
+    return HTMLResponse(content=page, headers=_SANS_CACHE)
+
+
 @router.get("/notes")
 def notes_alias():
     return RedirectResponse(url="/note", status_code=302)
@@ -88,8 +114,8 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=2" data-nted="1">
-<link rel="stylesheet" href="/static/mysifa_notes.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=3" data-nted="1">
+<link rel="stylesheet" href="/static/mysifa_notes.css?v=6">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -112,6 +138,7 @@ NOTES_HTML = r"""<!DOCTYPE html>
         <input type="search" id="nt-q" placeholder="Rechercher (titre, contenu)" autocomplete="off" spellcheck="false">
       </div>
       <button type="button" class="nav-btn" id="nt-nav-accueil">""" + _ICONE_ACCUEIL + r"""Toutes les notes</button>
+      <div id="nt-raccourcis"></div>
       <div class="nav-section-label msb-section nt-racine" id="nt-racine" title="Déposer ici pour ranger à la racine"><span>Pages</span></div>
       <div class="nt-arbre" id="nt-arbre"></div>
       <div class="nav-section-label msb-section" id="nt-label-partage" hidden><span>Partagées avec moi</span></div>
@@ -142,8 +169,49 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_notes_editeur.js?v=5"></script>
-<script src="/static/mysifa_notes.js?v=5"></script>
+<script src="/static/mysifa_notes_editeur.js?v=6"></script>
+<script src="/static/mysifa_notes.js?v=6"></script>
+<script src="/static/mysifa_notes_recherche.js?v=1"></script>
+<script src="/static/mysifa_notes_outils.js?v=1"></script>
+</body>
+</html>
+"""
+
+# Page d'impression : papier blanc, encre noire, quel que soit le thème de
+# l'utilisateur. hex-ok : couleurs d'impression, hors thème de l'application.
+IMPRESSION_HTML = r"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>__TITRE__ — impression</title>
+<style>
+  @page{size:A4;margin:16mm 18mm}
+  body{font-family:'Segoe UI',system-ui,sans-serif;color:#1f2937;background:#fff;margin:0;padding:24px;font-size:11pt;line-height:1.5} /* hex-ok */
+  .barre{display:flex;gap:8px;justify-content:flex-end;margin-bottom:16px}
+  .barre button{padding:8px 14px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;font:600 13px system-ui;cursor:pointer} /* hex-ok */
+  .barre button.ok{background:#0e7490;border-color:#0e7490;color:white} /* hex-ok */
+  @media print{.barre{display:none}body{padding:0}}
+  h1.titre{font-size:22pt;margin:0 0 2px}
+  .meta{color:#6b7280;font-size:9pt;margin-bottom:14px} /* hex-ok */
+  h1{font-size:17pt;margin:14px 0 4px} h2{font-size:14pt;margin:12px 0 4px} h3{font-size:12pt;margin:10px 0 3px}
+  p{margin:3px 0} .todo.coche{color:#9ca3af;text-decoration:line-through} .case{font-family:'DejaVu Sans',sans-serif} /* hex-ok */
+  blockquote{margin:6px 0;padding-left:10px;border-left:3px solid #d1d5db;color:#4b5563;font-style:italic} /* hex-ok */
+  .encadre{margin:6px 0;padding:8px 10px;border:1px solid #e5e7eb;background:#f9fafb;border-radius:6px;font-weight:600} /* hex-ok */
+  pre{margin:6px 0;padding:8px 10px;background:#f3f4f6;border-radius:6px;font-size:9.5pt;white-space:pre-wrap} /* hex-ok */
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;background:#f3f4f6;padding:0 3px;border-radius:3px} /* hex-ok */
+  hr{border:none;border-top:1px solid #d1d5db;margin:10px 0} /* hex-ok */
+  table{border-collapse:collapse;width:100%;margin:6px 0;page-break-inside:auto} tr{page-break-inside:avoid}
+  td,th{border:1px solid #d1d5db;padding:5px 7px;text-align:left;vertical-align:top} th{background:#f3f4f6} /* hex-ok */
+  figure{margin:8px 0} img{max-width:100%;border-radius:4px} figcaption{color:#6b7280;font-size:9pt} /* hex-ok */
+  a{color:#0e7490} .bascule{font-weight:650} .page{color:#6b7280} /* hex-ok */
+</style>
+</head>
+<body>
+<!-- mysifa-boutons-off : page d'impression, aucun bouton flottant -->
+<div class="barre"><button type="button" onclick="window.close()">Fermer</button><button type="button" class="ok" onclick="window.print()">Imprimer</button></div>
+__CORPS__
+<script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });</script>
 </body>
 </html>
 """

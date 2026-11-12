@@ -884,8 +884,8 @@
   /* ── Éditeur de blocs : static/mysifa_notes_editeur.js, commun avec /note ──
      Chargé à la demande : aucune page n'a à l'inclure. Changer l'éditeur
      impose d'incrémenter ces deux ?v= ET celui de mysifa_postit.js. */
-  var NTED_JS = '/static/mysifa_notes_editeur.js?v=5';
-  var NTED_CSS = '/static/mysifa_notes_editeur.css?v=2';
+  var NTED_JS = '/static/mysifa_notes_editeur.js?v=6';
+  var NTED_CSS = '/static/mysifa_notes_editeur.css?v=3';
   var _edPret = null;
   var _editeurs = {};
 

@@ -91,6 +91,7 @@ from app.routers.chat import router as chat_router
 from app.routers.alerts import router as alerts_router
 from app.routers.perf import router as perf_router
 from app.routers.portail import router as portail_router
+from app.routers.notes_outils import router as notes_outils_router
 from app.routers.postit import router as postit_router
 from app.routers.accueil_widgets import router as accueil_widgets_router
 from app.routers.ao import router as ao_router
@@ -760,8 +761,8 @@ _VERSION_ASSET = {
     b"/static/mysifa_dock.js": b"?v=5",
     b"/static/mysifa_dock_fenetres.js": b"?v=2",
     b"/static/mysifa_outils_mobile.js": b"?v=4",
-    b"/static/mysifa_postit.css": b"?v=8",
-    b"/static/mysifa_postit.js": b"?v=8",
+    b"/static/mysifa_postit.css": b"?v=9",
+    b"/static/mysifa_postit.js": b"?v=9",
 }
 
 
@@ -969,6 +970,8 @@ app.include_router(chat_router)
 app.include_router(alerts_router)
 app.include_router(perf_router)
 app.include_router(portail_router)
+# Avant postit_router : /api/postits/modeles serait lu comme /api/postits/{postit_id}.
+app.include_router(notes_outils_router)
 app.include_router(postit_router)
 app.include_router(accueil_widgets_router)
 app.include_router(ao_router)

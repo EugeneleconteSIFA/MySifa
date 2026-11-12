@@ -44,6 +44,7 @@ from app.services.notes import (
     normaliser_blocs,
     noter_presence,
     ops_depuis,
+    photographier,
     presences,
     quitter,
     titre_propre,
@@ -354,6 +355,8 @@ async def patch_postit(postit_id: int, request: Request):
         if "title" not in body and not updates:
             raise HTTPException(400, "Aucune modification")
         if updates:
+            if "blocs" in body:
+                photographier(conn, postit_id, "remplacement", forcer=True)
             conn.execute(f"UPDATE postits SET {', '.join(updates)} WHERE id=?", params + [postit_id])
             if "blocs" in body:
                 marquer_reset(conn, postit_id, user_id, str(body.get("client") or ""))

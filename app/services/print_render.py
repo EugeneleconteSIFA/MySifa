@@ -494,6 +494,13 @@ USAGES = [
         "module": "prod",
         "placeholders": [],
     },
+    # Mes notes : une note exportée en PDF (POST /api/print/pdf, entity_type « note »).
+    {
+        "key": "note_document",
+        "label": "Note (PDF) — Mes notes",
+        "module": "notes",
+        "placeholders": [],
+    },
     {
         "key": "fsc_avertissement_dossier",
         "label": "Avertissement FSC — dossier de production",
