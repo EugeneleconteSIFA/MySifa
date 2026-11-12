@@ -89,6 +89,84 @@ def classe_valide(c: str) -> bool:
     return bool(m and m.group(2) in STYLES_TEXTE[m.group(1)])
 
 
+# Mise en forme libre (façon Docs) : style en ligne sur un <span>, quatre
+# propriétés seulement. Miroir de POLICES / styleAdmis de l'éditeur.
+POLICES = (
+    ("arial", "Arial,Helvetica,sans-serif"),
+    ("verdana", "Verdana,Geneva,sans-serif"),
+    ("tahoma", "Tahoma,Geneva,sans-serif"),
+    ("trebuchet", "'Trebuchet MS',Helvetica,sans-serif"),
+    ("georgia", "Georgia,serif"),
+    ("times", "'Times New Roman',Times,serif"),
+    ("garamond", "Garamond,'EB Garamond',Georgia,serif"),
+    ("palatino", "'Palatino Linotype',Palatino,'Book Antiqua',serif"),
+    ("courier", "'Courier New',Courier,monospace"),
+    ("consolas", "Consolas,Menlo,monospace"),
+    ("comic", "'Comic Sans MS','Chalkboard SE',cursive"),
+    ("manuscrite", "'Segoe Print','Bradley Hand',cursive"),
+    ("brush", "'Brush Script MT','Snell Roundhand',cursive"),
+    ("impact", "Impact,'Arial Black',sans-serif"),
+)
+TAILLE_PT_MIN, TAILLE_PT_MAX = 6, 96
+_HEX_RE = re.compile(r"^#([0-9a-f]{3}|[0-9a-f]{6})$")
+_RGB_RE = re.compile(r"^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([\d.]+))?\s*\)$")
+_TAILLE_RE = re.compile(r"^(\d{1,3}(?:\.\d+)?)(pt|px)$")
+
+
+def _cle_famille(pile: str) -> str:
+    return re.sub(r"[\"'\s]", "", pile or "").lower()
+
+
+_PILES = {_cle_famille(pile): pile for _cle, pile in POLICES}
+
+
+def couleur_hex(v: str):
+    """Couleur CSS (#rgb, #rrggbb, rgb(), rgba() opaque) → #rrggbb, sinon None."""
+    v = (v or "").strip().lower()
+    m = _HEX_RE.match(v)
+    if m:
+        h = m.group(1)
+        return "#" + ("".join(c * 2 for c in h) if len(h) == 3 else h)
+    m = _RGB_RE.match(v)
+    if not m or (m.group(4) is not None and float(m.group(4)) < 0.5):
+        return None
+    return "#" + "".join("%02x" % min(255, int(x)) for x in m.groups()[:3])
+
+
+def taille_pt(v: str):
+    m = _TAILLE_RE.match((v or "").strip().lower())
+    if not m:
+        return None
+    pt = float(m.group(1)) * (0.75 if m.group(2) == "px" else 1)
+    pt = int(round(pt))
+    return pt if TAILLE_PT_MIN <= pt <= TAILLE_PT_MAX else None
+
+
+def style_admis(style: str) -> str:
+    """Attribut style → déclarations admises, en forme canonique (ou "")."""
+    out = {}
+    for decl in (style or "").split(";"):
+        if ":" not in decl:
+            continue
+        prop, val = decl.split(":", 1)
+        prop = prop.strip().lower()
+        val = val.strip()
+        if prop in ("color", "background-color"):
+            c = couleur_hex(val)
+            if c:
+                out[prop] = c
+        elif prop == "font-size":
+            t = taille_pt(val)
+            if t:
+                out[prop] = "%dpt" % t
+        elif prop == "font-family":
+            pile = _PILES.get(_cle_famille(val))
+            if pile:
+                out[prop] = pile
+    ordre = ("color", "background-color", "font-size", "font-family")
+    return ";".join("%s:%s" % (k, out[k]) for k in ordre if k in out)
+
+
 _BALISES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "s": "s", "strike": "s",
             "del": "s", "code": "code", "a": "a"}
 _LIEN_RE = re.compile(r"^(https?://|mailto:|/)[^\s\"'<>]*$", re.IGNORECASE)
@@ -114,10 +192,14 @@ class _Assainisseur(HTMLParser):
         nom = _BALISES.get(tag)
         if tag == "span":
             classe = (dict(attrs).get("class") or "").strip()
-            garde = classe_valide(classe)
+            classe = classe if classe_valide(classe) else ""
+            style = style_admis(dict(attrs).get("style") or "")
+            garde = bool(classe or style)
             self.spans.append(garde)
             if garde:
-                self.out.append('<span class="%s">' % classe)
+                self.out.append("<span%s%s>" % (
+                    ' class="%s"' % classe if classe else "",
+                    ' style="%s"' % style.replace("'", "&#39;") if style else ""))
                 self.pile.append("span")
             return
         if not nom:

@@ -26,6 +26,42 @@ TAILLES = {"petit": 0.82, "grand": 1.3, "tres-grand": 1.7}
 POLICES_CSS = {"serif": "Georgia,'Times New Roman',serif", "mono": "ui-monospace,Menlo,Consolas,monospace",
                "manuscrite": "'Segoe Print','Bradley Hand','Comic Sans MS',cursive"}
 
+# Polices de la mise en forme libre (clé de notes.POLICES) → nom pour Word,
+# police standard du PDF (None = police du document), italique de repli pour
+# les écritures manuscrites que le PDF n'embarque pas.
+POLICES_EXPORT = {
+    "serif": ("Georgia", "Times-Roman", False), "mono": ("Consolas", "Courier", False),
+    "manuscrite": ("Segoe Print", None, True),
+    "arial": ("Arial", None, False), "verdana": ("Verdana", None, False), "tahoma": ("Tahoma", None, False),
+    "trebuchet": ("Trebuchet MS", None, False), "georgia": ("Georgia", "Times-Roman", False),
+    "times": ("Times New Roman", "Times-Roman", False), "garamond": ("Garamond", "Times-Roman", False),
+    "palatino": ("Palatino Linotype", "Times-Roman", False), "courier": ("Courier New", "Courier", False),
+    "consolas": ("Consolas", "Courier", False), "comic": ("Comic Sans MS", None, False),
+    "brush": ("Brush Script MT", None, True), "impact": ("Impact", None, False),
+}
+
+
+def _jetons_style(style: str) -> list[str]:
+    """Style en ligne d'un span (déjà validé par notes.style_admis) → jetons
+    « c:#hex », « f:#hex », « t:12pt », « p:<clé de police> »."""
+    from app.services.notes import POLICES, style_admis
+    piles = {pile: cle for cle, pile in POLICES}
+    out = []
+    for decl in style_admis(style).split(";"):
+        if ":" not in decl:
+            continue
+        prop, val = decl.split(":", 1)
+        if prop == "color":
+            out.append("c:" + val)
+        elif prop == "background-color":
+            out.append("f:" + val)
+        elif prop == "font-size":
+            out.append("t:" + val)
+        elif prop == "font-family" and val in piles:
+            out.append("p:" + piles[val])
+    return out
+
+
 # ── Texte riche → segments ────────────────────────────────────────────
 
 class _Segments(HTMLParser):
@@ -35,7 +71,7 @@ class _Segments(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.styles: list[str] = []
         self.lien: str | None = None
-        self.spans: list[str] = []
+        self.spans: list[list[str]] = []
         self.out: list[tuple[str, frozenset, str | None]] = []
 
     def handle_starttag(self, tag, attrs):
@@ -46,18 +82,19 @@ class _Segments(HTMLParser):
         elif tag == "a":
             self.lien = dict(attrs).get("href")
         elif tag == "span":
-            m = re.match(r"^nt-([cftp])-([a-z-]+)$", dict(attrs).get("class") or "")
-            self.spans.append(f"{m.group(1)}:{m.group(2)}" if m else "")
-            if m:
-                self.styles.append(self.spans[-1])
+            a = dict(attrs)
+            m = re.match(r"^nt-([cftp])-([a-z-]+)$", a.get("class") or "")
+            jetons = ([f"{m.group(1)}:{m.group(2)}"] if m else []) + _jetons_style(a.get("style") or "")
+            self.spans.append(jetons)
+            self.styles.extend(jetons)
 
     def handle_endtag(self, tag):
         if tag == "span":
-            jeton = self.spans.pop() if self.spans else ""
-            if jeton and jeton in self.styles:
-                self.styles.reverse()
-                self.styles.remove(jeton)
-                self.styles.reverse()
+            for jeton in reversed(self.spans.pop() if self.spans else []):
+                if jeton in self.styles:
+                    self.styles.reverse()
+                    self.styles.remove(jeton)
+                    self.styles.reverse()
             return
         if tag in self.styles:
             self.styles.reverse()
@@ -87,20 +124,32 @@ def segments(bloc_ou_html) -> list[tuple[str, frozenset, str | None]]:
     return p.out
 
 
-def style_de(st) -> dict:
-    """Jetons de style d'un segment → {couleur, fond, taille, police} (valeurs de la palette)."""
+def style_de(st, taille_base: float = 11) -> dict:
+    """Jetons de style d'un segment → valeurs prêtes à exporter :
+    couleur et fond en #rrggbb, taille en points, police (clé de POLICES_EXPORT)."""
     out = {}
     for j in st:
         if ":" not in j:
             continue
         fam, val = j.split(":", 1)
-        if fam == "c" and val in COULEURS:
-            out["couleur"] = val
-        elif fam == "f" and val in SURLIGNAGES:
-            out["fond"] = val
-        elif fam == "t" and val in TAILLES:
-            out["taille"] = val
-        elif fam == "p" and val in POLICES_CSS:
+        if fam == "c":
+            if val in COULEURS:
+                out["couleur"] = COULEURS[val]
+            elif re.match(r"^#[0-9a-f]{6}$", val):
+                out["couleur"] = val
+        elif fam == "f":
+            if val in SURLIGNAGES:
+                out["fond"] = SURLIGNAGES[val]
+            elif re.match(r"^#[0-9a-f]{6}$", val):
+                out["fond"] = val
+        elif fam == "t":
+            if val in TAILLES:
+                out["taille"] = round(taille_base * TAILLES[val], 1)
+            else:
+                m = re.match(r"^(\d{1,2})pt$", val)
+                if m:
+                    out["taille"] = float(m.group(1))
+        elif fam == "p" and val in POLICES_EXPORT:
             out["police"] = val
     return out
 
@@ -135,14 +184,61 @@ def blocs_visibles(blocs: list[dict]) -> list[dict]:
 
 # ── Page imprimable (HTML) ────────────────────────────────────────────
 
+def _romain(n: int) -> str:
+    out = ""
+    for v, l in ((1000, "m"), (900, "cm"), (500, "d"), (400, "cd"), (100, "c"), (90, "xc"),
+                 (50, "l"), (40, "xl"), (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")):
+        while n >= v:
+            out += l
+            n -= v
+    return out
+
+
+def _lettres(n: int) -> str:
+    out = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        out = chr(97 + r) + out
+    return out
+
+
+def marque_num(n: int, retrait: int) -> str:
+    """Numéro d'une liste selon son niveau : 1. puis a. puis i. (miroir de l'éditeur)."""
+    niveau = (retrait or 0) % 3
+    return (str(n) if niveau == 0 else _lettres(n) if niveau == 1 else _romain(n)) + "."
+
+
+def marques_num(blocs: list[dict]) -> list:
+    """Numéro affiché de chaque bloc « num » (None pour les autres). Une liste
+    continue sous ses sous-éléments plus en retrait, comme dans l'éditeur."""
+    out = []
+    for i, b in enumerate(blocs):
+        if b.get("type") != "num":
+            out.append(None)
+            continue
+        r = int(b.get("retrait") or 0)
+        n = 1
+        for j in range(i - 1, -1, -1):
+            rj = int(blocs[j].get("retrait") or 0)
+            if rj > r:
+                continue
+            if rj < r or blocs[j].get("type") != "num":
+                break
+            n += 1
+        out.append(marque_num(n, r))
+    return out
+
+
 def html_note(titre: str, blocs: list[dict], auteur: str = "", date: str = "") -> str:
     """Corps HTML d'une note pour l'impression navigateur. Les HTML de blocs sont
     déjà assainis par le serveur ; les textes bruts sont échappés ici."""
     esc = html_mod.escape
     out = []
-    num = 0
-    for b in blocs_visibles(blocs):
+    vis = blocs_visibles(blocs)
+    marques = marques_num(vis)
+    for k, b in enumerate(vis):
         t = b.get("type")
+        num = marques[k]
         r = int(b.get("retrait") or 0)
         regles = []
         if r:
@@ -151,7 +247,6 @@ def html_note(titre: str, blocs: list[dict], auteur: str = "", date: str = "") -
             regles.append("text-align:" + {"centre": "center", "droite": "right", "justifie": "justify"}[b["aligne"]])
         style = f' style="{";".join(regles)}"' if regles else ""
         contenu = b.get("html") or esc(b.get("texte") or "").replace("\n", "<br>")
-        num = num + 1 if t == "num" else 0
         if t in ("h1", "h2", "h3"):
             out.append(f"<{t}{style}>{contenu}</{t}>")
         elif t == "todo":
@@ -159,7 +254,7 @@ def html_note(titre: str, blocs: list[dict], auteur: str = "", date: str = "") -
         elif t == "puce":
             out.append(f'<p class="liste"{style}>•&nbsp; {contenu}</p>')
         elif t == "num":
-            out.append(f'<p class="liste"{style}>{num}.&nbsp; {contenu}</p>')
+            out.append(f'<p class="liste"{style}>{num}&nbsp; {contenu}</p>')
         elif t == "citation":
             out.append(f"<blockquote{style}>{contenu}</blockquote>")
         elif t == "encadre":
@@ -255,21 +350,20 @@ def _para_xml(segs, taille_base: float = 10.5) -> str:
         t = html_mod.escape(_glyphes(txt)).replace("\n", "<br/>")
         if "code" in st:
             t = f'<font face="Courier">{t}</font>'
-        sty = style_de(st)
+        sty = style_de(st, taille_base)
         attrs = []
         if sty.get("couleur"):
-            attrs.append(f'color="{COULEURS[sty["couleur"]]}"')
+            attrs.append(f'color="{sty["couleur"]}"')
         if sty.get("fond"):
-            attrs.append(f'backColor="{SURLIGNAGES[sty["fond"]]}"')
+            attrs.append(f'backColor="{sty["fond"]}"')
         if sty.get("taille"):
-            attrs.append(f'size="{round(taille_base * TAILLES[sty["taille"]], 1)}"')
-        if sty.get("police") == "serif":
-            attrs.append('face="Times-Roman"')
-        elif sty.get("police") == "mono":
-            attrs.append('face="Courier"')
+            attrs.append(f'size="{sty["taille"]}"')
+        _nom, face, penche = POLICES_EXPORT.get(sty.get("police"), (None, None, False))
+        if face:
+            attrs.append(f'face="{face}"')
         if attrs:
             t = f'<font {" ".join(attrs)}>{t}</font>'
-        if sty.get("police") == "manuscrite":
+        if penche:
             t = f"<i>{t}</i>"
         if "b" in st:
             t = f"<b>{t}</b>"
@@ -311,18 +405,19 @@ def pdf_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str = 
     flux = [Paragraph(f"<b>{html_mod.escape(_glyphes(titre or 'Sans titre'))}</b>", st("t", 20, avant=0, apres=4))]
     if auteur or date:
         flux.append(Paragraph(html_mod.escape(" · ".join(x for x in (auteur, date) if x)), st("m", 9, couleur=discret, apres=10)))
-    num = 0
     largeur_utile = A4[0] - 36 * mm
-    for b in blocs_visibles(blocs):
+    vis = blocs_visibles(blocs)
+    marques = marques_num(vis)
+    for k, b in enumerate(vis):
         t = b.get("type")
         retrait = int(b.get("retrait") or 0) * 7 * mm
-        num = num + 1 if t == "num" else 0
+        num = marques[k]
         segs = segments(b)
         if t in ("h1", "h2", "h3"):
             taille = {"h1": 16, "h2": 13.5, "h3": 11.5}[t]
             flux.append(Paragraph(f"<b>{_para_xml(segs, taille)}</b>", st(t, taille, avant=8, apres=3, retrait=retrait, aligne=b.get("aligne"))))
         elif t in ("todo", "puce", "num", "bascule"):
-            prefixe = {"todo": ("☑ " if b.get("coche") else "☐ "), "puce": "• ", "num": f"{num}. ", "bascule": "▾ "}[t]
+            prefixe = {"todo": ("☑ " if b.get("coche") else "☐ "), "puce": "• ", "num": f"{num} ", "bascule": "▾ "}[t]
             corps = _para_xml(segs)
             if t == "todo" and b.get("coche"):
                 corps = f'<font color="#9ca3af"><strike>{corps}</strike></font>'  # hex-ok : case cochée
@@ -420,7 +515,18 @@ def docx_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str =
     from docx.oxml.ns import qn
     surligne = {"jaune": WD_COLOR_INDEX.YELLOW, "vert": WD_COLOR_INDEX.BRIGHT_GREEN, "bleu": WD_COLOR_INDEX.TURQUOISE,
                 "rose": WD_COLOR_INDEX.PINK, "orange": WD_COLOR_INDEX.YELLOW, "gris": WD_COLOR_INDEX.GRAY_25}
-    polices = {"serif": "Georgia", "mono": "Consolas", "manuscrite": "Segoe Print"}
+    index_surligne = {v: surligne[k] for k, v in SURLIGNAGES.items()}
+
+    def fond_run(run, hexa):
+        """Surlignage : couleur exacte en trame (Word n'a que 16 surligneurs)."""
+        if hexa in index_surligne:
+            run.font.highlight_color = index_surligne[hexa]
+            return
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), hexa.lstrip("#"))
+        run._r.get_or_add_rPr().append(shd)
     aligne_docx = {"centre": WD_ALIGN_PARAGRAPH.CENTER, "droite": WD_ALIGN_PARAGRAPH.RIGHT,
                    "justifie": WD_ALIGN_PARAGRAPH.JUSTIFY}
 
@@ -448,19 +554,20 @@ def docx_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str =
                 if lien:
                     run.font.color.rgb = RGBColor(0x0E, 0x74, 0x90)
                 if sty.get("couleur"):
-                    run.font.color.rgb = rgb(COULEURS[sty["couleur"]])
+                    run.font.color.rgb = rgb(sty["couleur"])
                 if sty.get("fond"):
-                    run.font.highlight_color = surligne[sty["fond"]]
+                    fond_run(run, sty["fond"])
                 if sty.get("taille"):
-                    run.font.size = Pt(11 * TAILLES[sty["taille"]])
+                    run.font.size = Pt(sty["taille"])
                 if sty.get("police"):
-                    run.font.name = polices[sty["police"]]
+                    run.font.name = POLICES_EXPORT[sty["police"]][0]
 
-    num = 0
-    for b in blocs_visibles(blocs):
+    vis = blocs_visibles(blocs)
+    marques = marques_num(vis)
+    for k, b in enumerate(vis):
         t = b.get("type")
         retrait = Cm(0.7 * int(b.get("retrait") or 0))
-        num = num + 1 if t == "num" else 0
+        num = marques[k]
         segs = segments(b)
         if t in ("h1", "h2", "h3"):
             par = doc.add_heading("", level={"h1": 1, "h2": 2, "h3": 3}[t])
@@ -470,7 +577,7 @@ def docx_note(conn, titre: str, blocs: list[dict], auteur: str = "", date: str =
             remplir(par, segs)
         elif t == "num":
             par = doc.add_paragraph()
-            par.add_run(f"{num}. ")
+            par.add_run(f"{num} ")
             remplir(par, segs)
         elif t == "todo":
             par = doc.add_paragraph()

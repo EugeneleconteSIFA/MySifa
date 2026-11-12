@@ -149,6 +149,90 @@
     return !!(m && STYLES_TEXTE[m[1]].indexOf(m[2]) >= 0);
   }
 
+  /* ── Mise en forme libre (façon Docs) ──
+     Couleur, surlignage, taille (pt) et police posés en style en ligne sur un
+     <span>, une propriété par span. Le serveur ne garde que ces quatre
+     propriétés et ces valeurs : couleur en #rrggbb, taille de 6 à 96 pt,
+     police prise dans POLICES (app/services/notes.py, même liste). */
+  var POLICES = [
+    { cle: 'standard', nom: 'Standard', pile: '' },
+    { cle: 'arial', nom: 'Arial', pile: 'Arial,Helvetica,sans-serif' },
+    { cle: 'verdana', nom: 'Verdana', pile: 'Verdana,Geneva,sans-serif' },
+    { cle: 'tahoma', nom: 'Tahoma', pile: 'Tahoma,Geneva,sans-serif' },
+    { cle: 'trebuchet', nom: 'Trebuchet MS', pile: "'Trebuchet MS',Helvetica,sans-serif" },
+    { cle: 'georgia', nom: 'Georgia', pile: 'Georgia,serif' },
+    { cle: 'times', nom: 'Times New Roman', pile: "'Times New Roman',Times,serif" },
+    { cle: 'garamond', nom: 'Garamond', pile: "Garamond,'EB Garamond',Georgia,serif" },
+    { cle: 'palatino', nom: 'Palatino', pile: "'Palatino Linotype',Palatino,'Book Antiqua',serif" },
+    { cle: 'courier', nom: 'Courier New', pile: "'Courier New',Courier,monospace" },
+    { cle: 'consolas', nom: 'Consolas', pile: 'Consolas,Menlo,monospace' },
+    { cle: 'comic', nom: 'Comic Sans MS', pile: "'Comic Sans MS','Chalkboard SE',cursive" },
+    { cle: 'manuscrite', nom: 'Manuscrite', pile: "'Segoe Print','Bradley Hand',cursive" },
+    { cle: 'brush', nom: 'Brush Script', pile: "'Brush Script MT','Snell Roundhand',cursive" },
+    { cle: 'impact', nom: 'Impact', pile: "Impact,'Arial Black',sans-serif" },
+  ];
+  var TAILLES_PT = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
+  /* Nuancier : une ligne de gris, une ligne vive, six lignes de nuances. */
+  var PALETTE = [
+    ['#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff'],
+    ['#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff', '#ff00ff'],
+    ['#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc'],
+    ['#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6', '#d5a6bd'],
+    ['#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3', '#c27ba0'],
+    ['#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79'],
+    ['#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47'],
+    ['#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'],
+  ];
+  var PROPS = { couleur: 'color', fond: 'background-color', taille: 'font-size', police: 'font-family' };
+  /* Ancienne forme (classes nt-c-…) : la même famille se remplace. */
+  var CLASSE_DE_PROP = { color: 'nt-c-', 'background-color': 'nt-f-', 'font-size': 'nt-t-', 'font-family': 'nt-p-' };
+
+  function versHex(v) {
+    v = String(v || '').trim().toLowerCase();
+    if (/^#[0-9a-f]{6}$/.test(v)) return v;
+    if (/^#[0-9a-f]{3}$/.test(v)) return '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+    var m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/.exec(v);
+    if (!m || (m[4] != null && Number(m[4]) < 0.5)) return null;
+    return '#' + [m[1], m[2], m[3]].map(function (x) { return ('0' + Math.min(255, Number(x)).toString(16)).slice(-2); }).join('');
+  }
+  function cleFamille(pile) {
+    return String(pile || '').replace(/["'\s]/g, '').toLowerCase();
+  }
+  function policeDe(pile) {
+    var k = cleFamille(pile);
+    for (var i = 1; i < POLICES.length; i++) if (cleFamille(POLICES[i].pile) === k) return POLICES[i];
+    /* Collage : on reconnaît la police par son premier nom. */
+    var premier = k.split(',')[0];
+    for (var j = 1; j < POLICES.length; j++) if (cleFamille(POLICES[j].pile).split(',')[0] === premier) return POLICES[j];
+    return null;
+  }
+  function taillePt(v) {
+    var m = /^([\d.]+)(pt|px)$/.exec(String(v || '').trim());
+    if (!m) return null;
+    var pt = m[2] === 'px' ? Number(m[1]) * 0.75 : Number(m[1]);
+    pt = Math.round(pt);
+    return pt >= 6 && pt <= 96 ? pt : null;
+  }
+  /* Style d'un span → déclarations admises, en forme canonique. `collage` : on
+     écarte ce que les traitements de texte posent partout (noir, blanc, taille
+     et police par défaut), qui rendrait le texte illisible en thème sombre. */
+  function styleAdmis(n, collage) {
+    var st = n.style;
+    if (!st) return '';
+    var out = [];
+    var c = versHex(st.color);
+    if (c && !(collage && /^#(000000|ffffff|[0-2][0-9a-f][0-2][0-9a-f][0-2][0-9a-f])$/.test(c))) out.push('color:' + c);
+    var f = versHex(st.backgroundColor);
+    if (f && !(collage && /^#(ffffff|f[a-f]f[a-f]f[a-f])$/.test(f))) out.push('background-color:' + f);
+    if (!collage) {
+      var t = taillePt(st.fontSize);
+      if (t) out.push('font-size:' + t + 'pt');
+      var pol = policeDe(st.fontFamily);
+      if (pol) out.push('font-family:' + pol.pile);
+    }
+    return out.join(';');
+  }
+
   var BALISES = { B: 'b', STRONG: 'b', I: 'i', EM: 'i', U: 'u', S: 's', STRIKE: 's', DEL: 's', CODE: 'code', A: 'a' };
   var LIEN_OK = /^(https?:\/\/|mailto:|\/)[^\s"'<>]*$/i;
 
@@ -160,9 +244,17 @@
     if ((tag === 'DIV' || tag === 'P') && out.length) out.push('<br>');
     var nom = BALISES[tag];
     var classe = tag === 'SPAN' ? (n.getAttribute('class') || '').trim() : '';
-    if (classe && classeValide(classe)) {
-      out.push('<span class="' + classe + '">');
+    var styl = tag === 'SPAN' || tag === 'FONT' ? styleAdmis(n, _collage) : '';
+    if (tag === 'FONT' && n.getAttribute('color') && !_collage) {
+      var fc = versHex(n.getAttribute('color'));
+      if (fc) styl = 'color:' + fc;
+    }
+    if ((classe && classeValide(classe)) || styl) {
+      var gras = !_collage ? '' : (/^(bold|[6-9]00)$/.test(n.style.fontWeight) ? 'b' : n.style.fontStyle === 'italic' ? 'i' : '');
+      out.push('<span' + (classe && classeValide(classe) ? ' class="' + classe + '"' : '') + (styl ? ' style="' + esc(styl) + '"' : '') + '>');
+      if (gras) out.push('<' + gras + '>');
       for (var c0 = n.firstChild; c0; c0 = c0.nextSibling) assainirNoeud(c0, out);
+      if (gras) out.push('</' + gras + '>');
       out.push('</span>');
       return;
     }
@@ -180,6 +272,12 @@
     if (ouvre) out.push(ouvre);
     for (var c = n.firstChild; c; c = c.nextSibling) assainirNoeud(c, out);
     if (ouvre) out.push('</' + nom + '>');
+  }
+
+  var _collage = false;
+  function assainirCollage(html) {
+    _collage = true;
+    try { return assainir(html); } finally { _collage = false; }
   }
 
   function assainir(html) {
@@ -423,6 +521,24 @@
     return n;
   };
 
+  /* Numéro selon le niveau de retrait : 1. puis a. puis i., comme un
+     traitement de texte (miroir de marque_num de notes_export.py). */
+  function romain(n) {
+    var out = '';
+    [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]
+      .forEach(function (p) { while (n >= p[0]) { out += p[1]; n -= p[0]; } });
+    return out;
+  }
+  function lettres(n) {
+    var out = '';
+    while (n > 0) { var r = (n - 1) % 26; out = String.fromCharCode(97 + r) + out; n = Math.floor((n - 1) / 26); }
+    return out;
+  }
+  function marqueNum(n, retrait) {
+    var niv = (retrait || 0) % 3;
+    return (niv === 0 ? String(n) : niv === 1 ? lettres(n) : romain(n)) + '.';
+  }
+
   P.blocHtml = function (blocs, i) {
     var b = blocs[i];
     var t = TYPES[b.type] ? b.type : 'p';
@@ -459,7 +575,7 @@
     }
     if (t === 'todo') h += '<input type="checkbox" class="pb-case" tabindex="-1"' + (b.coche ? ' checked' : '') + (this.lecture ? ' disabled' : '') + '>';
     else if (t === 'puce') h += '<span class="pb-marque" aria-hidden="true">' + (r % 2 ? '◦' : '•') + '</span>';
-    else if (t === 'num') h += '<span class="pb-marque pb-marque-num" aria-hidden="true">' + this.numero(blocs, i) + '.</span>';
+    else if (t === 'num') h += '<span class="pb-marque pb-marque-num" aria-hidden="true">' + marqueNum(this.numero(blocs, i), blocs[i].retrait) + '</span>';
     var ph = blocs.length === 1 && t === 'p' && this.opts.placeholder ? this.opts.placeholder : TYPES[t].ph;
     return h + '<div class="pb-txt" contenteditable="' + edit + '" spellcheck="true" data-ph="' + esc(this.lecture ? '' : ph) + '">' + htmlDe(b) + '</div></div>';
   };
@@ -1106,6 +1222,23 @@
       document.execCommand('insertText', false, signe);
       return;
     }
+    var libre = /^style:(couleur|fond|taille|police):(.+)$/.exec(cle);
+    if (libre || /^taille:[+-]1$/.test(cle) || /^casse:(maj|min|mots|phrase)$/.test(cle)) {
+      var elL = this.cible();
+      if (!elL) return;
+      if (cle.indexOf('casse:') === 0) return changerCasse(this, elL, cle.slice(6));
+      if (!libre) {
+        var t0 = etatFormat(this).taille || 11;
+        var k0 = cle === 'taille:+1' ? TAILLES_PT.filter(function (t) { return t > t0; })[0] : TAILLES_PT.filter(function (t) { return t < t0; }).pop();
+        if (!k0) return;
+        return styler(this, elL, 'font-size', k0 + 'pt');
+      }
+      var prop = PROPS[libre[1]];
+      var v = valeurStyle(prop, libre[2]);
+      if (v === undefined) return;
+      if (v && (prop === 'color' || prop === 'background-color')) noterRecente(v);
+      return styler(this, elL, prop, v);
+    }
     var deux = /^(couleur|fond|taille|police|aligne|cellule_fond):([a-z-]+)$/.exec(cle);
     if (deux || cle === 'effacer_format') {
       var elS = this.cible();
@@ -1311,7 +1444,7 @@
     }
     if (c.b.type === 'code' || txt.indexOf('\n') < 0) {
       if (html && c.b.type !== 'code' && txt.indexOf('\n') < 0) {
-        var propre = assainir(html);
+        var propre = assainirCollage(html);
         if (aMiseEnForme(propre)) document.execCommand('insertHTML', false, propre);
         else document.execCommand('insertText', false, txt);
       } else {
@@ -1390,11 +1523,22 @@
         break;
       }
     }
-    if (e.inputType === 'insertText' && e.data === ' ' && c.b.type === 'p') {
-      var t = RACCOURCIS[txt.slice(0, pos - 1)];
+    if (e.inputType === 'insertText' && e.data === ' ' && (c.b.type === 'p' || LISTES[c.b.type])) {
+      var tape = txt.slice(0, pos - 1);
+      var t = RACCOURCIS[tape] || (/^(\d{1,3}|[a-z]|[ivx]{1,4})[.)]$/i.test(tape) ? 'num' : null) || (tape === '•' ? 'puce' : null);
+      /* Dans une liste, seul un signe de liste change le type (« # » reste du texte). */
+      if (t && c.b.type !== 'p' && !LISTES[t]) t = null;
+      /* « a. » sous un élément de liste : sous-liste, un cran plus en retrait
+         que lui (affichée a., b., c.). */
+      var prec1 = c.blocs[c.i - 1];
+      var rPrec = prec1 ? (prec1.retrait || 0) : 0;
+      var sousListe = t === 'num' && /^[a-z][.)]$/i.test(tape) && !/^i[.)]$/i.test(tape) &&
+        prec1 && LISTES[prec1.type] && (c.b.retrait || 0) <= rPrec && rPrec < RETRAIT_MAX;
+      if (t === c.b.type && !sousListe) t = null;
       if (t) {
         remplacerTexte(el, 0, pos, '');
         ed.lire(c.b, el);
+        if (sousListe) c.b.retrait = rPrec + 1;
         c.b.type = t;
         if (t === 'todo') c.b.coche = false;
         fermerSlash();
@@ -1577,6 +1721,201 @@
     r.insertNode(frag);
     var c = ed.ctx(el);
     if (c) { relire(ed, c.b, el); ed.modifie(); }
+  }
+
+  /* ── Styles libres : application, retrait, casse, état ── */
+
+  /* Valeur d'une commande « style:<prop>:<valeur> » : null retire, undefined refuse. */
+  function valeurStyle(prop, brut) {
+    if (brut === '-') return null;
+    if (prop === 'color' || prop === 'background-color') return versHex(brut) || undefined;
+    if (prop === 'font-size') { var t = taillePt(/pt$/.test(brut) ? brut : brut + 'pt'); return t ? t + 'pt' : undefined; }
+    var pol = null;
+    POLICES.forEach(function (x) { if (x.cle === brut) pol = x; });
+    if (!pol) return undefined;
+    return pol.pile || null;
+  }
+
+  function porte(n, prop) {
+    return n && n.nodeType === 1 && n.tagName === 'SPAN' &&
+      (!!n.style.getPropertyValue(prop) || String(n.className || '').indexOf(CLASSE_DE_PROP[prop]) === 0);
+  }
+
+  function retirerProp(n, prop) {
+    n.style.removeProperty(prop);
+    if (String(n.className || '').indexOf(CLASSE_DE_PROP[prop]) === 0) n.removeAttribute('class');
+    if (!n.getAttribute('style')) n.removeAttribute('style');
+    if (!n.attributes.length) deballer(n);
+  }
+
+  /* Coupe l'ancêtre `a` autour de `n` : ce qui précède et ce qui suit gardent
+     son style, `n` seul en sort. C'est ce qui permet de retirer une couleur au
+     milieu d'une phrase colorée. */
+  function isoler(a, n) {
+    var r1 = document.createRange();
+    r1.setStart(a, 0);
+    r1.setEndBefore(n);
+    var avant = r1.extractContents();
+    if (avant.textContent) { var ca = a.cloneNode(false); ca.appendChild(avant); a.parentNode.insertBefore(ca, a); }
+    var r2 = document.createRange();
+    r2.setStartAfter(n);
+    r2.setEnd(a, a.childNodes.length);
+    var apres = r2.extractContents();
+    if (apres.textContent) { var cb = a.cloneNode(false); cb.appendChild(apres); a.parentNode.insertBefore(cb, a.nextSibling); }
+  }
+
+  /* Pose (ou retire, valeur null) une propriété sur la sélection. */
+  function styler(ed, el, prop, valeur) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      if (ed.opts.signaler) ed.opts.signaler('Sélectionnez d\'abord le texte à mettre en forme.', 'info');
+      return;
+    }
+    var r = sel.getRangeAt(0);
+    if (!el.contains(r.commonAncestorContainer)) return;
+    var marque = document.createElement('span');
+    marque.appendChild(r.extractContents());
+    Array.prototype.slice.call(marque.querySelectorAll('span')).forEach(function (x) { if (porte(x, prop)) retirerProp(x, prop); });
+    r.insertNode(marque);
+    var a = marque.parentNode;
+    while (a && a !== el) {
+      var suivant = a.parentNode;
+      if (porte(a, prop)) { isoler(a, marque); retirerProp(a, prop); }
+      a = suivant;
+    }
+    var debut = marque.firstChild;
+    var fin = marque.lastChild;
+    /* Sélection qui couvre exactement un passage déjà stylé : la propriété
+       rejoint ce span plutôt que d'en imbriquer un de plus. */
+    var hote = marque.parentNode;
+    if (valeur && hote !== el && hote.tagName === 'SPAN' && hote.childNodes.length === 1) {
+      deballer(marque);
+      marque = hote;
+    }
+    if (valeur) marque.style.setProperty(prop, valeur);
+    else deballer(marque);
+    Array.prototype.slice.call(el.querySelectorAll('span')).forEach(function (x) { if (!x.textContent) x.remove(); });
+    try {
+      var r2 = document.createRange();
+      if (valeur && marque.parentNode) r2.selectNodeContents(marque);
+      else if (debut && fin && debut.parentNode) { r2.setStartBefore(debut); r2.setEndAfter(fin); }
+      sel.removeAllRanges();
+      sel.addRange(r2);
+    } catch (e) {}
+    var c = ed.ctx(el);
+    if (c) { relire(ed, c.b, el); ed.memoriser(true); ed.modifie(); }
+    majBarre();
+  }
+
+  /* MAJUSCULES, minuscules, Première Lettre Des Mots, Première lettre de la
+     phrase. Le texte change caractère par caractère : la mise en forme et les
+     liens restent en place. */
+  function changerCasse(ed, el, mode) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) {
+      if (ed.opts.signaler) ed.opts.signaler('Sélectionnez d\'abord le texte à transformer.', 'info');
+      return;
+    }
+    var r = sel.getRangeAt(0);
+    if (!el.contains(r.commonAncestorContainer)) return;
+    var morceaux = [];
+    var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    var n;
+    while ((n = w.nextNode())) {
+      if (!r.intersectsNode(n)) continue;
+      var d = n === r.startContainer ? r.startOffset : 0;
+      var f = n === r.endContainer ? r.endOffset : n.data.length;
+      if (f > d) morceaux.push({ n: n, d: d, f: f });
+    }
+    if (!morceaux.length) return;
+    /* Début de phrase : au début du bloc ou après . ! ? (et un retour à la ligne). */
+    var avant = '';
+    try {
+      var ra = document.createRange();
+      ra.setStart(el, 0);
+      ra.setEnd(morceaux[0].n, morceaux[0].d);
+      avant = ra.toString();
+    } catch (e) {}
+    var debutPhrase = !avant.trim() || /[.!?…]\s*$|\n\s*$/.test(avant);
+    var debutMot = !avant || /[\s\-–—(«"/]$/.test(avant);
+    function un(ch, haut) {
+      var t = haut ? ch.toUpperCase() : ch.toLowerCase();
+      return t.length === 1 ? t : ch;
+    }
+    morceaux.forEach(function (m) {
+      var src = m.n.data;
+      var out = '';
+      for (var i = m.d; i < m.f; i++) {
+        var ch = src[i];
+        var lettre = ch.toLowerCase() !== ch.toUpperCase();
+        var x = ch;
+        if (mode === 'maj') x = un(ch, true);
+        else if (mode === 'min') x = un(ch, false);
+        else if (mode === 'mots') x = lettre ? un(ch, debutMot) : ch;
+        else if (mode === 'phrase') x = lettre ? un(ch, debutPhrase) : ch;
+        if (lettre) { debutMot = false; debutPhrase = false; }
+        else {
+          /* Une apostrophe ou un chiffre continuent le mot (« l'usine », « 3e »). */
+          debutMot = !(ch === "'" || ch === '’' || /[0-9]/.test(ch));
+          if (/[.!?…]/.test(ch) || ch === '\n') debutPhrase = true;
+        }
+        out += x;
+      }
+      m.n.replaceData(m.d, m.f - m.d, out);
+    });
+    try {
+      var r2 = document.createRange();
+      r2.setStart(morceaux[0].n, morceaux[0].d);
+      var der = morceaux[morceaux.length - 1];
+      r2.setEnd(der.n, der.f);
+      sel.removeAllRanges();
+      sel.addRange(r2);
+    } catch (e) {}
+    var c = ed.ctx(el);
+    if (c) { relire(ed, c.b, el); ed.memoriser(true); ed.modifie(); }
+  }
+
+  /* Mise en forme au curseur (ou au début de la sélection), pour la barre :
+     couleurs en #hex (null = normale), taille en pt, clé de police, gras… */
+  function etatFormat(ed) {
+    var sel = window.getSelection();
+    var out = { couleur: null, fond: null, taille: null, police: 'standard', gras: false, italique: false, souligne: false, barre: false, type: null, aligne: 'gauche', cellule: false };
+    if (!sel || !sel.rangeCount) return out;
+    var r = sel.getRangeAt(0);
+    var n = r.startContainer;
+    if (n.nodeType === 1 && n.childNodes[r.startOffset] && !sel.isCollapsed) n = n.childNodes[r.startOffset];
+    var e = n.nodeType === 1 ? n : n.parentNode;
+    var el = e && e.closest && e.closest('.pb-txt, .pb-cellule');
+    if (!el || (ed && !ed.corps.contains(el))) return out;
+    var cs = window.getComputedStyle(e);
+    out.taille = Math.round(parseFloat(cs.fontSize) * 0.75) || null;
+    for (var x = e; x && x !== el; x = x.parentNode) {
+      if (x.tagName !== 'SPAN') continue;
+      if (!out.couleur && porte(x, 'color')) out.couleur = versHex(window.getComputedStyle(x).color);
+      if (!out.fond && porte(x, 'background-color')) out.fond = versHex(window.getComputedStyle(x).backgroundColor);
+      if (out.police === 'standard' && x.style.fontFamily) { var p0 = policeDe(x.style.fontFamily); if (p0) out.police = p0.cle; }
+    }
+    ['bold:gras', 'italic:italique', 'underline:souligne', 'strikeThrough:barre'].forEach(function (k) {
+      var kk = k.split(':');
+      try { out[kk[1]] = document.queryCommandState(kk[0]); } catch (e2) {}
+    });
+    var c = ed && ed.ctx(el);
+    out.cellule = el.classList.contains('pb-cellule');
+    if (c) { out.type = out.cellule ? 'tableau' : c.b.type; out.aligne = c.b.aligne || 'gauche'; }
+    return out;
+  }
+
+  /* Couleurs choisies récemment (préférence de ce navigateur seulement). */
+  var CLE_RECENTES = 'mysifa.notes.couleurs';
+  function recentes() {
+    try { var v = JSON.parse(localStorage.getItem(CLE_RECENTES) || '[]'); return Array.isArray(v) ? v.filter(function (c) { return /^#[0-9a-f]{6}$/.test(c); }).slice(0, 10) : []; } catch (e) { return []; }
+  }
+  function noterRecente(c) {
+    var dansPalette = PALETTE.some(function (l) { return l.indexOf(c) >= 0; });
+    if (dansPalette) return;
+    var l = recentes().filter(function (x) { return x !== c; });
+    l.unshift(c);
+    try { localStorage.setItem(CLE_RECENTES, JSON.stringify(l.slice(0, 10))); } catch (e) {}
   }
 
   /* Alignement d'un paragraphe (ou d'une cellule de tableau). */
@@ -2139,6 +2478,7 @@
     }).join('') +
       '<button type="button" class="nted-fmt nted-menu-btn" data-menu="couleur" title="Couleur et surlignage"><span class="nted-a">A</span></button>' +
       '<button type="button" class="nted-fmt nted-menu-btn" data-menu="texte" title="Taille et police">Aa</button>' +
+      '<button type="button" class="nted-fmt nted-menu-btn" data-menu="casse" title="Majuscules, minuscules">aA</button>' +
       '<button type="button" class="nted-fmt nted-menu-btn" data-menu="aligne" title="Alignement du paragraphe">' + ICONES_ALIGNE.gauche + '</button>' +
       '<button type="button" class="nted-fmt" data-cmd="effacer_format" title="Effacer la mise en forme">⌫</button>' +
       '<button type="button" class="nted-commenter" data-cmd="commenter" title="Commenter ce passage">Commenter</button></div>' +
@@ -2151,13 +2491,15 @@
         var meme = !sous.hidden && sous.dataset.menu === menu.dataset.menu;
         sous.hidden = meme;
         sous.dataset.menu = menu.dataset.menu;
-        if (!meme) sous.innerHTML = sousMenu(menu.dataset.menu);
+        if (!meme) { sous.innerHTML = sousMenu(menu.dataset.menu); peindreEtat(sous, _barre._ed); }
         return;
       }
       var btn = e.target.closest('[data-cmd]');
       if (!btn || !_barre._ed) return;
       if (btn.dataset.cmd.indexOf(':') > 0 || btn.dataset.cmd === 'effacer_format') {
         _barre._ed.commande(btn.dataset.cmd);
+        var sous1 = _barre.querySelector('.nted-sous');
+        if (!sous1.hidden) peindreEtat(sous1, _barre._ed);
         return;
       }
       if (btn.dataset.cmd === 'commenter') {
@@ -2187,29 +2529,112 @@
     gauche: 'À gauche', centre: 'Centré', droite: 'À droite', justifie: 'Justifié',
   };
 
-  /* Choix d'un menu de la barre, réutilisés par le panneau d'actions de /note. */
+  /* Menus de mise en forme (barre flottante, barre du haut, panneau, téléphone).
+     Chaque bouton porte sa commande (data-cmd) ; l'hôte la passe à
+     ed.commande(). `peindreEtat` y marque la mise en forme courante. */
+  function caseCouleur(prop, c) {
+    return '<button type="button" class="nted-case" data-cmd="style:' + prop + ':' + c + '" style="background:' + c + '" title="' + c + '" aria-label="' + c + '"></button>';
+  }
+  function palette(prop) {
+    var rec = recentes();
+    return '<div class="nted-pal" data-pal="' + prop + '"' + (prop === 'fond' ? ' hidden' : '') + '>' +
+      '<button type="button" class="nted-pal-reset" data-cmd="style:' + prop + ':-">' +
+      (prop === 'couleur' ? '<span class="nted-a">A</span> Couleur normale' : '<span class="nted-sans"></span> Aucun surlignage') + '</button>' +
+      '<div class="nted-grille">' + PALETTE.map(function (l) { return l.map(function (c) { return caseCouleur(prop, c); }).join(''); }).join('') + '</div>' +
+      '<div class="nted-sous-titre">Personnalisée</div><div class="nted-perso">' +
+      rec.map(function (c) { return caseCouleur(prop, c); }).join('') +
+      '<label class="nted-plus" title="Choisir une autre couleur"><input type="color" data-perso="' + prop + '" value="' + (rec[0] || '#3c78d8') + '">+</label></div></div>';
+  }
+  function menuTaille() {
+    return '<div class="nted-pas"><button type="button" data-cmd="taille:-1" title="Réduire la taille" aria-label="Réduire la taille">−</button>' +
+      '<span class="nted-pas-val" data-etat="taille">–</span>' +
+      '<button type="button" data-cmd="taille:+1" title="Agrandir la taille" aria-label="Agrandir la taille">+</button></div>' +
+      '<div class="nted-tailles">' + TAILLES_PT.map(function (t) {
+        return '<button type="button" data-cmd="style:taille:' + t + '">' + t + '</button>';
+      }).join('') + '</div>';
+  }
+  function menuPolice() {
+    return '<div class="nted-polices">' + POLICES.map(function (x) {
+      return '<button type="button" data-cmd="style:police:' + x.cle + '"' + (x.pile ? ' style="font-family:' + esc(x.pile) + '"' : '') + '>' + esc(x.nom) + '</button>';
+    }).join('') + '</div>';
+  }
+  var CASSES = [['maj', 'MAJUSCULES'], ['min', 'minuscules'], ['mots', 'Première Lettre Des Mots'], ['phrase', 'Première lettre de la phrase']];
   function sousMenu(quoi) {
-    function pastilles(fam, cmd, valeurs) {
-      return valeurs.map(function (v) {
-        return '<button type="button" class="nted-pastille nt-' + fam + '-' + v + '" data-cmd="' + cmd + ':' + v + '" title="' + esc(LIBELLES[v]) + '" aria-label="' + esc(LIBELLES[v]) + '">' +
-          (fam === 'c' ? 'A' : '') + '</button>';
-      }).join('');
+    if (quoi === 'couleur' || quoi === 'couleur:texte' || quoi === 'couleur:fond') {
+      if (quoi !== 'couleur') return '<div class="nted-pals">' + palette(quoi === 'couleur:fond' ? 'fond' : 'couleur').replace(' hidden>', '>') + '</div>';
+      return '<div class="nted-pals"><div class="nted-onglets" role="tablist">' +
+        '<button type="button" class="actif" data-pal-onglet="couleur">Texte</button>' +
+        '<button type="button" data-pal-onglet="fond">Surlignage</button></div>' +
+        palette('couleur') + palette('fond') + '</div>';
     }
-    if (quoi === 'couleur') {
-      return '<div class="nted-sous-titre">Couleur du texte</div><div class="nted-pastilles">' + pastilles('c', 'couleur', STYLES_TEXTE.c) + '</div>' +
-        '<div class="nted-sous-titre">Surligner</div><div class="nted-pastilles">' + pastilles('f', 'fond', STYLES_TEXTE.f) + '</div>';
-    }
+    if (quoi === 'taille') return menuTaille();
+    if (quoi === 'police') return menuPolice();
     if (quoi === 'texte') {
-      return '<div class="nted-sous-titre">Taille</div><div class="nted-choix">' + STYLES_TEXTE.t.map(function (v) {
-        return '<button type="button" class="nt-t-' + v + '" data-cmd="taille:' + v + '">' + esc(LIBELLES[v]) + '</button>';
-      }).join('') + '</div><div class="nted-sous-titre">Police</div><div class="nted-choix">' + STYLES_TEXTE.p.map(function (v) {
-        return '<button type="button" class="nt-p-' + v + '" data-cmd="police:' + v + '">' + esc(LIBELLES[v]) + '</button>';
+      return '<div class="nted-sous-titre">Taille</div>' + menuTaille() + '<div class="nted-sous-titre">Police</div>' + menuPolice();
+    }
+    if (quoi === 'casse') {
+      return '<div class="nted-sous-titre">Casse</div><div class="nted-casses">' + CASSES.map(function (c) {
+        return '<button type="button" data-cmd="casse:' + c[0] + '">' + c[1] + '</button>';
       }).join('') + '</div>';
     }
     return '<div class="nted-sous-titre">Alignement</div><div class="nted-choix">' + ALIGNEMENTS.map(function (v) {
-      return '<button type="button" data-cmd="aligne:' + v + '" title="' + esc(LIBELLES[v]) + '">' + ICONES_ALIGNE[v] + '</button>';
+      return '<button type="button" data-cmd="aligne:' + v + '" title="' + esc(LIBELLES[v]) + '" aria-label="' + esc(LIBELLES[v]) + '">' + ICONES_ALIGNE[v] + '</button>';
     }).join('') + '</div>';
   }
+
+  /* Marque, dans un conteneur de menus, la mise en forme au curseur. */
+  function peindreEtat(boite, ed, etat) {
+    if (!boite) return etat;
+    etat = etat || etatFormat(ed);
+    var actifs = {};
+    actifs['style:couleur:' + (etat.couleur || '-')] = 1;
+    actifs['style:fond:' + (etat.fond || '-')] = 1;
+    actifs['style:police:' + etat.police] = 1;
+    if (etat.taille) actifs['style:taille:' + etat.taille] = 1;
+    actifs['aligne:' + etat.aligne] = 1;
+    boite.querySelectorAll('[data-cmd]').forEach(function (b) { b.classList.toggle('actif', !!actifs[b.dataset.cmd]); });
+    boite.querySelectorAll('[data-etat="taille"]').forEach(function (x) { x.textContent = etat.taille || '–'; });
+    return etat;
+  }
+
+  /* Onglets Texte / Surlignage d'un nuancier, où qu'il soit affiché. */
+  document.addEventListener('mousedown', function (e) {
+    var o = e.target.closest && e.target.closest('[data-pal-onglet]');
+    if (!o) return;
+    e.preventDefault();
+    var pals = o.closest('.nted-pals');
+    pals.querySelectorAll('[data-pal-onglet]').forEach(function (b) { b.classList.toggle('actif', b === o); });
+    pals.querySelectorAll('.nted-pal').forEach(function (p) { p.hidden = p.dataset.pal !== o.dataset.palOnglet; });
+  }, true);
+
+  /* Couleur personnalisée : le sélecteur du système prend le focus, donc la
+     sélection du texte est gardée à l'ouverture et rendue au choix. */
+  var _plageCouleur = null;
+  function garderPlage(e) {
+    var inp = e.target.closest && e.target.closest('.nted-plus');
+    if (!inp) return;
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) { _plageCouleur = null; return; }
+    var r = sel.getRangeAt(0);
+    var ed = null;
+    _editeurs.forEach(function (x) { if (x.corps.contains(r.commonAncestorContainer)) ed = x; });
+    _plageCouleur = ed ? { r: r.cloneRange(), ed: ed } : null;
+  }
+  document.addEventListener('mousedown', garderPlage, true);
+  document.addEventListener('touchstart', garderPlage, { capture: true, passive: true });
+  document.addEventListener('change', function (e) {
+    var inp = e.target;
+    if (!inp || !inp.dataset || !inp.dataset.perso || !_plageCouleur) return;
+    var g = _plageCouleur;
+    var n = g.r.startContainer;
+    var el = (n.nodeType === 1 ? n : n.parentNode).closest('.pb-txt, .pb-cellule');
+    if (!el || !document.body.contains(el)) return;
+    el.focus();
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(g.r);
+    g.ed.commande('style:' + inp.dataset.perso + ':' + inp.value);
+  }, true);
 
   function majBarre() {
     var sel = window.getSelection();
@@ -2708,6 +3133,12 @@
     monter: function (corps, note, opts) { return new Editeur(corps, note, opts); },
     /* Commandes d'insertion proposées à cet éditeur (menu « / » et panneau d'actions). */
     sousMenu: sousMenu,
+    peindreEtat: peindreEtat,
+    etat: function (ed) { return etatFormat(ed); },
+    POLICES: POLICES,
+    TAILLES_PT: TAILLES_PT,
+    PALETTE: PALETTE,
+    ICONES_ALIGNE: ICONES_ALIGNE,
     commandes: function (ed) {
       return commandesDe(ed).map(function (c) { return { cle: c.cle, libelle: c.libelle, aide: c.aide, icone: c.icone }; });
     },

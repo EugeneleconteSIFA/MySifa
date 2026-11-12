@@ -2687,7 +2687,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_donnees_prod.js?v=18"></script>
 <script src="/static/mysifa_destockage.js?v=12"></script>
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_postit.js?v=12"></script>
+<script src="/static/mysifa_postit.js?v=13"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <!-- Reprendre une réception de RVGI : fournisseur, BL, matière, laize.

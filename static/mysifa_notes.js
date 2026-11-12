@@ -713,7 +713,7 @@
       '<div class="nt-pa-section">Mise en forme</div><div class="nt-pa-formats">' + formats + '</div>' +
       '<p class="nt-pa-aide">Sélectionnez du texte, puis cliquez. Un style de titre ou de liste s\'applique au paragraphe du curseur.</p>' +
       '<div class="nt-pa-styles">' + window.MySifaNotesEditeur.sousMenu('couleur') + window.MySifaNotesEditeur.sousMenu('texte') +
-      window.MySifaNotesEditeur.sousMenu('aligne') +
+      window.MySifaNotesEditeur.sousMenu('aligne') + window.MySifaNotesEditeur.sousMenu('casse') +
       '<button type="button" class="nt-pa-effacer" data-cmd="effacer_format">Effacer la mise en forme</button></div>' +
       '<div class="nt-pa-section">Insérer</div><div class="nt-pa-grille">' + inserer + '</div>' +
       '<div class="nt-pa-section">Bloc</div><div class="nt-pa-grille">' +
