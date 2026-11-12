@@ -1939,6 +1939,31 @@ def of_search(request: Request):
     return {"items": [_row_dict(r) for r in rows]}
 
 
+@router.get("/api/of/proposition")
+def of_proposition(request: Request):
+    """L'OF tel qu'il découle d'une fiche technique, pour `qte` étiquettes.
+
+    Le geste du formulaire « Nouvel OF » d'Access : on choisit la fiche, on
+    donne le délai et le nombre d'étiquettes, le reste se recopie ou se
+    calcule. Lecture seule — l'enregistrement passe par POST /api/of.
+    Déclarée avant /api/of/{of_id} : sinon « proposition » serait lu comme
+    un identifiant.
+    """
+    _require_of_access(request)
+    try:
+        fiche_id = int(request.query_params.get("fiche_id") or 0)
+    except ValueError:
+        fiche_id = 0
+    if not fiche_id:
+        raise HTTPException(status_code=400, detail="Fiche technique absente.")
+    from app.services.of_proposition import proposer
+    with get_db() as conn:
+        res = proposer(conn, fiche_id, request.query_params.get("qte"))
+    if not res:
+        raise HTTPException(status_code=404, detail="Fiche technique introuvable.")
+    return res
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Création dans MySifa
 # ═══════════════════════════════════════════════════════════════════════════

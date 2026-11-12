@@ -1537,7 +1537,10 @@ async function openOfEditModal(row){
   renderOfEditModal();
 }
 function openOfCreateModal(){
-  openOfEditModal({_commandes:[]});
+  // La date de création est celle du jour, comme dans Access.
+  const d=new Date();
+  const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  openOfEditModal({_commandes:[],date_creation:iso});
 }
 window.openOfCreateModal = openOfCreateModal;
 
@@ -1759,6 +1762,223 @@ async function ofCreerDossierProd(row){
   location.href='/planning?'+sp.toString();
 }
 window.ofCreerDossierProd = ofCreerDossierProd;
+
+/* Nouvel OF depuis une fiche technique (12/11/2026).
+
+   C'est le formulaire « Nouvel OF » d'Access : un numéro, la fiche choisie
+   dans la liste « Format », puis le délai client et le nombre d'étiquettes.
+   Le reste de l'OF se RECOPIE de la fiche (produit) ou se CALCULE à partir
+   du nombre d'étiquettes (métrage, bobines, mandrins, cartons, tubes,
+   adhésif). Les formules vivent côté serveur (`of_proposition.py`), vérifiées
+   sur les OF Access : l'écran ne fait que demander et poser.
+
+   Choisir une fiche est un geste délibéré : ses valeurs remplacent celles de
+   la fiche précédente. Le recalcul, lui, ne touche jamais une case calculée
+   que l'ADV a corrigée à la main (`m._manuels`). */
+const OFE_CALCULES = {
+  metrage:'ofe-metrage', qte_bobines:'ofe-bobines', nb_mandrins:'ofe-mandrins',
+  nb_tubes:'ofe-tubes', nb_cartons:'ofe-cartons',
+  qte_adhesif_g:'ofe-qte-adhesif-g', qte_adhesif_kg:'ofe-qte-adhesif-kg',
+};
+const OFE_CALCULES_LIBELLES = {
+  metrage:'métrage', qte_bobines:'bobines', nb_mandrins:'mandrins',
+  nb_tubes:'tubes', nb_cartons:'cartons',
+  qte_adhesif_g:'grammage adhésif', qte_adhesif_kg:'adhésif (kg)',
+};
+let _ofeFicheTimer=null, _ofeCalcTimer=null;
+
+function _ofeQte(){
+  const el=document.getElementById('ofe-qte');
+  const v=el?el.value:'';
+  return v===''?'':String(parseInt(v,10)||'');
+}
+
+async function ofeChercherFiche(q){
+  const zone=document.getElementById('ofe-fiche-res');
+  const m=S.ofEditModal;
+  if(!zone||!m) return;
+  q=(q||'').trim();
+  if(!q){ zone.innerHTML=''; m._fichesTrouvees=[]; return; }
+  let r=null;
+  try{
+    r=await api('/api/fiches-techniques/list?limit=8&q='+encodeURIComponent(q));
+  }catch(e){
+    zone.innerHTML='<div style="font-size:12px;color:var(--danger)">'+escHtml(e.message||'Recherche impossible.')+'</div>';
+    return;
+  }
+  // Une réponse arrivée après une frappe plus récente ne doit pas l'écraser.
+  const champ=document.getElementById('ofe-fiche-q');
+  if(!champ||champ.value.trim()!==q) return;
+  m._fichesTrouvees=(r&&r.rows)||[];
+  m._ficheIdx=m._fichesTrouvees.length?0:-1;
+  ofePeindreFiches(q);
+}
+
+function ofePeindreFiches(q){
+  const zone=document.getElementById('ofe-fiche-res');
+  const m=S.ofEditModal;
+  if(!zone||!m) return;
+  const l=m._fichesTrouvees||[];
+  if(!l.length){
+    zone.innerHTML='<div style="font-size:12px;color:var(--muted);padding:6px 2px">Aucun résultat pour « '+escHtml(q||'')+' »</div>';
+    return;
+  }
+  zone.innerHTML=l.map(function(f,i){
+    const actif=i===m._ficheIdx;
+    return '<button type="button" data-fiche-id="'+escAttr(String(f.id))+'" '+
+      'style="display:flex;width:100%;gap:10px;align-items:baseline;text-align:left;padding:8px 10px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text);'+
+      'background:'+(actif?'var(--accent-bg)':'transparent')+'">'+
+      '<strong>'+escHtml(f.reference||'')+'</strong>'+
+      '<span style="color:var(--muted);font-size:12px">'+escHtml([f.machine,f.format].filter(Boolean).join(' · '))+'</span>'+
+      '</button>';
+  }).join('');
+  zone.querySelectorAll('[data-fiche-id]').forEach(function(b){
+    b.onclick=function(){ ofeChoisirFiche(Number(b.getAttribute('data-fiche-id'))); };
+  });
+}
+
+async function ofeChoisirFiche(ficheId){
+  const m=S.ofEditModal;
+  if(!m||!ficheId) return;
+  captureSaisie('ofe-',m);
+  let p=null;
+  try{
+    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(ficheId)+'&qte='+encodeURIComponent(_ofeQte()));
+  }catch(e){
+    toast(e.message||'Fiche technique illisible.','error');
+    return;
+  }
+  m._dom=m._dom||{};
+  m._manuels=m._manuels||{};
+  // Ce que la fiche précédente avait posé s'efface : sinon une case que la
+  // nouvelle fiche laisse vide garderait la valeur d'un autre produit.
+  (m._ficheCols||[]).forEach(function(col){
+    if(OFE_REFS.indexOf(col)>=0){ m[col]=null; return; }
+    const id=OFE_CHAMPS[col]||OFE_CALCULES[col];
+    if(id&&!m._manuels[id]){ m._dom[id]=''; m[col]=null; }
+  });
+  const poses=[];
+  Object.keys(p.champs||{}).forEach(function(col){
+    const val=p.champs[col];
+    if(OFE_REFS.indexOf(col)>=0){ m[col]=val; poses.push(col); return; }
+    const id=OFE_CHAMPS[col]||OFE_CALCULES[col];
+    if(!id||m._manuels[id]) return;
+    m._dom[id]=String(val);
+    m[col]=val;
+    poses.push(col);
+  });
+  m._ficheCols=poses;
+  m._fiche=p.fiche;
+  m._ficheManques=p.manques||[];
+  m._ficheCalcules=p.calcules||[];
+  m._fichesTrouvees=[];
+  set({ofEditModal:m});
+  renderOfEditModal();
+  const q=document.getElementById('ofe-qte');
+  if(q&&!q.value) q.focus();
+}
+window.ofeChoisirFiche = ofeChoisirFiche;
+
+function ofeChangerFiche(){
+  const m=S.ofEditModal;
+  if(!m) return;
+  captureSaisie('ofe-',m);
+  m._fiche=null;
+  set({ofEditModal:m});
+  renderOfEditModal();
+  requestAnimationFrame(function(){ const el=document.getElementById('ofe-fiche-q'); if(el) el.focus(); });
+}
+window.ofeChangerFiche = ofeChangerFiche;
+
+/* Recalcul au fil de la frappe du nombre d'étiquettes. Pas de re-render :
+   les cases sont posées une à une, le champ garde son focus. */
+async function ofeRecalculer(){
+  const m=S.ofEditModal;
+  if(!m||!m._fiche) return;
+  const qte=_ofeQte();
+  let p=null;
+  try{
+    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(m._fiche.id)+'&qte='+encodeURIComponent(qte));
+  }catch(e){ return; }
+  if(S.ofEditModal!==m||_ofeQte()!==qte) return;
+  m._dom=m._dom||{};
+  m._manuels=m._manuels||{};
+  Object.keys(OFE_CALCULES).forEach(function(col){
+    const id=OFE_CALCULES[col];
+    if(m._manuels[id]) return;
+    const val=(p.champs||{})[col];
+    const txt=(val===undefined||val===null)?'':String(val);
+    const el=document.getElementById(id);
+    if(el) el.value=txt;
+    m._dom[id]=txt;
+    m[col]=(val===undefined)?null:val;
+  });
+  m._ficheManques=p.manques||[];
+  m._ficheCalcules=p.calcules||[];
+  const info=document.getElementById('ofe-fiche-info');
+  if(info) info.innerHTML=ofeInfoFiche(m);
+}
+
+function ofeInfoFiche(m){
+  const calc=(m._ficheCalcules||[]).map(c=>OFE_CALCULES_LIBELLES[c]||c);
+  const manuels=Object.keys(OFE_CALCULES).filter(c=>(m._manuels||{})[OFE_CALCULES[c]])
+    .map(c=>OFE_CALCULES_LIBELLES[c]||c);
+  let h='';
+  if(calc.length) h+='<div>Calculé à partir du nombre d\'étiquettes : '+escHtml(calc.join(', '))+'.</div>';
+  if(manuels.length) h+='<div>Corrigé à la main, plus recalculé : '+escHtml(manuels.join(', '))+'.</div>';
+  (m._ficheManques||[]).forEach(function(x){ h+='<div style="color:var(--danger)">· '+escHtml(x)+'</div>'; });
+  return h;
+}
+
+/* Branchements de la section, après chaque rendu de la modale. */
+function ofeBrancherFiche(overlay,m){
+  const q=overlay.querySelector('#ofe-fiche-q');
+  if(q){
+    q.addEventListener('input',function(){
+      clearTimeout(_ofeFicheTimer);
+      const v=q.value;
+      _ofeFicheTimer=setTimeout(function(){ ofeChercherFiche(v); },220);
+    });
+    q.addEventListener('keydown',function(e){
+      const l=m._fichesTrouvees||[];
+      if(e.key==='Escape'){
+        e.stopPropagation();
+        q.value=''; m._fichesTrouvees=[];
+        const z=document.getElementById('ofe-fiche-res'); if(z) z.innerHTML='';
+        return;
+      }
+      if(!l.length) return;
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+        e.preventDefault();
+        const n=l.length;
+        m._ficheIdx=((m._ficheIdx||0)+(e.key==='ArrowDown'?1:-1)+n)%n;
+        ofePeindreFiches(q.value.trim());
+      }else if(e.key==='Enter'){
+        e.preventDefault();
+        const f=l[m._ficheIdx>=0?m._ficheIdx:0];
+        if(f) ofeChoisirFiche(f.id);
+      }
+    });
+    if(!m._fiche) requestAnimationFrame(function(){ q.focus(); });
+  }
+  const qte=overlay.querySelector('#ofe-qte');
+  if(qte&&!m.id){
+    qte.addEventListener('input',function(){
+      clearTimeout(_ofeCalcTimer);
+      _ofeCalcTimer=setTimeout(ofeRecalculer,250);
+    });
+  }
+  // Une case calculée corrigée à la main n'est plus recalculée.
+  const ids=Object.values(OFE_CALCULES);
+  overlay.addEventListener('input',function(e){
+    const id=e.target&&e.target.id;
+    if(id&&ids.indexOf(id)>=0){
+      m._manuels=m._manuels||{};
+      m._manuels[id]=true;
+    }
+  });
+}
+
 function closeOfEditModal(){
   const existing=document.getElementById('of-edit-overlay');
   if(existing) existing.remove();
@@ -1887,6 +2107,28 @@ function renderOfEditModal(){
         ${fields}
       </div>
     </div>`;
+  // Création : la fiche technique d'abord, puis les deux seules valeurs à
+  // saisir. Le reste du formulaire en découle (ofeChoisirFiche).
+  const _secFiche=()=>{
+    const f=m._fiche;
+    const bouton='padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap';
+    const choix=f?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;font-size:13px;color:var(--text)"><strong>${escHtml(f.reference||'')}</strong>
+          <span style="color:var(--muted);margin-left:8px">${escHtml([f.machine,f.format].filter(Boolean).join(' · '))}</span></div>
+        <button type="button" onclick="ofeChangerFiche()" style="${bouton}">Changer de fiche</button>
+      </div>`
+      :`<div style="grid-column:1/-1">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Fiche technique</label>
+        <input id="ofe-fiche-q" type="text" autocomplete="off" value="${escAttr(_v('ofe-fiche-q',''))}"
+          placeholder="Rechercher une fiche (référence, format, machine, support…)"
+          style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+        <div id="ofe-fiche-res" style="margin-top:6px;display:flex;flex-direction:column;gap:2px"></div>
+      </div>`;
+    return choix
+      +_f('ofe-qte','Nb étiquettes',m.qte_etiquettes,'number')
+      +_f('ofe-delai','Délai client',m.delai_client,'date')
+      +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`;
+  };
   const overlay=document.createElement('div');
   overlay.id='of-edit-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
@@ -1897,6 +2139,7 @@ function renderOfEditModal(){
         <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
+      ${creation?_sec('Fiche technique',_secFiche(),true):''}
       ${_sec('Commandes RVGI',`
         <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <button type="button" onclick="ofeChoisirCommandes()"
@@ -1928,7 +2171,7 @@ function renderOfEditModal(){
         _f('ofe-numero','OF n°',m.of_numero),
         _f('ofe-reference','Référence',m.reference),
         _f('ofe-date','Date création',(m.date_creation||'').slice(0,10),'date'),
-        _f('ofe-delai','Délai client',m.delai_client),
+        creation?'':_f('ofe-delai','Délai client',m.delai_client),
         _f('ofe-machine','Machine',m.machine),
       ].join(''),true)}
       ${_sec('Matière / Support',[
@@ -1948,7 +2191,7 @@ function renderOfEditModal(){
       ${_sec('Quantités',[
         _f('ofe-qte-mille','Qté au mille',m.qte_au_mille,'number'),
         _f('ofe-nb-levees','Nb levées',m.nb_levees,'number'),
-        _f('ofe-qte','Qté étiquettes',m.qte_etiquettes,'number'),
+        creation?'':_f('ofe-qte','Qté étiquettes',m.qte_etiquettes,'number'),
         _f('ofe-bobines','Qté bobines',m.qte_bobines,'number'),
         _f('ofe-metrage','Métrage',m.metrage,'number'),
         _f('ofe-tolerance','Tolérance',m.tolerance),
@@ -2015,6 +2258,7 @@ function renderOfEditModal(){
   overlay.querySelector('#ofe-save-btn').onclick=saveOfEdit;
   const bDossier=overlay.querySelector('#ofe-dossier-btn');
   if(bDossier) bDossier.onclick=()=>ofCreerDossierProd(m);
+  if(creation) ofeBrancherFiche(overlay,m);
 
   // Résumé du rattachement : servi par le serveur quand l'OF existe, peint
   // localement quand il n'existe pas encore.
