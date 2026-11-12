@@ -157,7 +157,11 @@
     });
     inp.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); appliquerTaille(); }
-      if (e.key === 'Escape') { e.preventDefault(); rendrePlage(); peindre(); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (S.ed && S.ed._sel) S.ed.corps.focus({ preventScroll: true }); else rendrePlage();
+        peindre();
+      }
     });
     inp.addEventListener('input', function () { inp.value = inp.value.replace(/[^0-9]/g, '').slice(0, 2); });
     peindre();
@@ -188,7 +192,10 @@
   function appliquerTaille() {
     var inp = barre.querySelector('.ntf-taille-val');
     var t = parseInt(inp.value, 10);
-    if (!rendrePlage()) {
+    /* Plusieurs blocs sélectionnés : la taille vaut pour eux tous. */
+    var blocs = !!(S.ed && S.ed._sel);
+    if (blocs) { _plage = null; S.ed.corps.focus({ preventScroll: true }); }
+    if (!blocs && !rendrePlage()) {
       if (S.ed.opts.signaler) S.ed.opts.signaler('Sélectionnez d\'abord le texte à mettre en forme.', 'info');
       return peindre();
     }
@@ -241,7 +248,7 @@
   function peindre() {
     if (!barre || !S.ed) return;
     var sel = window.getSelection();
-    var dans = sel && sel.rangeCount && S.ed.corps.contains(sel.getRangeAt(0).commonAncestorContainer);
+    var dans = (sel && sel.rangeCount && S.ed.corps.contains(sel.getRangeAt(0).commonAncestorContainer)) || !!S.ed._sel;
     var etat = dans ? E.etat(S.ed) : null;
     barre.classList.toggle('inactive', !etat);
     if (!etat) return;
@@ -285,6 +292,11 @@
     }
     clearTimeout(_t);
     _t = setTimeout(peindre, 50);
+  });
+  /* Sélection de plusieurs blocs : prise, étendue, défaite ou modifiée. */
+  document.addEventListener('nted:choix', function () {
+    clearTimeout(_t);
+    _t = setTimeout(peindre, 30);
   });
   document.addEventListener('mousedown', function (e) {
     if (pop && !e.target.closest('#nt-format')) fermerPop();

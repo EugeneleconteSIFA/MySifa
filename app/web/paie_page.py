@@ -374,7 +374,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 <link rel="stylesheet" href="/static/mysifa_postit.css?v=12">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_postit.js?v=13"></script>
+<script src="/static/mysifa_postit.js?v=15"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=21"></script>

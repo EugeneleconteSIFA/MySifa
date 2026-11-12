@@ -114,7 +114,7 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=6" data-nted="1">
+<link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=7" data-nted="1">
 <link rel="stylesheet" href="/static/mysifa_notes.css?v=11">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
@@ -169,12 +169,12 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_notes_editeur.js?v=9"></script>
+<script src="/static/mysifa_notes_editeur.js?v=11"></script>
 <script src="/static/mysifa_notes.js?v=9"></script>
 <script src="/static/mysifa_notes_recherche.js?v=1"></script>
 <script src="/static/mysifa_notes_outils.js?v=2"></script>
 <script src="/static/mysifa_notes_mobile.js?v=4"></script>
-<script src="/static/mysifa_notes_format.js?v=1"></script>
+<script src="/static/mysifa_notes_format.js?v=2"></script>
 </body>
 </html>
 """

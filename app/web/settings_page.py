@@ -3230,7 +3230,7 @@ __SETTINGS_FAMILLES__
 <link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_postit.js?v=13"></script>
+<script src="/static/mysifa_postit.js?v=15"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <!-- Clients et fournisseurs alignés sur RVGI : bandeau de synchro,
      pastille d'origine, bloc « fiche RVGI ». Tout est dans ce fichier,

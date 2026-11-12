@@ -1062,7 +1062,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <link rel="stylesheet" href="/static/mysifa_postit.css?v=12">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_postit.js?v=13"></script>
+<script src="/static/mysifa_postit.js?v=15"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
