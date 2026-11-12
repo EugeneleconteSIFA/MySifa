@@ -8290,6 +8290,180 @@ function creerRechercheDossier(prefill){
   };
 }
 
+// ── Liste des opérations au style MySifa ─────────────────────────────
+// Remplace l'affichage de la liste native (illisible, grise, sans repère)
+// par une liste groupée par catégorie, filtrable au clavier : l'opérateur
+// tape « 53 » ou « casse » puis Entrée. Le <select> d'origine reste dans le
+// DOM, caché : c'est lui qui porte la valeur et déclenche « change », donc
+// rien de ce qui le lit ne change.
+const OP_PICKER_CATS = {
+  production:'Production', calage:'Calage et changements', appro:'Approvisionnement',
+  arret:'Arrêts', nettoyage:'Nettoyage et maintenance', technique:'Technique',
+  pause:'Pauses', personnel:'Personnel et dossier', annulation:'Annulation',
+  autre:'Autre', stock:'Mouvements stock',
+};
+const OP_PICKER_ORDRE = ['production','calage','appro','arret','nettoyage','technique',
+  'pause','personnel','annulation','autre','stock'];
+function _opNorm(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+}
+function buildOpPicker(sel, ops, stockCodes){
+  const items = [];
+  Object.entries(ops || {}).forEach(([code, cfg]) => {
+    items.push({ code, label: cfg.label || '', cat: cfg.category || 'autre',
+      sev: cfg.severity || 'info', value: code+'           '+(cfg.label || '') });
+  });
+  (stockCodes || []).forEach(o => items.push({ code:o.code, label:o.label, cat:'stock',
+    sev:'info', value:o.code+'           '+o.label }));
+
+  const wrap = h('div', { className:'op-picker' });
+  const trigger = h('button', { type:'button', className:'op-picker-trigger',
+    'aria-haspopup':'listbox', 'aria-expanded':'false' });
+  wrap.appendChild(trigger);
+  sel.style.display = 'none';
+  wrap.appendChild(sel);
+
+  let pop = null, champ = null, liste = null, visibles = [], actif = -1;
+
+  function courant(){ return items.find(it => it.value === sel.value) || null; }
+  function peindreTrigger(){
+    trigger.textContent = '';
+    const it = courant();
+    if(!it){
+      trigger.appendChild(h('span', { className:'op-picker-vide' }, 'Choisir une opération'));
+    }else{
+      trigger.appendChild(h('span', { className:'op-picker-code' }, it.code));
+      trigger.appendChild(h('span', { className:'op-picker-lib' }, it.label));
+    }
+    const caret = h('span', { className:'op-picker-caret', 'aria-hidden':'true' });
+    caret.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    trigger.appendChild(caret);
+  }
+  function choisir(it){
+    sel.value = it.value;
+    sel.dispatchEvent(new Event('change', { bubbles:true }));
+    peindreTrigger();
+    fermer();
+    trigger.focus();
+  }
+  function placer(){
+    if(!pop) return;
+    // La modal fermée emporte le bouton : la liste ouverte ne lui survit pas.
+    if(!wrap.isConnected){ fermer(); return; }
+    const r = trigger.getBoundingClientRect();
+    const largeur = Math.max(r.width, 320);
+    const bas = window.innerHeight - r.bottom - 12;
+    const haut = r.top - 12;
+    const vers_haut = bas < 260 && haut > bas;
+    const maxH = Math.min(420, vers_haut ? haut : bas);
+    pop.style.width = largeur + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - largeur - 8)) + 'px';
+    pop.style.maxHeight = maxH + 'px';
+    if(vers_haut){ pop.style.top = ''; pop.style.bottom = (window.innerHeight - r.top + 6) + 'px'; }
+    else { pop.style.bottom = ''; pop.style.top = (r.bottom + 6) + 'px'; }
+  }
+  function peindreListe(){
+    const q = _opNorm(champ.value.trim());
+    visibles = items.filter(it => !q || it.code.toLowerCase().startsWith(q) || _opNorm(it.label).includes(q));
+    liste.textContent = '';
+    if(!visibles.length){
+      liste.appendChild(h('div', { className:'op-picker-rien' }, 'Aucune opération ne correspond.'));
+      actif = -1; return;
+    }
+    // Un code tapé en entier passe devant : « 5 » ne doit pas choisir 50 à la place de 05.
+    const exact = visibles.findIndex(it => it.code.toLowerCase() === q);
+    const val = sel.value;
+    if(actif < 0 || actif >= visibles.length) actif = 0;
+    if(exact >= 0) actif = exact;
+    else if(!q){ const i = visibles.findIndex(it => it.value === val); if(i >= 0) actif = i; }
+    const ordre = OP_PICKER_ORDRE.concat([...new Set(visibles.map(v => v.cat))].filter(c => !OP_PICKER_ORDRE.includes(c)));
+    ordre.forEach(cat => {
+      const groupe = visibles.filter(v => v.cat === cat);
+      if(!groupe.length) return;
+      liste.appendChild(h('div', { className:'op-picker-groupe' }, OP_PICKER_CATS[cat] || cat));
+      groupe.forEach(it => {
+        const idx = visibles.indexOf(it);
+        const ligne = h('div', {
+          className:'op-picker-opt' + (idx === actif ? ' actif' : '') + (it.value === val ? ' choisi' : ''),
+          role:'option', 'data-idx':String(idx),
+        },
+          h('span', { className:'op-picker-code' }, it.code),
+          h('span', { className:'op-picker-lib' }, it.label),
+          it.value === val ? h('span', { className:'op-picker-check' }, '✓') : null
+        );
+        ligne.addEventListener('mousedown', e => { e.preventDefault(); choisir(it); });
+        ligne.addEventListener('mousemove', () => {
+          if(actif === idx) return;
+          actif = idx;
+          liste.querySelectorAll('.op-picker-opt.actif').forEach(x => x.classList.remove('actif'));
+          ligne.classList.add('actif');
+        });
+        liste.appendChild(ligne);
+      });
+    });
+    const a = liste.querySelector('.op-picker-opt.actif');
+    if(a) a.scrollIntoView({ block:'nearest' });
+  }
+  function surDehors(e){ if(pop && !pop.contains(e.target) && !wrap.contains(e.target)) fermer(); }
+  function surScroll(e){ if(pop && !pop.contains(e.target)) placer(); }
+  function ouvrir(){
+    if(pop) return;
+    champ = h('input', { type:'text', className:'op-picker-champ', placeholder:'Code ou libellé…',
+      autocomplete:'off', spellcheck:'false' });
+    liste = h('div', { className:'op-picker-liste', role:'listbox' });
+    pop = h('div', { className:'op-picker-pop' }, champ, liste);
+    document.body.appendChild(pop);
+    actif = -1;
+    placer();
+    peindreListe();
+    trigger.setAttribute('aria-expanded', 'true');
+    wrap.classList.add('ouvert');
+    champ.addEventListener('input', () => { actif = 0; peindreListe(); });
+    champ.addEventListener('keydown', e => {
+      if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        if(!visibles.length) return;
+        actif = e.key === 'ArrowDown' ? Math.min(visibles.length - 1, actif + 1) : Math.max(0, actif - 1);
+        peindreListe();
+      }else if(e.key === 'Enter'){
+        e.preventDefault();
+        if(visibles[actif]) choisir(visibles[actif]);
+      }else if(e.key === 'Escape'){
+        e.preventDefault(); e.stopPropagation();
+        fermer(); trigger.focus();
+      }else if(e.key === 'Tab'){
+        fermer();
+      }
+    });
+    document.addEventListener('mousedown', surDehors, true);
+    window.addEventListener('scroll', surScroll, true);
+    window.addEventListener('resize', placer);
+    setTimeout(() => champ && champ.focus(), 0);
+  }
+  function fermer(){
+    if(!pop) return;
+    pop.remove(); pop = null; champ = null; liste = null;
+    trigger.setAttribute('aria-expanded', 'false');
+    wrap.classList.remove('ouvert');
+    document.removeEventListener('mousedown', surDehors, true);
+    window.removeEventListener('scroll', surScroll, true);
+    window.removeEventListener('resize', placer);
+  }
+  trigger.addEventListener('click', e => { e.preventDefault(); pop ? fermer() : ouvrir(); });
+  trigger.addEventListener('keydown', e => {
+    if(e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' '){ e.preventDefault(); ouvrir(); }
+    else if(/^[0-9a-zA-Z]$/.test(e.key)){
+      // Taper directement le code sur le bouton ouvre la liste déjà filtrée.
+      e.preventDefault(); ouvrir();
+      setTimeout(() => { if(champ){ champ.value = e.key; actif = 0; peindreListe(); } }, 0);
+    }
+  });
+  // Une valeur posée par le code (pré-remplissage, navigation entre saisies).
+  sel.addEventListener('change', peindreTrigger);
+  peindreTrigger();
+  return wrap;
+}
+
 function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const ops = S.OPS_CONFIG;
   const ops_list = S.filters.operators || [];
@@ -8400,10 +8574,10 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
     const cfg = ops[code];
     // Preview label
     if(isStock){
-      opPreview.textContent = '🟣 Mouvement stock';
+      opPreview.textContent = 'Mouvement stock';
     } else {
       opPreview.textContent = cfg
-        ? (cfg.severity==='critique'?'🔴 Critique':cfg.severity==='attention'?'🟡 Attention':'🟢 '+cfg.category)
+        ? (cfg.severity==='critique'?'Critique':cfg.severity==='attention'?'Attention':(OP_PICKER_CATS[cfg.category]||cfg.category||''))
         : '';
     }
     // Toggle prod-only / stock-only rows
@@ -8548,7 +8722,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
           ? h('div',{className:'add-row-header'}, title)
           : h('div',{className:'add-row-header'}, h('h3', null, title)),
       h('div', { className: 'form-row' },
-        h('div', null, h('label', null, 'Opération *'), opSel, opPreview),
+        h('div', null, h('label', null, 'Opération *'), buildOpPicker(opSel, ops, STOCK_CODES_UI), opPreview),
         h('div', null, h('label', null, 'Opérateur *'), opField)
       ),
       h('div', { className: 'form-row' },

@@ -1914,9 +1914,9 @@ function renderPortal(){
     )});
   }
 
-  // Réunions (05/11/2026) : espace commun à tous les services, chaque réunion
-  // filtrée côté serveur par sa visibilité (app/routers/reunions.py).
-  if(urole){
+  // Réunions : réservé à la direction, l'administration et au superadmin
+  // (ROLES_REUNIONS, config.py) ; chaque réunion reste filtrée par sa visibilité.
+  if(isSuper || ['direction','administration','administration_ventes','administration_technique'].includes(urole)){
     const id='reunions';
     tileSpecs.push({id,el:h('div',{
       className:'portal-app',

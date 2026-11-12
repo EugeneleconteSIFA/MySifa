@@ -1797,6 +1797,7 @@ __SETTINGS_FAMILLES__
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <h2 style="margin:0">Codes opération (calage, arrêt, production…)</h2>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn btn-sec" href="/api/settings/operation-codes/affiche.pdf" download="codes-operation.pdf" title="Affiche A4 des codes, à poser aux postes de conduite">Télécharger l'affiche PDF</a>
             <button type="button" class="btn btn-sec" onclick="importOpsJson()">Sync. operations.json</button>
             <button type="button" class="btn" onclick="openOpForm()">+ Ajouter un code</button>
           </div>
