@@ -196,6 +196,17 @@ th{{
 .portail-serie-sub td{{background:var(--bg);border-top:1px dashed var(--border) !important;padding:6px 8px !important}}
 .notice-danger{{border-color:var(--danger);color:var(--danger)}}
 td input[type="number"],td input[type="text"]{{min-width:88px}}
+td select.inp-devise{{min-width:96px;font-weight:700}}
+.price-help{{margin:0 0 12px;font-size:13px;color:var(--text2);line-height:1.5}}
+.price-help strong{{color:var(--text)}}
+/* Base du prix : deux pastilles exclusives, l'option retenue en accent. */
+.unite-choix{{display:flex;flex-direction:column;gap:6px;min-width:150px}}
+.unite-choix label{{display:block;cursor:pointer;margin:0}}
+.unite-choix input{{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}}
+.unite-choix span{{display:block;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;transition:border-color .15s,background .15s}}
+.unite-choix input:checked+span{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
+.unite-choix input:focus-visible+span{{box-shadow:0 0 0 3px var(--accent-bg)}}
+.unite-choix input:disabled+span{{opacity:.65;cursor:not-allowed}}
 input,textarea,select{{
   width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;
@@ -570,6 +581,9 @@ function renderOffre() {{
     html += '<p class="notice notice-warn">' + escHtml(t("noticeAlreadyReplied")) + '</p>';
   }}
 
+  if (!cloture) {{
+    html += '<p class="price-help">' + t("priceHelp") + '</p>';
+  }}
   html += '<div class="table-wrap"><table><thead><tr>' +
     '<th>' + escHtml(t("thClient")) + '</th><th>' + escHtml(t("thRef")) + '</th>' +
     '<th>' + escHtml(t("thFrontal")) + '</th><th>' + escHtml(t("thAdhesive")) + '</th>' +
@@ -590,7 +604,7 @@ function renderOffre() {{
         : (r.prix_unitaire != null && r.prix_unitaire !== "" ? r.prix_unitaire : "");
       const delaiVal = r.delai_jours != null && r.delai_jours !== "" ? r.delai_jours : "";
       const dev = (r.devise || "EUR").toUpperCase();
-      const unite = (r.unite_quotation || "mille").toLowerCase();
+      const unite = (r.unite_quotation || "bobine").toLowerCase();
       const devSel = (code, sel) =>
         '<option value="' + code + '"' + (sel === code ? " selected" : "") + ">" + code + "</option>";
       const uniteSel = (code, label, sel) =>
@@ -611,9 +625,9 @@ function renderOffre() {{
         '<td><select class="inp-devise" data-lid="' + ln.id + '"' + dis + ">" +
           devSel("EUR", dev) + devSel("USD", dev) +
         "</select></td>" +
-        '<td><div class="unite-radios">' +
-          '<label><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="mille"' + (unite === "mille" ? " checked" : "") + dis + "> " + escHtml(t("unitMille")) + "</label>" +
-          '<label style="margin-left:10px"><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="bobine"' + (unite === "bobine" ? " checked" : "") + dis + "> " + escHtml(t("unitBobine")) + "</label>" +
+        '<td><div class="unite-choix" role="radiogroup">' +
+          '<label><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="bobine"' + (unite === "bobine" ? " checked" : "") + dis + "><span>" + escHtml(t("unitBobine")) + "</span></label>" +
+          '<label><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="mille"' + (unite === "mille" ? " checked" : "") + dis + "><span>" + escHtml(t("unitMille")) + "</span></label>" +
         "</div></td>" +
         '<td><input type="number" step="1" min="0" class="inp-delai" data-lid="' + ln.id + '" value="' + escHtml(delaiVal) + '"' + dis + "></td>" +
         '<td><input type="text" class="inp-com" data-lid="' + ln.id + '" value="' + escAttr(r.commentaire || "") + '"' + dis + "></td>" +
@@ -664,7 +678,7 @@ async function submitOffre() {{
       ligne_id: lid,
       quotation: quotation,
       devise: devEl ? devEl.value : "EUR",
-      unite_quotation: uniteEl ? uniteEl.value : "mille",
+      unite_quotation: uniteEl ? uniteEl.value : "bobine",
       delai_jours: delai,
       commentaire: comEl ? (comEl.value.trim() || null) : null
     }});
@@ -1200,7 +1214,7 @@ function renderList(data) {{
       '<div class="d-top">' +
         '<div><div class="d-ref">' + escHtml(d.reference || "") + "</div>" +
         '<div class="d-title">' + escHtml(d.titre || t("defaultRequestTitle")) + "</div></div>" +
-        '<a class="' + btnCls + '" href="' + href + '">' + escHtml(isClosed ? t("viewEdit") : btnLabel) + "</a>" +
+        (isClosed ? "" : '<a class="' + btnCls + '" href="' + href + '">' + escHtml(btnLabel) + "</a>") +
       "</div>" +
       '<div class="d-meta">' + meta + "</div>" +
       "</article>";

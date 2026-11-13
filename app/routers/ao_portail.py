@@ -11,6 +11,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.services.ao_pricing import DEVISES, UNITES_QUOTATION
@@ -389,6 +390,15 @@ def portail_page(request: Request, token: str):
                     headers=_PORTAIL_HTML_HEADERS,
                 )
             ao, fourni = found
+            # Un AO clôturé n'attend plus de réponse : le lien (email, favori)
+            # mène à la liste de toutes les demandes du fournisseur.
+            if ao.get("statut") == "cloturee":
+                lang_q = "?lang=en" if _parse_lang(request) == "en" else ""
+                return RedirectResponse(
+                    url=f"/portail/ao/{token}/mes-demandes{lang_q}",
+                    status_code=303,
+                    headers=_PORTAIL_HTML_HEADERS,
+                )
             now = _now_paris_iso()
             if not fourni.get("date_ouverture"):
                 conn.execute(
@@ -606,9 +616,9 @@ async def repondre_ao(request: Request, token: str):
             devise = (item.get("devise") or "EUR").strip().upper()
             if devise not in DEVISES:
                 devise = "EUR"
-            unite_q = (item.get("unite_quotation") or "mille").strip().lower()
+            unite_q = (item.get("unite_quotation") or "bobine").strip().lower()
             if unite_q not in UNITES_QUOTATION:
-                unite_q = "mille"
+                unite_q = "bobine"
             delai = item.get("delai_jours")
             if delai is not None:
                 try:
@@ -635,6 +645,21 @@ async def repondre_ao(request: Request, token: str):
                 ),
             )
 
+        # Le commentaire général est souvent une question (« Same as
+        # AO-2026-019 right? ») : stocké seul sur ao_fournisseurs, personne ne
+        # le voyait côté SIFA. Tout commentaire nouveau ou modifié entre donc
+        # aussi dans la messagerie, non lu, comme un message du fournisseur.
+        ancien_com = conn.execute(
+            "SELECT commentaire_global FROM ao_fournisseurs WHERE id=?", (fourni_id,)
+        ).fetchone()
+        ancien_com = (ancien_com[0] if ancien_com else None) or None
+        if commentaire_global and commentaire_global != ancien_com:
+            conn.execute(
+                """INSERT INTO ao_messages
+                   (ao_fournisseur_id, expediteur, auteur_nom, message, date, lu)
+                   VALUES (?,'fournisseur',?,?,?,0)""",
+                (fourni_id, fourni.get("nom_fournisseur"), commentaire_global, now),
+            )
         conn.execute(
             """UPDATE ao_fournisseurs
                SET statut='repondu', date_reponse=?, commentaire_global=?

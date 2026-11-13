@@ -648,7 +648,7 @@ def _ao_invitation_email_strings(lang: str, *, reference: str, titre: str, nom: 
                 f"<strong style=\"color:#0f172a\">{ref_esc}</strong>{titre_suffix}."
             ),
             "th_ref": "Reference",
-            "th_qty": "Quantity",
+            "th_qty": "Quantity of labels",
             "th_labels_roll": "Labels / roll",
             "no_lines": "No line items for now.",
             "deadline_label": "Reply by",
@@ -665,7 +665,7 @@ def _ao_invitation_email_strings(lang: str, *, reference: str, titre: str, nom: 
             f"<strong style=\"color:#0f172a\">{ref_esc}</strong>{titre_suffix}."
         ),
         "th_ref": "Référence",
-        "th_qty": "Quantité",
+        "th_qty": "Quantité d'étiquettes",
         "th_labels_roll": "Étiq. / bobine",
         "no_lines": "Aucune ligne détaillée pour le moment.",
         "deadline_label": "Date limite",
@@ -786,7 +786,7 @@ def _fiche_technique_link(ref_produit: str | None, produits_by_ref: dict[str, in
     produit_id = produits_by_ref.get(ref.lower())
     if not produit_id:
         return "—"
-    url = f"{public_base_url()}/api/ao/produits/{produit_id}/export"
+    url = f"{public_base_url()}/api/ao/produits/{produit_id}/pdf-fournisseur"
     return (
         f'<a href="{_esc(url)}" style="color:#0891b2;font-weight:600;text-decoration:none">'
         f"Fiche technique</a>"
@@ -837,11 +837,25 @@ def email_accuse_reception(
     ao_id = ao.get("id")
     ao_link = ""
     if ao_id:
-        ao_url = f"{public_base_url()}/ao"
+        ao_url = f"{public_base_url()}/ao?ao={int(ao_id)}" + (
+            "&onglet=messages" if (fournisseur.get("commentaire_global") or "").strip() else ""
+        )
         ao_link = (
             f'<p style="margin:0 0 16px;font-size:13px;color:#475569">'
             f'<a href="{_esc(ao_url)}" style="color:#0891b2;font-weight:600;text-decoration:none">'
             f"Ouvrir la demande dans MySifa</a></p>"
+        )
+
+    commentaire = (fournisseur.get("commentaire_global") or "").strip()
+    commentaire_html = ""
+    if commentaire:
+        commentaire_html = (
+            '<div style="margin:0 0 20px;padding:12px 16px;background:#f8fafc;'
+            'border:1px solid #e2e8f0;border-left:3px solid #0891b2;border-radius:8px">'
+            '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;'
+            'color:#64748b;font-weight:700;margin-bottom:6px">Commentaire du fournisseur</div>'
+            f'<div style="font-size:14px;color:#0f172a;white-space:pre-wrap">{_esc(commentaire)}</div>'
+            "</div>"
         )
 
     subject = f"[MySifa] Réponse reçue — {reference} — {nom}"
@@ -859,17 +873,18 @@ def email_accuse_reception(
       <thead>
         <tr style="background:#f1f5f9">
           <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Réf.</th>
-          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Qté</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Qté d'étiquettes</th>
           <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Quotation</th>
-          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Unité</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Prix donné</th>
           <th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#64748b">Délai (j)</th>
           <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#64748b">Fiche</th>
         </tr>
       </thead>
       <tbody>{rows_html}</tbody>
     </table>
+    {commentaire_html}
     {ao_link}
-    <p style="margin:0;font-size:13px;color:#475569">La fiche technique ouvre le détail produit (connexion MySifa requise).</p>
+    <p style="margin:0;font-size:13px;color:#475569">La fiche technique ouvre le PDF envoyé au fournisseur (connexion MySifa requise).</p>
   </div>
 </div>"""
     return subject, body
