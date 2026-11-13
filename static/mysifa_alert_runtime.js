@@ -87,6 +87,10 @@
       /* Pesée d'étiquettes : grammage de colle calculé sous chaque valeur */
       '.ta-cl-colle{flex:0 0 auto;min-width:62px;text-align:right;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}',
       '.ta-cl-colle.ta-neg{color:var(--danger)}',
+      '.ta-cl-calc{flex:0 0 auto;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--accent);cursor:pointer;padding:0}',
+      '.ta-cl-calc:hover{border-color:var(--accent)}',
+      '.ta-cl-calc.on{background:var(--accent);border-color:var(--accent);color:var(--card)}',
+      '.ta-cl-fronts-note{font-size:11px;color:var(--muted);margin:-2px 0 6px 0}',
       '.ta-cl-colle-calc{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--accent-bg);font-size:12px;color:var(--text2);display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.4}',
       '.ta-cl-colle-calc label{display:inline-flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap;margin:0}',
       '.ta-cl-colle-calc .ta-cl-colle-nb{width:52px !important;flex:0 0 52px;min-width:0;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:12px;text-align:center}',
@@ -286,6 +290,7 @@
       }
     }
     if (item.getAttribute('data-colle') === '1') _majColleValeur(inp);
+    if (_calcItem === item) { const P = _colleApi(); if (P && P.rafraichirCalculette) P.rafraichirCalculette(); }
   }
   window._mysifaAlertOnValueInput = _onValueInput;
 
@@ -400,7 +405,138 @@
     zone.appendChild(aide);
     return zone;
   }
+  // ── Pesée par front (13/11/2026) ──
+  // Libellé d'une mesure en nombre libre : le premier front est le « Front
+  // opérateur », le dernier le « Front pignon ». Même règle que
+  // libelle_libre() de app/services/mesures_libres.py et que les écrans de
+  // MyMaintenance (mysifa_ack_viewer.js, maintenance_analyse.js) : la
+  // réponse reste une liste dans l'ordre des fronts, seul l'affichage change.
+  function _libellePoint(lib, k, n) {
+    lib = lib || 'Mesure';
+    if (String(lib).trim().toLowerCase() === 'front') {
+      if (k === 0) return lib + ' opérateur';
+      if (n >= 2 && k === n - 1) return lib + ' pignon';
+    }
+    return lib + ' ' + (k + 1);
+  }
+  function _estFront(item) {
+    return String(item.getAttribute('data-libelle') || '').trim().toLowerCase() === 'front';
+  }
+  // Nombre de lignes = nombre de fronts du dossier en cours (fiche technique,
+  // app/services/poids_colle.py), borné par le minimum et le maximum de la
+  // question. Le conducteur ajuste ensuite avec « + Ajouter » et « × » ; dès
+  // qu'il y touche, le dossier ne réécrit plus rien.
+  function _initFronts(wrap) {
+    const P = _colleApi();
+    // Sans le widget Poids de colle (pages hors saisie prod) : pas de calculette.
+    if (!P || !P.calculette) wrap.querySelectorAll('.ta-cl-calc').forEach(b => b.remove());
+    const items = Array.from(wrap.querySelectorAll('.ta-cl-item[data-libres="1"]')).filter(_estFront);
+    if (!items.length || !P) return;
+    P.pret().then(() => {
+      if (!wrap.isConnected) return;
+      const dos = P.dossier ? P.dossier() : {};
+      const nbf = parseInt(dos && dos.fiche && dos.fiche.nb_fronts, 10);
+      if (!(nbf >= 1)) return;
+      items.forEach(item => {
+        if (item._frontsManuels) return;
+        const mini = parseInt(item.getAttribute('data-min-pts'), 10) || 1;
+        const maxi = parseInt(item.getAttribute('data-max-pts'), 10) || 50;
+        const cible = Math.max(mini, Math.min(maxi, nbf));
+        const liste = item.querySelector('.ta-cl-libres');
+        if (!liste) return;
+        let lignes = Array.from(liste.querySelectorAll('.ta-cl-libre'));
+        // Jamais retirer une ligne déjà remplie.
+        while (lignes.length > cible) {
+          const der = lignes[lignes.length - 1];
+          const v = der.querySelector('.ta-cl-val');
+          if (v && String(v.value || '').trim() !== '') break;
+          der.remove(); lignes.pop();
+        }
+        while (lignes.length < cible) { lignes.push(_nouvelleLigne(liste)); }
+        let note = item.querySelector('.ta-cl-fronts-note');
+        if (!note) {
+          note = document.createElement('div');
+          note.className = 'ta-cl-fronts-note';
+          liste.parentNode.insertBefore(note, liste);
+        }
+        note.textContent = nbf + ' front' + (nbf > 1 ? 's' : '') + ' d\'après la fiche'
+          + (dos.no_dossier ? ' du dossier ' + dos.no_dossier : '') + ' — ajustable.';
+        _renumeroterMesures(item);
+      });
+    }, () => {});
+  }
+  function _nouvelleLigne(liste) {
+    const modele = liste.querySelector('.ta-cl-libre');
+    const neuve = modele.cloneNode(true);
+    const inp = neuve.querySelector('.ta-cl-val');
+    inp.value = ''; inp.style.borderColor = ''; inp.style.color = '';
+    const ec = neuve.querySelector('.ta-cl-ecart'); if (ec) ec.textContent = '';
+    const gc = neuve.querySelector('.ta-cl-colle'); if (gc) { gc.textContent = ''; gc.title = ''; gc.classList.remove('ta-neg'); }
+    const cb = neuve.querySelector('.ta-cl-calc'); if (cb) cb.classList.remove('on');
+    liste.appendChild(neuve);
+    return neuve;
+  }
+  // Calculette de poids de colle, ouverte au milieu de l'écran depuis une
+  // ligne de pesée. « Valider » range le poids pesé dans le premier front
+  // encore vide de la question (en ajoutant une ligne si toutes sont prises
+  // et que le maximum le permet).
+  let _calcItem = null;
+  function _premierVide(item) {
+    return Array.from(item.querySelectorAll('.ta-cl-libre')).find(l => {
+      const v = l.querySelector('.ta-cl-val');
+      return v && String(v.value || '').trim() === '';
+    }) || null;
+  }
+  function _libelleLigne(l) {
+    const lbl = l && l.querySelector('.ta-cl-libre-lbl');
+    return lbl ? lbl.textContent : '';
+  }
+  function _marquerCalc(item, on) {
+    item.querySelectorAll('.ta-cl-calc').forEach(b => b.classList.toggle('on', !!on));
+  }
+  window._mysifaAlertCalculette = function (btn) {
+    const P = _colleApi();
+    const item = btn.closest('.ta-cl-item');
+    if (!P || !P.calculette || !item) return;
+    if (_calcItem === item && P.calculetteOuverte && P.calculetteOuverte()) { P.fermerCalculette(); return; }
+    const maxi = parseInt(item.getAttribute('data-max-pts'), 10) || 50;
+    const cibleLigne = () => {
+      if (!item.isConnected) return null;
+      return _premierVide(item);
+    };
+    _calcItem = item;
+    _marquerCalc(item, true);
+    P.calculette({
+      cle: item,
+      titre: (item.querySelector('.ta-cl-titre') || {}).textContent || '',
+      cible: () => {
+        const l = cibleLigne();
+        if (l) return _libelleLigne(l);
+        if (item.isConnected && item.querySelectorAll('.ta-cl-libre').length < maxi) return 'nouveau front';
+        return '';
+      },
+      valider: (poids) => {
+        if (!item.isConnected) return null;
+        let l = cibleLigne();
+        if (!l) {
+          const liste = item.querySelector('.ta-cl-libres');
+          if (!liste || liste.children.length >= maxi) return null;
+          item._frontsManuels = true;
+          l = _nouvelleLigne(liste);
+          _renumeroterMesures(item);
+        }
+        const inp = l.querySelector('.ta-cl-val');
+        inp.value = String(Math.round(poids * 1000) / 1000);
+        _onValueInput(inp);
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        return { libelle: _libelleLigne(l), fini: !_premierVide(item) };
+      },
+      ferme: () => { if (_calcItem === item) _calcItem = null; _marquerCalc(item, false); },
+    });
+  };
+
   function _initColle(wrap) {
+    _initFronts(wrap);
     const items = Array.from(wrap.querySelectorAll('.ta-cl-item[data-colle="1"]'));
     if (!items.length) return;
     const P = _colleApi();
@@ -454,7 +590,7 @@
     const maxi = parseInt(item.getAttribute('data-max-pts'), 10) || 50;
     const lignes = item.querySelectorAll('.ta-cl-libre');
     lignes.forEach((l, k) => {
-      const lbl = l.querySelector('.ta-cl-libre-lbl'); if (lbl) lbl.textContent = lib + ' ' + (k + 1);
+      const lbl = l.querySelector('.ta-cl-libre-lbl'); if (lbl) lbl.textContent = _libellePoint(lib, k, lignes.length);
       const inp = l.querySelector('.ta-cl-val'); if (inp) inp.setAttribute('data-sub', String(k));
       const x = l.querySelector('.ta-cl-retirer'); if (x) x.style.visibility = k < mini ? 'hidden' : '';
     });
@@ -462,6 +598,8 @@
     if (aj) aj.style.display = lignes.length >= maxi ? 'none' : '';
     const wrap = item.closest('.ta-sim, .ta-apercu');
     if (wrap && wrap._alertRef) _updateValidateState(wrap, wrap._alertRef);
+    const P = _colleApi();
+    if (P && P.rafraichirCalculette && _calcItem === item) P.rafraichirCalculette();
   }
   window._mysifaAlertAjouterMesure = function (btn) {
     const item = btn.closest('.ta-cl-item');
@@ -470,14 +608,10 @@
     if (!modele) return;
     const maxi = parseInt(item.getAttribute('data-max-pts'), 10) || 50;
     if (liste.children.length >= maxi) return;
-    const neuve = modele.cloneNode(true);
-    const inp = neuve.querySelector('.ta-cl-val');
-    inp.value = ''; inp.style.borderColor = ''; inp.style.color = '';
-    const ec = neuve.querySelector('.ta-cl-ecart'); if (ec) ec.textContent = '';
-    const gc = neuve.querySelector('.ta-cl-colle'); if (gc) { gc.textContent = ''; gc.title = ''; gc.classList.remove('ta-neg'); }
-    liste.appendChild(neuve);
+    item._frontsManuels = true;
+    const neuve = _nouvelleLigne(liste);
     _renumeroterMesures(item);
-    inp.focus();
+    neuve.querySelector('.ta-cl-val').focus();
   };
   window._mysifaAlertRetirerMesure = function (btn) {
     const item = btn.closest('.ta-cl-item');
@@ -485,6 +619,7 @@
     if (!item || !ligne) return;
     const mini = parseInt(item.getAttribute('data-min-pts'), 10) || 1;
     if (item.querySelectorAll('.ta-cl-libre').length <= mini) return;
+    item._frontsManuels = true;
     ligne.remove();
     _renumeroterMesures(item);
   };
@@ -564,11 +699,15 @@
               const _ph = _esc(it.placeholder || 'Valeur');
               const _colle = it.calcul_colle ? '<span class="ta-cl-colle"></span>' : '';
               const _inp = (sub) => '<input type="number" step="any" inputmode="decimal" class="ta-cl-val" data-point="' + idx + '"' + (sub != null ? ' data-sub="' + sub + '"' : '') + ' placeholder="' + _ph + '" style="flex:1;min-width:0;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="window._mysifaAlertOnValueInput(this)">';
-              const _lblW = it.calcul_colle ? '64px' : '110px';
+              // Pesée par front : calculette de poids de colle sur chaque ligne
+              // (question marquée calcul_colle, ou mesure libre en grammes).
+              const _calc = it.points_libres && (it.calcul_colle || String(it.unit || '').trim().toLowerCase() === 'g');
+              const _lblW = it.calcul_colle ? '64px' : (it.points_libres && String(it.libelle_point).trim().toLowerCase() === 'front' ? '118px' : '110px');
+              const _calcBtn = _calc ? '<button type="button" class="ta-cl-calc" title="Calculette de poids de colle" aria-label="Calculette de poids de colle" onclick="window._mysifaAlertCalculette(this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2"/><rect x="8" y="5.5" width="8" height="4" rx="1"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg></button>' : '';
               const _multi = Array.isArray(it.points) && it.points.length > 1;
               const _ligneLibre = (k) => '<div class="ta-cl-libre" style="display:flex;align-items:center;gap:8px">'
-                + '<span class="ta-cl-libre-lbl" style="flex:0 0 ' + _lblW + ';font-size:12px;color:var(--text2);font-weight:600">' + _esc(it.libelle_point) + ' ' + (k + 1) + '</span>'
-                + _inp(k) + unit + _ecart + _colle
+                + '<span class="ta-cl-libre-lbl" style="flex:0 0 ' + _lblW + ';font-size:12px;color:var(--text2);font-weight:600">' + _esc(_libellePoint(it.libelle_point, k, it.min_points)) + '</span>'
+                + _inp(k) + unit + _ecart + _colle + _calcBtn
                 + '<button type="button" class="ta-cl-retirer" title="Retirer cette mesure" aria-label="Retirer cette mesure" onclick="window._mysifaAlertRetirerMesure(this)" style="flex:0 0 auto;width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-size:14px;line-height:1;' + (k < it.min_points ? 'visibility:hidden' : '') + '">×</button>'
                 + '</div>';
               const _champs = it.points_libres
@@ -589,7 +728,7 @@
                 + (it.max != null ? ' data-max="' + _esc(String(it.max)) + '"' : '')
                 + (it.target_value != null ? ' data-cible="' + _esc(String(it.target_value)) + '"' : '')
                 + (it.calcul_colle ? ' data-colle="1"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + _reqStarV + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span><span class="ta-cl-titre">' + _esc(it.label) + '</span>' + _reqStarV + '</div>'
                 + _helpHtml(it)
                 + _champs
                 + hint
@@ -711,8 +850,13 @@
       if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
       if (t === 'value' && it.getAttribute('data-libres') === '1') {
-        const remplies = Array.from(it.querySelectorAll('.ta-cl-val')).filter(i => (i.value || '').trim() !== '').length;
+        const champs = Array.from(it.querySelectorAll('.ta-cl-val'));
+        const remplies = champs.filter(i => (i.value || '').trim() !== '').length;
         if (remplies < Math.max(1, parseInt(it.getAttribute('data-min-pts'), 10) || 1)) return false;
+        // Pesée par front : chaque front affiché se pèse (sinon le retirer
+        // avec ×). La liste envoyée garde ainsi l'ordre des fronts, et le
+        // dernier est bien le front pignon dans MyMaintenance.
+        if (_estFront(it) && remplies < champs.length) return false;
       } else if (t === 'value') {
         for (const inp of it.querySelectorAll('.ta-cl-val')) {
           if ((inp.value || '').trim() === '') return false;

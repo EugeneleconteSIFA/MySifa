@@ -11,6 +11,18 @@
  */
 (function () {
   'use strict';
+  // Libellé de la k-ième mesure (0 = première) d'une série de n. Pesée par
+  // front : « Front opérateur », « Front 2 »…, « Front pignon ». Même règle
+  // que libelle_libre() de app/services/mesures_libres.py.
+  function libellePoint(lib, k, n) {
+    lib = lib || 'Mesure';
+    if (String(lib).trim().toLowerCase() === 'front') {
+      if (k === 0) return lib + ' opérateur';
+      if (n >= 2 && k === n - 1) return lib + ' pignon';
+    }
+    return lib + ' ' + (k + 1);
+  }
+
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -224,7 +236,7 @@
           // jusqu'à la plus longue série saisie.
           const nLibres = it.points_libres ? Math.max(0, ...acks.map(a => { const r = (a.reponses || {})[cle]; return Array.isArray(r) ? r.length : 0; })) : 0;
           const sous = it.points_libres
-            ? Array.from({length: nLibres}, (_, k) => ({pl: (it.libelle_point || 'Mesure') + ' ' + (k + 1), k}))
+            ? Array.from({length: nLibres}, (_, k) => ({pl: libellePoint(it.libelle_point, k, nLibres), k}))
             : (Array.isArray(it.points) && it.points.length > 1) ? it.points.map((pl, k) => ({pl, k})) : [{pl: '', k: null}];
           sous.forEach(({pl, k}) => {
             const pts = acks.map(a => {

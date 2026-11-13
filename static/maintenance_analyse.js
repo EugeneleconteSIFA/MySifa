@@ -25,6 +25,18 @@
  */
 (function () {
   'use strict';
+  // Libellé de la k-ième mesure (0 = première) d'une série de n. Pesée par
+  // front : « Front opérateur », « Front 2 »…, « Front pignon ». Même règle
+  // que libelle_libre() de app/services/mesures_libres.py.
+  function libellePoint(lib, k, n) {
+    lib = lib || 'Mesure';
+    if (String(lib).trim().toLowerCase() === 'front') {
+      if (k === 0) return lib + ' opérateur';
+      if (n >= 2 && k === n - 1) return lib + ' pignon';
+    }
+    return lib + ' ' + (k + 1);
+  }
+
   if (window.MaintAnalyse) return;
 
   // Analyse par défaut ; un seul type de contrôle à la fois.
@@ -451,8 +463,8 @@
     var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
     return '<div class="an-barres">' + pp.map(function (p) {
       var w = hi > lo ? 15 + (p.moyenne - lo) / (hi - lo) * 85 : 100;
-      return '<div class="an-barre-ligne" title="' + esc(m.libelle + ' ' + p.position + ' : moyenne ' + nb(p.moyenne, 3) + ' sur ' + p.n + ' contrôles') + '">'
-        + '<span class="an-barre-lib">' + esc(m.libelle + ' ' + p.position) + '</span>'
+      return '<div class="an-barre-ligne" title="' + esc(libellePoint(m.libelle, p.position - 1, pp.length) + ' : moyenne ' + nb(p.moyenne, 3) + ' sur ' + p.n + ' contrôles') + '">'
+        + '<span class="an-barre-lib">' + esc(libellePoint(m.libelle, p.position - 1, pp.length)) + '</span>'
         + '<span class="an-barre-piste"><span class="an-barre" style="width:' + w + '%"></span></span>'
         + '<span class="an-barre-val">' + nb(p.moyenne, 3) + u + ' <span>· ' + nb(p.n, 0) + '</span></span></div>';
     }).join('') + '</div>';
