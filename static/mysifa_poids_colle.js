@@ -25,6 +25,12 @@
  * widget ne s'ouvre plus par-dessus). Elle passe par pret(), grammage(poids),
  * resume(), valeurs(), regler({cle: valeur}), reprendre() et abonner(fn) /
  * desabonner(fn), appelé à chaque changement de réglage (widget ou alerte).
+ *
+ * Calculette de l'inspection (13/11/2026) : à côté de chaque pesée par front,
+ * l'alerte ouvre le même calcul au milieu de l'écran (calculette({titre,
+ * cible, valider})), au-dessus de l'inspection et sans la recouvrir de côté.
+ * « Valider » renvoie le poids pesé à l'alerte, qui le range dans le premier
+ * front encore vide ; la calculette se vide pour la pesée suivante.
  */
 (function (global) {
   "use strict";
@@ -33,7 +39,7 @@
   // « Inspections des produits finis » de l'onglet Qualité.
   var ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 20H5.5a3 3 0 0 1-3-3V5.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v5"/><rect x="6" y="5.5" width="9" height="4" rx="1"/><path d="M6.5 16.5H9.5"/><circle cx="17.5" cy="17.5" r="5"/><path d="M19.2 14.6h-3l-.4 2.7c.4-.3.9-.4 1.4-.4a1.65 1.65 0 0 1 0 3.3c-.6 0-1.1-.2-1.5-.6" stroke-width="1.6"/></svg>';
   var LS = "mysifa_poids_colle_v1";
-  var W = { open: false, data: null, charge: false, edit: false, erreur: "", saisie: null };
+  var W = { open: false, data: null, charge: false, edit: false, erreur: "", saisie: null, modal: null, info: "" };
 
   // ── Calcul ─────────────────────────────────────────────────────────────
   function nb(v) {
@@ -281,6 +287,11 @@
     body.appendChild(res);
     function afficherResultat() {
       var r = calcul(s);
+      if (valider) {
+        var cible = W.modal && W.modal.cible ? W.modal.cible() : "";
+        valider.textContent = cible ? "Valider → " + cible : "Valider";
+        valider.disabled = !(nb(s.pese) > 0) || !cible;
+      }
       det.textContent = r.surface ? "Surface " + fmt(r.surface, 0) + " mm² · sans colle " + fmt(r.theorique, 3) + " g" : "";
       if (r.adhesif != null) {
         val.textContent = fmt(r.adhesif, 1);
@@ -295,11 +306,32 @@
         res.classList.remove("pc-neg");
       }
     }
+    var valider = null;
+    if (W.modal) {
+      var bloc = el("div", "pc-valider-bloc");
+      var info = el("div", "pc-info", W.info || "");
+      valider = el("button", "pc-btn pc-btn-accent pc-valider");
+      valider.type = "button";
+      valider.addEventListener("click", function () {
+        var p = nb(s.pese);
+        if (!(p > 0) || !W.modal) return;
+        var r = W.modal.valider ? W.modal.valider(p) : null;
+        if (!r || !r.libelle) { W.info = "Aucun front libre : en ajouter un dans l'inspection."; rendre(); return; }
+        W.info = r.libelle + " : " + fmt(p, 3) + " g enregistré.";
+        s.pese = "";
+        ecrireLS();
+        if (r.fini) { fermerCalculette(); return; }
+        rendre();
+      });
+      bloc.append(valider, info);
+      body.appendChild(bloc);
+    }
     afficherResultat();
+    if (W.modal) setTimeout(function () { if (W.modal && inpP.isConnected) inpP.focus(); }, 30);
 
     body.appendChild(el("div", "pc-aide", "Valeurs de grammage indicatives : le poids du frontal se prend sur chaque bobine et s'annote dessus."));
     var liens = el("div", "pc-liens");
-    if (global.MySifaPesees) {
+    if (global.MySifaPesees && !W.modal) {
       var h = el("button", "pc-lien", "Inspections des produits finis");
       h.type = "button";
       h.addEventListener("click", function () {
@@ -385,15 +417,16 @@
   }
 
   function rendre() {
-    var panel = document.getElementById("pc-panel");
+    var panel = document.getElementById(W.modal ? "pc-modal" : "pc-panel");
     if (!panel) return;
     panel.textContent = "";
     var head = el("div", "mysifa-dock-panel-head");
-    head.appendChild(el("span", "mysifa-dock-panel-title", W.edit ? "Grammages matière" : "Poids de colle"));
+    head.appendChild(el("span", "mysifa-dock-panel-title",
+      W.edit ? "Grammages matière" : (W.modal && W.modal.titre ? "Poids de colle · " + W.modal.titre : "Poids de colle")));
     var x = el("button", "mysifa-dock-panel-close", "×");
     x.type = "button";
     x.setAttribute("aria-label", "Fermer");
-    x.addEventListener("click", function () { ouvrir(false); });
+    x.addEventListener("click", function () { if (W.modal) fermerCalculette(); else ouvrir(false); });
     head.appendChild(x);
     panel.appendChild(head);
     var body = el("div", "pc-body");
@@ -404,6 +437,7 @@
   }
 
   function ouvrir(v) {
+    if (v && W.modal) fermerCalculette();
     W.open = !!v;
     var panel = document.getElementById("pc-panel");
     if (panel) panel.style.display = W.open ? "" : "none";
@@ -427,10 +461,48 @@
     panel.style.display = "none";
     document.body.appendChild(panel);
     document.addEventListener("keydown", function (e) {
-      if (W.open && e.key === "Escape" && !document.getElementById("pf-overlay")) ouvrir(false);
+      if (e.key !== "Escape") return;
+      if (W.modal) { fermerCalculette(); return; }
+      if (W.open && !document.getElementById("pf-overlay")) ouvrir(false);
     });
     if (global.MySifaDock && typeof global.MySifaDock.layout === "function") global.MySifaDock.layout();
   }
+
+  // ── Calculette de l'inspection : au milieu de l'écran ─────────────────
+  // opts : { cle, titre, cible() → libellé du front à remplir ou "",
+  //          valider(poids) → {libelle, fini} ou null, ferme() }
+  function calculette(opts) {
+    if (W.open) ouvrir(false);
+    if (W.modal && W.modal.ferme && W.modal !== opts) { try { W.modal.ferme(); } catch (e) {} }
+    W.modal = opts || {};
+    W.info = "";
+    W.edit = false;
+    var fond = document.getElementById("pc-modal-fond");
+    if (!fond) {
+      fond = el("div", "pc-modal-fond");
+      fond.id = "pc-modal-fond";
+      fond.addEventListener("click", function (e) { if (e.target === fond) fermerCalculette(); });
+      var panel = el("div", "pc-modal");
+      panel.id = "pc-modal";
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-label", "Poids de colle");
+      fond.appendChild(panel);
+      document.body.appendChild(fond);
+    }
+    fond.hidden = false;
+    if (W.saisie) rendre();
+    pret().then(rendre, rendre);
+  }
+  function fermerCalculette() {
+    var m = W.modal;
+    W.modal = null;
+    W.info = "";
+    var fond = document.getElementById("pc-modal-fond");
+    if (fond) { fond.hidden = true; var p = document.getElementById("pc-modal"); if (p) p.textContent = ""; }
+    if (m && m.ferme) { try { m.ferme(); } catch (e) {} }
+  }
+  // L'alerte relit le libellé du prochain front après une saisie à la main.
+  function rafraichirCalculette() { if (W.modal && !W.edit) rendre(); }
 
   // ── Calcul pour l'alerte d'inspection ──────────────────────────────────
   var enCours = null;
@@ -478,11 +550,13 @@
     var la = ligne(W.saisie.anilox);
     if (v.encre != null && la && nb(v.encre) !== la.grammage_gsm) W.saisie.anilox = "";
     ecrireLS();
-    if (W.open && !W.edit) rendre();
+    if ((W.open || W.modal) && !W.edit) rendre();
   }
 
   global.MySifaPoidsColle = {
     monter: monter, ouvrir: ouvrir, _calcul: calcul, _surface: surface,
+    calculette: calculette, fermerCalculette: fermerCalculette, rafraichirCalculette: rafraichirCalculette,
+    calculetteOuverte: function (cle) { return !!W.modal && (cle == null || W.modal.cle === cle); },
     pret: pret, grammage: grammage, resume: resume, regler: regler,
     nombre: function () { return W.saisie ? W.saisie.nombre : ""; },
     valeurs: function () { var c = {}; if (W.saisie) Object.keys(W.saisie).forEach(function (k) { c[k] = W.saisie[k]; }); return c; },

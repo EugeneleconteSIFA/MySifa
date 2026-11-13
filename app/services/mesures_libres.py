@@ -36,9 +36,27 @@ def normaliser(it: dict) -> dict:
     return {"points_libres": True, "libelle_point": lib, "min_points": mini, "max_points": maxi}
 
 
-def libelle(it: dict, k: int) -> str:
-    """Libellé de la k-ième mesure (0 = première)."""
+def libelle_libre(lib: str, k: int, n: int | None = None) -> str:
+    """Libellé de la k-ième mesure (0 = première) d'une série de n.
+
+    Pesée par front (demande d'Eugène du 13/11/2026) : le premier front est
+    le « Front opérateur », le dernier le « Front pignon », ceux du milieu
+    gardent leur numéro (Front opérateur, Front 2, Front 3, Front pignon).
+    Même règle que `libellePoint` des écrans JS (alerte, MyMaintenance,
+    pesées, données prod) : la changer ici impose de la changer là.
+    """
+    lib = lib or "Mesure"
+    if lib.strip().lower() == "front":
+        if k == 0:
+            return f"{lib} opérateur"
+        if n is not None and n >= 2 and k == n - 1:
+            return f"{lib} pignon"
+    return f"{lib} {k + 1}"
+
+
+def libelle(it: dict, k: int, n: int | None = None) -> str:
+    """Libellé de la k-ième mesure (0 = première) sur n mesures saisies."""
     if it.get("points_libres"):
-        return f"{it.get('libelle_point') or 'Mesure'} {k + 1}"
+        return libelle_libre(it.get("libelle_point") or "Mesure", k, n)
     pts = it.get("points") or []
     return pts[k] if k < len(pts) else f"Mesure {k + 1}"

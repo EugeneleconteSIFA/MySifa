@@ -39,6 +39,18 @@
  */
 (function (global) {
   "use strict";
+  // Libellé de la k-ième mesure (0 = première) d'une série de n. Pesée par
+  // front : « Front opérateur », « Front 2 »…, « Front pignon ». Même règle
+  // que libelle_libre() de app/services/mesures_libres.py.
+  function libellePoint(lib, k, n) {
+    lib = lib || 'Mesure';
+    if (String(lib).trim().toLowerCase() === 'front') {
+      if (k === 0) return lib + ' opérateur';
+      if (n >= 2 && k === n - 1) return lib + ' pignon';
+    }
+    return lib + ' ' + (k + 1);
+  }
+
 
   var PERIODES = [["3", "3 derniers jours"], ["7", "7 derniers jours"], ["30", "30 derniers jours"],
                   ["90", "90 derniers jours"], ["", "Tout l'historique"]];
@@ -359,7 +371,7 @@
         bulle.appendChild(el("div", "pf-bulle-titre", dateCourte(l.ack_at) + " · " + (l.operateur || "—")));
         (l.valeurs[k] || []).forEach(function (v, j) {
           var r = el("div", aVerifier(l, q, j) ? "pf-bulle-ligne pf-hors" : "pf-bulle-ligne",
-                     (q.multiple ? q.libelle_point + " " + (j + 1) : q.label) + " : " + (q.multiple ? fmt(v, 3) : fmtLibre(v)) + unite(q)
+                     (q.multiple ? libellePoint(q.libelle_point, j, (l.valeurs[k] || []).length) : q.label) + " : " + (q.multiple ? fmt(v, 3) : fmtLibre(v)) + unite(q)
                      + (aVerifier(l, q, j) ? " · à vérifier" : ""));
           bulle.appendChild(r);
         });
@@ -386,7 +398,7 @@
     ["Date", "Opérateur"].forEach(function (h) { tr.appendChild(el("th", null, h)); });
     qs.forEach(function (q) {
       if (!q.multiple) { tr.appendChild(el("th", "num", q.label + (q.unit ? " (" + q.unit + ")" : ""))); return; }
-      for (var i = 0; i < nbF; i++) tr.appendChild(el("th", "num", q.libelle_point + " " + (i + 1)));
+      for (var i = 0; i < nbF; i++) tr.appendChild(el("th", "num", libellePoint(q.libelle_point, i, nbF)));
     });
     thead.appendChild(tr);
     t.appendChild(thead);

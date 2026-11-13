@@ -123,7 +123,7 @@ def contexte(conn, no_dossier: str, lignes: list) -> dict:
         ft = conn.execute(
             """SELECT id, reference, format, eti_laize, eti_longueur, eti_rayons,
                       support, glassine, tete1_anilox, tete2_anilox, tete3_anilox,
-                      outil1_nb_front, mod_nb_front
+                      outil1_nb_front, mod_nb_front, mod_laize, laize_optimale, laize
                  FROM fiches_techniques WHERE id = ?""",
             (ft_id,),
         ).fetchone()
@@ -154,10 +154,16 @@ def contexte(conn, no_dossier: str, lignes: list) -> dict:
             l = correspondance_anilox(txt, lignes)
             anilox.append({"tete": t, "texte": txt, "choix": l["id"] if l else None})
 
+    # Nombre de fronts : même règle que le métrage (outil, puis module > 1,
+    # puis géométrie avec la laize de l'OF). Il règle le nombre de pesées
+    # proposées dans l'inspection des produits finis.
+    from app.services.coherence_fiche import nb_fronts as _nb_fronts
+    fronts = _nb_fronts(ft, rows[0].get("of_laize") if rows else None)["valeur"] if ft else None
+
     return {
         "no_dossier": ref,
         "fiche": {"id": ft["id"], "reference": ft.get("reference"),
-                  "nb_fronts": ft.get("outil1_nb_front") or ft.get("mod_nb_front")} if ft else None,
+                  "nb_fronts": int(fronts) if fronts else None} if ft else None,
         "format": fmt,
         "papier": matiere("support", "frontal"),
         "glassine": matiere("glassine", "glassine"),

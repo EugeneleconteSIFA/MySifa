@@ -3159,7 +3159,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/maintenance_url.js?v=8"></script>
 <link rel="stylesheet" href="/static/maintenance_analyse.css?v=7">
-<script src="/static/maintenance_analyse.js?v=6"></script>
+<script src="/static/maintenance_analyse.js?v=7"></script>
 <script>
 'use strict';
 
@@ -11158,12 +11158,12 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/mysifa_alert_form.js?v=2.4.23"></script>
 <script src="/static/mysifa_confirm.js?v=1"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.5-confirm"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.24"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.25"></script>
 <!-- Chassis partage de la fenetre de detail d'un ack (openAckDetail). Le
      meme que dans MyProd : une alerte validee se relit comme une saisie.
      Ne touche pas au runtime des alertes ci-dessus, qui garde son style
      d'alerte — c'est une interruption, pas une consultation. -->
-<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack5"></script>
+<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack6"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js?v=3"></script>
 

@@ -121,7 +121,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <!-- Historique des pesées par front : avant le Retour de prod, qui en pose les boutons. -->
-<script src="/static/mysifa_pesees.js?v=6"></script>
+<script src="/static/mysifa_pesees.js?v=7"></script>
 <script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu20"></script>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
@@ -143,14 +143,14 @@ __ARRIVEE_PLANNING__
 <!-- Export PDF des saisies par operateur et par session (appele par le core) -->
 <script src="/static/mysifa_saisies_pdf.js?v=1"></script>
 <!-- Panneau « Données de prod » d'un dossier (partage avec le destockage) -->
-<script src="/static/mysifa_donnees_prod.js?v=18"></script>
+<script src="/static/mysifa_donnees_prod.js?v=19"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent23-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit4-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
-<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack5"></script>
+<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack6"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
 <script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem23"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>

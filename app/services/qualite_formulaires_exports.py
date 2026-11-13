@@ -92,7 +92,7 @@ def colonnes(entrees: list[dict]) -> list[dict]:
         if q["type"] == "value" and q.get("points_libres"):
             n = max(longueurs.get(qid, 0), int(q.get("min_points") or 1))
             for k in range(n):
-                cols.append({"q": q, "k": k, "titre": f"{q['label']} — {libelle_mesure(q, k)}{unite}"})
+                cols.append({"q": q, "k": k, "titre": f"{q['label']} — {libelle_mesure(q, k, n)}{unite}"})
         elif q["type"] == "value" and len(pts) > 1:
             for k, p in enumerate(pts):
                 cols.append({"q": q, "k": k, "titre": f"{q['label']} — {p}{unite}"})
@@ -310,7 +310,7 @@ def _fiche(ctx, e: dict, titre: str) -> list:
                 unite = f" {q['unit']}" if q.get("unit") else ""
                 brut = reps.get(q["id"]) if isinstance(reps.get(q["id"]), list) else []
                 lignes_m = []
-                libelles = ([libelle_mesure(q, k) for k in range(max(len(brut), 1))]
+                libelles = ([libelle_mesure(q, k, max(len(brut), 1)) for k in range(max(len(brut), 1))]
                             if q.get("points_libres") else q["points"])
                 for k, p in enumerate(libelles):
                     txt = f"{escape(p)} : {escape(valeur(q, reps, k) or '—')}{escape(unite)}"

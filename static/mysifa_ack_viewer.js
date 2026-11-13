@@ -32,6 +32,18 @@
  */
 (function(){
   'use strict';
+  // Libellé de la k-ième mesure (0 = première) d'une série de n. Pesée par
+  // front : « Front opérateur », « Front 2 »…, « Front pignon ». Même règle
+  // que libelle_libre() de app/services/mesures_libres.py.
+  function libellePoint(lib, k, n) {
+    lib = lib || 'Mesure';
+    if (String(lib).trim().toLowerCase() === 'front') {
+      if (k === 0) return lib + ' opérateur';
+      if (n >= 2 && k === n - 1) return lib + ' pignon';
+    }
+    return lib + ' ' + (k + 1);
+  }
+
   if(window.MysifaAckViewer) return;  // evite double-init
 
   const OVERLAY_ID = 'mysifa-ack-viewer-overlay';
@@ -142,7 +154,7 @@
         // Plusieurs mesures : une ligne par libellé, dans l'ordre saisi.
         // Nombre libre : autant de lignes que de mesures saisies (« Front 1 »…).
         const pts = it.points_libres
-          ? (Array.isArray(r) && r.length ? r : [null]).map((_, k) => (it.libelle_point || 'Mesure') + ' ' + (k + 1))
+          ? (Array.isArray(r) && r.length ? r : [null]).map((_, k, t) => libellePoint(it.libelle_point, k, t.length))
           : ((Array.isArray(it.points) && it.points.length > 1) ? it.points : [null]);
         const arr = (it.points_libres || pts.length > 1) ? (Array.isArray(r) ? r : (r != null ? [r] : [])) : [r];
         const lignes = pts.map((pl, k)=>{
