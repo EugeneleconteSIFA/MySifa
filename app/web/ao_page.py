@@ -191,12 +191,12 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-cell-best{background:var(--accent-bg);color:var(--accent);font-weight:700}
 .comp-table input[type=number],.comp-table select{font-size:12px;padding:6px 8px;min-width:0}
 .comp-table .inp-coef,.comp-table .inp-marge{width:60px;max-width:60px;text-align:right;padding:6px 6px}
-.comp-table .inp-dev-devis{max-width:74px}
+.comp-table .inp-dev-devis,.comp-table .inp-devise-fourni{max-width:74px}
 .comp-table th.comp-th-coef,.comp-table td.comp-td-coef,.comp-table th.comp-th-marge,.comp-table td.comp-td-marge{min-width:60px;width:60px}
 /* Colonnes volontairement étroites (demande UX) */
 .comp-table th.comp-col-etiqbob,.comp-table td.comp-col-etiqbob{width:58px;min-width:52px}
-.comp-table th.comp-col-uquot,.comp-table td.comp-col-uquot{width:84px;min-width:76px}
-.comp-table .inp-unite-quot{max-width:76px;font-size:11px;padding:4px 4px}
+.comp-table th.comp-col-uquot,.comp-table td.comp-col-uquot{width:96px;min-width:90px}
+.comp-table .inp-unite-quot{max-width:none;min-width:84px;font-size:11px;padding:4px 4px}
 /* Barre de scroll horizontale TOUJOURS visible (l'utilisateur doit voir qu'il
    peut défiler). overflow-x:scroll force la piste ; le style ::-webkit force
    l'affichage même sur macOS (overlay scrollbars masquées par défaut). */
@@ -1279,12 +1279,25 @@ function startMsgPolling() {
   S.polling = setInterval(() => {
     if (S.view === 'detail' && S.tab === 'messages' && S.ao && S.messages_fourni) {
       loadMessages(S.ao.id, S.messages_fourni).then(() => {
-        const el = document.querySelector('.msg-list');
-        if (el) {
-          const st = el.scrollTop;
-          renderMessagerieContent(el.parentElement);
-          const el2 = document.querySelector('.msg-list');
-          if (el2) el2.scrollTop = st;
+        // Redessine dans le conteneur de l'onglet, jamais dans la carte
+        // elle-même (sinon une carte de plus toutes les 30 s), en gardant le
+        // brouillon en cours, son curseur et la position de défilement.
+        const wrap = document.getElementById('tab-messages-wrap');
+        if (!wrap) return;
+        const liste = wrap.querySelector('.msg-list');
+        const st = liste ? liste.scrollTop : 0;
+        const ta = document.getElementById('msg-body');
+        const brouillon = ta ? ta.value : '';
+        const focus = ta && document.activeElement === ta;
+        const c0 = ta ? ta.selectionStart : null, c1 = ta ? ta.selectionEnd : null;
+        renderMessagerieContent(wrap);
+        bindMessagerieEvents();
+        const liste2 = wrap.querySelector('.msg-list');
+        if (liste2) liste2.scrollTop = st;
+        const ta2 = document.getElementById('msg-body');
+        if (ta2) {
+          ta2.value = brouillon;
+          if (focus) { ta2.focus(); try { ta2.setSelectionRange(c0, c1); } catch(e) {} }
         }
       }).catch(() => {});
     }
@@ -2434,7 +2447,7 @@ function aoLigneCarteHtml(l, canEditSeries, rang) {
       '<a href="#" class="ao-ligne-ref-link" data-ref="'+escAttr(l.ref_produit||'')+'">'+
       escHtml(l.ref_produit)+'</a></div>'+
     '<dl style="margin:0">'+
-      '<div class="msf-kv msf-kv--fort"><dt>Quantité</dt><dd>'+escHtml(formatInt(l.quantite))+
+      '<div class="msf-kv msf-kv--fort"><dt>Quantité d\'étiquettes</dt><dd>'+escHtml(formatInt(l.quantite))+
         ' <span style="font-size:11px;color:var(--muted);font-weight:600">'+escHtml(l.unite||'')+'</span></dd></div>'+
       '<div class="msf-kv"><dt>Client</dt><dd>'+escHtml(l.client_nom||'—')+'</dd></div>'+
       '<div class="msf-kv"><dt>Étiq. / bobine</dt><dd>'+formatInt(l.etiquettes_par_bobine)+'</dd></div>'+
@@ -2503,7 +2516,7 @@ function renderLignes() {
       (cartes || '<div class="msf-empty">Aucune ligne</div>');
   }
   return '<div class="card">'+addBtn+
-    '<table class="data-table ao-lignes-table"><thead><tr><th>#</th><th>Réf.</th><th>Client</th><th>Étiq. / bobine</th><th>Qté</th><th>Notes</th><th></th></tr></thead><tbody>'+
+    '<table class="data-table ao-lignes-table"><thead><tr><th>#</th><th>Réf.</th><th>Client</th><th>Étiq. / bobine</th><th>Qté d\'étiquettes</th><th>Notes</th><th></th></tr></thead><tbody>'+
     (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucune ligne</td></tr>')+'</tbody></table></div>';
 }
 
@@ -3887,6 +3900,11 @@ function renderComparaisonCartes() {
             '</dl></div>'+
             '<div class="msf-calc"><div class="msf-calc-t">Marge brute</div><dl style="margin:0">'+brute+'</dl></div>'+
             '<div class="msf-calc"><div class="msf-calc-t">Réglages de cette offre</div>'+
+              '<div class="ao-offre-reglage"><label>Devise du fournisseur</label>'+
+                '<select class="inp-devise-fourni" data-rep="'+escAttr(rid||'')+'">'+
+                  '<option value="EUR"'+(((r.devise||'EUR').toUpperCase())==='EUR'?' selected':'')+'>EUR</option>'+
+                  '<option value="USD"'+(((r.devise||'EUR').toUpperCase())==='USD'?' selected':'')+'>USD</option>'+
+                '</select></div>'+
               '<div class="ao-offre-reglage"><label>Unité de quotation</label>'+
                 '<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'">'+
                   '<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+
@@ -3953,7 +3971,7 @@ function renderComparaison() {
     '<th colspan="5" class="comp-grp-sifa comp-sifa-start">Côté SIFA · vente</th></tr>'+
     '<tr>'+
     '<th>Réf. produit</th><th class="comp-col-fa">Frontal</th><th class="comp-col-fa">Adhésif</th>'+
-    '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Quantité</th><th class="comp-col-fourn">Fournisseur</th>'+
+    '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Quantité d\'étiquettes</th><th class="comp-col-fourn">Fournisseur</th>'+
     '<th>Quotation</th><th>Devise</th><th class="comp-col-uquot">Unité</th>'+
     '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th>'+
     '<th>Prix d\'achat</th><th>Condi.</th><th>Prix achat condi.</th>'+
@@ -4037,7 +4055,10 @@ function renderComparaison() {
         produitCells+
         '<td class="txt-left comp-col-fourn">'+escHtml(r.nom_fournisseur||'')+'</td>'+
         quotationCell+
-        '<td>'+escHtml(devF)+'</td>'+
+        '<td><select class="inp-devise-fourni" data-rep="'+escAttr(rid||'')+'"'+dis+' title="Devise de la quotation fournisseur">'+
+          '<option value="EUR"'+(devF==='EUR'?' selected':'')+'>EUR</option>'+
+          '<option value="USD"'+(devF==='USD'?' selected':'')+'>USD</option>'+
+        '</select></td>'+
         '<td class="comp-col-uquot">'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 4px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">m</span>' : '')+'</td>'+
         '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
         '<td style="color:var(--text2);font-size:11px" data-tr="'+escAttr(rid||'')+'">'+formatMoney(r.transport_amount, devF)+'</td>'+
@@ -4128,6 +4149,27 @@ function renderMessagerieContent(container) {
     '<div class="msg-list" style="display:flex;flex-direction:column">'+bubbles+'</div>'+
     '<div class="field"><label>Message</label><textarea id="msg-body" rows="3"></textarea></div>'+
     '<button class="btn btn-accent" type="button" id="btn-send-msg">Envoyer</button></div>';
+}
+
+// Écouteurs propres à la messagerie : posés après chaque dessin de son
+// contenu (rendu complet ou rafraîchissement), jamais par bindDetailEvents,
+// qui ne doit tourner qu'une fois par rendu.
+function bindMessagerieEvents() {
+  document.getElementById('msg-fourni-sel')?.addEventListener('change', e => {
+    S.messages_fourni = parseInt(e.target.value, 10) || null;
+    if (S.messages_fourni) loadMessages(S.ao.id, S.messages_fourni).then(() => render());
+  });
+  document.getElementById('btn-send-msg')?.addEventListener('click', async () => {
+    const msg = document.getElementById('msg-body').value.trim();
+    if (!msg) return;
+    try {
+      await api('/api/ao/'+S.ao.id+'/fournisseurs/'+S.messages_fourni+'/messages',
+        {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: msg})});
+      document.getElementById('msg-body').value = '';
+      showToast('Message envoyé.', 'success');
+      await loadMessages(S.ao.id, S.messages_fourni); render();
+    } catch(e) { showToast(e.message, 'danger'); }
+  });
 }
 
 function renderMessagerie() {
@@ -4342,21 +4384,6 @@ function bindDetailEvents() {
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
-  document.getElementById('msg-fourni-sel')?.addEventListener('change', e => {
-    S.messages_fourni = parseInt(e.target.value, 10) || null;
-    if (S.messages_fourni) loadMessages(S.ao.id, S.messages_fourni).then(() => render());
-  });
-  document.getElementById('btn-send-msg')?.addEventListener('click', async () => {
-    const msg = document.getElementById('msg-body').value.trim();
-    if (!msg) return;
-    try {
-      await api('/api/ao/'+S.ao.id+'/fournisseurs/'+S.messages_fourni+'/messages',
-        {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: msg})});
-      document.getElementById('msg-body').value = '';
-      showToast('Message envoyé.', 'success');
-      await loadMessages(S.ao.id, S.messages_fourni); render();
-    } catch(e) { showToast(e.message, 'danger'); }
-  });
   // Bouton document tout-en-un : premier clic ouvre le file picker ; onchange déclenche l'upload direct.
   const pjFile = document.getElementById('pj-file');
   const pjBtnLabel = document.getElementById('btn-pj-upload-label');
@@ -4420,6 +4447,19 @@ function bindDetailEvents() {
       const k = b.dataset.offre;
       if (S.openOffres[k]) delete S.openOffres[k]; else S.openOffres[k] = 1;
       render();
+    });
+  });
+  // Devise de la quotation fournisseur : corrigée par SIFA quand le
+  // fournisseur a coché la mauvaise. Tous les prix en découlent → recalcul.
+  document.querySelectorAll('.inp-devise-fourni').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const rid = sel.dataset.rep;
+      if (!rid) return;
+      try {
+        await saveReponsePricing(rid, {devise: sel.value});
+        if (S.ao) { await loadComparaison(S.ao.id); render(); }
+        showToast('Devise fournisseur enregistrée.', 'success');
+      } catch(e) { showToast(e.message || 'Erreur devise.', 'danger'); }
     });
   });
   document.querySelectorAll('.inp-unite-quot').forEach(sel => {
@@ -4487,7 +4527,7 @@ function bindDetailEvents() {
 function openModalSaisieManuelle(ctx) {
   S.modal = 'saisie-manuelle';
   // Étape 1 : avertissement, puis étape 2 : formulaire
-  S.modalData = {step: 'warn', ctx: ctx, quotation: '', devise: 'EUR', unite_quotation: 'mille', delai_jours: '', commentaire: ''};
+  S.modalData = {step: 'warn', ctx: ctx, quotation: '', devise: 'EUR', unite_quotation: 'bobine', delai_jours: '', commentaire: ''};
   renderModal();
 }
 
@@ -4548,8 +4588,7 @@ function render() {
     bindDetailEvents();
     if (S.tab === 'messages') {
       const wrap = document.getElementById('tab-messages-wrap');
-      if (wrap) renderMessagerieContent(wrap);
-      bindDetailEvents();
+      if (wrap) { renderMessagerieContent(wrap); bindMessagerieEvents(); }
     } else if (S.tab === 'documents') {
       renderDocuments().then(html => {
         const el = document.getElementById('tab-docs');

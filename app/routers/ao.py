@@ -2853,6 +2853,10 @@ async def dupliquer_ao(request: Request, ao_id: int):
                 (ao_id,),
             ).fetchall()
             for pj in src_pjs:
+                # Les PJ auto sont régénérées pour la copie (plus bas) : recopier
+                # celles de l'original propagerait un ancien modèle.
+                if _est_pj_auto(pj):
+                    continue
                 src_path = _pj_file_path(ao_id, pj["stored_name"])
                 if not os.path.isfile(src_path):
                     continue
@@ -2879,6 +2883,24 @@ async def dupliquer_ao(request: Request, ao_id: int):
                     ),
                 )
             conn.commit()
+
+    # Fiche fournisseur + BAT de la copie, générés à neuf.
+    try:
+        with get_db() as conn:
+            lignes_copie = [
+                _row_dict(r) for r in conn.execute(
+                    "SELECT produit_id, ref_produit FROM ao_lignes WHERE ao_id=?",
+                    (new_id,),
+                ).fetchall()
+            ]
+            if lignes_copie:
+                _auto_attach_fournisseur_pdfs(
+                    conn, new_id, new_ao.get("reference"), lignes_copie,
+                    _produits_by_ref_map(conn), _now_paris_iso(),
+                )
+                conn.commit()
+    except Exception:
+        logger.exception("PJ auto de la copie d'AO %s non générées", new_id)
 
     log_action(
         user=user,
@@ -3366,6 +3388,38 @@ AUTO_DOC_KIND_BAT = "auto-bat-produit"
 AUTO_DOC_PREFIXES = (AUTO_DOC_FICHE_PREFIX, AUTO_DOC_BAT_PREFIX)
 
 
+def _est_pj_auto(pj) -> bool:
+    """Vrai pour une PJ générée par MySifa (fiche fournisseur ou BAT)."""
+    kind = str(pj["uploaded_by"] or "")
+    name = str(pj["filename"] or "")
+    return kind in (AUTO_DOC_KIND_FICHE, AUTO_DOC_KIND_BAT) or name.startswith(AUTO_DOC_PREFIXES)
+
+
+def _purger_pj_auto(conn, ao_id: int) -> None:
+    """Retire les PJ auto d'un AO (ligne + fichier) pour qu'elles soient
+    régénérées avec le modèle et les données du moment.
+
+    Une PJ auto n'est qu'un rendu de la fiche produit : la garder figée, c'est
+    envoyer au fournisseur un document périmé dès que le modèle ou la fiche
+    évolue — et une copie d'AO héritait des PDF de l'original.
+    """
+    rows = conn.execute(
+        "SELECT id, filename, stored_name, uploaded_by FROM ao_pieces_jointes"
+        " WHERE ao_id=? AND ao_fournisseur_id IS NULL",
+        (ao_id,),
+    ).fetchall()
+    for pj in rows:
+        if not _est_pj_auto(pj):
+            continue
+        try:
+            path = os.path.join(_ao_upload_dir(ao_id), pj["stored_name"])
+            if os.path.exists(path):
+                os.remove(path)
+        except OSError:
+            pass
+        conn.execute("DELETE FROM ao_pieces_jointes WHERE id=?", (pj["id"],))
+
+
 def _auto_doc_ref_slug(ref: str) -> str:
     """Fragment de nom de fichier dérivé d'une réf produit. Doit rester stable."""
     return re.sub(r"[^\w\-]+", "_", (ref or "").split(" - ")[0])
@@ -3635,8 +3689,9 @@ def envoyer_ao(request: Request, ao_id: int):
         # ── Auto-attach : génère la fiche technique fournisseur et le BAT
         # étiquette de chaque produit de l'AO, et les insère dans
         # ao_pieces_jointes (visibles côté portail dans l'onglet Documents).
-        # Idempotent : ne recrée pas les PDFs déjà attachés lors d'un envoi
-        # précédent (détecté par nom de fichier, cf. AUTO_DOC_PREFIXES).
+        # Régénérés à chaque envoi : le fournisseur reçoit le modèle et les
+        # données du jour, jamais un PDF figé à l'ajout de la ligne.
+        _purger_pj_auto(conn, ao_id)
         _auto_attach_fournisseur_pdfs(conn, ao_id, ao.get("reference"),
                                       lignes_raw, produits_map, now)
 
@@ -3739,7 +3794,15 @@ async def upload_piece_jointe(
 def list_pieces_jointes(request: Request, ao_id: int):
     _require_ao(request)
     with get_db() as conn:
-        _get_ao_or_404(conn, ao_id)
+        ao = _get_ao_or_404(conn, ao_id)
+        # Même rattrapage que le portail : une PJ auto purgée (nouveau modèle)
+        # réapparaît ici sans attendre la visite du fournisseur.
+        if ao.get("statut") in ("brouillon", "envoyee"):
+            try:
+                from app.routers.ao_portail import _ensure_auto_attached_fiches
+                _ensure_auto_attached_fiches(conn, ao_id, ao.get("reference"))
+            except Exception:
+                logger.exception("Rattrapage PJ auto AO %s échoué", ao_id)
         rows = conn.execute(
             """SELECT * FROM ao_pieces_jointes
                WHERE ao_id=? AND ao_fournisseur_id IS NULL
@@ -4053,6 +4116,13 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
     coef = body.get("coef")
     marge = body.get("marge")
     devise_prix_devis = body.get("devise_prix_devis")
+    # Devise de la quotation fournisseur : corrigeable par SIFA quand le
+    # fournisseur s'est trompé de case (prix en USD saisi en EUR).
+    devise_fourni = body.get("devise")
+    if devise_fourni is not None:
+        devise_fourni = (devise_fourni or "").strip().upper()
+        if devise_fourni not in DEVISES:
+            raise HTTPException(status_code=400, detail="Devise invalide.")
     unite_quotation = body.get("unite_quotation")
     if unite_quotation is not None:
         unite_quotation = (unite_quotation or "").strip().lower()
@@ -4103,6 +4173,11 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
             conn.execute(
                 "UPDATE ao_reponses SET devise_prix_devis=? WHERE id=?",
                 (devise_prix_devis, reponse_id),
+            )
+        if devise_fourni is not None:
+            conn.execute(
+                "UPDATE ao_reponses SET devise=? WHERE id=?",
+                (devise_fourni, reponse_id),
             )
         if unite_quotation is not None:
             # Recup original pour calculer unite_manuel

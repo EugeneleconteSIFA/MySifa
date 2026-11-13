@@ -550,13 +550,18 @@ function renderProduitForm() {
       ['mille','etiquette','bobine','carton','palette'].map(function(u){var lbl={mille:'Mille (1000 étiq.)',etiquette:'Étiquette',bobine:'Bobine',carton:'Carton',palette:'Palette'}[u];return '<option value="'+u+'"'+(((f.unite_vente&&f.unite_vente.type)||'mille')===u?' selected':'')+'>'+lbl+'</option>';}).join('')+
       '</select>'+
     '</div>'+
-    // Dernier prix de vente
+    // Dernier prix de vente — encadré bien visible : c'est LUI qui donne la
+    // marge brute des demandes de prix, et il était lu comme un champ annexe.
+    '<div style="background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;padding:12px 14px;margin:4px 0 10px">'+
+      '<div style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:4px">Dernier prix de vente → calcul de la marge brute</div>'+
+      '<div style="font-size:13px;color:var(--text);line-height:1.5">Saisir le dernier prix auquel ce produit a été vendu au client. Il sert de base au calcul de la marge brute dans les demandes de prix.</div>'+
+    '</div>'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+
       '<label style="font-size:12px;color:var(--text);font-weight:600;width:130px;flex-shrink:0">Dernier prix de vente</label>'+
       '<input type="number" min="0" step="0.0001" id="pf-dpv" value="'+escAttr(f.dernier_prix_vente!=null?f.dernier_prix_vente:'')+'" placeholder="0.00" style="width:110px;padding:6px 8px;text-align:right">'+
       '<span style="font-size:11px;color:var(--muted)">€ par unité de vente</span>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin:2px 0 14px">Pilote la colonne <strong>Condi.</strong> et le calcul de la <strong>marge brute</strong> dans les demandes de prix. Défaut de vente : au mille d\'étiquettes.</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin:2px 0 14px">L\'unité de vente pilote la colonne <strong>Condi.</strong> des demandes de prix. Défaut : au mille d\'étiquettes.</div>'+
     // Historique : AO contenant ce produit
     '<div style="font-size:14px;font-weight:700;color:var(--text);border-top:1px solid var(--border);padding-top:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="width:3px;height:16px;background:var(--accent);border-radius:2px;display:inline-block"></span>Appels d\'offres avec ce produit</div>'+
     '<div id="pf-aos-list" style="display:flex;flex-direction:column;gap:6px">'+
