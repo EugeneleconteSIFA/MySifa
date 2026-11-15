@@ -1637,18 +1637,31 @@ function ofeChoisirCommandes(){
   if(!window.MysRvgiPicker){toast('Sélecteur RVGI indisponible.','error');return;}
   captureSaisie('ofe-',m);
   m.of_numero=(m._dom&&m._dom['ofe-numero']!==undefined)?m._dom['ofe-numero']:m.of_numero;
+  // Le produit de l'OF : celui de la fiche choisie, sinon celui des
+  // commandes déjà cochées. Le sélecteur s'ouvre sur lui (toutes les
+  // commandes ouvertes du même produit) et marque les lignes d'un autre.
+  const produit=(m._fiche&&m._fiche.reference?String(m._fiche.reference).split(' - ')[0].trim():'')
+    ||(m._cmdInfo&&m._cmdInfo.article)||'';
   MysRvgiPicker.ouvrir({
     mode:'commande',
     objet:'of',
     objetId:m.id||null,
-    recherche:(m.of_numero||'').trim(),
+    // En création rien n'est encore enregistré : la sélection en cours
+    // revient cochée, sinon « Modifier les commandes » repartait de zéro.
+    initial:m.id?undefined:(m._commandes||[]),
+    produit:/^\d+\/\d+$/.test(produit)?produit:null,
+    recherche:(produit&&!m.id?produit:(m.of_numero||'')).trim(),
     onValider:function(res){
       m._commandes=(res&&res.lignes)||[];
       // Le numéro d'OF suit la même règle que la référence d'un dossier : il
       // se propose depuis les commandes. On ne l'impose jamais — un numéro
       // déjà saisi reste celui de l'ADV.
-      if(!(m.of_numero||'').trim() && res && res.reference){
+      // Un numéro proposé suit les commandes ; un numéro tapé à la main ne
+      // bouge plus. Sans ça, ajouter 9932860 et 861 laissait « 9932858 ».
+      const actuel=(m.of_numero||'').trim();
+      if(res && res.reference && (!actuel || actuel===m._numeroPropose)){
         m.of_numero=res.reference;
+        m._numeroPropose=res.reference;
         if(m._dom) m._dom['ofe-numero']=res.reference;
       }
       set({ofEditModal:m});
@@ -1656,7 +1669,8 @@ function ofeChoisirCommandes(){
       // Le sélecteur calcule son numéro 220 ms après la dernière case cochée :
       // un « Valider » plus rapide partait sans. On le redemande au serveur,
       // qui porte la même règle de nommage.
-      if(!m.id && !(m.of_numero||'').trim() && m._commandes.length) ofeProposerNumero(m);
+      if(!m.id && m._commandes.length && !(res&&res.reference) &&
+         (!(m.of_numero||'').trim() || (m.of_numero||'').trim()===m._numeroPropose)) ofeProposerNumero(m);
       // La reprise se fait APRÈS le rendu : elle est asynchrone, et l'écran
       // ne doit pas attendre le miroir pour montrer les commandes cochées.
       // En création, la commande désigne d'abord la FICHE technique (son
@@ -1678,9 +1692,10 @@ async function ofeProposerNumero(m){
   try{ r=await api('/api/rvgi/reference?lignes='+encodeURIComponent(lignes)); }catch(e){ return; }
   if(S.ofEditModal!==m||!r||!r.reference) return;
   const el=document.getElementById('ofe-numero');
-  if(el&&el.value.trim()) return;
+  if(el&&el.value.trim()&&el.value.trim()!==m._numeroPropose) return;
   if(el) el.value=r.reference;
   m.of_numero=r.reference;
+  m._numeroPropose=r.reference;
   m._dom=m._dom||{};
   m._dom['ofe-numero']=r.reference;
   ofeApercuPlusTard(m);

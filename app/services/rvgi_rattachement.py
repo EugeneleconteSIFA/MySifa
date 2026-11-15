@@ -29,6 +29,7 @@ Trois règles qui expliquent tout le reste
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -670,6 +671,13 @@ def chercher_commandes(q: str, limite: int = LIMITE_RECHERCHE,
     if len(q) < 2 and not suggeres:
         return []
     ou, params = _filtre_texte(q, ["l.numero", "e.rs", "l.des1", "l.code1", "l.code2", "l.vref"])
+    # « 1164/0066 » est un article : code1 et code2 sont deux colonnes, qu'aucun
+    # LIKE colonne par colonne ne retrouve. C'est pourtant ce qu'ouvre la
+    # fenêtre OF pour proposer les autres commandes du même produit.
+    art = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", q)
+    if art:
+        ou = ("(" + ou + " OR (TRIM(CAST(l.code1 AS TEXT)) = ? AND TRIM(CAST(l.code2 AS TEXT)) = ?))")
+        params = params + [art.group(1), art.group(2)]
     if len(q) < 2:
         # Pas de recherche : seules les commandes suggérées sont candidates.
         ou, params = "1=0", []

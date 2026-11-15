@@ -261,8 +261,13 @@ c_ko = op.controler_concordance(conn, [{"numero": "9932770", "ligne": 1}], 28)
 verifier("fiche d'un autre produit : refusée", c_ko["ok"], False)
 verifier("message explicite",
          c_ko["message"], "La fiche 1183/0028 - DSI ne correspond à aucun article des commandes cochées (1164/0066).")
-verifier("plusieurs modèles : la fiche d'UN des articles suffit",
-         op.controler_concordance(conn, [{"numero": "9932770", "ligne": None}], 66)["ok"], True)
+c_multi = op.controler_concordance(conn, [{"numero": "9932770", "ligne": None}], 66)
+verifier("deux articles cochés : refusé sans motif (un OF = un produit)", c_multi["ok"], False)
+verifier("message : un OF ne couvre qu'un produit", "un OF ne couvre qu'un produit" in (c_multi["message"] or ""), True)
+verifier("plusieurs commandes du MÊME article : accepté",
+         op.controler_concordance(conn, [{"numero": "9932839", "ligne": None}, {"numero": "9932840", "ligne": None}], 321)["ok"], True)
+verifier("ligne de frais cochée avec le produit : acceptée",
+         op.controler_concordance(conn, [{"numero": "9932856", "ligne": 1}, {"numero": "9932856", "ligne": 9}], None, "954/0087")["ok"], True)
 verifier("fiche par machine : la clé produit concorde",
          op.controler_concordance(conn, [{"numero": "9932839", "ligne": None}], 322)["ok"], True)
 c_ref = op.controler_concordance(conn, [{"numero": "9932770", "ligne": 1}], 66, "1183/0032")
