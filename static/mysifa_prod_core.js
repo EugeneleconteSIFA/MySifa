@@ -2093,6 +2093,11 @@ function ofeInfoFiche(m){
     if(r.qte_etiquettes) bouts.push(Number(r.qte_etiquettes).toLocaleString('fr-FR')+' étiquettes commandées');
     if(r.delai_client) bouts.push('livraison le '+r.delai_client.split('-').reverse().join('/'));
     h+='<div>'+escHtml(bouts.join(' · '))+'.</div>';
+    // Une commande en bobines ou en cartons est convertie en étiquettes :
+    // l'ADV voit comment, et ce qui n'a pas pu l'être (15/11/2026).
+    (r.conversions||[]).forEach(function(x){
+      h+='<div'+(/inconnu/.test(x)?' style="color:var(--danger)"':'')+'>· '+escHtml(x)+'</div>';
+    });
     if(!m._fiche&&n>1) h+='<div>'+n+' fiches pour ce produit — choisissez celle de la machine.</div>';
     if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+
       ' — à créer avant l\'OF. Une autre fiche reste possible, avec le motif de l\'écart.</div>';

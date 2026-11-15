@@ -189,22 +189,30 @@ INSERT INTO cde_ligne VALUES
  (9939999,1,'1164','0017',  10000,'2026-11-30 00:00','2026-11-30 00:00',0);
 """)
 miroir.get_erp_db = lambda *a, **k: contextlib.nullcontext(erp)
-miroir.tables_presentes = lambda c: {"cde_ligne", "cde_entete"}
+erp.executescript("""
+ALTER TABLE cde_ligne ADD COLUMN cuv TEXT DEFAULT '11';
+ALTER TABLE cde_ligne ADD COLUMN des1 TEXT;
+ALTER TABLE cde_ligne ADD COLUMN des2 TEXT;
+ALTER TABLE cde_ligne ADD COLUMN des3 TEXT;
+CREATE TABLE fic_ua (code TEXT, lib1 TEXT, nombre REAL, corbeille INTEGER);
+INSERT INTO fic_ua VALUES ('11','Mille',1000,0),('5','Bobine',1,0),('1','Carton',1,0),('C','Carton',1,0);
+""")
+miroir.tables_presentes = lambda c: {"cde_ligne", "cde_entete", "fic_ua"}
 
 lu = op.lire_commandes([{"numero": "9932770", "ligne": 1, "qte": None}])
 verifier("L1 seule : un article", lu["articles"], ["1164/0066"])
-verifier("L1 seule : quantité de la ligne", lu["qte_etiquettes"], 4000000)
+verifier("L1 seule : quantité de la ligne", op.quantite_etiquettes(lu)[0], 4000000)
 verifier("délai = date de livraison", lu["delai_client"], "2026-11-16")
 lu = op.lire_commandes([{"numero": "9932770", "ligne": None}])
 verifier("commande entière : deux articles", lu["articles"], ["1164/0066", "1164/0067"])
 lu = op.lire_commandes([{"numero": "9932839", "ligne": None}, {"numero": "9932840", "ligne": None}])
 verifier("deux commandes, même article", lu["articles"], ["1183/0032"])
-verifier("quantités additionnées", lu["qte_etiquettes"], 4000000)
+verifier("quantités additionnées", op.quantite_etiquettes(lu)[0], 4000000)
 verifier("la livraison la plus proche", lu["delai_client"], "2026-11-22")
 lu = op.lire_commandes([{"numero": "9932856", "ligne": None}])
 verifier("frais de cliché ignorés", lu["articles"], ["954/0087"])
 lu = op.lire_commandes([{"numero": "9932770", "ligne": 2, "qte": 300000}])
-verifier("quantité partielle du sélecteur", lu["qte_etiquettes"], 300000)
+verifier("quantité partielle du sélecteur", op.quantite_etiquettes(lu)[0], 300000)
 lu = op.lire_commandes([{"numero": "9939999", "ligne": None}])
 verifier("commande à la corbeille ignorée", lu["articles"], [])
 
@@ -226,11 +234,40 @@ verifier("deux articles : aucune fiche imposée", (d["article"], d["fiches"]), (
 d = op.depuis_commandes(conn, [{"numero": "9932856", "ligne": 1}])
 verifier("article sans fiche : liste vide", (d["article"], d["fiches"]), ("954/0087", []))
 
+print("Unité de vente : bobines et cartons convertis en étiquettes")
+erp.executescript("""
+INSERT INTO cde_entete VALUES (9932858,0),(9932860,0),(9932501,0),(9932502,0);
+INSERT INTO cde_ligne (numero, ligne, code1, code2, qte, amjl, amje, corbeille, cuv, des1, des2, des3) VALUES
+ (9932858,1,'1183','0028',200,'2026-12-02 00:00','2026-12-01 00:00',0,'5','B440/Etiquette 102 x 150mm.','Thermique Eco Permanent,','Bobine de 440 étiquettes, M40, Enr. Ext.'),
+ (9932860,1,'1183','0028',220,'2026-12-02 00:00','2026-12-01 00:00',0,'5','B440/Etiquette 102 x 150mm.','',''),
+ (9932501,1,'1164','0017',3,'2026-12-02 00:00','2026-12-01 00:00',0,'1','C/60 000 Etiquettes 40x25','',''),
+ (9932502,1,'1164','0017',4,'2026-12-02 00:00','2026-12-01 00:00',0,'5','Etiquette 40x25 en bobine','','');
+""")
+lu = op.lire_commandes([{"numero": "9932858", "ligne": 1}])
+q, msgs = op.quantite_etiquettes(lu)
+verifier("9932858 : 200 bobines de 440 = 88 000 étiquettes (était 200)", q, 88000)
+verifier("la conversion est dite", msgs, ["9932858 L1 : 200 bobine de 440 étiquettes."])
+lu = op.lire_commandes([{"numero": "9932858", "ligne": 1}, {"numero": "9932860", "ligne": 1}])
+verifier("deux commandes en bobines additionnées", op.quantite_etiquettes(lu)[0], 184800)
+lu = op.lire_commandes([{"numero": "9932858", "ligne": 1, "qte": 50}])
+verifier("quantité partielle en bobines convertie aussi", op.quantite_etiquettes(lu)[0], 22000)
+lu = op.lire_commandes([{"numero": "9932501", "ligne": 1}])
+verifier("« C/60 000 » : 3 cartons = 180 000", op.quantite_etiquettes(lu)[0], 180000)
+lu = op.lire_commandes([{"numero": "9932502", "ligne": 1}])
+q, msgs = op.quantite_etiquettes(lu)
+verifier("bobine sans nombre et sans fiche : rien d'inventé", q, None)
+verifier("… et c'est signalé", "inconnu" in msgs[0], True)
+verifier("bobine sans nombre : la fiche donne 500 / bobine", op.quantite_etiquettes(lu, {"nb_etiq_bobin": 500})[0], 2000)
+verifier("paravent : nombre lu en tête", op.unite_de_vente("2", {"2": ("B 500 P", 1.0)}, "P500/ Etiq. 100x50")[1], 500.0)
+verifier("« C50/rouleaux » : pas un nombre d'étiquettes", op.unite_de_vente("1", {"1": ("Carton", 1.0)}, "C50/rouleaux de 1000")[1], None)
+verifier("« C11.200/étiq » : 11 200", op.unite_de_vente("1", {"1": ("Carton", 1.0)}, "C11.200/étiq 40x25")[1], 11200.0)
+verifier("Mille : la quantité est déjà en étiquettes", op.unite_de_vente("11", {"11": ("Mille", 1000.0)}, "B500/Etiq. 9")[1], 1.0)
+
 print("Numéro proposé : les lignes de frais ne comptent pas")
 from app.services import rvgi_rattachement as ratt
 erp.executescript("""
 INSERT INTO cde_entete VALUES (9912584,0);
-INSERT INTO cde_ligne VALUES
+INSERT INTO cde_ligne (numero, ligne, code1, code2, qte, amjl, amje, corbeille) VALUES
  (9912584,1,'571','0095',200000,'2015-10-02 00:00','2015-10-01 00:00',0),
  (9912584,2,'FR','FRAIS_DOUTILS',1,'2015-10-02 00:00','2015-10-01 00:00',0),
  (9912584,3,'FR','FRAIS_DE_CLICHE',1,'2015-10-02 00:00','2015-10-01 00:00',0);

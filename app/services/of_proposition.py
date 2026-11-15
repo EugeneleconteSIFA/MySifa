@@ -358,13 +358,19 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
             # lignes orphelines dans le miroir (règle RVGI du 28/08).
             rows = c.execute(
                 "SELECT CAST(l.numero AS TEXT) AS numero, l.ligne, l.code1, l.code2, "
-                "       l.qte, substr(l.amjl, 1, 10) AS livraison "
+                "       l.qte, l.cuv, l.des1, l.des2, l.des3, "
+                "       substr(l.amjl, 1, 10) AS livraison "
                 "  FROM cde_ligne l "
                 "  JOIN cde_entete e ON e.numero = l.numero AND e.corbeille = 0 "
                 " WHERE l.corbeille = 0 AND CAST(l.numero AS TEXT) IN (%s) "
                 " ORDER BY l.numero, l.ligne" % ",".join("?" * len(nums)),
                 nums,
             ).fetchall()
+            unites = {}
+            if "fic_ua" in tables:
+                for u in c.execute("SELECT code, lib1, nombre FROM fic_ua WHERE corbeille = 0"):
+                    unites[str(u["code"] or "").strip()] = (
+                        str(u["lib1"] or "").strip(), _nombre(u["nombre"]) or 0.0)
     except Exception:
         return vide
 
@@ -386,18 +392,116 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not article:
             continue
         qte = partielle if partielle else _nombre(r["qte"])
+        unite, par_unite = unite_de_vente(r["cuv"], unites, r["des1"], r["des2"], r["des3"])
         retenues.append({"numero": num, "ligne": ligne, "article": article,
-                         "qte": qte, "livraison": (r["livraison"] or None)})
+                         "qte": qte, "unite": unite, "par_unite": par_unite,
+                         "livraison": (r["livraison"] or None)})
 
     articles = sorted({x["article"] for x in retenues})
-    qtes = [x["qte"] for x in retenues if x["qte"]]
     dates = sorted(x["livraison"] for x in retenues if x["livraison"])
     return {
         "articles": articles,
-        "qte_etiquettes": int(sum(qtes)) if qtes else None,
+        "qte_etiquettes": None,          # posée par quantite_etiquettes()
         "delai_client": dates[0] if dates else None,
         "lignes": retenues,
     }
+
+
+# ─── Unité de vente des lignes de commande ──────────────────────────────────
+#
+# RVGI compte une ligne dans son UNITÉ DE VENTE (`cuv` → `fic_ua`), pas en
+# étiquettes. Constat du 15/11/2026 sur 9932858 : « B440/Etiquette 102 x
+# 150 mm », 200 en unité 5 = Bobine — 200 BOBINES de 440, soit 88 000
+# étiquettes. Lues comme 200 étiquettes, elles donnaient un OF de 11 m.
+#
+# Répartition des lignes de produit depuis 9932000 : Mille (11) 661, Carton
+# (1, C) 464, Bobine (5) 87, et quelques paravents et planches.
+#
+#   - une unité « de prix » (Mille, Cent : `nombre` ≥ 100) : la quantité EST
+#     un nombre d'étiquettes, le prix est au mille ;
+#   - une unité contenant (Bobine, Carton, Paravent, Planche…) : la quantité
+#     compte des contenants. Le nombre d'étiquettes par contenant se lit en
+#     tête de désignation (« B440/ », « C12000/ », « C/60 000 », « P500/ »),
+#     sinon dans ses phrases (« Bobine de 440 étiquettes »), sinon dans la
+#     fiche technique (étiquettes par bobine, × bobines par carton).
+#
+# Rien n'est deviné au-delà : une quantité qu'on ne sait pas convertir est
+# signalée, pas transformée.
+
+# Le nombre doit compter des ÉTIQUETTES : « C50/rouleaux » (50 rouleaux par
+# carton) ne dit pas combien d'étiquettes, et le prendre ferait un OF faux.
+_PAR_UNITE_TETE = (
+    re.compile(r"^\s*[A-Za-z]{1,2}\s*(\d[\d\s.\u202f]*)\s*/\s*[EeÉé]"),     # B440/Etiq  C12000/Etiq  P500/ Etiq
+    re.compile(r"^\s*[A-Za-z]{1,2}\s*/\s*(\d[\d\s.\u202f]*\d)\s*[EeÉé]"),   # C/60 000 Eti  B/1000Etique
+)
+_PAR_UNITE_PHRASE = re.compile(
+    r"\b(?:bobines?|cartons?|paravents?|rouleaux?|planches?)\s+de\s+(\d[\d\s.\u202f]*)\s*(?:[ée]tiq|plis)",
+    re.IGNORECASE)
+
+
+def _entier_texte(brut: str) -> Optional[float]:
+    return _nombre(re.sub(r"[\s.\u202f]", "", brut or ""))
+
+
+def unite_de_vente(cuv: Any, unites: Dict[str, Any], *designations: Any):
+    """(libellé de l'unité, étiquettes par unité ou None).
+
+    1.0 pour une unité de prix (la quantité compte déjà des étiquettes)."""
+    lib, nombre = unites.get(str(cuv or "").strip(), ("", 0.0))
+    if nombre and nombre >= 100:
+        return lib or "Mille", 1.0
+    tete = str(designations[0] or "") if designations else ""
+    for motif in _PAR_UNITE_TETE:
+        m = motif.search(tete)
+        if m:
+            n = _entier_texte(m.group(1))
+            if n:
+                return lib or "unité", n
+    for d in designations:
+        m = _PAR_UNITE_PHRASE.search(str(d or ""))
+        if m:
+            n = _entier_texte(m.group(1))
+            if n:
+                return lib or "unité", n
+    return lib or "unité", None
+
+
+def quantite_etiquettes(lu: Dict[str, Any], fiche: Optional[Dict[str, Any]] = None):
+    """(nombre d'étiquettes, messages) des lignes lues, unités converties.
+
+    Une bobine ou un carton sans nombre dans la désignation prend celui de
+    la fiche. Une ligne qu'on ne sait pas convertir est laissée de côté et
+    nommée : la quantité proposée serait sinon fausse sans le dire."""
+    total = 0.0
+    messages: List[str] = []
+    eb = etiquettes_par_bobine(fiche)[0] if fiche else None
+    bc = _nombre((fiche or {}).get("nb_bobines_carton"))
+    for x in lu.get("lignes") or []:
+        q = x.get("qte")
+        if not q:
+            continue
+        par = x.get("par_unite")
+        unite = (x.get("unite") or "").lower()
+        if not par and eb and "bobine" in unite:
+            par = eb
+        if not par and eb and bc and "carton" in unite:
+            par = eb * bc
+        if not par:
+            messages.append("%s L%s : %s en « %s », nombre d'étiquettes par %s inconnu — "
+                            "quantité à saisir." % (x["numero"], x["ligne"], _texte_qte(q),
+                                                   x.get("unite") or "unité", x.get("unite") or "unité"))
+            continue
+        total += q * par
+        if par != 1.0:
+            messages.append("%s L%s : %s %s de %s étiquettes." % (
+                x["numero"], x["ligne"], _texte_qte(q), (x.get("unite") or "unité").lower(),
+                _texte_qte(par)))
+    return (int(round(total)) if total else None), messages
+
+
+def _texte_qte(v: Any) -> str:
+    n = _nombre(v) or 0
+    return ("{:,.0f}".format(n)).replace(",", " ") if n == int(n) else str(n)
 
 
 def fiches_du_produit(conn, article: Any) -> List[Dict[str, Any]]:
@@ -422,11 +526,20 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
     lu = lire_commandes(lignes)
     articles = lu["articles"]
     fiches = fiches_du_produit(conn, articles[0]) if len(articles) == 1 else []
+    # Le nombre d'étiquettes par bobine d'un produit ne dépend pas de la
+    # machine : la première fiche suffit à convertir une commande en bobines.
+    fiche = None
+    if fiches:
+        r = conn.execute("SELECT * FROM fiches_techniques WHERE id = ?",
+                         (fiches[0]["id"],)).fetchone()
+        fiche = dict(r) if r else None
+    qte, conversions = quantite_etiquettes(lu, fiche)
     return {
         "articles": articles,
         "article": articles[0] if len(articles) == 1 else None,
         "fiches": fiches,
-        "qte_etiquettes": lu["qte_etiquettes"],
+        "qte_etiquettes": qte,
+        "conversions": conversions,
         "delai_client": lu["delai_client"],
     }
 
