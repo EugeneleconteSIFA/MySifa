@@ -429,3 +429,53 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         "qte_etiquettes": lu["qte_etiquettes"],
         "delai_client": lu["delai_client"],
     }
+
+
+# ─── Concordance fiche / commandes ───────────────────────────────────────────
+#
+# Un OF rattaché à des commandes doit être fait avec la fiche d'un de leurs
+# articles. Vérifié le 15/11/2026 sur les 55 OF Access récents qui portent à
+# la fois un numéro de commande et une référence produit : 55 sur 55. Un écart
+# n'est donc presque jamais voulu — et il ne se verrait pas : planning,
+# besoins matières et déstockage suivraient la mauvaise fiche.
+#
+# « Un de leurs articles », pas « le seul » : un OF peut imprimer plusieurs
+# modèles ensemble sur la fiche de l'un d'eux (9932652 : fiche 1315/0003 pour
+# 1315/0003, 0004 et 0013).
+#
+# Rien à contrôler sans commande (stock, marché, reliquat), ni quand le miroir
+# ne répond pas : on ne bloque jamais une création sur une panne de lecture.
+# Le cas légitime (nouveau code article, fiche pas encore dupliquée) passe
+# avec un motif, que la route d'écriture exige et journalise.
+
+def controler_concordance(conn, commandes: List[Dict[str, Any]],
+                          fiche_id: Any = None,
+                          reference: Any = None) -> Dict[str, Any]:
+    """{ok, verifiable, articles, message}. `ok` est vrai quand rien n'est
+    vérifiable : l'absence de contrôle n'est pas un écart."""
+    articles = lire_commandes(commandes)["articles"] if commandes else []
+    res: Dict[str, Any] = {"ok": True, "verifiable": bool(articles),
+                           "articles": articles, "message": None}
+    if not articles:
+        return res
+
+    a_verifier = []   # (libellé, clé produit)
+    if fiche_id:
+        try:
+            row = conn.execute(
+                "SELECT reference FROM fiches_techniques WHERE id = ?", (int(fiche_id),)
+            ).fetchone()
+        except (TypeError, ValueError):
+            row = None
+        if row:
+            a_verifier.append(("La fiche %s" % row["reference"], _cle_produit(row["reference"])))
+    cle_ref = _cle_produit(reference)
+    if cle_ref and cle_ref not in [c for _, c in a_verifier]:
+        a_verifier.append(("La référence %s" % cle_ref, cle_ref))
+
+    hors = [lib for lib, cle in a_verifier if cle not in articles]
+    if hors:
+        res["ok"] = False
+        res["message"] = "%s ne correspond%s à aucun article des commandes cochées (%s)." % (
+            " et ".join(hors), "ent" if len(hors) > 1 else "", ", ".join(articles))
+    return res

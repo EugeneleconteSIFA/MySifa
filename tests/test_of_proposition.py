@@ -226,6 +226,34 @@ verifier("deux articles : aucune fiche imposée", (d["article"], d["fiches"]), (
 d = op.depuis_commandes(conn, [{"numero": "9932856", "ligne": 1}])
 verifier("article sans fiche : liste vide", (d["article"], d["fiches"]), ("954/0087", []))
 
+print("Concordance fiche / commandes")
+c_ok = op.controler_concordance(conn, [{"numero": "9932770", "ligne": 1}], 66)
+verifier("fiche de l'article coché : acceptée", c_ok["ok"], True)
+c_ko = op.controler_concordance(conn, [{"numero": "9932770", "ligne": 1}], 28)
+verifier("fiche d'un autre produit : refusée", c_ko["ok"], False)
+verifier("message explicite",
+         c_ko["message"], "La fiche 1183/0028 - DSI ne correspond à aucun article des commandes cochées (1164/0066).")
+verifier("plusieurs modèles : la fiche d'UN des articles suffit",
+         op.controler_concordance(conn, [{"numero": "9932770", "ligne": None}], 66)["ok"], True)
+verifier("fiche par machine : la clé produit concorde",
+         op.controler_concordance(conn, [{"numero": "9932839", "ligne": None}], 322)["ok"], True)
+c_ref = op.controler_concordance(conn, [{"numero": "9932770", "ligne": 1}], 66, "1183/0032")
+verifier("référence modifiée à la main : contrôlée aussi", c_ref["ok"], False)
+verifier("sans commande (stock, marché) : rien à contrôler",
+         op.controler_concordance(conn, [], 28), {"ok": True, "verifiable": False, "articles": [], "message": None})
+verifier("commande à la corbeille : rien de vérifiable, pas de blocage",
+         op.controler_concordance(conn, [{"numero": "9939999", "ligne": None}], 28)["ok"], True)
+
+print("La création fait respecter le contrôle")
+src_c = open("app/routers/of_import.py", encoding="utf-8").read()
+corps = src_c[src_c.index("async def create_of"):src_c.index('@router.post("/api/fiches-techniques")')]
+verifier("fiche obligatoire", "Choisissez la fiche technique de l'OF." in corps, True)
+verifier("écart refusé sans motif", "controle[\"ok\"]" in corps and "status_code=409" in corps, True)
+verifier("motif gardé dans les observations", "Écart fiche / commandes accepté" in corps, True)
+verifier("écart journalisé", '"ecart_fiche_commandes": ecart' in corps, True)
+verifier("route de contrôle avant /api/of/{of_id}",
+         src_c.index('@router.get("/api/of/controle")') < src_c.index('@router.get("/api/of/{of_id}")'), True)
+
 print("Route déclarée avant /api/of/{of_id}")
 src = open("app/routers/of_import.py", encoding="utf-8").read()
 verifier("ordre des routes",
