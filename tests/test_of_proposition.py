@@ -176,10 +176,10 @@ erp = sqlite3.connect(":memory:")
 erp.row_factory = sqlite3.Row
 erp.executescript("""
 CREATE TABLE cde_entete (numero INTEGER, corbeille INTEGER);
-CREATE TABLE cde_ligne (numero INTEGER, ligne INTEGER, code1 TEXT, code2 TEXT, qte INTEGER,
+CREATE TABLE cde_ligne (id INTEGER PRIMARY KEY, numero INTEGER, ligne INTEGER, code1 TEXT, code2 TEXT, qte INTEGER,
                         amjl TEXT, amje TEXT, corbeille INTEGER);
 INSERT INTO cde_entete VALUES (9932770,0),(9932839,0),(9932840,0),(9932856,0),(9939999,1);
-INSERT INTO cde_ligne VALUES
+INSERT INTO cde_ligne (numero, ligne, code1, code2, qte, amjl, amje, corbeille) VALUES
  (9932770,1,'1164','0066',4000000,'2026-11-16 00:00','2026-11-13 00:00',0),
  (9932770,2,'1164','0067', 650000,'2026-11-16 00:00','2026-11-13 00:00',0),
  (9932839,1,'1183','0032',2000000,'2026-11-23 00:00','2026-11-18 00:00',0),
@@ -227,6 +227,8 @@ INSERT INTO fiches_techniques (id, reference, ref_produit_norm, machine) VALUES
 """)
 d = op.depuis_commandes(conn, [{"numero": "9932770", "ligne": 1}])
 verifier("une fiche pour l'article : proposée", [f["id"] for f in d["fiches"]], [66])
+verifier("l'id de la ligne revient pour « Voir la commande »",
+         [(x["numero"], x["ligne"], bool(x["id"])) for x in d["lignes"]], [("9932770", 1, True)])
 d = op.depuis_commandes(conn, [{"numero": "9932839", "ligne": None}, {"numero": "9932840", "ligne": None}])
 verifier("deux fiches (une par machine) : l'ADV choisit", [f["id"] for f in d["fiches"]], [321, 322])
 d = op.depuis_commandes(conn, [{"numero": "9932770", "ligne": None}])
