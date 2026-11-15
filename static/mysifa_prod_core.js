@@ -3205,8 +3205,11 @@ function renderOfTab(){
     // Quand Access a envoyé autre chose (le numéro d'OF), le bouton reste à sa
     // place, grisé, pour que les colonnes restent alignées.
     const bp=window.MySifaProduitMemoire?window.MySifaProduitMemoire.boutonFiche(row.reference,{label:'Produit'}):null;
+    // Même classe que le vrai bouton : grisé, il garde sa largeur, et les
+    // colonnes de boutons restent alignées d'une ligne à l'autre.
     acts.push(bp||h('button',{
-      style:bStyle+';opacity:.4;cursor:default',disabled:true,
+      className:'pmem-btn pmem-btn-sm',
+      style:'opacity:.35;cursor:default',disabled:true,
       title:'Référence produit inconnue — la référence de cet OF n\'est pas une clé produit (« 1164/0067 »).'
     },'Produit'));
     if(S.user&&S.user.role==='superadmin'){
