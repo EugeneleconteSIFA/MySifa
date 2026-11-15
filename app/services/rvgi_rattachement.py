@@ -624,7 +624,11 @@ _SQL_COMMANDES = """
            e.amjc            AS date_cde,
            l.vref            AS vref
       FROM cde_ligne l
-      LEFT JOIN cde_entete e ON e.numero = l.numero
+      -- INNER JOIN obligatoire (règle RVGI du 28/08) : une commande supprimée
+      -- laisse ses lignes orphelines dans le miroir, sans entête. 504
+      -- commandes dans ce cas au 15/11/2026 (9921842…) : le sélecteur les
+      -- proposait, puis rien ne pouvait en être repris.
+      JOIN cde_entete e ON e.numero = l.numero AND e.corbeille = 0
      WHERE l.corbeille = 0
 """
 

@@ -2094,9 +2094,8 @@ async function ofeDepuisCommandes(m){
     ofePeindreFiches('');
     return true;
   }
-  if((r.articles||[]).length>1){
-    toast((r.articles||[]).length+' articles sur les lignes cochées — choisissez la fiche, ou faites un OF par ligne.','info');
-  }
+  // Plusieurs articles ou aucun : c'est dit sous la fiche (ofeInfoFiche),
+  // en clair et sans toast qui disparaît.
   return false;
 }
 
@@ -2106,6 +2105,13 @@ function ofeInfoFiche(m){
     .map(c=>OFE_CALCULES_LIBELLES[c]||c);
   let h='';
   const r=m._cmdInfo;
+  if(r&&!r.article&&(m._commandes||[]).length){
+    // Jamais de silence : sans article, la fenêtre resterait vide sans dire
+    // pourquoi (constat du 15/11/2026 sur 9921842, commande supprimée).
+    h+=(r.articles||[]).length>1
+      ? '<div style="color:var(--danger)">· Les lignes cochées portent '+r.articles.length+' articles ('+escHtml(r.articles.join(', '))+') : un OF ne couvre qu\'un produit. Gardez une seule ligne, ou choisissez la fiche (un motif sera demandé).</div>'
+      : '<div style="color:var(--danger)">· Aucune ligne de produit retrouvée dans RVGI pour les commandes cochées (commande supprimée, ou lignes de frais seulement). Choisissez la fiche et saisissez la quantité.</div>';
+  }
   if(r&&r.article){
     const n=(r.fiches||[]).length;
     const bouts=['Article de la commande : '+r.article];
