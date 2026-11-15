@@ -1976,6 +1976,25 @@ def of_proposition(request: Request):
     return res
 
 
+@router.get("/api/of/depuis-commandes")
+def of_depuis_commandes(request: Request):
+    """Fiche(s), quantité et délai que proposent les commandes cochées.
+
+    `c` : les lignes du sélecteur RVGI en JSON ([{numero, ligne, qte}]).
+    Lecture seule, d'où un GET : un POST serait journalisé comme une action.
+    """
+    _require_of_access(request)
+    try:
+        lignes = json.loads(request.query_params.get("c") or "[]")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Lignes de commande illisibles.")
+    if not isinstance(lignes, list):
+        raise HTTPException(status_code=400, detail="Lignes de commande illisibles.")
+    from app.services.of_proposition import depuis_commandes
+    with get_db() as conn:
+        return depuis_commandes(conn, lignes[:200])
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Création dans MySifa
 # ═══════════════════════════════════════════════════════════════════════════
