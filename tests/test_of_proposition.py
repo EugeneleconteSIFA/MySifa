@@ -227,6 +227,9 @@ INSERT INTO fiches_techniques (id, reference, ref_produit_norm, machine) VALUES
 """)
 d = op.depuis_commandes(conn, [{"numero": "9932770", "ligne": 1}])
 verifier("une fiche pour l'article : proposée", [f["id"] for f in d["fiches"]], [66])
+verifier("dates de la commande : livraison et expédition",
+         (d["date_livraison"], d["date_expedition"]), ("2026-11-16", "2026-11-13"))
+verifier("délai proposé = livraison", d["delai_client"], "2026-11-16")
 verifier("l'id de la ligne revient pour « Voir la commande »",
          [(x["numero"], x["ligne"], bool(x["id"])) for x in d["lignes"]], [("9932770", 1, True)])
 d = op.depuis_commandes(conn, [{"numero": "9932839", "ligne": None}, {"numero": "9932840", "ligne": None}])
