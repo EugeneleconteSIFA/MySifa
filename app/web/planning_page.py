@@ -5639,7 +5639,9 @@ function computePlanningOfTitle(){
 
 function computePlanningOfDlBtn(){
   const a = _ofPlanningActiveOf();
-  if(!a || !a.pdf_filename) return '';
+  // Tous les OF se téléchargent : sans PDF d'origine, le serveur génère l'OF
+  // sur le modèle atelier (15/11/2026).
+  if(!a) return '';
   return `<a href="/api/of/${a.id}/pdf" target="_blank" download
           style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
                  border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);

@@ -3314,7 +3314,9 @@ function renderOfPanel(){
         onClick:()=>openOfEditModal(row),
       }, svgIcon('edit',14)),
     ];
-    if(row.pdf_filename){
+    // Tous les OF s'impriment et se téléchargent : sans PDF d'origine, le
+    // serveur génère l'OF sur le modèle atelier (15/11/2026).
+    {
       // v1.7 — bouton imprimer (avant le telecharger PDF) : ouvre le popup
       // de choix imprimante + params, puis POST /api/print/pdf.
       actBtns.push(h('button',{

@@ -297,6 +297,17 @@ verifier("même générateur que l'OF enregistré", "generate_of_pdf(champs)" in
 from app.core.audit_taxonomy import SKIP_PREFIXES
 verifier("aperçu exclu du journal", "/api/of/apercu" in SKIP_PREFIXES, True)
 
+print("Impression et téléchargement de tous les OF")
+src_p = open("app/routers/print.py", encoding="utf-8").read()
+verifier("impression : OF sans PDF généré, plus refusé", "pdf_of_genere(entity_id)" in src_p
+         and "Cet OF n'a pas de PDF associe" not in src_p, True)
+corps_dl = src_a[src_a.index("def download_of_pdf"):src_a.index('@router.delete("/api/of/bulk")')]
+verifier("téléchargement : OF sans PDF généré", "pdf_of_genere(of_id)" in corps_dl, True)
+js = open("static/mysifa_prod_core.js", encoding="utf-8").read()
+liste = js[js.index("const rows=(S.ofImports||[]).map(row=>{"):]
+liste = liste[:liste.index("return h('tr',null,")]
+verifier("liste : plus aucun bouton réservé aux OF déposés en PDF", "pdf_filename" in liste, False)
+
 print("Tri de la liste des OF")
 src_r = open("app/routers/of_import.py", encoding="utf-8").read()
 expr = re.search(r'_SQL_DATE_CREATION_ISO = \((.*?)\n\)', src_r, re.S).group(1)

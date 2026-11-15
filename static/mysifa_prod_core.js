@@ -3126,50 +3126,44 @@ function renderOfTab(){
 
   const rows=(S.ofImports||[]).map(row=>{
     const dateCrea=(row.date_creation||'').slice(0,10)||'—';
+    // Mêmes boutons, même ordre, sur chaque ligne (15/11/2026). Ils
+    // dépendaient de l'origine de l'OF : Imprimer et Télécharger n'existaient
+    // que pour un OF déposé en PDF, si bien qu'un OF créé dans MySifa ne
+    // pouvait pas partir à l'atelier. Le serveur génère désormais l'OF sur le
+    // modèle atelier quand il n'y a pas de fichier. Un bouton qui ne
+    // s'applique pas est grisé et dit pourquoi, au lieu de disparaître.
+    // Fond var(--bg) dans la carte : un bouton transparent ne se voit pas
+    // au repos (design-system.md).
+    const bStyle='padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer';
+    const bouton=(titre,icone,action)=>h('button',{style:bStyle,title:titre,onClick:action},iconEl(icone,13));
     const acts=[
-      h('button',{
-        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
-        title:'Modifier', onClick:()=>openOfEditModal(row)
-      },iconEl('edit',13)),
-    ];
-    acts.push(h('button',{
-      style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+      bouton('Modifier','edit',()=>openOfEditModal(row)),
       // ?v=date_import : sans cache-buster, le navigateur resservait le PDF
       // mis en cache lors du premier aperçu même après un ré-import.
-      title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview?v='+encodeURIComponent(row.date_import||Date.now()),'_blank');}
-    },iconEl('eye',13)));
-    // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
-    // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
-    acts.push(h('button',{
-      style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
-      title:'Créer directement un dossier de prod', onClick:()=>ofCreerDossierProd(row)
-    },iconEl('calendar',13)));
-    if(row.pdf_filename){
-      // v1.7 — bouton Imprimer : ouvre le popup partage (mysifa_print_modal.js)
-      // pour choisir imprimante + params + envoyer sur l'imprimante bureautique.
-      acts.push(h('button',{
-        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
-        title:'Imprimer', onClick:()=>{
-          if(typeof openPrintModal!=='function'){toast('Modal impression indisponible.','error');return;}
-          openPrintModal({
-            entityType:'of',
-            entityId:row.id,
-            title:'Imprimer OF '+(row.of_numero||('#'+row.id)),
-            subtitle:(row.reference?('Ref '+row.reference+' — '):'')+(row.machine||''),
-          });
-        }
-      },iconEl('printer',13)));
-      acts.push(h('button',{
-        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
-        title:'Télécharger PDF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}
-      },iconEl('download',13)));
-    }
-    // Memoire produit : of_imports.reference EST deja la cle produit normalisee
-    // (option B de l'import OF), le bouton n'a donc rien a deviner.
-    if(window.MySifaProduitMemoire){
-      const bp=window.MySifaProduitMemoire.boutonFiche(row.reference,{label:'Produit'});
-      if(bp) acts.push(bp);
-    }
+      bouton('Aperçu OF','eye',()=>{window.open('/api/of/'+row.id+'/pdf-preview?v='+encodeURIComponent(row.date_import||Date.now()),'_blank');}),
+      // Popup partagé (mysifa_print_modal.js) : imprimante, paramètres, envoi.
+      bouton('Imprimer','printer',()=>{
+        if(typeof openPrintModal!=='function'){toast('Modal impression indisponible.','error');return;}
+        openPrintModal({
+          entityType:'of',
+          entityId:row.id,
+          title:'Imprimer OF '+(row.of_numero||('#'+row.id)),
+          subtitle:(row.reference?('Ref '+row.reference+' — '):'')+(row.machine||''),
+        });
+      }),
+      bouton('Télécharger PDF','download',()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}),
+      // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
+      // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
+      bouton('Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),
+    ];
+    // Mémoire produit : of_imports.reference EST la clé produit normalisée.
+    // Quand Access a envoyé autre chose (le numéro d'OF), le bouton reste à sa
+    // place, grisé, pour que les colonnes restent alignées.
+    const bp=window.MySifaProduitMemoire?window.MySifaProduitMemoire.boutonFiche(row.reference,{label:'Produit'}):null;
+    acts.push(bp||h('button',{
+      style:bStyle+';opacity:.4;cursor:default',disabled:true,
+      title:'Référence produit inconnue — la référence de cet OF n\'est pas une clé produit (« 1164/0067 »).'
+    },'Produit'));
     if(S.user&&S.user.role==='superadmin'){
       acts.push(h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger)',

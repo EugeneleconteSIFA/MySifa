@@ -853,6 +853,26 @@ def preview_of_pdf(of_id: int, request: Request):
     )
 
 
+def pdf_of_genere(of_id: int):
+    """(pdf, nom de fichier) d'un OF SANS fichier d'origine — venu d'Access
+    ou créé dans MySifa — imprimé sur le modèle atelier et complété depuis
+    sa fiche. C'est le document de l'aperçu (l'œil) : l'imprimer ou le
+    télécharger doit donner le même. None si l'OF n'existe pas.
+
+    Jusqu'au 15/11/2026, impression et téléchargement n'existaient que pour
+    les OF déposés en PDF : un OF créé dans MySifa ne pouvait pas partir à
+    l'atelier depuis la liste.
+    """
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM of_imports WHERE id=?", (of_id,)).fetchone()
+    if not row:
+        return None
+    from app.services.of_pdf_generator import generate_of_pdf
+    pdf_bytes = generate_of_pdf(_enrich_of_row_from_fiche(dict(row)))
+    safe_num = re.sub(r"[^\w\-]+", "_", str(row["of_numero"] or of_id))
+    return pdf_bytes, "OF_%s.pdf" % safe_num
+
+
 @router.get("/api/of/{of_id}/pdf")
 def download_of_pdf(request: Request, of_id: int):
     _require_of_access(request)
@@ -861,8 +881,18 @@ def download_of_pdf(request: Request, of_id: int):
             "SELECT pdf_filename FROM of_imports WHERE id=?",
             (of_id,),
         ).fetchone()
-    if not row or not row["pdf_filename"]:
+    if not row:
         raise HTTPException(status_code=404, detail="OF introuvable.")
+    if not row["pdf_filename"]:
+        try:
+            pdf_bytes, nom = pdf_of_genere(of_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{nom}"'},
+        )
     path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")

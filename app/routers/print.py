@@ -791,7 +791,9 @@ class PdfPrintRequest(BaseModel):
 def _fetch_pdf_bytes(entity_type: str, entity_id: int, user: dict | None = None) -> tuple[bytes, str]:
     """Retourne (pdf_bytes, filename_suggere) pour l'entite demandee.
 
-    - 'of'    : lit le PDF importe depuis of_imports.pdf_filename (sur disque).
+    - 'of'    : lit le PDF importe depuis of_imports.pdf_filename (sur disque) ;
+                sans fichier (OF Access ou cree dans MySifa), genere l'OF sur
+                le modele atelier, comme l'apercu (of_import.pdf_of_genere).
     - 'fiche' : appelle app.services.fiche_pdf.generate_fiche_pdf() a la volee.
 
     Leve HTTPException si l'entite est introuvable ou le PDF absent.
@@ -814,7 +816,11 @@ def _fetch_pdf_bytes(entity_type: str, entity_id: int, user: dict | None = None)
                 raise HTTPException(status_code=404, detail="OF introuvable.")
             pdf_filename = row["pdf_filename"]
             if not pdf_filename:
-                raise HTTPException(status_code=409, detail="Cet OF n'a pas de PDF associe.")
+                from app.routers.of_import import pdf_of_genere
+                try:
+                    return pdf_of_genere(entity_id)
+                except FileNotFoundError as exc:
+                    raise HTTPException(status_code=503, detail=str(exc)) from exc
             # OF_UPLOAD_DIR est defini dans of_import.py — on le reimporte pour rester DRY.
             try:
                 from app.routers.of_import import OF_UPLOAD_DIR  # type: ignore
