@@ -2574,11 +2574,22 @@ function renderOfEditModal(){
     if(m.id&&window.MysRvgiPicker){
       MysRvgiPicker.resume(zone,'of',m.id);
     }else{
+      // Chaque commande cochée s'ouvre dans l'écran Commandes de l'ERP, dans
+      // un nouvel onglet : l'ADV vérifie la commande sans quitter l'OF. Une
+      // ligne précise ouvre directement sa fiche quand on connaît son id.
       const l=m._commandes||[];
+      const ids={};
+      ((m._cmdInfo&&m._cmdInfo.lignes)||[]).forEach(function(x){ ids[x.numero+':'+x.ligne]=x.id; });
+      const lien=function(x){
+        const id=x.ligne!=null?ids[x.numero+':'+x.ligne]:null;
+        const url='/erp#/commandes?q='+encodeURIComponent(x.numero)+(id?'&fiche='+encodeURIComponent('commandes:'+id):'');
+        const lib=String(x.numero)+(x.ligne!=null?(' L'+x.ligne):' (entière)');
+        return '<a href="'+escAttr(url)+'" target="_blank" rel="noopener" title="Voir la commande dans MyERP (nouvel onglet)" '+
+          'style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-decoration:none;font-size:12px;font-weight:600">'+
+          escHtml(lib)+' <span style="color:var(--accent)">Voir la commande ↗</span></a>';
+      };
       zone.innerHTML=l.length
-        ? '<div style="font-size:12px;color:var(--text2)">'+
-          l.map(x=>escHtml(String(x.numero)+(x.ligne?(' L'+x.ligne):''))).join(' · ')+
-          '</div>'
+        ? '<div style="display:flex;gap:6px;flex-wrap:wrap">'+l.map(lien).join('')+'</div>'
         : '<div style="font-size:12px;color:var(--muted)">Aucune commande rattachée — le numéro d\'OF devra être saisi à la main.</div>';
     }
   }

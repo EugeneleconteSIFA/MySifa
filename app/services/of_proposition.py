@@ -357,7 +357,7 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
             # INNER JOIN obligatoire : une commande à la corbeille laisse ses
             # lignes orphelines dans le miroir (règle RVGI du 28/08).
             rows = c.execute(
-                "SELECT CAST(l.numero AS TEXT) AS numero, l.ligne, l.code1, l.code2, "
+                "SELECT l.id AS id_ligne, CAST(l.numero AS TEXT) AS numero, l.ligne, l.code1, l.code2, "
                 "       l.qte, l.cuv, l.des1, l.des2, l.des3, "
                 "       substr(l.amjl, 1, 10) AS livraison "
                 "  FROM cde_ligne l "
@@ -393,7 +393,7 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
             continue
         qte = partielle if partielle else _nombre(r["qte"])
         unite, par_unite = unite_de_vente(r["cuv"], unites, r["des1"], r["des2"], r["des3"])
-        retenues.append({"numero": num, "ligne": ligne, "article": article,
+        retenues.append({"id": r["id_ligne"], "numero": num, "ligne": ligne, "article": article,
                          "qte": qte, "unite": unite, "par_unite": par_unite,
                          "livraison": (r["livraison"] or None)})
 
@@ -540,6 +540,10 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         "fiches": fiches,
         "qte_etiquettes": qte,
         "conversions": conversions,
+        # Pour « Voir la commande » : l'id de la ligne ouvre sa fiche dans
+        # l'écran Commandes de l'ERP (/erp#/commandes?fiche=commandes:<id>).
+        "lignes": [{"id": x["id"], "numero": x["numero"], "ligne": x["ligne"],
+                    "article": x["article"]} for x in lu.get("lignes") or []],
         "delai_client": lu["delai_client"],
     }
 
