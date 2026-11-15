@@ -1995,6 +1995,25 @@ def of_depuis_commandes(request: Request):
         return depuis_commandes(conn, lignes[:200])
 
 
+@router.get("/api/of/controle")
+def of_controle(request: Request):
+    """La fiche (et la référence) de l'OF concordent-elles avec les
+    commandes cochées ? Sert l'alerte de la fenêtre, avant tout clic sur
+    « Créer » ; la création refait le même contrôle et le fait respecter."""
+    _require_of_access(request)
+    try:
+        lignes = json.loads(request.query_params.get("c") or "[]")
+    except ValueError:
+        lignes = []
+    from app.services.of_proposition import controler_concordance
+    with get_db() as conn:
+        return controler_concordance(
+            conn, _lignes_commandes(lignes if isinstance(lignes, list) else [])[:200],
+            request.query_params.get("fiche_id") or None,
+            request.query_params.get("reference") or None,
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Création dans MySifa
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2076,6 +2095,30 @@ async def create_of(request: Request):
     maintenant = _now_paris_iso()
     qui = (user.get("nom") or user.get("email") or "").strip() or None
 
+    # Un OF se fait à partir d'une fiche technique, et la fiche doit être
+    # celle d'un article des commandes rattachées (of_proposition). Un écart
+    # passe seulement avec un motif, gardé dans l'OF et dans le journal.
+    fiche_id = body.get("fiche_id")
+    if not fiche_id:
+        raise HTTPException(status_code=400, detail="Choisissez la fiche technique de l'OF.")
+    from app.services.of_proposition import controler_concordance
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM fiches_techniques WHERE id = ?",
+                            (fiche_id,)).fetchone():
+            raise HTTPException(status_code=400, detail="Fiche technique introuvable.")
+        controle = controler_concordance(conn, commandes, fiche_id, champs.get("reference"))
+    ecart = None
+    if not controle["ok"]:
+        motif = str(body.get("forcer_motif") or "").strip()
+        if len(motif) < 10:
+            raise HTTPException(
+                status_code=409,
+                detail=controle["message"] + " Indiquez le motif de l'écart pour créer quand même.",
+            )
+        ecart = {"message": controle["message"], "motif": motif}
+        note = "Écart fiche / commandes accepté par %s : %s" % (qui or "?", motif)
+        champs["observations"] = ((champs.get("observations") or "").strip() + "\n" + note).strip()
+
     with get_db() as conn:
         # La désignation de la référence devient le texte imprimé, AVANT
         # l'insertion : sinon le document naîtrait avec un texte que personne
@@ -2131,6 +2174,8 @@ async def create_of(request: Request):
         objet="OF %s · %s" % (numero, champs.get("reference") or ""),
         detail={"source": "mysifa",
                 "commandes": [l["numero"] for l in commandes],
+                "fiche_id": fiche_id,
+                "ecart_fiche_commandes": ecart,
                 "dossiers_relies": linked},
         request=request,
     )

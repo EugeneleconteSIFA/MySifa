@@ -1881,6 +1881,7 @@ async function ofeChoisirFiche(ficheId){
   renderOfEditModal();
   const q=document.getElementById('ofe-qte');
   if(q&&!q.value) q.focus();
+  ofeControler(m);
 }
 window.ofeChoisirFiche = ofeChoisirFiche;
 
@@ -1924,6 +1925,46 @@ async function ofeRecalculer(){
   if(info) info.innerHTML=ofeInfoFiche(m);
 }
 
+/* Concordance fiche / commandes (15/11/2026). Le serveur refuse un OF
+   dont la fiche n'est l'article d'aucune commande cochée, sauf motif. On le
+   dit ici dès que la fiche ou les commandes changent, sans attendre
+   « Créer ». */
+async function ofeControler(m){
+  if(!m||m.id) return;
+  const refEl=document.getElementById('ofe-reference');
+  const ref=refEl?refEl.value:(m.reference||'');
+  const l=(m._commandes||[]).map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
+  if(!m._fiche||!l.length){ m._controle=null; ofePeindreEcart(m); return; }
+  let r=null;
+  try{
+    r=await api('/api/of/controle?fiche_id='+encodeURIComponent(m._fiche.id)+
+      '&reference='+encodeURIComponent(ref||'')+'&c='+encodeURIComponent(JSON.stringify(l)));
+  }catch(e){ return; }
+  if(S.ofEditModal!==m) return;
+  m._controle=r;
+  ofePeindreEcart(m);
+}
+
+function ofeEcartHtml(m){
+  const c=m._controle;
+  if(!c||c.ok) return '';
+  const v=(m._dom&&m._dom['ofe-motif-ecart'])||'';
+  return '<div style="border:1px solid var(--danger);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.6">'+
+    '<div style="color:var(--danger);font-weight:600">'+escHtml(c.message)+'</div>'+
+    '<label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin:8px 0 4px">Motif de l\'écart — obligatoire pour créer quand même</label>'+
+    '<textarea id="ofe-motif-ecart" rows="2" placeholder="Ex. : nouveau code article du client, fiche pas encore dupliquée" '+
+    'style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical">'+
+    escHtml(v)+'</textarea></div>';
+}
+
+function ofePeindreEcart(m){
+  const z=document.getElementById('ofe-ecart');
+  if(!z) return;
+  const t=document.getElementById('ofe-motif-ecart');
+  if(t){ m._dom=m._dom||{}; m._dom['ofe-motif-ecart']=t.value; }
+  z.innerHTML=ofeEcartHtml(m);
+}
+
 /* Les commandes cochées proposent la fiche, la quantité et le délai.
    Rend true quand une fiche a été prise ou proposée : la reprise de la fiche
    de fabrication RVGI n'a alors plus lieu d'être. Une quantité ou un délai
@@ -1946,6 +1987,7 @@ async function ofeDepuisCommandes(m){
   const f=r.fiches||[];
   set({ofEditModal:m});
   renderOfEditModal();
+  ofeControler(m);
   if(m._fiche) return f.length>0;
   if(f.length===1){
     await ofeChoisirFiche(f[0].id);
@@ -2022,6 +2064,8 @@ function ofeBrancherFiche(overlay,m){
       _ofeCalcTimer=setTimeout(ofeRecalculer,250);
     });
   }
+  const ref=overlay.querySelector('#ofe-reference');
+  if(ref&&!m.id) ref.addEventListener('change',function(){ ofeControler(m); });
   // Une case calculée corrigée à la main n'est plus recalculée.
   const ids=Object.values(OFE_CALCULES);
   overlay.addEventListener('input',function(e){
@@ -2120,7 +2164,18 @@ async function saveOfEdit(){
       await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
       toast('OF mis à jour.');
     }else{
+      if(!m._fiche){ toast('Choisissez la fiche technique de l\'OF.','error'); return; }
+      await ofeControler(m);
+      const motifEl=document.getElementById('ofe-motif-ecart');
+      const motif=motifEl?motifEl.value.trim():'';
+      if(m._controle&&!m._controle.ok&&motif.length<10){
+        toast('La fiche ne correspond pas aux commandes — indiquez le motif de l\'écart (10 caractères au moins).','error');
+        if(motifEl) motifEl.focus();
+        return;
+      }
       payload.commandes=m._commandes||[];
+      payload.fiche_id=m._fiche.id;
+      if(motif) payload.forcer_motif=motif;
       const res=await api('/api/of',{method:'POST',body:JSON.stringify(payload)});
       toast('OF '+(res&&res.of_numero?res.of_numero:'')+' créé.');
     }
@@ -2181,7 +2236,8 @@ function renderOfEditModal(){
     return choix
       +_f('ofe-qte','Nb étiquettes',m.qte_etiquettes,'number')
       +_f('ofe-delai','Délai client',m.delai_client,'date')
-      +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`;
+      +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`
+      +`<div id="ofe-ecart" style="grid-column:1/-1">${ofeEcartHtml(m)}</div>`;
   };
   const overlay=document.createElement('div');
   overlay.id='of-edit-overlay';
