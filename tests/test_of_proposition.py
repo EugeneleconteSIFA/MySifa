@@ -226,6 +226,34 @@ verifier("deux articles : aucune fiche imposée", (d["article"], d["fiches"]), (
 d = op.depuis_commandes(conn, [{"numero": "9932856", "ligne": 1}])
 verifier("article sans fiche : liste vide", (d["article"], d["fiches"]), ("954/0087", []))
 
+print("Numéro proposé : les lignes de frais ne comptent pas")
+from app.services import rvgi_rattachement as ratt
+erp.executescript("""
+INSERT INTO cde_entete VALUES (9912584,0);
+INSERT INTO cde_ligne VALUES
+ (9912584,1,'571','0095',200000,'2015-10-02 00:00','2015-10-01 00:00',0),
+ (9912584,2,'FR','FRAIS_DOUTILS',1,'2015-10-02 00:00','2015-10-01 00:00',0),
+ (9912584,3,'FR','FRAIS_DE_CLICHE',1,'2015-10-02 00:00','2015-10-01 00:00',0);
+""")
+produits, totaux = ratt.lignes_de_produit(erp, ["9912584", "9932856"])
+verifier("9912584 : une seule ligne de produit", totaux.get("9912584"), 1)
+verifier("9932856 : le cliché ne compte pas", ("9932856", 9) in produits, False)
+def numero(choix):
+    nommees = [x for x in choix if x["ligne"] is None or (x["numero"], x["ligne"]) in produits]
+    return ratt.proposer_reference(nommees or choix, totaux)
+verifier("L1 + frais d'outils → « 9912584 » (était 9912584/L1-2)",
+         numero([{"numero": "9912584", "ligne": 1}, {"numero": "9912584", "ligne": 2}]), "9912584")
+# Dans ce jeu, 9932856 n'a qu'une ligne de produit (L1) plus le cliché (L9).
+verifier("seule ligne de produit cochée → la commande entière",
+         numero([{"numero": "9932856", "ligne": 1}]), "9932856")
+produits, totaux = ratt.lignes_de_produit(erp, ["9932770"])
+verifier("une ligne parmi deux produits → « 9932770/L1 »",
+         numero([{"numero": "9932770", "ligne": 1}]), "9932770/L1")
+verifier("les deux produits → « 9932770 »",
+         numero([{"numero": "9932770", "ligne": 1}, {"numero": "9932770", "ligne": 2}]), "9932770")
+src_rv = open("app/routers/rvgi.py", encoding="utf-8").read()
+verifier("la route du numéro utilise ce filtre", "ratt.lignes_de_produit(" in src_rv, True)
+
 print("Concordance fiche / commandes")
 c_ok = op.controler_concordance(conn, [{"numero": "9932770", "ligne": 1}], 66)
 verifier("fiche de l'article coché : acceptée", c_ok["ok"], True)

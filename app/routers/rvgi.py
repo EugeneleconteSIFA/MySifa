@@ -348,23 +348,25 @@ def rvgi_reference(
     if not choix:
         return {"reference": "", "reliquat": False}
 
-    # Combien de lignes chaque commande porte dans RVGI : sans ça, on écrirait
-    # « 9932128/L1-6 » là où « 9932128 » suffit.
+    # Combien de lignes de PRODUIT chaque commande porte dans RVGI : sans ça,
+    # on écrirait « 9932128/L1-6 » là où « 9932128 » suffit. Les lignes de
+    # frais (outils, cliché) ne comptent ni dans ce total ni dans le numéro.
     totaux: Dict[str, int] = {}
+    produits = None
     try:
         from app.services import erp_mirror as miroir
         with miroir.get_erp_db() as c:
             if "cde_ligne" in miroir.tables_presentes(c):
-                uniques = sorted({c2["numero"] for c2 in choix})
-                for debut in range(0, len(uniques), 400):
-                    lot = uniques[debut:debut + 400]
-                    for r in c.execute(
-                        "SELECT CAST(numero AS TEXT) n, COUNT(*) k FROM cde_ligne "
-                        "WHERE corbeille=0 AND CAST(numero AS TEXT) IN (%s) GROUP BY n"
-                        % ",".join("?" * len(lot)), lot):
-                        totaux[r["n"]] = r["k"]
+                produits, totaux = ratt.lignes_de_produit(c, [c2["numero"] for c2 in choix])
     except FileNotFoundError:
         pass
+    if produits is not None:
+        nommees = [c2 for c2 in choix
+                   if c2["ligne"] is None or (c2["numero"], c2["ligne"]) in produits]
+        # Que des lignes de frais cochées : on garde la sélection telle quelle
+        # plutôt que de ne rien proposer.
+        if nommees:
+            choix = nommees
 
     with get_db() as conn:
         reliquat = ratt.deja_couvertes(
