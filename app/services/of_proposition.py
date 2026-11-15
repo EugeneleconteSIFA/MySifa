@@ -439,9 +439,11 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
 # n'est donc presque jamais voulu — et il ne se verrait pas : planning,
 # besoins matières et déstockage suivraient la mauvaise fiche.
 #
-# « Un de leurs articles », pas « le seul » : un OF peut imprimer plusieurs
-# modèles ensemble sur la fiche de l'un d'eux (9932652 : fiche 1315/0003 pour
-# 1315/0003, 0004 et 0013).
+# Un OF = un produit (décision du 15/11/2026) : TOUTES les lignes cochées
+# doivent porter l'article de la fiche. Plusieurs modèles imprimés ensemble
+# sur la fiche de l'un d'eux (9932652 : fiche 1315/0003 pour 1315/0003, 0004
+# et 0013) reste possible, mais c'est une exception qui se justifie : elle
+# passe par le motif, comme tout écart.
 #
 # Rien à contrôler sans commande (stock, marché, reliquat), ni quand le miroir
 # ne répond pas : on ne bloque jamais une création sur une panne de lecture.
@@ -478,4 +480,13 @@ def controler_concordance(conn, commandes: List[Dict[str, Any]],
         res["ok"] = False
         res["message"] = "%s ne correspond%s à aucun article des commandes cochées (%s)." % (
             " et ".join(hors), "ent" if len(hors) > 1 else "", ", ".join(articles))
+        return res
+    # Un seul produit : les lignes d'un autre article n'ont rien à faire là.
+    cle_of = a_verifier[0][1] if a_verifier else None
+    autres = [a for a in articles if cle_of and a != cle_of]
+    if autres:
+        res["ok"] = False
+        res["message"] = ("Les lignes cochées portent %d articles (%s) : un OF ne couvre qu'un "
+                          "produit. Faites un OF par article, ou indiquez le motif "
+                          "(modèles imprimés ensemble…)." % (len(articles), ", ".join(articles)))
     return res

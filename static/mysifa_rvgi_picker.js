@@ -48,6 +48,9 @@
                  commandes remontent en tête et s'affichent avant
                  toute recherche — rien n'est coché pour autant
      recherche   chaîne pré-remplie (le numéro déjà tapé)
+     produit     article attendu (« 1164/0066 ») : une ligne d'un autre
+                 article porte l'étiquette « autre produit ». Sert l'OF,
+                 qui ne couvre qu'un produit (15/11/2026)
      initial     lignes déjà rattachées, à re-cocher à l'ouverture.
                  SANS elles, valider après avoir coché une ligne
                  EFFACE les précédentes — l'enregistrement est un
@@ -99,6 +102,12 @@
     '.mrp-etiq.plein{background:rgba(22,163,74,.14);color:#15803d}',
     /* Déjà partie : un autre départ emporte cette ligne. Ce n'est pas un
        rattachement de production, la couleur est donc la sienne. */
+    '.mrp-etiq.autre{background:rgba(248,113,113,.14);color:var(--danger,#dc2626)}',
+    '.mrp-sel{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--border,#dcdfe4)}',
+    '.mrp-sel .t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#6b7280);margin-right:4px}',
+    '.mrp-puce{display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 9px;border-radius:999px;font-size:12px;',
+    '  background:var(--accent-bg,rgba(37,99,235,.1));color:var(--accent,#2563eb);border:1px solid var(--accent,#2563eb)}',
+    '.mrp-puce button{border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 4px}',
     '.mrp-etiq.expediee{background:rgba(99,102,241,.16);color:#4338ca}',
     '.mrp-l{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border,#dcdfe4);font-size:12.5px}',
     '.mrp-l:last-child{border-bottom:none}',
@@ -362,6 +371,10 @@
             ? '<label class="mrp-bascule"><input type="checkbox" id="mrp-sold"> Inclure les commandes soldées</label>'
             : '') +
         '</div>' +
+        // Ce qui est déjà coché reste sous les yeux, quelle que soit la
+        // recherche en cours : sans ça, chercher une deuxième commande
+        // cachait la première, et on ne savait plus ce qu'on avait pris.
+        '<div class="mrp-sel" id="mrp-sel" style="display:none"></div>' +
         '<div class="mrp-corps" id="mrp-corps"><div class="mrp-msg">Tape au moins deux caractères.</div></div>' +
         '<div class="mrp-pied">' +
           '<span class="mrp-choix" id="mrp-choix">Aucune ligne cochée</span>' +
@@ -481,6 +494,10 @@
                '<span class="qsai"><input type="number" min="0" step="1" data-qte="' + esc(k) + '"' +
                  (c ? '' : ' disabled') + ' placeholder="tout" value="' +
                  (c && c.qte != null ? esc(c.qte) : '') + '"></span>' +
+               (mode === 'commande' && o.produit && l.article && /^\d+\/\d+$/.test(l.article) &&
+                l.article !== o.produit
+                 ? '<span class="mrp-etiq autre" title="Un OF ne couvre qu\'un produit : ' + esc(o.produit) + '">autre produit</span>'
+                 : '') +
                (pris.length
                  ? '<span class="note" title="' + esc(pris.map(function (x) { return x.ref; }).join(', ')) + '">déjà pris</span>'
                  : '<span class="note"></span>') +
@@ -588,7 +605,31 @@
     function CSS_escape(s) { return String(s).replace(/"/g, '\\"'); }
 
     var minuteurRef = null;
+    function majSelection() {
+      var z = $('mrp-sel');
+      if (!z) return;
+      var cles = Object.keys(etat.choix);
+      if (!cles.length) { z.style.display = 'none'; z.innerHTML = ''; return; }
+      z.style.display = 'flex';
+      z.innerHTML = '<span class="t">Lignes choisies</span>' + cles.map(function (k) {
+        var c = etat.choix[k];
+        var lib = c.numero + (c.ligne == null ? ' (entière)' : ' L' + c.ligne) +
+          (c.vu_article ? ' · ' + c.vu_article : '') +
+          (c.qte != null ? ' · ' + nb(c.qte) : (c.vu_qte != null && c.ligne != null ? ' · ' + nb(c.vu_qte) : ''));
+        return '<span class="mrp-puce">' + esc(lib) +
+          '<button type="button" data-retirer="' + esc(k) + '" title="Retirer">×</button></span>';
+      }).join('');
+      z.querySelectorAll('[data-retirer]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var k = b.getAttribute('data-retirer');
+          delete etat.choix[k];
+          if (etat.pieces.length) peindre(); else majPied();
+        });
+      });
+    }
+
     function majPied() {
+      majSelection();
       var n = Object.keys(etat.choix).length;
       $('mrp-choix').innerHTML = n
         ? '<b>' + n + '</b> ligne' + (n > 1 ? 's' : '') + ' cochée' + (n > 1 ? 's' : '')
@@ -651,6 +692,7 @@
     }
 
     // Ouverture : on lance la recherche si on a déjà de quoi
+    majPied();
     if (o.recherche) champ.value = o.recherche;
     setTimeout(function () { champ.focus(); champ.select(); }, 30);
     if ((o.recherche && o.recherche.trim().length >= 2) ||
