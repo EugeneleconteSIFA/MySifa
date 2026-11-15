@@ -1540,7 +1540,14 @@ function openOfCreateModal(){
   // La date de création est celle du jour, comme dans Access.
   const d=new Date();
   const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  openOfEditModal({_commandes:[],date_creation:iso});
+  const m={_commandes:[],date_creation:iso};
+  // Tout découle de la commande : « Créer un OF » ouvre d'abord le choix des
+  // commandes, et la fenêtre OF n'apparaît qu'ensuite, déjà remplie. Un
+  // formulaire vide donnait l'impression d'avoir dix cases à saisir quand il
+  // n'y a qu'un choix à faire (15/11/2026). « OF sans commande » ouvre la
+  // fenêtre pour un OF de stock ou de marché.
+  if(!window.MysRvgiPicker){ openOfEditModal(m); return; }
+  ofeChoisirCommandes(m,true);
 }
 window.openOfCreateModal = openOfCreateModal;
 
@@ -1631,11 +1638,11 @@ async function ofeReprendreArticle(lignes){
    serveur. En création il n'y en a pas encore, donc on garde la sélection
    dans la modale et elle part avec le POST — c'est le même mécanisme que le
    planning utilise pour un dossier qui n'existe pas encore. */
-function ofeChoisirCommandes(){
-  const m=S.ofEditModal;
+function ofeChoisirCommandes(mDepart,premier){
+  const m=mDepart||S.ofEditModal;
   if(!m) return;
   if(!window.MysRvgiPicker){toast('Sélecteur RVGI indisponible.','error');return;}
-  captureSaisie('ofe-',m);
+  if(!premier) captureSaisie('ofe-',m);
   m.of_numero=(m._dom&&m._dom['ofe-numero']!==undefined)?m._dom['ofe-numero']:m.of_numero;
   // Le produit de l'OF : celui de la fiche choisie, sinon celui des
   // commandes déjà cochées. Le sélecteur s'ouvre sur lui (toutes les
@@ -1651,7 +1658,19 @@ function ofeChoisirCommandes(){
     initial:m.id?undefined:(m._commandes||[]),
     produit:/^\d+\/\d+$/.test(produit)?produit:null,
     recherche:(produit&&!m.id?produit:(m.of_numero||'')).trim(),
+    titre:premier?'Nouvel OF — choisissez la ou les commandes':undefined,
+    libelleRien:m.id?undefined:'OF sans commande',
     onValider:function(res){
+      if(!m.id && res && res.etat==='a_rattacher'){
+        // OF sans commande (stock, marché, reliquat) : la fenêtre s'ouvre
+        // sur le numéro à saisir et la fiche à choisir.
+        m._commandes=[];
+        m._cmdInfo=null;
+        set({ofEditModal:m});
+        renderOfEditModal();
+        requestAnimationFrame(function(){ const el=document.getElementById('ofe-numero'); if(el) el.focus(); });
+        return;
+      }
       m._commandes=(res&&res.lignes)||[];
       // Le numéro d'OF suit la même règle que la référence d'un dossier : il
       // se propose depuis les commandes. On ne l'impose jamais — un numéro

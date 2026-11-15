@@ -1891,3 +1891,26 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 .op-picker-opt.choisi{font-weight:600}
 .op-picker-check{color:var(--accent);font-weight:700}
 .op-picker-rien{padding:14px 8px;font-size:12px;color:var(--muted)}
+
+/* Liste des OF (15/11/2026) : chaque ligne porte désormais les mêmes sept
+   actions (Modifier, Aperçu, Imprimer, Télécharger, Dossier, Produit,
+   Supprimer). À 260px la corbeille sortait de la cellule. Les colonnes de
+   texte prennent des largeurs à leur mesure au lieu de se partager le reste
+   à parts égales : une machine ou une date n'a pas besoin de la place d'un
+   numéro d'OF. */
+.table-std.table-actions-wide.prod-liste-of th.th-actions,
+.table-std.table-actions-wide.prod-liste-of td.td-actions{
+  width:340px !important;
+  min-width:340px !important;
+  max-width:340px !important;
+}
+.prod-liste-of th:nth-child(2){width:20%}
+.prod-liste-of th:nth-child(3){width:15%}
+.prod-liste-of th:nth-child(4){width:11%}
+.prod-liste-of th:nth-child(5){width:11%}
+.prod-liste-of th:nth-child(6){width:11%}
+.prod-liste-of th:nth-child(7){width:11%}
+@media (max-width:900px){
+  .table-std.table-actions-wide.prod-liste-of th.th-actions,
+  .table-std.table-actions-wide.prod-liste-of td.td-actions{width:auto !important;min-width:0 !important;max-width:none !important}
+}

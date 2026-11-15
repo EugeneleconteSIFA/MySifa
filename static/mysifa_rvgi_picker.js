@@ -51,6 +51,9 @@
      produit     article attendu (« 1164/0066 ») : une ligne d'un autre
                  article porte l'étiquette « autre produit ». Sert l'OF,
                  qui ne couvre qu'un produit (15/11/2026)
+     titre       titre de la fenêtre, à la place du titre par défaut
+     libelleRien libellé du bouton « Je ne trouve pas… » (« OF sans
+                 commande » quand le sélecteur ouvre la création d'un OF)
      initial     lignes déjà rattachées, à re-cocher à l'ouverture.
                  SANS elles, valider après avoir coché une ligne
                  EFFACE les précédentes — l'enregistrement est un
@@ -359,7 +362,7 @@
     fond.className = 'mrp-fond';
     fond.innerHTML =
       '<div class="mrp" role="dialog" aria-modal="true">' +
-        '<div class="mrp-tete"><div><h2>' + esc(titrePicker(mode, objet)) +
+        '<div class="mrp-tete"><div><h2>' + esc(o.titre || titrePicker(mode, objet)) +
         '</h2><p class="st" id="mrp-st">—</p></div>' +
         '<button type="button" class="mrp-x" title="Fermer">×</button></div>' +
         '<div class="mrp-cherche">' +
@@ -382,8 +385,9 @@
             ? '<span class="mrp-ref" id="mrp-refz" style="display:none">Référence proposée <span class="v" id="mrp-ref"></span></span>'
             : '') +
           '<span class="mrp-b">' +
-            '<button type="button" class="mrp-btn doux" id="mrp-rien">Je ne trouve pas ' +
-              (mode === 'commande' ? 'ma commande' : 'mon BL') + '</button>' +
+            '<button type="button" class="mrp-btn doux" id="mrp-rien">' +
+              (o.libelleRien ? esc(o.libelleRien)
+                : 'Je ne trouve pas ' + (mode === 'commande' ? 'ma commande' : 'mon BL')) + '</button>' +
             '<button type="button" class="mrp-btn" id="mrp-annul">Annuler</button>' +
             '<button type="button" class="mrp-btn pri" id="mrp-ok" disabled>Valider</button>' +
           '</span>' +
