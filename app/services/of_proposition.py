@@ -359,7 +359,7 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
             rows = c.execute(
                 "SELECT l.id AS id_ligne, CAST(l.numero AS TEXT) AS numero, l.ligne, l.code1, l.code2, "
                 "       l.qte, l.cuv, l.des1, l.des2, l.des3, "
-                "       substr(l.amjl, 1, 10) AS livraison "
+                "       substr(l.amjl, 1, 10) AS livraison, substr(l.amje, 1, 10) AS expedition "
                 "  FROM cde_ligne l "
                 "  JOIN cde_entete e ON e.numero = l.numero AND e.corbeille = 0 "
                 " WHERE l.corbeille = 0 AND CAST(l.numero AS TEXT) IN (%s) "
@@ -395,14 +395,21 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         unite, par_unite = unite_de_vente(r["cuv"], unites, r["des1"], r["des2"], r["des3"])
         retenues.append({"id": r["id_ligne"], "numero": num, "ligne": ligne, "article": article,
                          "qte": qte, "unite": unite, "par_unite": par_unite,
-                         "livraison": (r["livraison"] or None)})
+                         "livraison": (r["livraison"] or None),
+                         "expedition": (r["expedition"] or None)})
 
     articles = sorted({x["article"] for x in retenues})
     dates = sorted(x["livraison"] for x in retenues if x["livraison"])
+    expeditions = sorted(x["expedition"] for x in retenues if x.get("expedition"))
     return {
         "articles": articles,
         "qte_etiquettes": None,          # posée par quantite_etiquettes()
         "delai_client": dates[0] if dates else None,
+        # Le délai des OF Access est la date de livraison 3 fois sur 4, la
+        # date d'expédition parfois (43 commandes, 15/11/2026) : l'écran
+        # propose la livraison et montre les deux, au choix d'un clic.
+        "date_livraison": dates[0] if dates else None,
+        "date_expedition": expeditions[0] if expeditions else None,
         "lignes": retenues,
     }
 
@@ -540,6 +547,8 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         "fiches": fiches,
         "qte_etiquettes": qte,
         "conversions": conversions,
+        "date_livraison": lu.get("date_livraison"),
+        "date_expedition": lu.get("date_expedition"),
         # Pour « Voir la commande » : l'id de la ligne ouvre sa fiche dans
         # l'écran Commandes de l'ERP (/erp#/commandes?fiche=commandes:<id>).
         "lignes": [{"id": x["id"], "numero": x["numero"], "ligne": x["ligne"],

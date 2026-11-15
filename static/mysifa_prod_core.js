@@ -2099,6 +2099,47 @@ async function ofeDepuisCommandes(m){
   return false;
 }
 
+/* Les deux dates de la commande sous le délai client. Le délai des OF
+   Access est la date de livraison 3 fois sur 4, la date d'expédition
+   parfois : la livraison est proposée, l'autre se prend d'un clic. */
+function ofeDatesHtml(m){
+  const r=m._cmdInfo;
+  if(!r||(!r.date_livraison&&!r.date_expedition)) return '';
+  const actuel=(m._dom&&m._dom['ofe-delai']!==undefined)?m._dom['ofe-delai']:(m.delai_client||'');
+  const fr=d=>String(d).split('-').reverse().join('/');
+  const puce=function(lib,d){
+    if(!d) return '';
+    const choisi=actuel===d;
+    return '<button type="button" data-delai="'+escAttr(d)+'" title="Prendre cette date comme délai client" '+
+      'style="padding:5px 10px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;'+
+      (choisi?'border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:700'
+             :'border:1px solid var(--border);background:var(--bg);color:var(--text)')+'">'+
+      escHtml(lib)+' '+escHtml(fr(d))+'</button>';
+  };
+  return '<div id="ofe-dates" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
+    'Dates de la commande :'+puce('Livraison',r.date_livraison)+puce('Expédition',r.date_expedition)+'</div>';
+}
+
+// Un clic sur une date de la commande la prend comme délai client.
+function ofeBrancherDates(overlay,m){
+  overlay.querySelectorAll('[data-delai]').forEach(function(b){
+    b.addEventListener('click',function(){
+      const d=b.getAttribute('data-delai');
+      const champ=document.getElementById('ofe-delai');
+      if(champ) champ.value=d;
+      m._dom=m._dom||{}; m._dom['ofe-delai']=d; m.delai_client=d;
+      ofeRepeindreDates(overlay,m);
+      ofeApercuPlusTard(m);
+    });
+  });
+}
+function ofeRepeindreDates(overlay,m){
+  const z=document.getElementById('ofe-dates');
+  if(!z) return;
+  z.outerHTML=ofeDatesHtml(m);
+  ofeBrancherDates(overlay,m);
+}
+
 function ofeInfoFiche(m){
   const calc=(m._ficheCalcules||[]).map(c=>OFE_CALCULES_LIBELLES[c]||c);
   const manuels=Object.keys(OFE_CALCULES).filter(c=>(m._manuels||{})[OFE_CALCULES[c]])
@@ -2176,6 +2217,12 @@ function ofeBrancherFiche(overlay,m){
   }
   const ref=overlay.querySelector('#ofe-reference');
   if(ref&&!m.id) ref.addEventListener('change',function(){ ofeControler(m); });
+  ofeBrancherDates(overlay,m);
+  const champDelai=overlay.querySelector('#ofe-delai');
+  if(champDelai) champDelai.addEventListener('change',function(){
+    m._dom=m._dom||{}; m._dom['ofe-delai']=champDelai.value;
+    ofeRepeindreDates(overlay,m);
+  });
   // Une case calculée corrigée à la main n'est plus recalculée.
   const ids=Object.values(OFE_CALCULES);
   overlay.addEventListener('input',function(e){
@@ -2382,6 +2429,7 @@ function renderOfEditModal(){
     return choix
       +_f('ofe-qte','Nb étiquettes',m.qte_etiquettes,'number')
       +_f('ofe-delai','Délai client',m.delai_client,'date')
+      +ofeDatesHtml(m)
       +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`
       +`<div id="ofe-ecart" style="grid-column:1/-1">${ofeEcartHtml(m)}</div>`;
   };
