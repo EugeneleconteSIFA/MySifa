@@ -1995,6 +1995,37 @@ def of_depuis_commandes(request: Request):
         return depuis_commandes(conn, lignes[:200])
 
 
+@router.post("/api/of/apercu")
+async def of_apercu(request: Request):
+    """L'OF en cours de saisie, imprimé sur le modèle atelier, SANS rien
+    enregistrer. Dans Access, l'ADV voit le document pendant qu'elle le
+    remplit ; la fenêtre « Nouvel OF » rappelle cette route à chaque
+    modification. C'est le même générateur que l'OF enregistré
+    (generate_of_pdf) : ce qu'elle relit est ce qui partira à l'atelier.
+
+    POST parce que l'OF entier ne tient pas dans une adresse ; exclu du
+    journal (audit_taxonomy.SKIP_PREFIXES) puisque rien ne change.
+    """
+    _require_of_access(request)
+    body = await request.json()
+    champs = {k: _coerce_of_value(k, v) for k, v in body.items() if k in OF_DATA_FIELDS}
+    with get_db() as conn:
+        # Le texte imprimé d'une matière découle de sa référence, comme à
+        # l'enregistrement.
+        _appliquer_references(conn, champs, REFERENCES_OF)
+    try:
+        from app.services.of_pdf_generator import generate_of_pdf
+        pdf_bytes = generate_of_pdf(champs)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="apercu_of.pdf"',
+                 "Cache-Control": "no-store"},
+    )
+
+
 @router.get("/api/of/controle")
 def of_controle(request: Request):
     """La fiche (et la référence) de l'OF concordent-elles avec les
