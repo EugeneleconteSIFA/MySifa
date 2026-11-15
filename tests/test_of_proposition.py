@@ -261,6 +261,14 @@ verifier("ordre des routes",
 verifier("ordre des routes (commandes)",
          src.index('@router.get("/api/of/depuis-commandes")') < src.index('@router.get("/api/of/{of_id}")'), True)
 
+print("Aperçu en direct de l'OF")
+src_a = open("app/routers/of_import.py", encoding="utf-8").read()
+corps_a = src_a[src_a.index("async def of_apercu"):src_a.index('@router.get("/api/of/controle")')]
+verifier("l'aperçu n'écrit rien en base", any(x in corps_a for x in ("INSERT", "UPDATE", "commit(")), False)
+verifier("même générateur que l'OF enregistré", "generate_of_pdf(champs)" in corps_a, True)
+from app.core.audit_taxonomy import SKIP_PREFIXES
+verifier("aperçu exclu du journal", "/api/of/apercu" in SKIP_PREFIXES, True)
+
 print("Tri de la liste des OF")
 src_r = open("app/routers/of_import.py", encoding="utf-8").read()
 expr = re.search(r'_SQL_DATE_CREATION_ISO = \((.*?)\n\)', src_r, re.S).group(1)

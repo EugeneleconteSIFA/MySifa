@@ -381,6 +381,9 @@ SKIP_PREFIXES: tuple[str, ...] = (
     "/api/print/agent/jobs",
     "/api/print/preview",
     "/api/print/specifiques/apercu",
+    # Aperçu de l'OF en cours de saisie, rappelé à chaque frappe : rien n'est
+    # enregistré, la création elle-même est journalisée.
+    "/api/of/apercu",
     "/api/tools/etiquettes/impression/apercu",
     "/api/perf",
     "/api/notifications/vu",
