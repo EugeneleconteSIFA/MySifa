@@ -2113,7 +2113,10 @@ function ofeBrancherFiche(overlay,m){
         if(f) ofeChoisirFiche(f.id);
       }
     });
-    if(!m._fiche) requestAnimationFrame(function(){ q.focus(); });
+    // La commande vient d'abord : on n'amène le curseur sur la recherche de
+    // fiche qu'une fois les commandes choisies (ou quand il y a plusieurs
+    // fiches à départager).
+    if(!m._fiche&&(m._commandes||[]).length) requestAnimationFrame(function(){ q.focus(); });
   }
   const qte=overlay.querySelector('#ofe-qte');
   if(qte&&!m.id){
@@ -2251,6 +2254,36 @@ async function saveOfEdit(){
   }
 }
 window.saveOfEdit = saveOfEdit;
+/* La molette dans une fenêtre ne doit jamais faire défiler la page derrière.
+   Le fond défilait dès que la fenêtre n'avait rien à faire défiler (contenu
+   plus court que l'écran) ou qu'elle était arrivée en butée : le navigateur
+   passe alors le geste au parent. On laisse défiler l'élément sous la souris
+   s'il le peut dans ce sens (fenêtre, zone de texte, liste) et on bloque le
+   reste. L'aperçu PDF est un iframe : il garde ses propres événements. */
+function retenirDefilement(overlay){
+  overlay.style.overscrollBehavior='contain';
+  const bloque=function(e,dy){
+    let el=e.target;
+    while(el&&el!==overlay){
+      const st=getComputedStyle(el);
+      const defilable=/(auto|scroll)/.test(st.overflowY)&&el.scrollHeight>el.clientHeight+1;
+      if(defilable){
+        const enHaut=el.scrollTop<=0, enBas=el.scrollTop+el.clientHeight>=el.scrollHeight-1;
+        if((dy<0&&!enHaut)||(dy>0&&!enBas)) return;
+      }
+      el=el.parentElement;
+    }
+    e.preventDefault();
+  };
+  overlay.addEventListener('wheel',function(e){ bloque(e,e.deltaY); },{passive:false});
+  let y0=null;
+  overlay.addEventListener('touchstart',function(e){ y0=e.touches[0].clientY; },{passive:true});
+  overlay.addEventListener('touchmove',function(e){
+    if(y0==null) return;
+    bloque(e,y0-e.touches[0].clientY);
+  },{passive:false});
+}
+
 function renderOfEditModal(){
   const existing=document.getElementById('of-edit-overlay');
   if(existing) existing.remove();
@@ -2313,8 +2346,7 @@ function renderOfEditModal(){
         <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
-      ${creation?_sec('Fiche technique',_secFiche(),true):''}
-      ${_sec(creation?"Commandes RVGI et numéro d'OF":'Commandes RVGI',`
+      ${_sec(creation?"1 · Commandes RVGI et numéro d'OF":'Commandes RVGI',`
         <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <button type="button" onclick="ofeChoisirCommandes()"
             style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">
@@ -2322,7 +2354,7 @@ function renderOfEditModal(){
           </button>
           <div style="font-size:12px;color:var(--muted)">
             ${creation
-              ? "Un OF peut couvrir une commande entière, quelques-unes de ses lignes, ou plusieurs commandes. Le numéro d'OF se propose à partir de ce choix."
+              ? "Commencez par la commande : elle propose le numéro d'OF, la fiche technique, le nombre d'étiquettes et le délai. Sans commande (stock, marché), saisissez le numéro et choisissez la fiche."
               : "Le sélecteur enregistre directement le rattachement de cet OF."}
           </div>
         </div>
@@ -2342,7 +2374,8 @@ function renderOfEditModal(){
           })(m._rvgiOf)}
           ${(m._rvgiOf.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
         </div>`:''}`,true)}
-      ${creation?_sec('Quantités à vérifier',[
+      ${creation?_sec('2 · Fiche technique, quantité et délai',_secFiche(),true):''}
+      ${creation?_sec('3 · Quantités à vérifier',[
         _f('ofe-nb-levees','Nb levées',m.nb_levees,'number'),
         _f('ofe-bobines','Qté bobines',m.qte_bobines,'number'),
         _f('ofe-metrage','Métrage',m.metrage,'number'),
@@ -2353,7 +2386,7 @@ function renderOfEditModal(){
       ].join(''),true):''}
       ${creation?`<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;background:var(--accent-bg);border-bottom:1px solid var(--border)">
-          <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">L'OF tel qu'il sera imprimé</span>
+          <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">4 · L'OF tel qu'il sera imprimé</span>
           <span id="ofe-apercu-etat" style="font-size:12px;color:var(--muted)"></span>
         </div>
         <div id="ofe-apercu-vide" style="display:${m._fiche?'none':'block'};padding:28px 16px;text-align:center;font-size:13px;color:var(--muted)">Choisissez une fiche technique pour voir l'OF.</div>
@@ -2449,6 +2482,7 @@ function renderOfEditModal(){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  retenirDefilement(overlay);
   overlay.querySelectorAll('.ofe-sec-hd').forEach(hd=>{
     hd.addEventListener('click',()=>{
       const body=hd.nextElementSibling;
@@ -2920,6 +2954,7 @@ function renderFicheEditModal(){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  retenirDefilement(overlay);
   overlay.querySelectorAll('.fce-sec-hd').forEach(hd=>{
     hd.addEventListener('click',()=>{
       const body=hd.nextElementSibling;
