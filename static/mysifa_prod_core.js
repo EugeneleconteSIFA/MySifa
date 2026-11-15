@@ -1651,10 +1651,15 @@ function ofeChoisirCommandes(){
       }
       set({ofEditModal:m});
       renderOfEditModal();
-      // La reprise de l'article se fait APRÈS le rendu : elle est
-      // asynchrone, et l'écran ne doit pas attendre le miroir pour montrer
-      // les commandes qui viennent d'être cochées.
-      ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
+      // La reprise se fait APRÈS le rendu : elle est asynchrone, et l'écran
+      // ne doit pas attendre le miroir pour montrer les commandes cochées.
+      // En création, la commande désigne d'abord la FICHE technique (son
+      // article est la clé produit) ; la fiche de fabrication RVGI n'est
+      // qu'un repli quand aucune fiche n'existe.
+      (m.id?Promise.resolve(false):ofeDepuisCommandes(m)).then(function(fait){
+        if(fait) return;
+        ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
+      });
     },
   });
 }
@@ -1919,11 +1924,60 @@ async function ofeRecalculer(){
   if(info) info.innerHTML=ofeInfoFiche(m);
 }
 
+/* Les commandes cochées proposent la fiche, la quantité et le délai.
+   Rend true quand une fiche a été prise ou proposée : la reprise de la fiche
+   de fabrication RVGI n'a alors plus lieu d'être. Une quantité ou un délai
+   déjà saisis ne sont jamais remplacés. */
+async function ofeDepuisCommandes(m){
+  const l=m._commandes||[];
+  if(!l.length) return false;
+  let r=null;
+  try{
+    const c=JSON.stringify(l.map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte})));
+    r=await api('/api/of/depuis-commandes?c='+encodeURIComponent(c));
+  }catch(e){ return false; }
+  if(S.ofEditModal!==m) return true;
+  captureSaisie('ofe-',m);
+  m._dom=m._dom||{};
+  const vide=id=>!String(m._dom[id]==null?'':m._dom[id]).trim();
+  if(r.qte_etiquettes&&vide('ofe-qte')){ m._dom['ofe-qte']=String(r.qte_etiquettes); m.qte_etiquettes=r.qte_etiquettes; }
+  if(r.delai_client&&vide('ofe-delai')){ m._dom['ofe-delai']=r.delai_client; m.delai_client=r.delai_client; }
+  m._cmdInfo=r;
+  const f=r.fiches||[];
+  set({ofEditModal:m});
+  renderOfEditModal();
+  if(m._fiche) return f.length>0;
+  if(f.length===1){
+    await ofeChoisirFiche(f[0].id);
+    return true;
+  }
+  if(f.length>1){
+    m._fichesTrouvees=f;
+    m._ficheIdx=0;
+    ofePeindreFiches('');
+    return true;
+  }
+  if((r.articles||[]).length>1){
+    toast((r.articles||[]).length+' articles sur les lignes cochées — choisissez la fiche, ou faites un OF par ligne.','info');
+  }
+  return false;
+}
+
 function ofeInfoFiche(m){
   const calc=(m._ficheCalcules||[]).map(c=>OFE_CALCULES_LIBELLES[c]||c);
   const manuels=Object.keys(OFE_CALCULES).filter(c=>(m._manuels||{})[OFE_CALCULES[c]])
     .map(c=>OFE_CALCULES_LIBELLES[c]||c);
   let h='';
+  const r=m._cmdInfo;
+  if(r&&r.article){
+    const n=(r.fiches||[]).length;
+    const bouts=['Article de la commande : '+r.article];
+    if(r.qte_etiquettes) bouts.push(Number(r.qte_etiquettes).toLocaleString('fr-FR')+' étiquettes commandées');
+    if(r.delai_client) bouts.push('livraison le '+r.delai_client.split('-').reverse().join('/'));
+    h+='<div>'+escHtml(bouts.join(' · '))+'.</div>';
+    if(!m._fiche&&n>1) h+='<div>'+n+' fiches pour ce produit — choisissez celle de la machine.</div>';
+    if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+'.</div>';
+  }
   if(calc.length) h+='<div>Calculé à partir du nombre d\'étiquettes : '+escHtml(calc.join(', '))+'.</div>';
   if(manuels.length) h+='<div>Corrigé à la main, plus recalculé : '+escHtml(manuels.join(', '))+'.</div>';
   (m._ficheManques||[]).forEach(function(x){ h+='<div style="color:var(--danger)">· '+escHtml(x)+'</div>'; });

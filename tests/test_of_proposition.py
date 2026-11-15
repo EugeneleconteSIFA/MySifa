@@ -169,10 +169,69 @@ verifier("adhésif sans grammage connu : rien", "qte_adhesif_g" in p["champs"], 
 verifier("sans quantité : aucune case calculée", p["calcules"], [])
 verifier("fiche inconnue", op.proposer(conn, 999, 10), None)
 
+print("Depuis les commandes cochées (lignes réelles de RVGI)")
+import contextlib
+from app.services import erp_mirror as miroir
+erp = sqlite3.connect(":memory:")
+erp.row_factory = sqlite3.Row
+erp.executescript("""
+CREATE TABLE cde_entete (numero INTEGER, corbeille INTEGER);
+CREATE TABLE cde_ligne (numero INTEGER, ligne INTEGER, code1 TEXT, code2 TEXT, qte INTEGER,
+                        amjl TEXT, amje TEXT, corbeille INTEGER);
+INSERT INTO cde_entete VALUES (9932770,0),(9932839,0),(9932840,0),(9932856,0),(9939999,1);
+INSERT INTO cde_ligne VALUES
+ (9932770,1,'1164','0066',4000000,'2026-11-16 00:00','2026-11-13 00:00',0),
+ (9932770,2,'1164','0067', 650000,'2026-11-16 00:00','2026-11-13 00:00',0),
+ (9932839,1,'1183','0032',2000000,'2026-11-23 00:00','2026-11-18 00:00',0),
+ (9932840,1,'1183','0032',2000000,'2026-11-22 00:00','2026-11-18 00:00',0),
+ (9932856,1,'954','0087',  60000,'2026-11-27 00:00','2026-11-25 00:00',0),
+ (9932856,9,'FR','FRAIS_DE_CLICHE',1,'2026-11-27 00:00','2026-11-25 00:00',0),
+ (9939999,1,'1164','0017',  10000,'2026-11-30 00:00','2026-11-30 00:00',0);
+""")
+miroir.get_erp_db = lambda *a, **k: contextlib.nullcontext(erp)
+miroir.tables_presentes = lambda c: {"cde_ligne", "cde_entete"}
+
+lu = op.lire_commandes([{"numero": "9932770", "ligne": 1, "qte": None}])
+verifier("L1 seule : un article", lu["articles"], ["1164/0066"])
+verifier("L1 seule : quantité de la ligne", lu["qte_etiquettes"], 4000000)
+verifier("délai = date de livraison", lu["delai_client"], "2026-11-16")
+lu = op.lire_commandes([{"numero": "9932770", "ligne": None}])
+verifier("commande entière : deux articles", lu["articles"], ["1164/0066", "1164/0067"])
+lu = op.lire_commandes([{"numero": "9932839", "ligne": None}, {"numero": "9932840", "ligne": None}])
+verifier("deux commandes, même article", lu["articles"], ["1183/0032"])
+verifier("quantités additionnées", lu["qte_etiquettes"], 4000000)
+verifier("la livraison la plus proche", lu["delai_client"], "2026-11-22")
+lu = op.lire_commandes([{"numero": "9932856", "ligne": None}])
+verifier("frais de cliché ignorés", lu["articles"], ["954/0087"])
+lu = op.lire_commandes([{"numero": "9932770", "ligne": 2, "qte": 300000}])
+verifier("quantité partielle du sélecteur", lu["qte_etiquettes"], 300000)
+lu = op.lire_commandes([{"numero": "9939999", "ligne": None}])
+verifier("commande à la corbeille ignorée", lu["articles"], [])
+
+conn.execute("ALTER TABLE fiches_techniques ADD COLUMN ref_produit_norm TEXT")
+conn.executescript("""
+UPDATE fiches_techniques SET ref_produit_norm = '1164/0017' WHERE id = 17;
+UPDATE fiches_techniques SET ref_produit_norm = '1183/0028' WHERE id = 28;
+INSERT INTO fiches_techniques (id, reference, ref_produit_norm, machine) VALUES
+  (66, '1164/0066', '1164/0066', 'COHESIO 1'),
+  (321, '1183/0032 - COHESIO1 - Laize 470', '1183/0032', 'COHESIO 1'),
+  (322, '1183/0032 - COHESIO2 - Laize 570', '1183/0032', 'COHESIO 2');
+""")
+d = op.depuis_commandes(conn, [{"numero": "9932770", "ligne": 1}])
+verifier("une fiche pour l'article : proposée", [f["id"] for f in d["fiches"]], [66])
+d = op.depuis_commandes(conn, [{"numero": "9932839", "ligne": None}, {"numero": "9932840", "ligne": None}])
+verifier("deux fiches (une par machine) : l'ADV choisit", [f["id"] for f in d["fiches"]], [321, 322])
+d = op.depuis_commandes(conn, [{"numero": "9932770", "ligne": None}])
+verifier("deux articles : aucune fiche imposée", (d["article"], d["fiches"]), (None, []))
+d = op.depuis_commandes(conn, [{"numero": "9932856", "ligne": 1}])
+verifier("article sans fiche : liste vide", (d["article"], d["fiches"]), ("954/0087", []))
+
 print("Route déclarée avant /api/of/{of_id}")
 src = open("app/routers/of_import.py", encoding="utf-8").read()
 verifier("ordre des routes",
          src.index('@router.get("/api/of/proposition")') < src.index('@router.get("/api/of/{of_id}")'), True)
+verifier("ordre des routes (commandes)",
+         src.index('@router.get("/api/of/depuis-commandes")') < src.index('@router.get("/api/of/{of_id}")'), True)
 
 print("Tri de la liste des OF")
 src_r = open("app/routers/of_import.py", encoding="utf-8").read()

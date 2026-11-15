@@ -297,3 +297,135 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[s
         "calcules": [c for c in CHAMPS_CALCULES if c in champs],
         "manques": manques,
     }
+
+
+# ─── Depuis les commandes cochées ────────────────────────────────────────────
+#
+# La commande dit QUEL produit, COMBIEN et POUR QUAND. Le code article d'une
+# ligne de commande (« 1164/0066 ») est la clé produit de la fiche technique :
+# vérifié sur tous les OF Access récents (9932770 L1/L2, 9932839-842,
+# 9932856 L1-L8). Il suffit donc de cocher la commande pour retrouver la
+# fiche — sauf quand le produit en a plusieurs (une par machine ou par laize,
+# 152 produits sur 785) : c'est alors à l'ADV de choisir.
+#
+# Quantité : celle des lignes cochées, ou la quantité partielle saisie dans
+# le sélecteur. L'ADV arrondit parfois au-dessus (1 075 000 → 1 080 000, une
+# levée complète) mais pas toujours : on propose la quantité commandée, elle
+# corrige.
+#
+# Délai : la date de livraison de la ligne (`amjl`) — celle des OF 9932770 et
+# 9932856. La plus proche quand plusieurs lignes sont cochées.
+
+def _article_produit(code1: Any, code2: Any) -> Optional[str]:
+    """« 1164/0066 », ou None pour une ligne qui n'est pas un produit
+    (« FR/FRAIS_DE_CLICHE ») : code1 et code2 sont numériques sur un article."""
+    a = str(code1 or "").strip()
+    b = str(code2 or "").strip()
+    if not (a.isdigit() and b.isdigit()):
+        return None
+    return "%s/%s" % (a, b)
+
+
+def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Articles, quantité et délai des lignes de commande cochées.
+
+    `lignes` : [{numero, ligne (None = commande entière), qte (partielle)}].
+    Lecture seule du miroir RVGI ; miroir absent = résultat vide, jamais
+    d'erreur.
+    """
+    choix: Dict[str, Dict[Any, Any]] = {}
+    for l in lignes or []:
+        num = str((l or {}).get("numero") or "").strip()
+        if not num:
+            continue
+        ligne = l.get("ligne")
+        try:
+            ligne = int(ligne) if ligne not in (None, "") else None
+        except (TypeError, ValueError):
+            ligne = None
+        choix.setdefault(num, {})[ligne] = _nombre(l.get("qte"))
+    vide = {"articles": [], "qte_etiquettes": None, "delai_client": None, "lignes": []}
+    if not choix:
+        return vide
+    try:
+        from app.services import erp_mirror as miroir
+        with miroir.get_erp_db() as c:
+            tables = miroir.tables_presentes(c)
+            if "cde_ligne" not in tables or "cde_entete" not in tables:
+                return vide
+            nums = sorted(choix)
+            # INNER JOIN obligatoire : une commande à la corbeille laisse ses
+            # lignes orphelines dans le miroir (règle RVGI du 28/08).
+            rows = c.execute(
+                "SELECT CAST(l.numero AS TEXT) AS numero, l.ligne, l.code1, l.code2, "
+                "       l.qte, substr(l.amjl, 1, 10) AS livraison "
+                "  FROM cde_ligne l "
+                "  JOIN cde_entete e ON e.numero = l.numero AND e.corbeille = 0 "
+                " WHERE l.corbeille = 0 AND CAST(l.numero AS TEXT) IN (%s) "
+                " ORDER BY l.numero, l.ligne" % ",".join("?" * len(nums)),
+                nums,
+            ).fetchall()
+    except Exception:
+        return vide
+
+    retenues = []
+    for r in rows:
+        num = r["numero"]
+        sel = choix.get(num, {})
+        try:
+            ligne = int(r["ligne"]) if r["ligne"] is not None else None
+        except (TypeError, ValueError):
+            ligne = None
+        if None in sel and len(sel) == 1:
+            partielle = None              # commande entière
+        elif ligne in sel:
+            partielle = sel[ligne]
+        else:
+            continue
+        article = _article_produit(r["code1"], r["code2"])
+        if not article:
+            continue
+        qte = partielle if partielle else _nombre(r["qte"])
+        retenues.append({"numero": num, "ligne": ligne, "article": article,
+                         "qte": qte, "livraison": (r["livraison"] or None)})
+
+    articles = sorted({x["article"] for x in retenues})
+    qtes = [x["qte"] for x in retenues if x["qte"]]
+    dates = sorted(x["livraison"] for x in retenues if x["livraison"])
+    return {
+        "articles": articles,
+        "qte_etiquettes": int(sum(qtes)) if qtes else None,
+        "delai_client": dates[0] if dates else None,
+        "lignes": retenues,
+    }
+
+
+def fiches_du_produit(conn, article: Any) -> List[Dict[str, Any]]:
+    """Les fiches techniques d'un produit : « 1183/0028 », « 1183/0028 - DSI »…"""
+    cle = _cle_produit(article)
+    if not cle:
+        return []
+    rows = conn.execute(
+        """SELECT id, reference, machine, format FROM fiches_techniques
+            WHERE ref_produit_norm = ? OR TRIM(reference) = ?
+               OR reference LIKE ? || ' %'
+            ORDER BY reference""",
+        (cle, cle, cle),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Ce que les commandes cochées proposent pour l'OF : fiche(s), quantité,
+    délai. Une fiche n'est proposée que si les lignes portent UN SEUL
+    article — deux articles, c'est un OF par ligne (« 9932770 - L1 »)."""
+    lu = lire_commandes(lignes)
+    articles = lu["articles"]
+    fiches = fiches_du_produit(conn, articles[0]) if len(articles) == 1 else []
+    return {
+        "articles": articles,
+        "article": articles[0] if len(articles) == 1 else None,
+        "fiches": fiches,
+        "qte_etiquettes": lu["qte_etiquettes"],
+        "delai_client": lu["delai_client"],
+    }
