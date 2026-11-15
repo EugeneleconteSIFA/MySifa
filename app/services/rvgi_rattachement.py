@@ -191,6 +191,39 @@ def proposer_reference(lignes: List[Dict[str, Any]],
     return ("Reliquat " + base) if reliquat else base
 
 
+def lignes_de_produit(c, numeros: Iterable[str]) -> Tuple[set, Dict[str, int]]:
+    """Les lignes de commande qui portent un PRODUIT, et leur nombre par
+    commande.
+
+    Une commande porte aussi des lignes de frais (« FR/FRAIS_DOUTILS »,
+    « FR/FRAIS_DE_CLICHE ») qui ne se fabriquent pas. Les compter faisait
+    proposer « 9912584/L1-2 » pour la seule ligne produit d'une commande
+    qui en a une (15/11/2026). Un article se reconnaît à ses deux codes
+    numériques, comme dans of_proposition._article_produit.
+    `c` : connexion au miroir. Rend ({(numero, ligne)}, {numero: nb}).
+    """
+    produits: set = set()
+    totaux: Dict[str, int] = {}
+    uniques = sorted({str(n).strip() for n in numeros if str(n).strip()})
+    for debut in range(0, len(uniques), 400):
+        lot = uniques[debut:debut + 400]
+        for r in c.execute(
+            "SELECT CAST(numero AS TEXT) n, ligne, code1, code2 FROM cde_ligne "
+            "WHERE corbeille=0 AND CAST(numero AS TEXT) IN (%s)" % ",".join("?" * len(lot)),
+            lot,
+        ):
+            a, b = str(r["code1"] or "").strip(), str(r["code2"] or "").strip()
+            if not (a.isdigit() and b.isdigit()):
+                continue
+            try:
+                lg = int(r["ligne"])
+            except (TypeError, ValueError):
+                continue
+            produits.add((r["n"], lg))
+            totaux[r["n"]] = totaux.get(r["n"], 0) + 1
+    return produits, totaux
+
+
 def deja_couvertes(conn: sqlite3.Connection, lignes: List[Dict[str, Any]],
                    piece: str = "commande",
                    sauf: Optional[Tuple[str, int]] = None) -> bool:

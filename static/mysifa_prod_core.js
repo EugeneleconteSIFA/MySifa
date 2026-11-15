@@ -1582,8 +1582,10 @@ const OFE_REFS = ['matiere_ref_id','glassine_ref_id','adhesif_ref_id',
 async function ofeReprendreArticle(lignes){
   const m=S.ofEditModal;
   if(!m) return;
+  // Une ligne « FR/FRAIS_DE_CLICHE » n'est pas un produit : même règle que
+  // le serveur (of_proposition._article_produit).
   const articles=[...new Set((lignes||[])
-    .map(l=>(l.vu_article||'').trim()).filter(Boolean))];
+    .map(l=>(l.vu_article||'').trim()).filter(a=>/^\d+\/\d+$/.test(a)))];
   if(!articles.length) return;
   if(articles.length>1){
     toast(articles.length+' articles différents sur les lignes cochées — '+
@@ -1660,10 +1662,11 @@ function ofeChoisirCommandes(){
       // En création, la commande désigne d'abord la FICHE technique (son
       // article est la clé produit) ; la fiche de fabrication RVGI n'est
       // qu'un repli quand aucune fiche n'existe.
-      (m.id?Promise.resolve(false):ofeDepuisCommandes(m)).then(function(fait){
-        if(fait) return;
-        ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
-      });
+      // En création, la fiche technique est obligatoire : la fiche de
+      // fabrication RVGI n'a plus de rôle à jouer, et son message « 2 articles
+      // différents » contredisait celui de la fiche (15/11/2026).
+      if(m.id) ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
+      else ofeDepuisCommandes(m);
     },
   });
 }
@@ -2076,7 +2079,8 @@ function ofeInfoFiche(m){
     if(r.delai_client) bouts.push('livraison le '+r.delai_client.split('-').reverse().join('/'));
     h+='<div>'+escHtml(bouts.join(' · '))+'.</div>';
     if(!m._fiche&&n>1) h+='<div>'+n+' fiches pour ce produit — choisissez celle de la machine.</div>';
-    if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+'.</div>';
+    if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+
+      ' — à créer avant l\'OF. Une autre fiche reste possible, avec le motif de l\'écart.</div>';
   }
   if(calc.length) h+='<div>Calculé à partir du nombre d\'étiquettes : '+escHtml(calc.join(', '))+'.</div>';
   if(manuels.length) h+='<div>Corrigé à la main, plus recalculé : '+escHtml(manuels.join(', '))+'.</div>';
