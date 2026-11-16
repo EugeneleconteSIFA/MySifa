@@ -139,6 +139,8 @@ body.light .acc-matrix-defaults tr.acc-sub-tr td.acc-sub-cell{background:#fafbfc
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
 input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
 .btn{background:var(--accent);color:var(--accent-fg);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+/* Un lien habillé en bouton (téléchargement) ne garde pas son soulignement. */
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .btn:hover{filter:brightness(1.06)}
 .btn-danger{background:var(--danger);color:var(--danger-fg)}
 .btn-danger:hover{filter:brightness(1.08)}
