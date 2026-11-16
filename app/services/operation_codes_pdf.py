@@ -137,8 +137,7 @@ def generer_pdf_codes_operation(codes: List[Dict]) -> bytes:
     def colonne(x0, cols):
         yy = y_regle - 5 * mm
         for titre, items, coul in cols:
-            fond = _teinte(coul, 0.13)
-            filet = _teinte(coul, 0.35)
+            filet = _teinte(coul, 0.45)
             c.setFillColor(coul)
             c.setFont("Helvetica-Bold", 8.5)
             t = titre.upper()
@@ -155,14 +154,15 @@ def generer_pdf_codes_operation(codes: List[Dict]) -> bytes:
                 code = str(it["code"])
                 cle = code in (CODE_DEBUT_DOS, CODE_FIN_DOS)
                 milieu = yy - h_ligne / 2
-                # Pastille du code, dans la couleur de sa section ; pleine pour
-                # le début et la fin de dossier.
+                # Pastille du code en gris neutre : la couleur reste au titre
+                # de la section, sinon l'affiche est trop chargée (retour du
+                # 16/11/2026). Pleine et foncée pour le début et la fin de dossier.
                 pw, ph = 10.5 * mm, min(h_ligne - 1.6 * mm, 6 * mm)
                 c.setLineWidth(0.8)
-                c.setFillColor(coul if cle else fond)
-                c.setStrokeColor(coul if cle else filet)
+                c.setFillColor(TEXT if cle else BG)
+                c.setStrokeColor(TEXT if cle else BORDER)
                 c.roundRect(x0, milieu - ph / 2, pw, ph, 1.8 * mm, stroke=1, fill=1)
-                c.setFillColor(colors.white if cle else coul)
+                c.setFillColor(colors.white if cle else TEXT)
                 c.setFont("Courier-Bold", taille + 1)
                 c.drawCentredString(x0 + pw / 2, milieu - (taille + 1) * 0.33, code)
                 # Libellé
