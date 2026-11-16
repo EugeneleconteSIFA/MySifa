@@ -80,6 +80,8 @@ sait ce qui part sur la même bobine. Le rattachement vit dans
 `rvgi_rattachements` avec `objet = 'of'`, et l'état retombe sur
 `of_imports.cmd_rvgi` / `.rvgi_etat`, exactement comme `dos_rvgi` sur un dossier.
 
+Un numéro PROPOSÉ déjà porté par un autre OF reçoit un suffixe : « 9932128/L1 (2) », puis « (3) » (`numero_of_libre()`). C'est le cas de deux OF qui se partagent une ligne : la quantité n'entre pas dans le numéro. Parenthèses et pas tiret, qui se lirait comme une plage de lignes. Un numéro TAPÉ par l'ADV n'est jamais suffixé : son doublon reste refusé (409).
+
 Un rattachement d'OF ne compte PAS dans `deja_couvertes()` : l'OF pointe la même
 ligne de commande que le dossier qui en sort, et le compter ferait naître en
 « Reliquat » le premier dossier issu de cet OF.

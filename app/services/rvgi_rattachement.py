@@ -225,6 +225,83 @@ def lignes_de_produit(c, numeros: Iterable[str]) -> Tuple[set, Dict[str, int]]:
     return produits, totaux
 
 
+def _cle_numero_of(numero: str) -> str:
+    """Comparaison d'un numéro d'OF : casse et espaces neutralisés.
+
+    Même équivalence que le contrôle de doublon de `POST /api/of`
+    (`LOWER(TRIM(of_numero))`), espaces intérieurs en plus.
+    """
+    return re.sub(r"\s+", " ", str(numero or "").strip()).lower()
+
+
+def numero_of_libre(conn: sqlite3.Connection, base: str,
+                    sauf_of_id: Optional[int] = None) -> str:
+    """`base` si aucun OF ne le porte, sinon « base (2) », « base (3) »…
+
+    Deux OF peuvent couvrir la même ligne de commande (450 000 puis 450 000
+    sur une ligne de 900 000) : la quantité n'entre pas dans le numéro, et
+    `deja_couvertes()` ignore les OF. Sans suffixe, le second recevait le
+    numéro du premier et la création répondait 409.
+
+    Le suffixe est entre parenthèses, pas en tiret : « 9932128/L1-3-2 » se
+    lirait comme une plage de lignes. Il n'ajoute aucun nombre de cinq
+    chiffres, donc le rapprochement dossier ↔ OF par numéro de commande
+    (`_of_tokens`) le traverse sans le voir.
+    """
+    base = str(base or "").strip()
+    if not base:
+        return base
+    motif = (base.replace("\\", "\\\\").replace("%", "\\%")
+             .replace("_", "\\_") + "%")
+    sql = ("SELECT id, of_numero FROM of_imports "
+           "WHERE LOWER(TRIM(of_numero)) LIKE LOWER(?) ESCAPE '\\'")
+    pris = {
+        _cle_numero_of(r[1]) for r in conn.execute(sql, (motif,)).fetchall()
+        if not (sauf_of_id and int(r[0]) == int(sauf_of_id))
+    }
+    if _cle_numero_of(base) not in pris:
+        return base
+    n = 2
+    while _cle_numero_of("%s (%d)" % (base, n)) in pris:
+        n += 1
+    return "%s (%d)" % (base, n)
+
+
+def lignes_a_numeroter(choix: List[Dict[str, Any]]
+                       ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """Les lignes cochées qui entrent dans le numéro proposé, et le nombre de
+    lignes de PRODUIT de chaque commande, lus dans le miroir.
+
+    Même règle que la route `/api/rvgi/reference` : les lignes de frais
+    (outils, cliché) ne comptent ni dans le total ni dans le numéro. Avec le
+    total, `proposer_reference()` écrit « 9932128 » plutôt que
+    « 9932128/L1-6 » quand toutes les lignes sont cochées. Que des lignes de
+    frais cochées : la sélection est gardée telle quelle. Miroir absent :
+    sélection intacte et {} — le numéro garde le détail des lignes, plus long
+    mais jamais faux.
+    """
+    totaux: Dict[str, int] = {}
+    produits = None
+    try:
+        with miroir.get_erp_db() as c:
+            if "cde_ligne" in miroir.tables_presentes(c):
+                produits, totaux = lignes_de_produit(c, [x["numero"] for x in choix])
+    except FileNotFoundError:
+        pass
+    if produits is not None:
+        def _produit(x):
+            if x.get("ligne") is None:
+                return True
+            try:
+                return (str(x["numero"]).strip(), int(x["ligne"])) in produits
+            except (TypeError, ValueError):
+                return False
+        nommees = [x for x in choix if _produit(x)]
+        if nommees:
+            choix = nommees
+    return choix, totaux
+
+
 def deja_couvertes(conn: sqlite3.Connection, lignes: List[Dict[str, Any]],
                    piece: str = "commande",
                    sauf: Optional[Tuple[str, int]] = None) -> bool:

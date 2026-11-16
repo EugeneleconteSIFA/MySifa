@@ -2140,8 +2140,13 @@ async def create_of(request: Request):
     commandes = _lignes_commandes(body.get("commandes"))
 
     numero = (champs.get("of_numero") or "").strip() if champs.get("of_numero") else ""
+    # Un numéro PROPOSÉ reçoit un suffixe s'il est déjà pris ; un numéro TAPÉ
+    # par l'ADV reste tel quel, et le doublon est refusé plus bas.
+    propose = False
     if not numero and commandes:
-        numero = ratt.proposer_reference(commandes)
+        nommees, totaux = ratt.lignes_a_numeroter(commandes)
+        numero = ratt.proposer_reference(nommees, totaux)
+        propose = bool(numero)
     if not numero:
         raise HTTPException(
             status_code=400,
@@ -2185,6 +2190,9 @@ async def create_of(request: Request):
         # l'insertion : sinon le document naîtrait avec un texte que personne
         # n'a choisi.
         _appliquer_references(conn, champs, REFERENCES_OF)
+        if propose:
+            numero = ratt.numero_of_libre(conn, numero)
+            champs["of_numero"] = numero
         double = conn.execute(
             "SELECT id FROM of_imports WHERE LOWER(TRIM(of_numero)) = LOWER(TRIM(?))",
             (numero,),
