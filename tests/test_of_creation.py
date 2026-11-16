@@ -88,6 +88,101 @@ class TestNumeroProposeDepuisCommandes(unittest.TestCase):
         self.assertEqual(ratt.proposer_reference([]), "")
 
 
+class TestToutesLesLignesCochees(unittest.TestCase):
+    """Cocher une à une toutes les lignes = la commande entière.
+
+    La création d'OF (`POST /api/of`) appelait `proposer_reference()` sans le
+    nombre de lignes de RVGI : six lignes cochées donnaient « 9932128/L1-6 ».
+    """
+
+    def setUp(self):
+        import contextlib
+        self.erp = sqlite3.connect(":memory:")
+        self.erp.row_factory = sqlite3.Row
+        self.erp.execute("CREATE TABLE cde_ligne (numero TEXT, ligne INTEGER, corbeille INTEGER)")
+        for lg in range(1, 7):
+            self.erp.execute("INSERT INTO cde_ligne VALUES ('9932128', ?, 0)", (lg,))
+        self.erp.execute("INSERT INTO cde_ligne VALUES ('9932128', 7, 1)")
+        self._get, self._tables = ratt.miroir.get_erp_db, ratt.miroir.tables_presentes
+        erp = self.erp
+        ratt.miroir.get_erp_db = lambda: contextlib.nullcontext(erp)
+        ratt.miroir.tables_presentes = lambda c: {"cde_ligne"}
+
+    def tearDown(self):
+        ratt.miroir.get_erp_db, ratt.miroir.tables_presentes = self._get, self._tables
+        self.erp.close()
+
+    def test_compte_hors_corbeille(self):
+        self.assertEqual(ratt.lignes_par_commande(["9932128", "9932128"]), {"9932128": 6})
+
+    def test_toutes_les_lignes_donnent_le_numero_seul(self):
+        lignes = [{"numero": "9932128", "ligne": lg} for lg in range(1, 7)]
+        self.assertEqual(
+            ratt.proposer_reference(lignes, ratt.lignes_par_commande(["9932128"])),
+            "9932128")
+
+    def test_une_partie_garde_le_detail(self):
+        lignes = [{"numero": "9932128", "ligne": lg} for lg in (1, 2, 3)]
+        self.assertEqual(
+            ratt.proposer_reference(lignes, ratt.lignes_par_commande(["9932128"])),
+            "9932128/L1-3")
+
+    def test_miroir_absent(self):
+        def absent():
+            raise FileNotFoundError
+        ratt.miroir.get_erp_db = absent
+        self.assertEqual(ratt.lignes_par_commande(["9932128"]), {})
+
+
+class TestNumeroOfSansDoublon(unittest.TestCase):
+    """Deux OF sur la même ligne ne reçoivent pas le même numéro."""
+
+    def setUp(self):
+        self.fichier = tempfile.NamedTemporaryFile(suffix=".db", delete=False).name
+        self.conn = _base_rattachements(self.fichier)
+
+    def tearDown(self):
+        self.conn.close()
+        try:
+            os.unlink(self.fichier)
+        except OSError:
+            pass
+
+    def _of(self, id_, numero):
+        self.conn.execute("INSERT INTO of_imports (id, of_numero) VALUES (?, ?)", (id_, numero))
+
+    def test_numero_libre_reste_tel_quel(self):
+        self.assertEqual(ratt.numero_of_libre(self.conn, "9932128/L1"), "9932128/L1")
+
+    def test_second_of_recoit_un_suffixe(self):
+        self._of(10, "9932128/L1")
+        self.assertEqual(ratt.numero_of_libre(self.conn, "9932128/L1"), "9932128/L1 (2)")
+
+    def test_suffixe_suivant_libre(self):
+        self._of(10, "9932128/L1")
+        self._of(11, "9932128/L1 (2)")
+        self.assertEqual(ratt.numero_of_libre(self.conn, "9932128/L1"), "9932128/L1 (3)")
+
+    def test_casse_et_espaces_ignores(self):
+        self._of(10, "  reliquat 9932128 ")
+        self.assertEqual(ratt.numero_of_libre(self.conn, "Reliquat 9932128"),
+                         "Reliquat 9932128 (2)")
+
+    def test_prefixe_seul_ne_compte_pas(self):
+        # « 9932128/L1-3 » commence comme « 9932128/L1 » sans être le même OF.
+        self._of(10, "9932128/L1-3")
+        self.assertEqual(ratt.numero_of_libre(self.conn, "9932128/L1"), "9932128/L1")
+
+    def test_l_of_lui_meme_n_est_pas_un_doublon(self):
+        self._of(10, "9932128/L1")
+        self.assertEqual(ratt.numero_of_libre(self.conn, "9932128/L1", sauf_of_id=10),
+                         "9932128/L1")
+
+    def test_caracteres_like_echappes(self):
+        self._of(10, "9932128_L1")
+        self.assertEqual(ratt.numero_of_libre(self.conn, "9932128%L1"), "9932128%L1")
+
+
 class TestRattachementDUnOf(unittest.TestCase):
 
     def setUp(self):

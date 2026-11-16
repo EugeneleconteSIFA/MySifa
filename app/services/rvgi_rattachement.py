@@ -29,6 +29,7 @@ Trois règles qui expliquent tout le reste
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -189,6 +190,76 @@ def proposer_reference(lignes: List[Dict[str, Any]],
         base = _compacter_numeros(list(par_cde.keys()))
 
     return ("Reliquat " + base) if reliquat else base
+
+
+def _cle_numero_of(numero: str) -> str:
+    """Comparaison d'un numéro d'OF : casse et espaces neutralisés.
+
+    Même équivalence que le contrôle de doublon de `POST /api/of`
+    (`LOWER(TRIM(of_numero))`), espaces intérieurs en plus.
+    """
+    return re.sub(r"\s+", " ", str(numero or "").strip()).lower()
+
+
+def numero_of_libre(conn: sqlite3.Connection, base: str,
+                    sauf_of_id: Optional[int] = None) -> str:
+    """`base` si aucun OF ne le porte, sinon « base (2) », « base (3) »…
+
+    Deux OF peuvent couvrir la même ligne de commande (450 000 puis 450 000
+    sur une ligne de 900 000) : la quantité n'entre pas dans le numéro, et
+    `deja_couvertes()` ignore les OF. Sans suffixe, le second recevait le
+    numéro du premier et la création répondait 409.
+
+    Le suffixe est entre parenthèses, pas en tiret : « 9932128/L1-3-2 » se
+    lirait comme une plage de lignes. Il n'ajoute aucun nombre de cinq
+    chiffres, donc le rapprochement dossier ↔ OF par numéro de commande
+    (`_of_tokens`) le traverse sans le voir.
+    """
+    base = str(base or "").strip()
+    if not base:
+        return base
+    motif = (base.replace("\\", "\\\\").replace("%", "\\%")
+             .replace("_", "\\_") + "%")
+    sql = ("SELECT id, of_numero FROM of_imports "
+           "WHERE LOWER(TRIM(of_numero)) LIKE LOWER(?) ESCAPE '\\'")
+    pris = {
+        _cle_numero_of(r[1]) for r in conn.execute(sql, (motif,)).fetchall()
+        if not (sauf_of_id and int(r[0]) == int(sauf_of_id))
+    }
+    if _cle_numero_of(base) not in pris:
+        return base
+    n = 2
+    while _cle_numero_of("%s (%d)" % (base, n)) in pris:
+        n += 1
+    return "%s (%d)" % (base, n)
+
+
+def lignes_par_commande(numeros: Iterable[str]) -> Dict[str, int]:
+    """{numéro: nombre de lignes de la commande dans RVGI}, lu dans le miroir.
+
+    C'est ce qui permet à `proposer_reference()` d'écrire « 9932128 » plutôt
+    que « 9932128/L1-6 » quand toutes les lignes sont cochées. Un miroir
+    absent rend {} : la référence garde alors le détail des lignes, ce qui est
+    plus long mais jamais faux.
+    """
+    uniques = sorted({str(n).strip() for n in numeros if str(n or "").strip()})
+    totaux: Dict[str, int] = {}
+    if not uniques:
+        return totaux
+    try:
+        with miroir.get_erp_db() as c:
+            if "cde_ligne" not in miroir.tables_presentes(c):
+                return totaux
+            for debut in range(0, len(uniques), 400):
+                lot = uniques[debut:debut + 400]
+                for r in c.execute(
+                    "SELECT CAST(numero AS TEXT) n, COUNT(*) k FROM cde_ligne "
+                    "WHERE corbeille=0 AND CAST(numero AS TEXT) IN (%s) GROUP BY n"
+                    % ",".join("?" * len(lot)), lot):
+                    totaux[r["n"]] = r["k"]
+    except FileNotFoundError:
+        pass
+    return totaux
 
 
 def deja_couvertes(conn: sqlite3.Connection, lignes: List[Dict[str, Any]],

@@ -350,21 +350,7 @@ def rvgi_reference(
 
     # Combien de lignes chaque commande porte dans RVGI : sans ça, on écrirait
     # « 9932128/L1-6 » là où « 9932128 » suffit.
-    totaux: Dict[str, int] = {}
-    try:
-        from app.services import erp_mirror as miroir
-        with miroir.get_erp_db() as c:
-            if "cde_ligne" in miroir.tables_presentes(c):
-                uniques = sorted({c2["numero"] for c2 in choix})
-                for debut in range(0, len(uniques), 400):
-                    lot = uniques[debut:debut + 400]
-                    for r in c.execute(
-                        "SELECT CAST(numero AS TEXT) n, COUNT(*) k FROM cde_ligne "
-                        "WHERE corbeille=0 AND CAST(numero AS TEXT) IN (%s) GROUP BY n"
-                        % ",".join("?" * len(lot)), lot):
-                        totaux[r["n"]] = r["k"]
-    except FileNotFoundError:
-        pass
+    totaux = ratt.lignes_par_commande(c2["numero"] for c2 in choix)
 
     with get_db() as conn:
         reliquat = ratt.deja_couvertes(
