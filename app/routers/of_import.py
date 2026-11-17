@@ -2403,6 +2403,31 @@ def _format_lh(valeur) -> tuple:
     return (None, None)
 
 
+@router.get("/api/of/{of_id}/fiche")
+def of_fiche(of_id: int, request: Request):
+    """La fiche technique d'un OF existant, pour la fenêtre « Modifier l'OF ».
+
+    Un OF ne stocke pas sa fiche : on la retrouve comme l'aperçu le fait
+    (`of_depuis_fiche.completer_of` : référence, sinon dossier relié, sinon
+    commande RVGI ; puis machine et laize). Lecture seule.
+    """
+    _require_of_access(request)
+    from app.services.of_depuis_fiche import completer_of
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM of_imports WHERE id = ?", (of_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="OF introuvable.")
+        fiche_id = completer_of(conn, dict(row)).get("_fiche_id")
+        fiche = None
+        if fiche_id:
+            f = conn.execute(
+                "SELECT id, reference, machine, format FROM fiches_techniques WHERE id = ?",
+                (fiche_id,),
+            ).fetchone()
+            fiche = dict(f) if f else None
+    return {"fiche": fiche}
+
+
 @router.get("/api/of/{of_id}/dossier-prefill")
 def of_dossier_prefill(of_id: int, request: Request):
     """Ce qu'il faut pour ouvrir la modale « nouveau dossier » déjà remplie.
