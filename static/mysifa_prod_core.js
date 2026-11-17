@@ -1535,6 +1535,18 @@ async function openOfEditModal(row){
   }
   set({ofEditModal:{...plein}});
   renderOfEditModal();
+  // Un OF existant ne stocke pas sa fiche : on la retrouve comme l'aperçu,
+  // pour que l'étape 2 la montre et que le nombre d'étiquettes recalcule.
+  if(plein&&plein.id){
+    api('/api/of/'+plein.id+'/fiche').then(function(r){
+      const m=S.ofEditModal;
+      if(!m||m.id!==plein.id||!r||!r.fiche) return;
+      captureSaisie('ofe-',m);
+      m._fiche=r.fiche;
+      set({ofEditModal:m});
+      renderOfEditModal();
+    }).catch(function(){});
+  }
 }
 function openOfCreateModal(){
   // La date de création est celle du jour, comme dans Access.
@@ -1990,7 +2002,7 @@ function ofeApercuPlusTard(m,delai){
   _ofeApercuTimer=setTimeout(function(){ ofeApercu(m); }, delai==null?450:delai);
 }
 async function ofeApercu(m){
-  if(!m||m.id||S.ofEditModal!==m||!m._fiche) return;
+  if(!m||S.ofEditModal!==m||(!m._fiche&&!m.id)) return;
   const cadre=document.getElementById('ofe-apercu');
   const etat=document.getElementById('ofe-apercu-etat');
   if(!cadre) return;
@@ -2215,7 +2227,7 @@ function ofeBrancherFiche(overlay,m){
     if(!m._fiche&&(m._commandes||[]).length) requestAnimationFrame(function(){ q.focus(); });
   }
   const qte=overlay.querySelector('#ofe-qte');
-  if(qte&&!m.id){
+  if(qte){
     qte.addEventListener('input',function(){
       clearTimeout(_ofeCalcTimer);
       _ofeCalcTimer=setTimeout(ofeRecalculer,250);
@@ -2391,6 +2403,17 @@ function retenirDefilement(overlay){
   },{passive:false});
 }
 
+/* Une date pour un champ <input type="date"> : il n'accepte que l'ISO. Les
+   OF venus d'Access portent « 18/11/2026 » : affichée telle quelle, la case
+   restait vide, et « Enregistrer » effaçait alors le délai (champ vidé =
+   décision humaine pour documents_verite). */
+function ofeIso(v){
+  const t=String(v==null?'':v).trim();
+  const fr=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(fr) return fr[3]+'-'+fr[2].padStart(2,'0')+'-'+fr[1].padStart(2,'0');
+  return t.slice(0,10);
+}
+
 function renderOfEditModal(){
   const existing=document.getElementById('of-edit-overlay');
   if(existing) existing.remove();
@@ -2439,7 +2462,7 @@ function renderOfEditModal(){
       </div>`;
     return choix
       +_f('ofe-qte','Nb étiquettes',m.qte_etiquettes,'number')
-      +_f('ofe-delai','Délai client',m.delai_client,'date')
+      +_f('ofe-delai','Délai client',ofeIso(m.delai_client),'date')
       +ofeDatesHtml(m)
       +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`
       +`<div id="ofe-ecart" style="grid-column:1/-1">${ofeEcartHtml(m)}</div>`;
@@ -2455,12 +2478,12 @@ function renderOfEditModal(){
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px 16px '+_sousDock+';box-sizing:border-box';
   overlay.onclick=e=>{if(e.target===overlay)closeOfEditModal();};
   overlay.innerHTML=`
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:${creation?'1400px':'900px'};width:100%;max-height:calc(100vh - 16px - ${_sousDock});overflow-y:auto;box-sizing:border-box">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:1400px;width:100%;max-height:calc(100vh - 16px - ${_sousDock});overflow-y:auto;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
-      ${_sec(creation?"1 · Commandes RVGI et numéro d'OF":'Commandes RVGI',`
+      ${_sec("1 · Commandes RVGI et numéro d'OF",`
         <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <button type="button" onclick="ofeChoisirCommandes()"
             style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">
@@ -2473,7 +2496,7 @@ function renderOfEditModal(){
           </div>
         </div>
         <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>
-        ${creation?_f('ofe-numero','OF n°',m.of_numero):''}
+        ${_f('ofe-numero','OF n°',m.of_numero)}
         ${m._rvgiOf?`
         <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
           ${(function(r){
@@ -2488,8 +2511,8 @@ function renderOfEditModal(){
           })(m._rvgiOf)}
           ${(m._rvgiOf.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
         </div>`:''}`,true)}
-      ${creation?_sec('2 · Fiche technique, quantité et délai',_secFiche(),true):''}
-      ${creation?_sec('3 · Quantités à vérifier',[
+      ${_sec('2 · Fiche technique, quantité et délai',_secFiche(),true)}
+      ${_sec('3 · Quantités à vérifier',[
         _f('ofe-nb-levees','Nb levées',m.nb_levees,'number'),
         _f('ofe-bobines','Qté bobines',m.qte_bobines,'number'),
         _f('ofe-metrage','Métrage',m.metrage,'number'),
@@ -2497,31 +2520,33 @@ function renderOfEditModal(){
           Calculées depuis la fiche et le nombre d'étiquettes. Une valeur corrigée à la main (levées arrondies…) n'est plus recalculée.
           <button type="button" id="ofe-recalc-btn" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
         </div>`,
-      ].join(''),true):''}
-      ${creation?`<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+      ].join(''),true)}
+      ${`<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;background:var(--accent-bg);border-bottom:1px solid var(--border)">
           <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">4 · L'OF tel qu'il sera imprimé</span>
           <span id="ofe-apercu-etat" style="font-size:12px;color:var(--muted)"></span>
         </div>
-        <div id="ofe-apercu-vide" style="display:${m._fiche?'none':'block'};padding:28px 16px;text-align:center;font-size:13px;color:var(--muted)">Choisissez une fiche technique pour voir l'OF.</div>
+        <div id="ofe-apercu-vide" style="display:${(m._fiche||m.id)?'none':'block'};padding:28px 16px;text-align:center;font-size:13px;color:var(--muted)">Choisissez une fiche technique pour voir l'OF.</div>
         <iframe id="ofe-apercu" title="Aperçu de l'OF" src="${m._apercuUrl?escAttr(m._apercuUrl+'#view=FitH&toolbar=0'):'about:blank'}"
-          style="display:${m._fiche?'block':'none'};width:100%;aspect-ratio:1/1.414;border:none;background:#fff"></iframe>
-      </div>`:''}
-      ${creation?`<div style="margin:4px 0 8px">
+          style="display:${(m._fiche||m.id)?'block':'none'};width:100%;aspect-ratio:1/1.414;border:none;background:#fff"></iframe>
+      </div>`}
+      ${`<div style="margin:4px 0 8px">
         <button type="button" id="ofe-detail-btn" style="padding:7px 12px;border-radius:8px;border:1px dashed var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px">
           ${m._voirDetail?'Masquer le détail de l\'OF':'Ajuster le détail de l\'OF (repris de la fiche et calculé)'}
         </button>
       </div>
-      <div id="ofe-detail" style="display:${m._voirDetail?'block':'none'}">`:''}
-      ${_sec(creation?'Identification — reprise de la fiche':'Identification',[
+      <div id="ofe-detail" style="display:${m._voirDetail?'block':'none'}">`}
+      ${_sec('Identification — reprise de la fiche',[
         // En création, le numéro vit avec les commandes qui le proposent, et
         // le reste est déjà rempli par la fiche : le bloc part replié.
-        creation?'':_f('ofe-numero','OF n°',m.of_numero),
+        // Le numéro vit avec les commandes, le délai avec la fiche (étapes 1
+        // et 2) : en création comme en modification depuis le 17/11/2026.
+        '',
         _f('ofe-reference','Référence',m.reference),
-        _f('ofe-date','Date création',(m.date_creation||'').slice(0,10),'date'),
-        creation?'':_f('ofe-delai','Délai client',m.delai_client),
+        _f('ofe-date','Date création',ofeIso(m.date_creation),'date'),
+        '',
         _f('ofe-machine','Machine',m.machine),
-      ].join(''),!creation)}
+      ].join(''),false)}
       ${_sec('Matière / Support',[
         _f('ofe-laize','Laize',m.laize,'number'),
         _f('ofe-format','Format',m.format),
@@ -2540,10 +2565,7 @@ function renderOfEditModal(){
         _f('ofe-qte-mille','Qté au mille',m.qte_au_mille,'number'),
         // En création, levées, bobines et métrage sont dans « Quantités à
         // vérifier », au-dessus de l'aperçu.
-        creation?'':_f('ofe-nb-levees','Nb levées',m.nb_levees,'number'),
-        creation?'':_f('ofe-qte','Qté étiquettes',m.qte_etiquettes,'number'),
-        creation?'':_f('ofe-bobines','Qté bobines',m.qte_bobines,'number'),
-        creation?'':_f('ofe-metrage','Métrage',m.metrage,'number'),
+        // Levées, bobines, métrage et quantité vivent au-dessus de l'aperçu.
         _f('ofe-tolerance','Tolérance',m.tolerance),
         _f('ofe-bobinettes','Bobinettes complètes',m.bobinettes_completes),
       ].join(''))}
@@ -2586,7 +2608,7 @@ function renderOfEditModal(){
       ${_sec('Particularités et observations',
         _ta('ofe-particularites','Particularités',m.particularites,3)
         +_ta('ofe-observations','Observations',m.observations,4),false)}
-      ${creation?'</div>':''}
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding:12px 0 18px;border-top:1px solid var(--border);flex-wrap:wrap;position:sticky;bottom:-18px;background:var(--card);z-index:2">
         <div>${m.id?`<button id="ofe-dossier-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Créer directement un dossier de prod</button>`:''}</div>
         <div style="display:flex;gap:10px">
@@ -2610,7 +2632,7 @@ function renderOfEditModal(){
   overlay.querySelector('#ofe-save-btn').onclick=saveOfEdit;
   const bDossier=overlay.querySelector('#ofe-dossier-btn');
   if(bDossier) bDossier.onclick=()=>ofCreerDossierProd(m);
-  if(creation){
+  {
     ofeBrancherFiche(overlay,m);
     // Toute modification redessine l'OF : frappe, choix d'une liste, case
     // recopiée de la fiche ou recalculée (ces dernières appellent aussi
