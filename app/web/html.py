@@ -226,6 +226,7 @@ __LOGIN_MAIN_CSS__
 body.has-staging-bandeau{padding-top:24px}
 body.has-staging-bandeau .sidebar{height:calc(100vh - 24px);top:24px}
 body.has-staging-bandeau .mobile-topbar{top:24px}
+@media print{.staging-bandeau{display:none!important}body.has-staging-bandeau{padding-top:0!important}}
 .app{position:relative;z-index:1;display:flex;min-height:100vh}
 .sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
 .sidebar::-webkit-scrollbar{width:0}
