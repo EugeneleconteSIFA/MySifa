@@ -2529,7 +2529,13 @@ function renderOfEditModal(){
   // défilement : le bouton est toujours visible, sans replier le dock.
   // Sous 900 px il n'y a pas de dock (mysifa_outils_mobile.js).
   const _sousDock=window.innerWidth>900?'96px':'16px';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px 16px '+_sousDock+';box-sizing:border-box';
+  // Le bandeau d'environnement (v1 pour tous, prod pour un superadmin) est
+  // fixé en haut au-dessus de tout : la fenêtre commence sous lui, sinon son
+  // titre et le haut de l'étape 1 passaient dessous (17/11/2026).
+  const _bandeau=document.querySelector('.staging-bandeau:not([hidden])');
+  const _hautBandeau=_bandeau&&_bandeau.offsetHeight?_bandeau.offsetHeight:0;
+  const _sousBandeau=(16+_hautBandeau)+'px';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:'+_sousBandeau+' 16px '+_sousDock+';box-sizing:border-box';
   // Un clic à côté ne jette plus une saisie en cours : il demande d'abord.
   overlay.onclick=async e=>{
     if(e.target!==overlay) return;
@@ -2542,7 +2548,7 @@ function renderOfEditModal(){
     closeOfEditModal();
   };
   overlay.innerHTML=`
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:1400px;width:100%;max-height:calc(100vh - 16px - ${_sousDock});overflow-y:auto;box-sizing:border-box">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:1400px;width:100%;max-height:calc(100vh - ${_sousBandeau} - ${_sousDock});overflow-y:auto;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
