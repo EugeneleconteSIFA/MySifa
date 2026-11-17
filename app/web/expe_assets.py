@@ -602,7 +602,9 @@ async function validerTarifsBrouillon(ids){
     const res=await api('/api/expe/transporteurs/'+T.editId+'/tarifs/valider',{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
     });
-    showToast((res.actives!=null?res.actives:0)+' ligne(s) active(s).','success');
+    const rempl=Number(res.remplacees)||0;
+    showToast((res.activees!=null?res.activees:0)+' ligne(s) activée(s)'
+      +(rempl?' · '+rempl+' ancienne(s) remplacée(s)':'')+'.','success');
     await loadTarifsTransporteur(T.editId);
   }catch(e){
     showToast(e.message||'Validation impossible','danger');
@@ -726,7 +728,8 @@ function renderTarifsOnglet(){
   }
   if(brouillons.length&&expeCanWrite()){
     kids.push(h('div',{className:'expe-trp-tarif-banner'},
-      h('span',null,'Ces lignes sont en brouillon — elles ne sont pas utilisées par le comparateur.'),
+      h('span',null,'Ces lignes sont en brouillon — elles ne sont pas utilisées par le comparateur. '
+        +'Les activer remplace les tarifs actifs des mêmes zones et tranches ; les autres zones restent en place.'),
       h('button',{type:'button',className:'btn btn-accent',onClick:()=>void validerTarifsBrouillon(null)},'Tout activer'),
       h('button',{type:'button',className:'btn btn-ghost',onClick:activerTarifsSelection},'Activer la sélection')
     ));

@@ -2703,35 +2703,87 @@ async def import_tarifs_csv(
     }
 
 
+def _activer_tarifs_brouillon(
+    conn, transporteur_id: int, ids: Optional[list] = None
+) -> dict:
+    """Active des lignes brouillon et retire les lignes actives qu'elles remplacent.
+
+    Une ligne active est remplacée quand elle porte le même type d'envoi, la
+    même base de calcul et la même zone qu'une ligne activée, sur une tranche
+    qui la chevauche. Sans ce retrait, l'import d'une grille annuelle laissait
+    l'ancienne active à côté de la nouvelle : la recherche de tarif ne regarde
+    pas les dates de validité et prenait l'une ou l'autre au hasard. Les zones
+    absentes de la nouvelle grille (l'international d'une grille France, par
+    exemple) gardent leurs tarifs.
+
+    Les lignes remplacées sont supprimées, pas remises en brouillon : un
+    « Tout activer » ultérieur les réactiverait.
+    """
+    if ids:
+        ids = [int(i) for i in ids]
+        ph = ",".join("?" * len(ids))
+        filtre_new = f"n.actif=0 AND n.id IN ({ph})"
+        filtre_maj = f"actif=0 AND id IN ({ph})"
+        params_new: tuple = tuple(ids)
+    else:
+        filtre_new = "n.actif=0"
+        filtre_maj = "actif=0"
+        params_new = ()
+    remplacees = conn.execute(
+        f"""DELETE FROM expe_tarifs
+            WHERE transporteur_id=? AND actif=1
+              AND EXISTS (
+                SELECT 1 FROM expe_tarifs n
+                WHERE n.transporteur_id=expe_tarifs.transporteur_id
+                  AND {filtre_new}
+                  AND n.type_envoi IS expe_tarifs.type_envoi
+                  AND n.base_calcul IS expe_tarifs.base_calcul
+                  AND n.zone_type IS expe_tarifs.zone_type
+                  AND n.zone_valeur IS expe_tarifs.zone_valeur
+                  AND (n.tranche_max IS NULL OR expe_tarifs.tranche_min <= n.tranche_max)
+                  AND (expe_tarifs.tranche_max IS NULL OR n.tranche_min <= expe_tarifs.tranche_max)
+              )""",
+        (transporteur_id, *params_new),
+    ).rowcount
+    activees = conn.execute(
+        f"""UPDATE expe_tarifs SET actif=1
+            WHERE transporteur_id=? AND {filtre_maj}""",
+        (transporteur_id, *params_new),
+    ).rowcount
+    actives = conn.execute(
+        "SELECT COUNT(*) AS n FROM expe_tarifs WHERE transporteur_id=? AND actif=1",
+        (transporteur_id,),
+    ).fetchone()[0]
+    return {"activees": activees, "remplacees": remplacees, "actives": actives}
+
+
 @router.post("/transporteurs/{transporteur_id}/tarifs/valider")
 def valider_tarifs(
     request: Request, transporteur_id: int, body: dict = Body(...)
 ):
-    _require_expe_write(request)
+    user = _require_expe_write(request)
     ids = body.get("ids") or []
     with get_db() as conn:
-        if not conn.execute(
-            "SELECT 1 FROM expe_transporteurs WHERE id=?", (transporteur_id,)
-        ).fetchone():
+        ex = conn.execute(
+            "SELECT id, nom FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone()
+        if not ex:
             raise HTTPException(status_code=404, detail="Transporteur introuvable")
-        if ids:
-            placeholders = ",".join("?" * len(ids))
-            conn.execute(
-                f"""UPDATE expe_tarifs SET actif=1
-                    WHERE transporteur_id=? AND id IN ({placeholders})""",
-                (transporteur_id, *ids),
-            )
-        else:
-            conn.execute(
-                "UPDATE expe_tarifs SET actif=1 WHERE transporteur_id=? AND actif=0",
-                (transporteur_id,),
-            )
+        res = _activer_tarifs_brouillon(conn, transporteur_id, ids)
         conn.commit()
-        updated = conn.execute(
-            "SELECT COUNT(*) AS n FROM expe_tarifs WHERE transporteur_id=? AND actif=1",
-            (transporteur_id,),
-        ).fetchone()["n"]
-    return {"actives": updated}
+    nom_log = (ex["nom"] or "").strip() or f"#{transporteur_id}"
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="expe",
+        objet=f"Transporteur {nom_log} · tarifs activés",
+        detail=(
+            f"{res['activees']} ligne(s) activée(s), "
+            f"{res['remplacees']} ligne(s) remplacée(s)"
+        ),
+        ip=request.client.host if request.client else None,
+    )
+    return res
 
 
 @router.delete("/transporteurs/{transporteur_id}/tarifs")
