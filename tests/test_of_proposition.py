@@ -127,7 +127,7 @@ CREATE TABLE fiches_techniques (
   nb_etiq_bobin INTEGER, nb_bobines_carton INTEGER,
   support_ref_id INTEGER, glassine_ref_id INTEGER, adhesif_ref_id INTEGER,
   carton_ref_id INTEGER, mandrin_ref_id INTEGER, palette_ref_id INTEGER);
-CREATE TABLE of_imports (id INTEGER PRIMARY KEY, adhesif_label TEXT, qte_adhesif_g REAL);
+CREATE TABLE of_imports (id INTEGER PRIMARY KEY, adhesif_label TEXT, qte_adhesif_g REAL, of_numero TEXT);
 INSERT INTO of_imports (adhesif_label, qte_adhesif_g) VALUES
   ('Enlevable 4007-22', 22), ('Permanent', NULL), ('enlevable 4007-22 ', NULL);
 INSERT INTO fiches_techniques VALUES (
@@ -230,6 +230,11 @@ verifier("une fiche pour l'article : proposée", [f["id"] for f in d["fiches"]],
 verifier("dates de la commande : livraison et expédition",
          (d["date_livraison"], d["date_expedition"]), ("2026-11-16", "2026-11-13"))
 verifier("délai proposé = livraison", d["delai_client"], "2026-11-16")
+verifier("numéro proposé, tel que la création le donnera", d["numero"], "9932770/L1")
+conn.execute("INSERT INTO of_imports (of_numero) VALUES ('9932770/L1')")
+verifier("numéro déjà pris : suffixe (2) (règle num_of_auto)",
+         op.depuis_commandes(conn, [{"numero": "9932770", "ligne": 1}])["numero"], "9932770/L1 (2)")
+conn.execute("DELETE FROM of_imports WHERE of_numero = '9932770/L1'")
 verifier("l'id de la ligne revient pour « Voir la commande »",
          [(x["numero"], x["ligne"], bool(x["id"])) for x in d["lignes"]], [("9932770", 1, True)])
 d = op.depuis_commandes(conn, [{"numero": "9932839", "ligne": None}, {"numero": "9932840", "ligne": None}])

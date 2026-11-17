@@ -541,7 +541,19 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
                          (fiches[0]["id"],)).fetchone()
         fiche = dict(r) if r else None
     qte, conversions = quantite_etiquettes(lu, fiche)
+    # Le numéro tel que la création le donnera, suffixe compris : « 9932128/L1
+    # (2) » quand un autre OF porte déjà le numéro (numero_of_libre, règle du
+    # 16/11/2026). L'ADV le voit avant de créer, au lieu d'un refus.
+    numero = None
+    try:
+        from app.services import rvgi_rattachement as ratt
+        nommees, totaux = ratt.lignes_a_numeroter(lignes)
+        base = ratt.proposer_reference(nommees, totaux)
+        numero = ratt.numero_of_libre(conn, base) if base else None
+    except Exception:
+        numero = None
     return {
+        "numero": numero,
         "articles": articles,
         "article": articles[0] if len(articles) == 1 else None,
         "fiches": fiches,
