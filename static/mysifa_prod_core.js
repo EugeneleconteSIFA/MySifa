@@ -1679,6 +1679,7 @@ async function ofeChoisirCommandes(mDepart,premier){
     // revient cochée, sinon « Modifier les commandes » repartait de zéro.
     initial:m.id?deja:(m._commandes||[]),
     produit:/^\d+\/\d+$/.test(produit)?produit:null,
+    unProduit:true,
     recherche:(produit&&!m.id?produit:(m.of_numero||'')).trim(),
     titre:premier?'Nouvel OF — choisissez la ou les commandes':undefined,
     libelleRien:m.id?undefined:'OF sans commande',

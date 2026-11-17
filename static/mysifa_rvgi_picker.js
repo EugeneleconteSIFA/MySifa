@@ -51,6 +51,9 @@
      produit     article attendu (« 1164/0066 ») : une ligne d'un autre
                  article porte l'étiquette « autre produit ». Sert l'OF,
                  qui ne couvre qu'un produit (15/11/2026)
+     unProduit   true pour l'OF : sans `produit`, c'est la première ligne
+                 cochée qui le fixe ; les lignes d'un autre article sont
+                 marquées aussitôt et le pied le dit en rouge (17/11/2026)
      titre       titre de la fenêtre, à la place du titre par défaut
      libelleRien libellé du bouton « Je ne trouve pas… » (« OF sans
                  commande » quand le sélecteur ouvre la création d'un OF)
@@ -154,6 +157,7 @@
     '.mrp-btn:disabled{opacity:.5;cursor:not-allowed}',
     '.mrp-btn.doux{background:none;border-color:transparent;color:var(--muted,#6b7280);text-decoration:underline}',
     '.mrp-avert{width:100%;font-size:11.5px;color:var(--muted,#6b7280);margin:0}',
+    '.mrp-avert.erreur{color:var(--danger,#dc2626);font-weight:700;font-size:12.5px}',
     /* résumé sous le champ du formulaire */
     '.mrp-res{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;margin-top:5px}',
     '.mrp-res .p{background:rgba(37,99,235,.12);color:var(--accent,#2563eb);border-radius:6px;',
@@ -510,9 +514,9 @@
                  ' title="Quantité à prendre sur cette ligne. Vide = toute la ligne."' +
                  (c ? '' : ' disabled') + ' placeholder="toute" value="' +
                  (c && c.qte != null ? esc(c.qte) : '') + '"></span>' +
-               (mode === 'commande' && o.produit && l.article && /^\d+\/\d+$/.test(l.article) &&
-                l.article !== o.produit
-                 ? '<span class="mrp-etiq autre" title="Un OF ne couvre qu\'un produit : ' + esc(o.produit) + '">autre produit</span>'
+               (mode === 'commande' && produitCourant() && estProduit(l.article) &&
+                l.article !== produitCourant()
+                 ? '<span class="mrp-etiq autre" title="Un OF ne couvre qu\'un produit : ' + esc(produitCourant()) + '">autre produit</span>'
                  : '') +
                // Nommer QUI a déjà la ligne : « déjà pris » seul ne disait ni
                // par quoi, ni si c'était un problème.
@@ -607,7 +611,43 @@
       }
       var q = corps.querySelector('[data-qte="' + CSS_escape(k) + '"]');
       if (q) { q.disabled = !coche; if (!coche) q.value = ''; }
+      // Le produit de l'OF peut venir de changer (première ligne cochée) :
+      // on remarque les lignes tout de suite, sans perdre la position.
+      if (o.unProduit && !o.produit) {
+        var haut = corps.scrollTop;
+        peindre();
+        corps.scrollTop = haut;
+        return;
+      }
       majPied();
+    }
+
+    function estProduit(a) { return !!a && /^\d+\/\d+$/.test(String(a)); }
+
+    // Le produit de l'OF : celui de la fiche s'il est connu, sinon l'article
+    // de la première ligne de produit cochée.
+    function produitCourant() {
+      if (o.produit) return o.produit;
+      if (!o.unProduit) return null;
+      var ks = Object.keys(etat.choix);
+      for (var i = 0; i < ks.length; i++) {
+        var c = etat.choix[ks[i]];
+        if (estProduit(c.vu_article)) return c.vu_article;
+      }
+      var ls = lignesChoisies();
+      for (var j = 0; j < ls.length; j++) if (estProduit(ls[j].article)) return ls[j].article;
+      return null;
+    }
+
+    // Les articles de produit couverts par la sélection (frais exclus).
+    function articlesChoisis() {
+      var vus = {};
+      Object.keys(etat.choix).forEach(function (k) {
+        var c = etat.choix[k];
+        if (estProduit(c.vu_article)) vus[c.vu_article] = 1;
+      });
+      lignesChoisies().forEach(function (l) { if (estProduit(l.article)) vus[l.article] = 1; });
+      return Object.keys(vus).sort();
     }
 
     // Une pièce entière ne s'enregistre PAS ligne par ligne : un seul
@@ -662,9 +702,19 @@
       $('mrp-ok').disabled = !n;
       var avert = $('mrp-avert');
       var partiel = Object.keys(etat.choix).some(function (k) { return etat.choix[k].qte != null; });
-      avert.textContent = partiel
-        ? 'Une quantité saisie ne couvre qu\'une partie de la ligne. Laisser vide couvre tout ce qui reste.'
-        : '';
+      var arts = o.unProduit ? articlesChoisis() : [];
+      var autres = o.produit ? arts.filter(function (a) { return a !== o.produit; }) : [];
+      avert.classList.toggle('erreur', arts.length > 1 || autres.length > 0);
+      if (arts.length > 1) {
+        avert.textContent = arts.length + ' produits différents cochés (' + arts.join(', ') +
+          ') : un OF ne couvre qu\'un produit. Faites un OF par produit — ou validez quand même pour des modèles imprimés ensemble (un motif sera demandé).';
+      } else if (autres.length) {
+        avert.textContent = 'La ligne cochée (' + autres.join(', ') + ') n\'est pas le produit de la fiche (' + o.produit + ').';
+      } else {
+        avert.textContent = partiel
+          ? 'Une quantité saisie ne couvre qu\'une partie de la ligne. Laisser vide couvre tout ce qui reste.'
+          : '';
+      }
       if (!propose) return;
       clearTimeout(minuteurRef);
       minuteurRef = setTimeout(majReference, 220);
