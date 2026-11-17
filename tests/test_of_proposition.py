@@ -301,6 +301,21 @@ verifier("les deux produits → « 9932770 »",
 src_rv = open("app/routers/rvgi.py", encoding="utf-8").read()
 verifier("la route du numéro utilise ce filtre", "ratt.lignes_de_produit(" in src_rv, True)
 
+print("Recherche de commandes par numéro d'OF")
+for q, attendu in [
+    ("9932856/L", ["9932856"]), ("9932856/L2", ["9932856"]), ("9932856 - L1", ["9932856"]),
+    ("9932128+129", ["9932128", "9932129"]),
+    ("9932839, 840, 841 et 842", ["9932839", "9932840", "9932841", "9932842"]),
+    ("9932858 à 861", ["9932858", "9932859", "9932860", "9932861"]),
+    ("9932128/L1-3+5", ["9932128"]), ("9932128/L1 (2)", ["9932128"]),
+    ("Reliquat 9932705 - L2", ["9932705"]), ("1164/0066", []), ("SONELOG", []),
+]:
+    verifier("« %s »" % q, ratt.numeros_dans_texte(q), attendu)
+
+a_ratt = open("app/services/rvgi_rattachement.py", encoding="utf-8").read()
+corps_cc = a_ratt[a_ratt.index("def chercher_commandes"):a_ratt.index("def _lire_lignes_commandes")]
+verifier("la recherche de commandes s'en sert", "numeros_dans_texte(q)" in corps_cc, True)
+
 print("Concordance fiche / commandes")
 c_ok = op.controler_concordance(conn, [{"numero": "9932770", "ligne": 1}], 66)
 verifier("fiche de l'article coché : acceptée", c_ok["ok"], True)

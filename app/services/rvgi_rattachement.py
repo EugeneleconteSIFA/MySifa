@@ -733,6 +733,49 @@ def _filtre_texte(q: str, colonnes: List[str]) -> Tuple[str, List[Any]]:
     return "(" + bouts + ")", [motif] * len(colonnes)
 
 
+# Ce qu'on tape dans la recherche, c'est souvent un NUMÉRO D'OF ou de dossier :
+# « 9932856/L2 », « 9932128+129 », « 9932839, 840, 841 et 842 », « 9932858 à
+# 9932861 ». Cherché tel quel, il ne ressemble à aucune colonne de RVGI et la
+# recherche ne trouvait rien (constat du 17/11/2026 : « 9932856/L » vide, et
+# c'est le texte qu'ouvre « Modifier les commandes » d'un OF existant).
+_SEGMENT_LIGNES = re.compile(r"[/\s-]*\bL\s*\d+(?:\s*[-–+,]\s*\d+)*", re.IGNORECASE)
+_PLAGE = re.compile(r"(\d{7})\s*(?:à|a|-|–)\s*(\d{2,7})\b")
+
+
+def numeros_dans_texte(q: str) -> List[str]:
+    """Les numéros de commande que désigne un numéro d'OF ou de dossier.
+
+    Les lignes (« /L1-3+5 ») sont retirées ; un numéro court qui suit un
+    numéro complet en abrège la fin (« 9932128+129 » → 9932129) ; « 9932858 à
+    9932861 » couvre la plage (30 numéros au plus). Rien de numérique à sept
+    chiffres : liste vide, la recherche texte habituelle s'applique seule.
+    """
+    texte = _SEGMENT_LIGNES.sub(" ", str(q or ""))
+    out: List[str] = []
+
+    def ajouter(n: str) -> None:
+        if n not in out:
+            out.append(n)
+
+    for m in _PLAGE.finditer(texte):
+        debut = m.group(1)
+        fin = m.group(2)
+        fin = fin if len(fin) == 7 else debut[:-len(fin)] + fin
+        a, b = int(debut), int(fin)
+        if a <= b <= a + 30:
+            for n in range(a, b + 1):
+                ajouter(str(n))
+    base = None
+    for m in re.finditer(r"\d+", texte):
+        t = m.group(0)
+        if len(t) == 7:
+            base = t
+            ajouter(t)
+        elif base and 2 <= len(t) <= 3:
+            ajouter(base[:-len(t)] + t)
+    return out
+
+
 def chercher_commandes(q: str, limite: int = LIMITE_RECHERCHE,
                        ouvertes_seulement: bool = True,
                        numeros_suggeres: Optional[List[str]] = None) -> List[Dict[str, Any]]:
@@ -755,6 +798,10 @@ def chercher_commandes(q: str, limite: int = LIMITE_RECHERCHE,
     # « 1164/0066 » est un article : code1 et code2 sont deux colonnes, qu'aucun
     # LIKE colonne par colonne ne retrouve. C'est pourtant ce qu'ouvre la
     # fenêtre OF pour proposer les autres commandes du même produit.
+    nums = numeros_dans_texte(q)
+    if nums:
+        ou = "(" + ou + " OR CAST(l.numero AS TEXT) IN (%s))" % ",".join("?" * len(nums))
+        params = params + nums
     art = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", q)
     if art:
         ou = ("(" + ou + " OR (TRIM(CAST(l.code1 AS TEXT)) = ? AND TRIM(CAST(l.code2 AS TEXT)) = ?))")
