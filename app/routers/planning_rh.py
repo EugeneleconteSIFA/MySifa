@@ -328,7 +328,7 @@ async def create_planning(request: Request):
 
     user_id    = body.get("user_id")
     semaine    = body.get("semaine")
-    machine_id = body.get("machine_id")   # peut être None (resp_atelier / logistique)
+    machine_id = body.get("machine_id")   # peut être None (resp_atelier / logistique / tournant)
     poste      = body.get("poste")
     creneau    = body.get("creneau", "journee")
     force      = bool(body.get("force", False))   # passer outre un congé partiel

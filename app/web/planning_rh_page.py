@@ -794,11 +794,15 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script>
 // ── Constantes grille ─────────────────────────────────────
 const GRID_DEF = [
-  { code:'RESP', label:"Responsable d'atelier", color:'var(--c5)', special:true,
+  { code:'RESP', label:"Chef d'atelier", color:'var(--c5)', special:true,
     creneaux:[ { key:'journee', label:'Journée', hours:null, postes:['resp_atelier'] } ]
   },
   { code:'LOG', label:'Logistique / Expédition', color:'var(--accent)', special:true,
     creneaux:[ { key:'journee', label:'Journée', hours:'08:00 – 16:00', postes:['logistique'], multi:true } ]
+  },
+  // Personnes sans poste fixe, disponibles pour remplacer ou renforcer.
+  { code:'TOUR', label:'Tournant', color:'var(--muted)', special:true,
+    creneaux:[ { key:'journee', label:'Journée', hours:null, postes:['tournant'], multi:true } ]
   },
   { code:'C1',  label:'Cohésio 1',             color:'var(--c1)',
     creneaux:[
@@ -831,7 +835,7 @@ const GRID_DEF = [
 // sans config, ou pour LOG / RESP (rôles pilotés à part).
 function getEffectiveCreneaux(mdef){
   if(!mdef) return [];
-  if(mdef.special) return mdef.creneaux;                 // LOG, RESP
+  if(mdef.special) return mdef.creneaux;                 // LOG, RESP, TOUR
   if(!S.machines || !S.machineConfigs) return mdef.creneaux;
   const mac = S.machines.find(x=>x.code===mdef.code);
   if(!mac) return mdef.creneaux;
@@ -863,8 +867,13 @@ function getEffectiveCreneaux(mdef){
 
 const POSTE_LABELS = {
   conducteur:'Conducteur', aide:'Aide', emballage:'Emballage',
-  resp_atelier:"Resp. d'atelier", logistique:'Logistique'
+  resp_atelier:"Chef d'atelier", logistique:'Logistique', tournant:'Tournant'
 };
+// Postes sans machine : chacun a sa ligne dédiée dans la grille.
+const SPECIAL_POSTE_CODES = { logistique:'LOG', resp_atelier:'RESP', tournant:'TOUR' };
+function isSpecialRowAssignment(a, machineCode){
+  return SPECIAL_POSTE_CODES[a.poste]===machineCode;
+}
 const TYPE_CONGE_LABELS = { CP:'Congés payés', maladie:'Maladie', autre:'Autre' };
 const STATUT_CONGE_LABELS = { pose:'Posé', valide:'Validé', refuse:'Refusé' };
 
@@ -1068,14 +1077,14 @@ function planningKey(a){
     const m=S.machines.find(x=>x.id===a.machine_id||x.id===Number(a.machine_id));
     if(m)mc=m.code;
   }
-  if(!mc){ if(a.poste==='logistique')mc='LOG'; else if(a.poste==='resp_atelier')mc='RESP'; else mc='NULL'; }
+  if(!mc){ mc=SPECIAL_POSTE_CODES[a.poste]||'NULL'; }
   return`${mc}|${a.creneau}|${a.poste}|${a.semaine}`;
 }
 function getAssignments(machineCode,creneau,poste,semaine){
   return S.planning.filter(a=>planningKey(a)===`${machineCode}|${creneau}|${poste}|${semaine}`);
 }
 function getMachineId(code){
-  if(code==='LOG'||code==='RESP')return null;
+  if(Object.values(SPECIAL_POSTE_CODES).includes(code))return null;
   const m=S.machines.find(x=>x.code===code);
   return m?(Number(m.id)||m.id):null;
 }
@@ -1326,7 +1335,7 @@ async function duplicateAssignmentsToNextWeek(semaine, machineCode, poste, crene
 
 async function duplicateAllAssignmentsToNextWeek(semaine, machineCode, machineId){
   const nextWeek = addWeeks(semaine, 1);
-  const weekAssignments = S.planning.filter(a => a.semaine === semaine && (a.machine_code === machineCode || (machineCode === 'LOG' && a.poste === 'logistique') || (machineCode === 'RESP' && a.poste === 'resp_atelier')));
+  const weekAssignments = S.planning.filter(a => a.semaine === semaine && (a.machine_code === machineCode || isSpecialRowAssignment(a, machineCode)));
   if(!weekAssignments.length){
     toast('Aucune affectation à dupliquer','warn');
     return;
@@ -1355,7 +1364,7 @@ async function duplicateAllAssignmentsToNextWeek(semaine, machineCode, machineId
 }
 
 async function deleteRowAssignments(semaine, machineCode, creneau){
-  const rowAssignments = S.planning.filter(a => a.semaine === semaine && (a.machine_code === machineCode || (machineCode === 'LOG' && a.poste === 'logistique') || (machineCode === 'RESP' && a.poste === 'resp_atelier')) && a.creneau === creneau);
+  const rowAssignments = S.planning.filter(a => a.semaine === semaine && (a.machine_code === machineCode || isSpecialRowAssignment(a, machineCode)) && a.creneau === creneau);
   if(!rowAssignments.length){
     toast('Aucune affectation à supprimer','warn');
     return;
@@ -2638,7 +2647,7 @@ function buildOperatorView(){
           {k:'Créneau',v:myPlan.creneau==='matin'?'Matin':myPlan.creneau==='aprem'?'Après-midi':myPlan.creneau==='nuit'?'Nuit':'Journée'},
         ];
         if(joursLbl) rows.push({k:'Jours',v:joursLbl});
-        const gdef=GRID_DEF.find(g=>g.code===myPlan.machine_code||(myPlan.poste==='logistique'&&g.code==='LOG')||(myPlan.poste==='resp_atelier'&&g.code==='RESP'));
+        const gdef=GRID_DEF.find(g=>g.code===myPlan.machine_code||isSpecialRowAssignment(myPlan,g.code));
         if(gdef){
           const cr=getEffectiveCreneaux(gdef).find(c=>c.key===myPlan.creneau);
           if(cr&&cr.hours) rows.push({k:'Horaires',v:cr.hours});
@@ -3020,8 +3029,8 @@ function buildPrintPivotLayout(){
   header.innerHTML='Planning du personnel — '+weekLabel1+(weeks.length>1?' au '+weekLabel2:'');
   wrap.appendChild(header);
   
-  // Group 1: LOG, RESP (journee only)
-  const group1Machines=GRID_DEF.filter(m=>['LOG','RESP'].includes(m.code));
+  // Group 1: LOG, RESP, TOUR (journee only)
+  const group1Machines=GRID_DEF.filter(m=>['LOG','RESP','TOUR'].includes(m.code));
   if(group1Machines.length){
     wrap.appendChild(buildPivotTable(group1Machines,weeks,false));
   }
