@@ -57,7 +57,7 @@
       + '.mysifa-cfm-ico{display:inline-flex;color:var(--muted)}'
       + '.mysifa-cfm-ico.danger{color:var(--danger,#f87171)}'
       + '.mysifa-cfm-body{padding:20px 22px;font-size:13px;line-height:1.55;color:var(--text)}'
-      + '.mysifa-cfm-detail{margin-top:10px;font-size:12px;line-height:1.5;color:var(--muted)}'
+      + '.mysifa-cfm-detail{margin-top:10px;font-size:12px;line-height:1.5;color:var(--muted);white-space:pre-line}'
       + '.mysifa-cfm-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;'
       + 'border-top:1px solid var(--border);background:var(--bg)}'
       + '.mysifa-cfm-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;'

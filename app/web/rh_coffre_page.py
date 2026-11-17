@@ -306,7 +306,7 @@ tr.ndf-total td,tr.ndf-total:hover td{background:none;color:var(--text);font-wei
 
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_ndf_reglages.js?v=4"></script>
-<script src="/static/mysifa_confirm.js?v=3"></script>
+<script src="/static/mysifa_confirm.js?v=4"></script>
 <script src="/static/mysifa_ndf_fiche.js?v=7"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/rh_coffre_url.js?v=4"></script>
