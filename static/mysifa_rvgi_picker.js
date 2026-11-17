@@ -124,7 +124,13 @@
     '.mrp-l .qsai input{width:100%;padding:4px 7px;border:1px solid var(--border,#dcdfe4);border-radius:7px;',
     '  background:var(--bg,#f6f7f9);color:inherit;font:inherit;font-size:12px;text-align:right}',
     '.mrp-l .qsai input:disabled{opacity:.4}',
-    '.mrp-l .note{flex:0 0 auto;font-size:11px;color:#a16207}',
+    '.mrp-l .note{flex:0 0 150px;font-size:11px;color:#a16207;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    // En-tête des colonnes : « tout » et « déjà pris » ne disaient pas ce
+    // qu'ils étaient (retour du 17/11/2026).
+    '.mrp-l.entete{background:transparent;border-bottom:1px solid var(--border,#dcdfe4);font-size:10.5px;font-weight:700;',
+    '  text-transform:uppercase;letter-spacing:.4px;color:var(--muted,#6b7280);padding-top:4px;padding-bottom:4px}',
+    '.mrp-l.entete .note{color:var(--muted,#6b7280);font-size:10.5px}',
+    '.mrp-l.entete .case{flex:0 0 13px}',
     /* La machine sur laquelle l'article est censé tourner : ce que le
        planificateur regarde en premier, juste après le produit. */
     '.mrp-mac{display:inline-block;padding:1px 7px;border-radius:6px;font-size:10.5px;font-weight:700;',
@@ -466,7 +472,12 @@
         majPied();
         return;
       }
-      var h = '';
+      var h = '<div class="mrp-l entete" aria-hidden="true">' +
+        '<span class="case"></span><span class="lg">Lg</span><span class="art">Article</span>' +
+        (mode === 'commande' ? '<span class="mac"></span>' : '') +
+        '<span class="des">Désignation</span><span class="qte">Commandé</span>' +
+        '<span class="qsai" title="Une partie seulement de la ligne : saisir la quantité. Vide = toute la ligne.">À prendre</span>' +
+        '<span class="note" title="Dossiers ou OF déjà rattachés à cette ligne">Déjà sur</span></div>';
       etat.pieces.forEach(function (p, ip) {
         var sug = (p.lignes || []).some(function (l) { return l.suggere; });
         var pc = mode === 'commande' ? produitCommun(p.lignes) : null;
@@ -496,14 +507,18 @@
                '<span class="des">' + esc(l.des1 || '') + '</span>' +
                '<span class="qte">' + (l.qte != null ? nb(l.qte) : '—') + '</span>' +
                '<span class="qsai"><input type="number" min="0" step="1" data-qte="' + esc(k) + '"' +
-                 (c ? '' : ' disabled') + ' placeholder="tout" value="' +
+                 ' title="Quantité à prendre sur cette ligne. Vide = toute la ligne."' +
+                 (c ? '' : ' disabled') + ' placeholder="toute" value="' +
                  (c && c.qte != null ? esc(c.qte) : '') + '"></span>' +
                (mode === 'commande' && o.produit && l.article && /^\d+\/\d+$/.test(l.article) &&
                 l.article !== o.produit
                  ? '<span class="mrp-etiq autre" title="Un OF ne couvre qu\'un produit : ' + esc(o.produit) + '">autre produit</span>'
                  : '') +
+               // Nommer QUI a déjà la ligne : « déjà pris » seul ne disait ni
+               // par quoi, ni si c'était un problème.
                (pris.length
-                 ? '<span class="note" title="' + esc(pris.map(function (x) { return x.ref; }).join(', ')) + '">déjà pris</span>'
+                 ? '<span class="note" title="Déjà rattachée à : ' + esc(pris.map(libPris).join(', ')) + '">' +
+                   esc(libPris(pris[0]) || 'déjà pris') + (pris.length > 1 ? ' +' + (pris.length - 1) : '') + '</span>'
                  : '<span class="note"></span>') +
                etiqExpedition(l) +
                '</div>';
@@ -531,6 +546,12 @@
         });
       });
       majPied();
+    }
+
+    // « OF 9932856/L2 », « Dossier 9932856 - L1 » : la nature d'abord.
+    function libPris(x) {
+      var nature = x.objet === 'of' ? 'OF ' : (x.objet === 'dossier' ? 'Dossier ' : (x.objet === 'depart' ? 'Départ ' : ''));
+      return nature + (x.ref || '');
     }
 
     function etiqEtat(e) {

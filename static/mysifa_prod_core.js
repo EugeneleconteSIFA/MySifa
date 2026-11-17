@@ -1131,7 +1131,7 @@ async function relancerMappingAuto(){
     let msg='Simulation du rapprochement automatique :\n\n'+lignes.join('\n');
     if(ambigus) msg+='\n\n'+ambigus+' cas ambigu'+(ambigus>1?'s':'')+' resteront à arbitrer manuellement.';
     msg+='\n\nAppliquer ces changements ?';
-    if(!confirm(msg)) return;
+    if(!(await prodConfirmerTexte(msg,{title:'Rapprochement automatique',confirmLabel:'Appliquer'}))) return;
     const res=await api('/api/admin/relink-of',{method:'POST'});
     const n=Number(res&&res.relinked||0), r=Number(res&&res.repaired_links||0);
     toast(n+' dossier'+(n>1?'s':'')+' rattaché'+(n>1?'s':'')
@@ -3218,6 +3218,18 @@ async function prodConfirmer(opts){
   return confirm([opts.title,opts.message].filter(Boolean).join('\n\n'));
 }
 
+/* Même fenêtre pour un texte de confirmation déjà rédigé : la première
+   ligne devient le message, la suite le détail (retours à la ligne gardés). */
+async function prodConfirmerTexte(texte, opts){
+  const t=String(texte||'');
+  const i=t.indexOf('\n');
+  const o=Object.assign({}, opts||{});
+  o.message=(i<0?t:t.slice(0,i)).trim();
+  const reste=(i<0?'':t.slice(i+1)).trim();
+  if(reste) o.detail=reste;
+  return prodConfirmer(o);
+}
+
 async function ofDeleteImport(id){
   const row=(S.ofImports||[]).find(r=>r.id===id)||{};
   if(!(await prodConfirmer({
@@ -5092,8 +5104,8 @@ async function openTracMatieresEditModal(dos, matieres){
       del.style.padding = '8px 10px';
       del.innerHTML = '';
       del.appendChild(iconEl('trash',14));
-      del.onclick = ()=>{
-        if(!confirm('Supprimer cette bobine du dossier ?')) return;
+      del.onclick = async ()=>{
+        if(!(await prodConfirmer({title:'Supprimer la bobine',message:'Supprimer cette bobine du dossier ?',confirmLabel:'Supprimer',danger:true}))) return;
         row.deleted = true;
         renderRows();
       };
@@ -5688,7 +5700,7 @@ async function linkDossiers(devisId, dossiers){
 }
 
 async function deleteDevis(id){
-  if(!confirm('Supprimer ce devis ?'))return;
+  if(!(await prodConfirmer({title:'Supprimer le devis',message:'Supprimer ce devis ?',detail:'Cette action est définitive.',confirmLabel:'Supprimer',danger:true})))return;
   try{
     await api('/api/rentabilite/devis/'+id,{method:'DELETE'});
     toast('Devis supprimé');
@@ -8513,7 +8525,7 @@ function renderSuivi(){
   // ────────────────────────────────────────────────────────────────────
 
 async function deleteImport(id,fn){
-  if(!confirm('Supprimer "'+fn+'" et toutes ses lignes ?'))return;
+  if(!(await prodConfirmer({title:'Supprimer l\'import',message:'Supprimer « '+fn+' » et toutes ses lignes ?',detail:'Cette action est définitive.',confirmLabel:'Supprimer',danger:true})))return;
   try{const r=await api('/api/imports/'+id,{method:'DELETE'});if(!r)return;toast(r.lignes_supprimees+' lignes supprimées');loadImports();}
   catch(e){toast(e.message,'error');}
 }
@@ -9888,7 +9900,7 @@ function openEditStockModal(row){
         + 'L entree restera visible dans l historique : les enregistrements FSC '
         + 'doivent etre conserves 5 ans.'
       : 'Supprimer cette saisie stock ? Le stock sera restaure a la valeur precedente.';
-    if(!confirm(question)) return;
+    if(!(await prodConfirmerTexte(question,{title:estFsc?'Annuler l\'entrée FSC':'Supprimer la saisie stock',confirmLabel:estFsc?'Annuler l\'entrée':'Supprimer',danger:true}))) return;
     try{
       const res = await api('/api/fabrication/saisie-stock/'+kind+'/'+row.id,{method:'DELETE'});
       toast((res && res.message) ? res.message : 'Saisie supprimee');
@@ -9956,7 +9968,7 @@ function openEditModal(row) {
     className: 'btn-danger',
     onClick: async e => {
       e.stopPropagation();
-      if (!confirm('Supprimer cette saisie ?')) return;
+      if (!(await prodConfirmer({title:'Supprimer la saisie',message:'Supprimer cette saisie ?',confirmLabel:'Supprimer',danger:true}))) return;
       pushUndo('delete', row);  // ← ajouter cette ligne
       try {
         await api('/api/saisies/' + row.id, { method: 'DELETE' });
@@ -10583,8 +10595,8 @@ async function finirRecopie(){
     (a + k) !== r.idx && recopieEligible(row, r.champ) && valeurRecopie(row, r.champ) !== valeur);
   if(!cibles.length){ toast('Aucune ligne à modifier : elles ont déjà cette valeur ou ne se modifient pas ici.', 'error'); return; }
   const affiche = r.champ === 'operateur' ? opName(valeur) : valeur;
-  if(!confirm('Recopier « ' + (affiche || '(vide)') + ' » dans la colonne ' + RECOPIE_LIBELLES[r.champ]
-      + ' sur ' + cibles.length + ' ligne(s) ?')) return;
+  if(!(await prodConfirmer({title:'Recopier la valeur',message:'Recopier « ' + (affiche || '(vide)') + ' » dans la colonne ' + RECOPIE_LIBELLES[r.champ]
+      + ' sur ' + cibles.length + ' ligne(s) ?',confirmLabel:'Recopier'}))) return;
   await appliquerRecopie(r.champ, r.source, cibles);
 }
 async function appliquerRecopie(champ, source, cibles){
@@ -10651,7 +10663,7 @@ async function bulkDelete(){
   if(!choisies.length){ S.selectedRows=new Set(); render(); return; }
   let msg='Supprimer '+choisies.length+' ligne(s) ?';
   if(annexes.length) msg+='\n'+annexes.length+' alerte(s) ou mouvement(s) de stock : suppression définitive, sans retour arrière.';
-  if(!confirm(msg)) return;
+  if(!(await prodConfirmerTexte(msg,{title:'Supprimer les lignes',confirmLabel:'Supprimer',danger:true}))) return;
 
   let supprimees=0;
   const erreurs=[];
@@ -10742,7 +10754,7 @@ async function openFictifReassignModal(){
         const to=String(toInp.value||'').trim();
         if(!from){ toast('Choisissez un dossier fictif','error'); return; }
         if(!to){ toast('Indiquez le dossier cible','error'); return; }
-        if(!confirm('Rattacher « '+fictifOfDisplay(from)+' » → « '+to+' » ?\n\nToutes les saisies concernées seront modifiées.')) return;
+        if(!(await prodConfirmerTexte('Rattacher « '+fictifOfDisplay(from)+' » → « '+to+' » ?\nToutes les saisies concernées seront modifiées.',{title:'Rattacher le dossier fictif',confirmLabel:'Rattacher'}))) return;
         try{
           const r=await api('/api/saisies/reassign/fictif',{
             method:'POST',
@@ -11711,9 +11723,10 @@ function renderSaisies(){
         onClick:async e=>{
           e.stopPropagation();
           if(isAlertAck || isStockRow){
-            if(!confirm(isAlertAck
+            if(!(await prodConfirmerTexte(isAlertAck
               ? 'Supprimer cette validation d\'alerte ? La suppression est définitive.'
-              : 'Supprimer ce mouvement de stock ? La suppression est définitive.')) return;
+              : 'Supprimer ce mouvement de stock ? La suppression est définitive.',
+              {title:isAlertAck?'Supprimer la validation d\'alerte':'Supprimer le mouvement de stock',confirmLabel:'Supprimer',danger:true}))) return;
             try{
               await supprimerLigneAnnexe(row);
               S.selectedRows.delete(selKey);
@@ -11722,7 +11735,7 @@ function renderSaisies(){
             }catch(err){ toast(err.message,'error'); }
             return;
           }
-          if(!confirm('Supprimer cette saisie ?'))return;
+          if(!(await prodConfirmer({title:'Supprimer la saisie',message:'Supprimer cette saisie ?',confirmLabel:'Supprimer',danger:true})))return;
           pushUndo('delete',row);
           try{
             await api('/api/saisies/'+row.id,{method:'DELETE'});
