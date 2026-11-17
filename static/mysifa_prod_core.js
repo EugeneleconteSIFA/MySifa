@@ -1957,6 +1957,7 @@ async function ofeChoisirFiche(ficheId){
   });
   m._ficheCols=poses;
   m._fiche=p.fiche;
+  m._modifie=true;
   m._ficheManques=p.manques||[];
   m._ficheCalcules=p.calcules||[];
   m._fichesTrouvees=[];
@@ -2040,7 +2041,12 @@ async function ofeApercu(m){
   const vivant=document.getElementById('ofe-apercu');
   if(vivant){
     vivant.style.display='block';
-    vivant.src=m._apercuUrl+'#view=FitH&toolbar=0';
+    // location.replace et pas src : chaque changement de src ajoutait une
+    // entrée à l'historique du navigateur. En fermant un OF existant, le
+    // « Retour » de l'adresse retombait alors sur un ancien aperçu déjà
+    // libéré — page « blob:… » introuvable dans Safari (17/11/2026).
+    const url=m._apercuUrl+'#view=FitH&toolbar=0';
+    try{ vivant.contentWindow.location.replace(url); }catch(e){ vivant.src=url; }
     const vide=document.getElementById('ofe-apercu-vide');
     if(vide) vide.style.display='none';
   }
@@ -2169,6 +2175,7 @@ function ofeBrancherDates(overlay,m){
       const champ=document.getElementById('ofe-delai');
       if(champ) champ.value=d;
       m._dom=m._dom||{}; m._dom['ofe-delai']=d; m.delai_client=d;
+      m._modifie=true;
       ofeRepeindreDates(overlay,m);
       ofeApercuPlusTard(m);
     });
@@ -2499,7 +2506,17 @@ function renderOfEditModal(){
   // Sous 900 px il n'y a pas de dock (mysifa_outils_mobile.js).
   const _sousDock=window.innerWidth>900?'96px':'16px';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px 16px '+_sousDock+';box-sizing:border-box';
-  overlay.onclick=e=>{if(e.target===overlay)closeOfEditModal();};
+  // Un clic à côté ne jette plus une saisie en cours : il demande d'abord.
+  overlay.onclick=async e=>{
+    if(e.target!==overlay) return;
+    const enCours=m._modifie||(!m.id&&((m._commandes||[]).length||m._fiche));
+    if(enCours&&!(await prodConfirmer({
+      title:'Fermer sans enregistrer',
+      message:m.id?'Les modifications de cet OF seront perdues.':'Cet OF n\'est pas encore créé : la saisie sera perdue.',
+      confirmLabel:'Fermer sans enregistrer', cancelLabel:'Continuer la saisie', danger:true,
+    }))) return;
+    closeOfEditModal();
+  };
   overlay.innerHTML=`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:1400px;width:100%;max-height:calc(100vh - 16px - ${_sousDock});overflow-y:auto;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -2665,8 +2682,8 @@ function renderOfEditModal(){
     // Toute modification redessine l'OF : frappe, choix d'une liste, case
     // recopiée de la fiche ou recalculée (ces dernières appellent aussi
     // ofeApercuPlusTard, car un .value posé par le code ne déclenche rien).
-    overlay.addEventListener('input',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q') ofeApercuPlusTard(m); });
-    overlay.addEventListener('change',function(){ ofeApercuPlusTard(m); });
+    overlay.addEventListener('input',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q'){ m._modifie=true; ofeApercuPlusTard(m); } });
+    overlay.addEventListener('change',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q') m._modifie=true; ofeApercuPlusTard(m); });
     const bRecalc=overlay.querySelector('#ofe-recalc-btn');
     if(bRecalc) bRecalc.onclick=function(){ m._manuels={}; ofeRecalculer(); };
     ofeApercuPlusTard(m,0);
@@ -2680,6 +2697,7 @@ function renderOfEditModal(){
     const champ=document.getElementById('ofe-numero');
     if(champ) champ.value=m._numeroSuggere;
     m.of_numero=m._numeroSuggere;
+    m._modifie=true;
     m._dom=m._dom||{}; m._dom['ofe-numero']=m._numeroSuggere;
     m._numeroSuggere=null;
     bSugg.parentElement.remove();
