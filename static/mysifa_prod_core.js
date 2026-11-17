@@ -1912,13 +1912,20 @@ function ofePeindreFiches(q){
     zone.innerHTML='<div style="font-size:12px;color:var(--muted);padding:6px 2px">Aucun résultat pour « '+escHtml(q||'')+' »</div>';
     return;
   }
-  zone.innerHTML=l.map(function(f,i){
+  // Des cartes avec un vrai bouton : une simple ligne surlignée ne se
+  // lisait pas comme un choix à faire, et l'OF restait sans calcul ni
+  // aperçu sans qu'on comprenne pourquoi (retour du 17/11/2026).
+  const depuisCommande=!q;
+  zone.innerHTML=(depuisCommande?'<div style="font-size:12px;font-weight:700;color:var(--danger);margin:2px 0 6px">'+
+      'Choisissez la fiche technique : les quantités et l\'aperçu en dépendent.</div>':'')+
+    l.map(function(f,i){
     const actif=i===m._ficheIdx;
     return '<button type="button" data-fiche-id="'+escAttr(String(f.id))+'" '+
-      'style="display:flex;width:100%;gap:10px;align-items:baseline;text-align:left;padding:8px 10px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text);'+
-      'background:'+(actif?'var(--accent-bg)':'transparent')+'">'+
+      'style="display:flex;width:100%;gap:10px;align-items:center;text-align:left;padding:9px 12px;margin-bottom:4px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text);'+
+      'border:1px solid '+(actif?'var(--accent)':'var(--border)')+';background:'+(actif?'var(--accent-bg)':'var(--bg)')+'">'+
       '<strong>'+escHtml(f.reference||'')+'</strong>'+
-      '<span style="color:var(--muted);font-size:12px">'+escHtml([f.machine,f.format].filter(Boolean).join(' · '))+'</span>'+
+      '<span style="color:var(--muted);font-size:12px;flex:1">'+escHtml([f.machine,f.format].filter(Boolean).join(' · '))+'</span>'+
+      '<span style="font-size:12px;font-weight:700;color:var(--accent)">Choisir →</span>'+
       '</button>';
   }).join('');
   zone.querySelectorAll('[data-fiche-id]').forEach(function(b){
@@ -1960,6 +1967,7 @@ async function ofeChoisirFiche(ficheId){
   });
   m._ficheCols=poses;
   m._fiche=p.fiche;
+  m._auMetre=!!p.au_metre;
   m._modifie=true;
   m._ficheManques=p.manques||[];
   m._ficheCalcules=p.calcules||[];
@@ -2008,6 +2016,7 @@ async function ofeRecalculer(){
   });
   m._ficheManques=p.manques||[];
   m._ficheCalcules=p.calcules||[];
+  m._auMetre=!!p.au_metre;
   const info=document.getElementById('ofe-fiche-info');
   if(info) info.innerHTML=ofeInfoFiche(m);
   ofeApercuPlusTard(m);
@@ -2139,6 +2148,7 @@ async function ofeDepuisCommandes(m){
     m._dom['ofe-numero']=r.numero; m.of_numero=r.numero; m._numeroPropose=r.numero;
   }
   m._cmdInfo=r;
+  if(r.au_metre!==undefined&&(r.fiches||[]).length) m._auMetre=!!r.au_metre;
   const f=r.fiches||[];
   // Une fiche prise d'office pour l'ancienne commande suit le produit des
   // nouvelles ; une fiche choisie à la main reste.
@@ -2228,7 +2238,7 @@ function ofeInfoFiche(m){
   if(r&&r.article){
     const n=(r.fiches||[]).length;
     const bouts=['Article de la commande : '+r.article];
-    if(r.qte_etiquettes) bouts.push(Number(r.qte_etiquettes).toLocaleString('fr-FR')+' étiquettes commandées');
+    if(r.qte_etiquettes) bouts.push(Number(r.qte_etiquettes).toLocaleString('fr-FR')+(r.au_metre?' rouleaux commandés':' étiquettes commandées'));
     if(r.delai_client) bouts.push('livraison le '+r.delai_client.split('-').reverse().join('/'));
     h+='<div>'+escHtml(bouts.join(' · '))+'.</div>';
     // Une commande en bobines ou en cartons est convertie en étiquettes :
@@ -2236,11 +2246,11 @@ function ofeInfoFiche(m){
     (r.conversions||[]).forEach(function(x){
       h+='<div'+(/inconnu/.test(x)?' style="color:var(--danger)"':'')+'>· '+escHtml(x)+'</div>';
     });
-    if(!m._fiche&&n>1) h+='<div>'+n+' fiches pour ce produit — choisissez celle de la machine.</div>';
+    if(!m._fiche&&n>=1) h+='<div style="color:var(--danger)">· '+(n>1?n+' fiches pour ce produit — choisissez celle de la machine.':'Choisissez la fiche proposée.')+'</div>';
     if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+
       ' — à créer avant l\'OF. Une autre fiche reste possible, avec le motif de l\'écart.</div>';
   }
-  if(calc.length) h+='<div>Calculé à partir du nombre d\'étiquettes : '+escHtml(calc.join(', '))+'.</div>';
+  if(calc.length) h+='<div>Calculé à partir du nombre '+(m._auMetre?'de rouleaux':'d\'étiquettes')+' : '+escHtml(calc.join(', '))+'.</div>';
   if(manuels.length) h+='<div>Corrigé à la main, plus recalculé : '+escHtml(manuels.join(', '))+'.</div>';
   (m._ficheManques||[]).forEach(function(x){ h+='<div style="color:var(--danger)">· '+escHtml(x)+'</div>'; });
   return h;
@@ -2515,7 +2525,9 @@ function renderOfEditModal(){
         <div id="ofe-fiche-res" style="margin-top:6px;display:flex;flex-direction:column;gap:2px"></div>
       </div>`;
     return choix
-      +_f('ofe-qte','Nb étiquettes',m.qte_etiquettes,'number')
+      // Produit vendu au mètre (« Bobine de 45 ml ») : on compte des rouleaux,
+      // comme dans Access (17/11/2026).
+      +_f('ofe-qte',m._auMetre?'Nb rouleaux':'Nb étiquettes',m.qte_etiquettes,'number')
       +_f('ofe-delai','Délai client',ofeIso(m.delai_client),'date')
       +ofeDatesHtml(m)
       +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`
