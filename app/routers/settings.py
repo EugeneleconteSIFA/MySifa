@@ -2915,6 +2915,29 @@ def _ecrire_formulaire(conn, table, code, formulaire):
         conn.execute(f"UPDATE {table} SET formulaire=? WHERE code=?", (formulaire, code))
 
 
+def _ecrire_maint_code(conn, table, code, maint_code):
+    """Intervention MyMaintenance préchoisie (operation_codes.maint_code) :
+    colonne posée par la migration `operation_codes_intervention_maintenance`,
+    ignorée avant. L'intervention doit exister et ne pas être archivée."""
+    try:
+        cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+    except Exception:
+        return
+    if "maint_code" not in cols:
+        return
+    if maint_code:
+        ok = conn.execute(
+            "SELECT 1 FROM maintenance_codes WHERE code = ? AND archived_at IS NULL",
+            (maint_code,),
+        ).fetchone()
+        if not ok:
+            raise HTTPException(
+                status_code=422,
+                detail="Intervention inconnue ou archivée dans MyMaintenance.",
+            )
+    conn.execute(f"UPDATE {table} SET maint_code=? WHERE code=?", (maint_code or None, code))
+
+
 def _colonne_outil_type(conn, table) -> bool:
     try:
         return "outil_type" in {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
@@ -2933,8 +2956,22 @@ def list_operation_codes(request: Request):
 
     with get_db() as conn:
         items = _list(conn)
+        # Interventions proposées pour le formulaire « maintenance » : les
+        # mêmes que la fenêtre du poste (catégorie « remplacements »).
+        try:
+            interventions = [
+                {"code": r["code"], "label": r["label"]}
+                for r in conn.execute(
+                    """SELECT code, label FROM maintenance_codes
+                        WHERE categorie = 'remplacements' AND archived_at IS NULL
+                        ORDER BY label COLLATE NOCASE"""
+                ).fetchall()
+            ]
+        except Exception:
+            interventions = []
     return {"items": items, "categories": categories_for_ui(),
-            "formulaires": [{"code": c, "label": l} for c, l in OPERATION_FORMULAIRES]}
+            "formulaires": [{"code": c, "label": l} for c, l in OPERATION_FORMULAIRES],
+            "interventions": interventions}
 
 
 @router.get("/api/settings/operation-codes/affiche.pdf")
@@ -3008,6 +3045,7 @@ async def create_operation_code(request: Request):
                 ),
             )
         _ecrire_formulaire(conn, TABLE, payload["code"], payload.get("formulaire"))
+        _ecrire_maint_code(conn, TABLE, payload["code"], payload.get("maint_code"))
         conn.commit()
     refresh_operations_cache()
     return {"success": True, "code": payload["code"]}
@@ -3071,6 +3109,7 @@ async def update_operation_code(code: str, request: Request):
                 ),
             )
         _ecrire_formulaire(conn, TABLE, code_key, payload.get("formulaire"))
+        _ecrire_maint_code(conn, TABLE, code_key, payload.get("maint_code"))
 
         # Le referentiel fait foi, y compris sur l'historique.
         #

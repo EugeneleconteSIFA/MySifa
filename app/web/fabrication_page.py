@@ -1415,7 +1415,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <!-- Historique des pesées par front et widget Poids de colle (bouton du dock). -->
 <script src="/static/mysifa_pesees.js?v=7"></script>
-<script src="/static/mysifa_maint_saisie.js?v=5"></script>
+<script src="/static/mysifa_maint_saisie.js?v=6"></script>
 <script src="/static/mysifa_poids_colle.js?v=7"></script>
 <script>
   // Dossier en cours pour le widget Poids de colle : lu à l'ouverture.
@@ -7715,6 +7715,8 @@ async function ouvrirOperationMaintenance(code, label){
     machine: (S.machine && S.machine.nom) || '',
     machines: (S.machines || []).map(m => m.nom).filter(Boolean),
     role: (S.user && S.user.role) || '',
+    // Intervention reliée au code (maint_code) : préchoisie dans la fenêtre.
+    intervention: (OPS && OPS[code] && OPS[code].maint_code) || '',
     apres: info => triggerOp(code, label,
       {commentaire: info.libelle + (info.commentaire ? ' — ' + info.commentaire : '')}),
   });

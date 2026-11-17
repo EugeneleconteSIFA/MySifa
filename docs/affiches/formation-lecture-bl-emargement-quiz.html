@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Lecture BL — Émargement et quiz</title>
+<style>
+  :root{
+    --bg:#f1f5f9; --card:#ffffff; --border:#cbd5e1;
+    --text:#0f172a; --text2:#475569; --muted:#64748b;
+    --acc:#2563eb; --acc-bg:rgba(37,99,235,0.13);
+    --ok:#059669; --red:#dc2626;
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif }
+  .page{ width:210mm; height:297mm; padding:14mm 13mm 10mm; display:flex; flex-direction:column; gap:5mm; page-break-after:always; background:var(--bg); overflow:hidden }
+  .page:last-child{ page-break-after:auto }
+  .page.land{ width:297mm; height:209mm }
+  .hero{ display:flex; align-items:center; gap:14px }
+  .mark{ width:46px; height:46px; border-radius:13px; background:var(--acc-bg); color:var(--acc); display:flex; align-items:center; justify-content:center }
+  .mark svg{ width:27px; height:27px }
+  h1{ margin:0; font-size:32px; font-weight:800; letter-spacing:-1px; text-transform:uppercase }
+  h1 em{ font-style:normal; color:var(--acc) }
+  .team{ margin-left:auto; padding:6px 14px; border-radius:999px; background:var(--acc-bg); color:var(--acc); font-size:12px; font-weight:800; letter-spacing:2.2px; text-transform:uppercase }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:5mm 6mm }
+  .meta{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:6mm; font-size:13px; font-weight:700; color:var(--text2) }
+  .meta div{ border-bottom:1px solid var(--border); padding-bottom:6px }
+  .info{ width:100%; border-collapse:collapse; font-size:13px }
+  .info td{ padding:2.2mm 0; border-bottom:1px solid rgba(203,213,225,.7); color:var(--text2); font-weight:600 }
+  .info tr:last-child td{ border-bottom:none }
+  .info td:first-child{ width:40mm; font-size:11px; font-weight:800; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted) }
+  .qt{ font-size:16px; font-weight:800; line-height:1.25; margin:0 0 1mm; display:flex; gap:8px }
+  .qt .n{ color:var(--acc) }
+  .qt .pts{ margin-left:auto; font-size:12px; color:var(--muted); font-weight:700; white-space:nowrap }
+  .hint{ font-size:12px; color:var(--muted); font-weight:600; margin-bottom:2mm }
+  .q{ display:flex; align-items:center; gap:10px; padding:1.45mm 0; border-bottom:1px solid rgba(203,213,225,.7); font-size:13px; font-weight:600; color:var(--text2) }
+  .q:last-child{ border-bottom:none }
+  .box{ width:16px; height:16px; border:2px solid var(--text2); border-radius:4px; flex-shrink:0 }
+  .l{ width:16px; font-weight:800; color:var(--acc); flex-shrink:0 }
+  .ans{ display:flex; align-items:flex-end; gap:8px; font-size:13.5px; font-weight:700; color:var(--text2); margin-top:2mm }
+  .ans .line{ flex:0 0 40mm; border-bottom:1.5px solid var(--text2); height:7mm }
+  .score{ display:flex; justify-content:flex-end; font-size:14px; font-weight:800 }
+  table.g{ width:100%; border-collapse:collapse; font-size:12px }
+  table.g th{ text-align:left; font-size:10px; letter-spacing:1.1px; text-transform:uppercase; color:var(--muted); padding:0 5px 7px; border-bottom:2px solid var(--border); vertical-align:bottom }
+  table.g td{ height:10.5mm; border-bottom:1px solid var(--border); padding:0 6px }
+  table.g td+td, table.g th+th{ border-left:1px solid rgba(203,213,225,.7) }
+  table.g td.c{ text-align:center; font-weight:800; color:var(--muted) }
+  .ack{ font-size:13px; line-height:1.45; color:var(--text2); font-weight:600; margin:0 }
+  .ack em{ font-style:normal; color:var(--acc); font-weight:800 }
+  .key{ font-size:14px; line-height:1.6; font-weight:700; color:var(--text2) }
+  .key b{ color:var(--ok) } .key i{ font-style:normal; color:var(--red) }
+  .key h3{ margin:0 0 1mm; font-size:14px; color:var(--text) }
+  .key p{ margin:1.5mm 0 0; font-weight:600; font-size:13px; line-height:1.45 }
+  .key ul{ margin:1mm 0 0; padding-left:5mm; font-weight:600; font-size:13px; line-height:1.5 }
+  .ft{ margin-top:auto; font-size:9px; color:var(--muted); text-align:center; text-transform:uppercase; letter-spacing:1.5px; font-weight:700 }
+</style></head><body>
+
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div><h1>Lecture du <em>BL</em></h1><span class="team">Feuille d'émargement</span></div>
+  <div class="card"><table class="info">
+    <tr><td>Date</td><td></td></tr>
+    <tr><td>Horaire / durée</td><td>…… h …… à …… h ……   (prévu : 30 min)</td></tr>
+    <tr><td>Lieu</td><td></td></tr>
+    <tr><td>Formateur(s)</td><td></td></tr>
+    <tr><td>Participants prévus</td><td>Personnel logistique et réception, toutes équipes</td></tr>
+    <tr><td>Contenu</td><td>Support « Lecture du BL » (3 pages), exercice sur BL fournisseurs réels, quiz (3 questions, 20 points)</td></tr>
+  </table></div>
+  <p class="ack">En signant, je confirme avoir été formé(e) à la lecture d'un bon de livraison fournisseur : <em>repérer n° de BL, commande, références, unités et lots</em>, <em>contrôler chaque ligne</em> contre le comptage et la commande, <em>réceptionner la quantité comptée</em>, et <em>signaler tout écart le jour même</em> avec une réserve précise.</p>
+  <div class="card"><table class="g">
+    <tr><th style="width:7%">N°</th><th style="width:34%">Nom et prénom</th><th style="width:22%">Fonction / équipe</th><th style="width:11%">Quiz /20</th><th>Signature</th></tr>
+    <tr><td class="c">1</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">2</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">3</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">4</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">5</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">6</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">7</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">8</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">9</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">10</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">11</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">12</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">13</td><td></td><td></td><td></td><td></td></tr><tr><td class="c">14</td><td></td><td></td><td></td><td></td></tr>
+  </table></div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · document interne SIFA</div>
+</div>
+
+<div class="page" style="gap:3.6mm;padding-top:12mm">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div><h1>Lecture du <em>BL</em></h1><span class="team">Quiz</span></div>
+  <div class="card meta"><div>Nom et prénom :</div><div>Date :</div><div>Signature :</div></div>
+  <div class="card">
+    <p class="qt"><span class="n">1.</span><span>À la réception, que vérifiez-vous sur le BL ?</span><span class="pts">12 points</span></p>
+    <div class="hint">Cochez toutes les bonnes réponses. Plusieurs réponses possibles.</div>
+    <div class="q"><span class="box"></span><span class="l">A</span><span>Le nombre de palettes ou de colis correspond au BL, avant de signer</span></div><div class="q"><span class="box"></span><span class="l">B</span><span>Le nom du chauffeur</span></div><div class="q"><span class="box"></span><span class="l">C</span><span>Le n° de commande SIFA figurant sur le BL</span></div><div class="q"><span class="box"></span><span class="l">D</span><span>Uniquement le total en bas du BL</span></div><div class="q"><span class="box"></span><span class="l">E</span><span>La référence et la désignation de chaque ligne : grammage, laize, mandrin</span></div><div class="q"><span class="box"></span><span class="l">F</span><span>Le prix unitaire de chaque ligne</span></div><div class="q"><span class="box"></span><span class="l">G</span><span>L'unité de chaque ligne avant la quantité : bobines, m², ml, kg, cartons</span></div><div class="q"><span class="box"></span><span class="l">H</span><span>Les lignes en reliquat se réceptionnent avec le reste de la livraison</span></div><div class="q"><span class="box"></span><span class="l">I</span><span>Le n° de lot du BL est le même que sur l'étiquette des bobines</span></div><div class="q"><span class="box"></span><span class="l">J</span><span>Dans MyStock, je saisis la quantité du BL : c'est plus rapide</span></div><div class="q"><span class="box"></span><span class="l">K</span><span>La quantité livrée, comparée à la quantité commandée</span></div><div class="q"><span class="box"></span><span class="l">L</span><span>En cas de doute, j'écris « sous réserve de déballage »</span></div>
+  </div>
+  <div class="card">
+    <p class="qt"><span class="n">2.</span><span>Une ligne du BL indique 6 000 m² de PP, laize 250 mm, bobines de 2 000 m. Combien de bobines devez-vous compter ?</span><span class="pts">2 points</span></p>
+    <div class="ans"><span>Réponse :</span><span class="line"></span><span>bobines</span></div>
+  </div>
+  <div class="card">
+    <p class="qt"><span class="n">3.</span><span>Le BL annonce 3 palettes. Le camion en livre 2, dont une avec une bobine écrasée. Que faites-vous ?</span><span class="pts">6 points</span></p>
+    <div class="hint">Cochez toutes les bonnes réponses.</div>
+    <div class="q"><span class="box"></span><span class="l">A</span><span>Je signe, et je préviens le responsable plus tard</span></div><div class="q"><span class="box"></span><span class="l">B</span><span>J'écris sur le document du transporteur, avant de signer : « 2 palettes reçues sur 3, 1 bobine écrasée »</span></div><div class="q"><span class="box"></span><span class="l">C</span><span>Je photographie la palette abîmée avant de la défaire</span></div><div class="q"><span class="box"></span><span class="l">D</span><span>Je préviens le responsable le jour même, avec le BL annoté</span></div><div class="q"><span class="box"></span><span class="l">E</span><span>J'écris « sous réserve de déballage », ça couvre tout</span></div><div class="q"><span class="box"></span><span class="l">F</span><span>Je réceptionne 3 palettes dans MyStock, puisque c'est ce que dit le BL</span></div>
+  </div>
+  <div class="score">Score : ______ / 20</div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · document interne SIFA</div>
+</div>
+
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div><h1>Lecture du <em>BL</em></h1><span class="team">Exercice · BL réel</span></div>
+  <div class="card meta" style="grid-template-columns:1fr 1fr;row-gap:5mm"><div>Nom :</div><div>Fournisseur :</div><div>N° BL :</div><div>N° commande SIFA :</div><div>Colis annoncés :</div><div>Colis comptés :</div><div>Lignes en reliquat :</div><div>Mention FSC : oui / non</div></div>
+  <p class="ack">Pour chaque ligne du BL : recopier la référence, la quantité et l'unité, puis calculer ce qu'il faut <em>réellement compter sur le quai</em>. Comparer à la commande et noter le lot à retrouver sur l'étiquette.</p>
+  <div class="card"><table class="g">
+    <tr><th style="width:6%">L.</th><th style="width:14%">Réf. fourn.</th><th style="width:18%">Désignation</th><th style="width:9%">Qté BL</th><th style="width:9%">Unité</th><th style="width:11%">À compter</th><th style="width:10%">Qté cdée</th><th style="width:11%">N° lot</th><th>OK / écart</th></tr>
+    <tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  </table></div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · document interne SIFA</div>
+</div>
+
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div><h1>Lecture du <em>BL</em></h1><span class="team">Corrigé · formateur</span></div>
+  <div class="card key">
+    <h3>À ne pas distribuer aux participants.</h3>
+    <div style="margin-top:3mm"><span style="color:var(--text)">Question 1</span> · 1 point par case juste (cochée si bonne, vide si mauvaise), 12 points.</div>
+    <div><b>À cocher (6) :</b> A, C, E, G, I, K</div>
+    <div><i>À laisser vide (6) :</i> B, D, F, H, J, L</div>
+    <p>F : le prix ne figure pas sur un BL, il se contrôle sur la facture. H : un reliquat n'est pas livré, il ne se réceptionne pas. J et L : les deux erreurs qui coûtent le plus cher.</p>
+    <div style="margin-top:4mm"><span style="color:var(--text)">Question 2</span> · 2 points.</div>
+    <div><b>12 bobines</b> · 0,250 m × 2 000 m = 500 m² par bobine, 6 000 ÷ 500 = 12.</div>
+    <div style="margin-top:4mm"><span style="color:var(--text)">Question 3</span> · 1 point par case juste, 6 points.</div>
+    <div><b>À cocher (3) :</b> B, C, D</div>
+    <div><i>À laisser vide (3) :</i> A, E, F</div>
+    <p>Barème : 20 points. Seuil conseillé : 16/20, et aucune erreur sur J (Q1), L (Q1) ni F (Q3). En dessous, reprendre la page concernée du support avec la personne.</p>
+  </div>
+  <div class="card key">
+    <h3>Préparer l'exercice sur BL réels</h3>
+    <p>Choisir 2 ou 3 BL de fournisseurs récents, masquer les prix s'il y en a, et en imprimer un jeu par participant. Viser des cas différents :</p>
+    <ul>
+      <li>un BL simple, en bobines, pour prendre les repères ;</li>
+      <li>un BL en m², ml ou kg, qui oblige à convertir avant de compter ;</li>
+      <li>un BL avec un reliquat, une livraison partielle ou une mention FSC.</li>
+    </ul>
+    <p>Chaque participant remplit la grille ligne par ligne. Correction collective : pour chaque ligne, faire dire l'unité, la quantité à compter sur le quai et le lot à retrouver sur l'étiquette. L'exercice n'est pas noté.</p>
+  </div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · document interne SIFA</div>
+</div>
+</body></html>

@@ -63,5 +63,41 @@ try:
 except ValueError:
     check("payload : formulaire inconnu refusé", True, True)
 
+# ── Intervention MyMaintenance préchoisie (maint_code) ──────────────────
+# Changements de couteaux / contre-couteaux (82-85) reliés à l'intervention
+# de la pièce d'usure. Un code déjà réglé à la main n'est pas touché, et une
+# intervention archivée n'est pas reliée.
+conn.execute("""CREATE TABLE maintenance_codes (code TEXT PRIMARY KEY, label TEXT, categorie TEXT,
+                archived_at TEXT)""")
+conn.executemany("INSERT INTO maintenance_codes (code, label, categorie, archived_at) VALUES (?,?,?,?)",
+                 [("91", "Changement couteaux bande", "remplacements", None),
+                  ("92", "Changement couteaux rives", "remplacements", None),
+                  ("93", "Changement contre-couteaux bande", "remplacements", None),
+                  ("94", "Changement contre-couteaux rives", "remplacements", "2026-11-01")])
+conn.executemany("INSERT INTO operation_codes (code, severity, label, category) VALUES (?,?,?,?)",
+                 [("82", "info", "Changement couteaux bande", "calage"),
+                  ("83", "info", "Changement couteaux rive", "calage"),
+                  ("84", "info", "Changement contre couteaux bande", "calage"),
+                  ("85", "info", "Changement contre couteaux rive", "calage")])
+spec2 = importlib.util.spec_from_file_location(
+    "m2", RACINE / "app/core/migrations/2026_11_17_operation_intervention_maintenance.py")
+mig2 = importlib.util.module_from_spec(spec2)
+spec2.loader.exec_module(mig2)
+check("avant migration : maint_code absent → None", oc.load_operations_dict(conn)["82"].get("maint_code"), None)
+conn.execute("ALTER TABLE operation_codes ADD COLUMN maint_code TEXT")
+conn.execute("UPDATE operation_codes SET formulaire = 'maintenance', maint_code = '93' WHERE code = '83'")
+mig2.appliquer(conn)
+mig2.appliquer(conn)  # rejouable
+ops = oc.load_operations_dict(conn)
+check("seed : 82 → 91", (ops["82"]["formulaire"], ops["82"]["maint_code"]), ("maintenance", "91"))
+check("seed : 84 → 93", (ops["84"]["formulaire"], ops["84"]["maint_code"]), ("maintenance", "93"))
+check("réglage de Paramètres conservé (83)", ops["83"]["maint_code"], "93")
+check("intervention archivée non reliée (85)", (ops["85"]["formulaire"], ops["85"]["maint_code"]), (None, None))
+check("93 générique reste au choix", ops["93"]["maint_code"], None)
+check("payload : intervention gardée avec le formulaire",
+      oc.validate_operation_payload({**base, "formulaire": "maintenance", "maint_code": "91"})["maint_code"], "91")
+check("payload : intervention ignorée sans formulaire",
+      oc.validate_operation_payload({**base, "formulaire": "", "maint_code": "91"})["maint_code"], None)
+
 print("\n" + ("TOUT EST VERT" if not FAIL else f"{len(FAIL)} ÉCHEC(S)"))
 sys.exit(1 if FAIL else 0)
