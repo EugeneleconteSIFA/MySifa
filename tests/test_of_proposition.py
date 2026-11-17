@@ -362,16 +362,21 @@ verifier("liste : plus aucun bouton réservé aux OF déposés en PDF", "pdf_fil
 
 print("Tri de la liste des OF")
 src_r = open("app/routers/of_import.py", encoding="utf-8").read()
-expr = re.search(r'_SQL_DATE_CREATION_ISO = \((.*?)\n\)', src_r, re.S).group(1)
-expr = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', expr))
+# Les deux affectations sont des chaînes pures : on les rejoue telles quelles.
+ns_tri = {}
+exec(re.search(r'_SQL_DATE_CREATION_BRUTE = \(.*?\n\)', src_r, re.S).group(0), ns_tri)
+exec(re.search(r'_SQL_DATE_CREATION_ISO = \(.*?\n\)', src_r, re.S).group(0), ns_tri)
+expr = ns_tri["_SQL_DATE_CREATION_ISO"]
 t = sqlite3.connect(":memory:")
 t.execute("CREATE TABLE o (id INTEGER, date_creation TEXT, date_import TEXT)")
 t.executemany("INSERT INTO o VALUES (?,?,?)", [
     (1, "31/10/2026", "2026-10-31T10:00:00"), (2, "05/11/2026", "2026-11-05T10:00:00"),
     (3, "2026-11-12", "2026-11-12T22:11:16"), (4, "12/11/2026", "2026-11-12T09:00:00"),
-    (5, None, "2026-11-01T08:00:00")])
+    (5, None, "2026-11-01T08:00:00"),
+    (6, "2099-12-18", "2026-06-02T09:20:10")])
 ordre = [r[0] for r in t.execute("SELECT id FROM o ORDER BY %s DESC, o.id DESC" % expr)]
-verifier("OF créé aujourd'hui en tête, dates françaises et ISO mêlées", ordre, [4, 3, 2, 5, 1])
+verifier("OF créé aujourd'hui en tête, dates françaises et ISO mêlées ; "
+         "date de création future rangée à sa date d'arrivée", ordre, [4, 3, 2, 5, 1, 6])
 
 print("Dates de l'OF imprimé")
 gen = open("app/services/of_pdf_generator.py", encoding="utf-8").read()
