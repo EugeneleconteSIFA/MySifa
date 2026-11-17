@@ -107,7 +107,10 @@
       + '}'
       + 'body.has-staging-bandeau{padding-top:24px}'
       + 'body.has-staging-bandeau .sidebar{height:calc(100vh - 24px);top:24px}'
-      + 'body.has-staging-bandeau .mobile-topbar{top:24px}';
+      + 'body.has-staging-bandeau .mobile-topbar{top:24px}'
+      // Le bandeau est un outil d'écran : il n'a rien à faire sur une feuille imprimée.
+      + '@media print{.staging-bandeau{display:none!important}'
+      +   'body.has-staging-bandeau{padding-top:0!important}}';
     var s = document.createElement('style');
     s.id = 'msf-imp-css';
     s.textContent = css;
