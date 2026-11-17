@@ -141,10 +141,19 @@ def _now_paris_iso() -> str:
 # texte, un OF créé aujourd'hui passait derrière tous les « 3x/… » et
 # « 2x/… » d'Access, et n'apparaissait jamais en tête de liste. À date
 # égale, le dernier enregistré d'abord.
-_SQL_DATE_CREATION_ISO = (
+_SQL_DATE_CREATION_BRUTE = (
     "CASE WHEN substr(COALESCE(o.date_creation,''),3,1) = '/' "
     "THEN substr(o.date_creation,7,4)||'-'||substr(o.date_creation,4,2)||'-'||substr(o.date_creation,1,2) "
     "ELSE substr(COALESCE(o.date_creation, o.date_import),1,10) END"
+)
+# Une date de création dans le FUTUR n'en est pas une : c'est une faute de
+# frappe dans Access (« Reliquat M,715 - L7 », créé le 18/12/2026, arrivé le
+# 02/06/2026). Triée telle quelle, elle restait en tête de liste pendant des
+# mois. On prend alors la date d'arrivée dans MySifa.
+_SQL_DATE_CREATION_ISO = (
+    "CASE WHEN (" + _SQL_DATE_CREATION_BRUTE + ") > date('now','localtime') "
+    "THEN substr(COALESCE(o.date_import,''),1,10) "
+    "ELSE (" + _SQL_DATE_CREATION_BRUTE + ") END"
 )
 
 

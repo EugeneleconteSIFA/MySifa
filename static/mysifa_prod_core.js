@@ -2446,10 +2446,16 @@ function renderOfEditModal(){
   };
   const overlay=document.createElement('div');
   overlay.id='of-edit-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  // La barre d'outils flottante (dock, en bas à droite, au-dessus de tout)
+  // recouvrait « Créer » / « Enregistrer ». On laisse sa hauteur libre sous
+  // la fenêtre, et le pied de fenêtre reste collé en bas pendant le
+  // défilement : le bouton est toujours visible, sans replier le dock.
+  // Sous 900 px il n'y a pas de dock (mysifa_outils_mobile.js).
+  const _sousDock=window.innerWidth>900?'96px':'16px';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px 16px '+_sousDock+';box-sizing:border-box';
   overlay.onclick=e=>{if(e.target===overlay)closeOfEditModal();};
   overlay.innerHTML=`
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:${creation?'1400px':'900px'};width:100%;max-height:${creation?'96vh':'92vh'};overflow-y:auto;box-sizing:border-box">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:${creation?'1400px':'900px'};width:100%;max-height:calc(100vh - 16px - ${_sousDock});overflow-y:auto;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
@@ -2581,7 +2587,7 @@ function renderOfEditModal(){
         _ta('ofe-particularites','Particularités',m.particularites,3)
         +_ta('ofe-observations','Observations',m.observations,4),false)}
       ${creation?'</div>':''}
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding:12px 0 18px;border-top:1px solid var(--border);flex-wrap:wrap;position:sticky;bottom:-18px;background:var(--card);z-index:2">
         <div>${m.id?`<button id="ofe-dossier-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Créer directement un dossier de prod</button>`:''}</div>
         <div style="display:flex;gap:10px">
           <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
