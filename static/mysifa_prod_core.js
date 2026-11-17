@@ -2078,6 +2078,12 @@ async function ofeDepuisCommandes(m){
   const vide=id=>!String(m._dom[id]==null?'':m._dom[id]).trim();
   if(r.qte_etiquettes&&vide('ofe-qte')){ m._dom['ofe-qte']=String(r.qte_etiquettes); m.qte_etiquettes=r.qte_etiquettes; }
   if(r.delai_client&&vide('ofe-delai')){ m._dom['ofe-delai']=r.delai_client; m.delai_client=r.delai_client; }
+  // Le numéro exact de la création, suffixe « (2) » compris s'il est déjà
+  // pris. Un numéro tapé par l'ADV n'est jamais remplacé.
+  const numActuel=String(m._dom['ofe-numero']==null?(m.of_numero||''):m._dom['ofe-numero']).trim();
+  if(r.numero&&(!numActuel||numActuel===m._numeroPropose)){
+    m._dom['ofe-numero']=r.numero; m.of_numero=r.numero; m._numeroPropose=r.numero;
+  }
   m._cmdInfo=r;
   const f=r.fiches||[];
   set({ofEditModal:m});
@@ -2338,6 +2344,11 @@ async function saveOfEdit(){
       }
       payload.commandes=m._commandes||[];
       payload.fiche_id=m._fiche.id;
+      // Numéro proposé (pas tapé) : on le laisse au serveur, qui applique la
+      // même règle et pose le suffixe « (2) » au moment exact de la création.
+      // Envoyé tel quel, il passerait pour un numéro tapé et un doublon
+      // serait refusé (règle num_of_auto d'Eugène, 16/11/2026).
+      if(payload.commandes.length&&m._numeroPropose&&(payload.of_numero||'')===m._numeroPropose) payload.of_numero=null;
       if(motif) payload.forcer_motif=motif;
       const res=await api('/api/of',{method:'POST',body:JSON.stringify(payload)});
       toast('OF '+(res&&res.of_numero?res.of_numero:'')+' créé.');
