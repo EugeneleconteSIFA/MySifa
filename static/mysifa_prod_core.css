@@ -1900,10 +1900,11 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
    numéro d'OF. */
 .table-std.table-actions-wide.prod-liste-of th.th-actions,
 .table-std.table-actions-wide.prod-liste-of td.td-actions{
-  width:300px !important;
-  min-width:300px !important;
-  max-width:300px !important;
+  width:336px !important;
+  min-width:336px !important;
+  max-width:336px !important;
 }
+/* 336px depuis le 17/11/2026 : un huitième bouton, le scan de l'OF terminé. */
 /* 340px laissait un vide à droite des boutons pendant que « Délai client »,
    « Qté étiquettes » et les dates se coupaient. Ajusté au contenu réel, et
    un en-tête trop long passe à la ligne au lieu d'être tronqué. */
