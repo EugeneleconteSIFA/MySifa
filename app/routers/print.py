@@ -829,7 +829,8 @@ def _fetch_pdf_bytes(entity_type: str, entity_id: int, user: dict | None = None)
                 from pathlib import Path as _P
                 OF_UPLOAD_DIR = str(_P(__file__).resolve().parent.parent.parent / "data" / "uploads" / "of")
             import os as _os
-            path = _os.path.join(OF_UPLOAD_DIR, pdf_filename)
+            from app.services.fichiers_secours import chemin_lecture
+            path = chemin_lecture(OF_UPLOAD_DIR, pdf_filename) or _os.path.join(OF_UPLOAD_DIR, pdf_filename)
             if not _os.path.isfile(path):
                 raise HTTPException(status_code=404, detail=f"PDF introuvable sur le serveur : {pdf_filename}")
             with open(path, "rb") as f:

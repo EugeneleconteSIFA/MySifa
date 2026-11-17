@@ -846,8 +846,9 @@ def preview_of_pdf(of_id: int, request: Request):
 
     # OF importé via PDF → servir le fichier original
     if row["pdf_filename"]:
-        path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
-        if not os.path.isfile(path):
+        from app.services.fichiers_secours import chemin_lecture
+        path = chemin_lecture(OF_UPLOAD_DIR, row["pdf_filename"])
+        if not path:
             raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
         return FileResponse(
             path,
@@ -926,8 +927,9 @@ def download_of_pdf(request: Request, of_id: int):
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{nom}"'},
         )
-    path = os.path.join(OF_UPLOAD_DIR, row["pdf_filename"])
-    if not os.path.isfile(path):
+    from app.services.fichiers_secours import chemin_lecture
+    path = chemin_lecture(OF_UPLOAD_DIR, row["pdf_filename"])
+    if not path:
         raise HTTPException(status_code=404, detail="Fichier PDF introuvable.")
     return FileResponse(
         path,

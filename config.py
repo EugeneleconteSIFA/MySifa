@@ -30,6 +30,12 @@ UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 # que v2 (prod), comme c'est déjà le cas pour la DB. Évite les 404 sur les pièces
 # jointes du chat quand un message est envoyé depuis l'autre instance.
 UPLOADS_ROOT = os.getenv("UPLOADS_ROOT", os.path.join(BASE_DIR, "uploads"))
+# Dossier de SECOURS en lecture seule pour les fichiers métier déposés (scans
+# d'OF, PDF d'OF, pièces des savoirs) : v1 reçoit la base de prod chaque nuit
+# mais pas ses fichiers. Pointé sur le data/uploads de prod, il laisse v1 lire
+# ce qu'il n'a pas. Vide = désactivé (défaut, et toujours en prod).
+# Voir app/services/fichiers_secours.py.
+UPLOAD_SECOURS_DIR = os.getenv("UPLOAD_SECOURS_DIR", "")
 
 # Miroir en lecture seule de l'ERP RVGI (base HFSQL `sifa_cs`), alimenté par
 # scripts/import_rvgi_csv.py. Fichier séparé de DB_PATH à dessein : il est

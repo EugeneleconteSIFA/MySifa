@@ -364,8 +364,9 @@ def document_pdf(doc_id: int, request: Request):
         ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Document introuvable.")
-    path = os.path.join(SCAN_UPLOAD_DIR, row["fichier"])
-    if not os.path.isfile(path):
+    from app.services.fichiers_secours import chemin_lecture
+    path = chemin_lecture(SCAN_UPLOAD_DIR, row["fichier"])
+    if not path:
         raise HTTPException(status_code=404, detail="Fichier absent du serveur.")
     # Pas de `filename=` : FileResponse poserait alors un Content-Disposition
     # « attachment » et le scan se telechargerait au lieu de s'ouvrir dans
@@ -822,8 +823,9 @@ def lire_piece(piece_id: int, request: Request):
     get_current_user(request)
     with get_db() as conn:
         row = _piece_ou_404(conn, piece_id)
-    chemin = os.path.join(SAVOIR_UPLOAD_DIR, row["fichier"])
-    if not os.path.isfile(chemin):
+    from app.services.fichiers_secours import chemin_lecture
+    chemin = chemin_lecture(SAVOIR_UPLOAD_DIR, row["fichier"])
+    if not chemin:
         raise HTTPException(status_code=404, detail="Fichier absent du serveur.")
     # Pas de `filename=` : la photo s'ouvre dans la page plutot que de se
     # telecharger. Le fichier ne change jamais apres son depot, donc le cache
