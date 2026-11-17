@@ -1538,6 +1538,14 @@ async function openOfEditModal(row){
   // Un OF existant ne stocke pas sa fiche : on la retrouve comme l'aperçu,
   // pour que l'étape 2 la montre et que le nombre d'étiquettes recalcule.
   if(plein&&plein.id){
+    api('/api/of/'+plein.id+'/scans').then(function(r){
+      const m=S.ofEditModal;
+      if(!m||m.id!==plein.id||!r||!(r.scans||[]).length) return;
+      captureSaisie('ofe-',m);
+      m._scans=r.scans;
+      set({ofEditModal:m});
+      renderOfEditModal();
+    }).catch(function(){});
     api('/api/of/'+plein.id+'/fiche').then(function(r){
       const m=S.ofEditModal;
       if(!m||m.id!==plein.id||!r||!r.fiche) return;
@@ -2492,6 +2500,41 @@ function ofeIso(v){
   return t.slice(0,10);
 }
 
+function ofeDateFr(d){
+  const t=String(d||'');
+  return /^\d{4}-\d{2}-\d{2}/.test(t)?t.slice(0,10).split('-').reverse().join('/'):t;
+}
+
+/* Les derniers OF terminés scannés du produit, à l'étape 2 : l'ADV relit
+   les annotations de la dernière production (réglages, problèmes, gâche)
+   avant de lancer la suivante (17/11/2026). */
+function ofeScansProduitHtml(m){
+  const l=m._scansProduit||[];
+  if(!m._fiche||!l.length) return '';
+  return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
+    'Derniers OF scannés de ce produit :'+
+    l.map(x=>'<a href="/api/produits/documents/'+encodeURIComponent(x.id)+'/pdf" target="_blank" rel="noopener" '+
+      'title="Papier atelier annoté de l\'OF '+escAttr(x.of_numero||'')+'" '+
+      'style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-decoration:none">'+
+      '<strong>'+escHtml(x.of_numero||'OF')+'</strong> · '+escHtml(ofeDateFr(x.date))+' <span style="color:var(--accent)">↗</span></a>').join('')+
+    '</div>';
+}
+
+// Charge les scans du produit de la fiche choisie, puis repeint leur zone.
+async function ofeChargerScansProduit(m){
+  const cle=m&&m._fiche&&m._fiche.reference?String(m._fiche.reference).split(' - ')[0].trim():'';
+  if(!cle){ m._scansProduit=[]; return; }
+  if(m._scansProduitCle===cle) return;
+  m._scansProduitCle=cle;
+  try{
+    const r=await api('/api/of/scans-produit?ref='+encodeURIComponent(cle)+'&limit=3'+(m.id?'&sauf='+encodeURIComponent(m.id):''));
+    if(S.ofEditModal!==m) return;
+    m._scansProduit=(r&&r.scans)||[];
+  }catch(e){ m._scansProduit=[]; }
+  const z=document.getElementById('ofe-scans-produit');
+  if(z) z.innerHTML=ofeScansProduitHtml(m);
+}
+
 function renderOfEditModal(){
   const existing=document.getElementById('of-edit-overlay');
   if(existing) existing.remove();
@@ -2551,7 +2594,8 @@ function renderOfEditModal(){
       +_f('ofe-delai','Délai client',ofeIso(m.delai_client),'date')
       +ofeDatesHtml(m)
       +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`
-      +`<div id="ofe-ecart" style="grid-column:1/-1">${ofeEcartHtml(m)}</div>`;
+      +`<div id="ofe-ecart" style="grid-column:1/-1">${ofeEcartHtml(m)}</div>`
+      +`<div id="ofe-scans-produit" style="grid-column:1/-1">${ofeScansProduitHtml(m)}</div>`;
   };
   const overlay=document.createElement('div');
   overlay.id='of-edit-overlay';
@@ -2599,6 +2643,10 @@ function renderOfEditModal(){
         </div>
         <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>
         ${_f('ofe-numero','OF n°',m.of_numero)}
+        ${m.id&&(m._scans||[]).length?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
+          OF terminé scanné :
+          ${m._scans.map(x=>`<a href="/api/produits/documents/${encodeURIComponent(x.id)}/pdf" target="_blank" rel="noopener" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-decoration:none;font-weight:600">${escHtml(ofeDateFr(x.date)||'scan')} <span style="color:var(--accent)">Voir le scan ↗</span></a>`).join('')}
+        </div>`:''}
         ${m.id&&m._numeroSuggere?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
           Numéro proposé pour ces commandes : <strong>${escHtml(m._numeroSuggere)}</strong>
           <button type="button" id="ofe-num-sugg" style="padding:5px 10px;border-radius:8px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">Utiliser ce numéro</button>
@@ -2757,6 +2805,7 @@ function renderOfEditModal(){
   overlay.querySelectorAll('[data-autre-fiche]').forEach(function(b){
     b.onclick=function(){ ofeChoisirFiche(Number(b.getAttribute('data-autre-fiche'))); };
   });
+  if(m._fiche) ofeChargerScansProduit(m);
   const bSugg=overlay.querySelector('#ofe-num-sugg');
   if(bSugg) bSugg.onclick=function(){
     const champ=document.getElementById('ofe-numero');
@@ -3447,6 +3496,10 @@ function renderOfTab(){
         });
       }),
       bouton('Télécharger PDF','download',()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}),
+      // Le papier atelier annoté, une fois l'OF terminé et scanné (17/11/2026).
+      row.scan_id
+        ? bouton('Scan de l\'OF terminé','file-text',()=>{window.open('/api/produits/documents/'+row.scan_id+'/pdf','_blank');})
+        : h('button',{style:bStyle+';opacity:.35;cursor:default',disabled:true,title:'Pas encore de scan pour cet OF'},iconEl('file-text',13)),
       // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
       // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
       bouton('Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),

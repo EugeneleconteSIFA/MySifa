@@ -403,6 +403,34 @@ liste = js[js.index("const rows=(S.ofImports||[]).map(row=>{"):]
 liste = liste[:liste.index("return h('tr',null,")]
 verifier("liste : plus aucun bouton réservé aux OF déposés en PDF", "pdf_filename" in liste, False)
 
+print("Scans d'OF dans la liste et la fenêtre")
+ns_sc = {}
+for nom in ("_SQL_SCAN_DE_OF", "_SQL_DERNIER_SCAN", "_SQL_DATE_SCAN"):
+    exec(re.search(nom + r' = \(.*?\n\)', src_a, re.S).group(0), ns_sc)
+sc = sqlite3.connect(":memory:")
+sc.row_factory = sqlite3.Row
+sc.executescript("""
+CREATE TABLE of_imports (id INTEGER PRIMARY KEY, of_numero TEXT);
+CREATE TABLE produit_documents (id INTEGER PRIMARY KEY, of_import_id INTEGER, of_numero TEXT,
+  ref_produit_norm TEXT, nb_pages INTEGER, date_document TEXT, importe_le TEXT);
+INSERT INTO of_imports VALUES (1121, '9932140'), (2, '9932178'), (3, 'sans scan');
+INSERT INTO produit_documents VALUES
+  (1, 1121, '9932140', '420/0018', 1, '24/06/2026', '2026-08-26'),
+  (2, NULL, '9932178', '706/0003', 1, '2026-07-30T08:00', '2026-08-26'),
+  (3, NULL, 'X', '420/0018', 1, '01/07/2026', '2026-08-26');
+""")
+scans = {r["id"]: r["scan_id"] for r in sc.execute(
+    "SELECT o.id, (" + ns_sc["_SQL_DERNIER_SCAN"] + ") AS scan_id FROM of_imports o")}
+verifier("scan relié par l'identifiant de l'OF", scans[1121], 1)
+verifier("scan relié par le numéro d'OF", scans[2], 2)
+verifier("OF sans scan", scans[3], None)
+dates = [r[0] for r in sc.execute(
+    "SELECT d.id FROM produit_documents d WHERE d.ref_produit_norm = '420/0018' ORDER BY (" +
+    ns_sc["_SQL_DATE_SCAN"] + ") DESC")]
+verifier("historique produit : le plus récent d'abord, dates mêlées", dates, [3, 1])
+verifier("route des scans produit avant /api/of/{of_id}",
+         src_a.index('@router.get("/api/of/scans-produit")') < src_a.index('@router.get("/api/of/{of_id}")'), True)
+
 print("Tri de la liste des OF")
 src_r = open("app/routers/of_import.py", encoding="utf-8").read()
 # Les deux affectations sont des chaînes pures : on les rejoue telles quelles.

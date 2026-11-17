@@ -157,6 +157,29 @@ _SQL_DATE_CREATION_ISO = (
 )
 
 
+# Le scan de l'OF terminé (papier atelier annoté, MyProd › Scans d'OF) : relié
+# par l'identifiant de l'OF, sinon par son numéro. Le dernier en date.
+_SQL_SCAN_DE_OF = (
+    "d.of_import_id = o.id OR (TRIM(COALESCE(o.of_numero,'')) <> '' "
+    "AND LOWER(TRIM(COALESCE(d.of_numero,''))) = LOWER(TRIM(o.of_numero)))"
+)
+_SQL_DERNIER_SCAN = (
+    "SELECT d.id FROM produit_documents d WHERE " + _SQL_SCAN_DE_OF +
+    " ORDER BY d.id DESC LIMIT 1"
+)
+# date_document mêle « 24/06/2026 » et l'ISO : comparable une fois converti.
+_SQL_DATE_SCAN = (
+    "CASE WHEN substr(COALESCE(d.date_document,''),3,1) = '/' "
+    "THEN substr(d.date_document,7,4)||'-'||substr(d.date_document,4,2)||'-'||substr(d.date_document,1,2) "
+    "ELSE substr(COALESCE(d.date_document, d.importe_le),1,10) END"
+)
+
+
+def _scan_public(r) -> dict:
+    return {"id": r["id"], "of_numero": r["of_numero"], "date": r["date_scan"],
+            "ref_produit": r["ref_produit_norm"], "nb_pages": r["nb_pages"]}
+
+
 def _require_of_access(request: Request) -> dict:
     user = get_current_user(request)
     if user.get("role") not in OF_ALLOWED_ROLES:
@@ -598,7 +621,8 @@ def list_of_imports(request: Request):
                     o.metrage, o.matiere, o.conditionnement, o.outil_1_numero,
                     o.nb_mandrins, o.nb_cartons, o.nb_tubes,
                     o.date_import, o.statut, o.pdf_filename, o.imported_by,
-                    CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie
+                    CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie,
+                    ({_SQL_DERNIER_SCAN}) AS scan_id
                 FROM of_imports o
                 LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
                 WHERE 1=1 {search_filter}
@@ -2069,6 +2093,36 @@ async def of_apercu(request: Request):
     )
 
 
+@router.get("/api/of/scans-produit")
+def of_scans_produit(request: Request):
+    """Les derniers OF terminés scannés d'un produit (`ref`, « 1153/0009 »).
+
+    Montrés à l'étape 2 de la fenêtre OF : l'ADV relit les annotations de
+    la dernière production (réglages, problèmes, gâche) avant de lancer la
+    suivante. `sauf` écarte l'OF ouvert lui-même.
+    """
+    _require_of_access(request)
+    from app.services.of_proposition import _cle_produit
+    cle = _cle_produit(request.query_params.get("ref"))
+    if not cle:
+        return {"scans": []}
+    try:
+        limite = max(1, min(int(request.query_params.get("limit") or 3), 10))
+        sauf = int(request.query_params.get("sauf") or 0)
+    except ValueError:
+        limite, sauf = 3, 0
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT d.id, d.of_numero, d.ref_produit_norm, d.nb_pages, "
+            "       (" + _SQL_DATE_SCAN + ") AS date_scan "
+            "  FROM produit_documents d "
+            " WHERE d.ref_produit_norm = ? AND COALESCE(d.of_import_id, 0) <> ? "
+            " ORDER BY date_scan DESC, d.id DESC LIMIT ?",
+            (cle, sauf, limite),
+        ).fetchall()
+    return {"scans": [_scan_public(r) for r in rows]}
+
+
 @router.get("/api/of/controle")
 def of_controle(request: Request):
     """La fiche (et la référence) de l'OF concordent-elles avec les
@@ -2405,6 +2459,22 @@ def _format_lh(valeur) -> tuple:
             except ValueError:
                 return (None, None)
     return (None, None)
+
+
+@router.get("/api/of/{of_id}/scans")
+def of_scans(of_id: int, request: Request):
+    """Les scans de l'OF terminé, rattachés à cet OF."""
+    _require_of_access(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT d.id, d.of_numero, d.ref_produit_norm, d.nb_pages, "
+            "       (" + _SQL_DATE_SCAN + ") AS date_scan "
+            "  FROM produit_documents d, of_imports o "
+            " WHERE o.id = ? AND (" + _SQL_SCAN_DE_OF + ") "
+            " ORDER BY d.id DESC",
+            (of_id,),
+        ).fetchall()
+    return {"scans": [_scan_public(r) for r in rows]}
 
 
 @router.get("/api/of/{of_id}/fiche")
