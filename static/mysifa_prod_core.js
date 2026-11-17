@@ -1984,9 +1984,23 @@ function ofeChangerFiche(){
   const m=S.ofEditModal;
   if(!m) return;
   captureSaisie('ofe-',m);
+  // « Changer » repropose d'abord les fiches du MÊME produit : c'est presque
+  // toujours une autre machine ou une autre laize qu'on cherche. Avant, il
+  // fallait retaper une recherche à vide (retour du 17/11/2026).
+  const cle=m._fiche&&m._fiche.reference?String(m._fiche.reference).split(' - ')[0].trim():'';
+  const duProduit=((m._cmdInfo&&m._cmdInfo.fiches)||[]);
   m._fiche=null;
+  m._fichesTrouvees=duProduit.length?duProduit:[];
+  m._ficheIdx=0;
   set({ofEditModal:m});
   renderOfEditModal();
+  if(duProduit.length){
+    ofePeindreFiches('');
+  }else if(cle){
+    const el=document.getElementById('ofe-fiche-q');
+    if(el) el.value=cle;
+    ofeChercherFiche(cle);
+  }
   requestAnimationFrame(function(){ const el=document.getElementById('ofe-fiche-q'); if(el) el.focus(); });
 }
 window.ofeChangerFiche = ofeChangerFiche;
@@ -2512,11 +2526,17 @@ function renderOfEditModal(){
   const _secFiche=()=>{
     const f=m._fiche;
     const bouton='padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap';
+    // Les autres fiches du même produit restent à portée d'un clic.
+    const autres=f?((m._cmdInfo&&m._cmdInfo.fiches)||[]).filter(x=>x.id!==f.id):[];
     const choix=f?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="flex:1;font-size:13px;color:var(--text)"><strong>${escHtml(f.reference||'')}</strong>
           <span style="color:var(--muted);margin-left:8px">${escHtml([f.machine,f.format].filter(Boolean).join(' · '))}</span></div>
         <button type="button" onclick="ofeChangerFiche()" style="${bouton}">Changer de fiche</button>
-      </div>`
+      </div>
+      ${autres.length?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+        Autre${autres.length>1?'s':''} fiche${autres.length>1?'s':''} de ce produit :
+        ${autres.map(x=>`<button type="button" data-autre-fiche="${escAttr(String(x.id))}" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-family:inherit;font-size:12px"><strong>${escHtml(x.reference||'')}</strong>${x.machine?' · '+escHtml(x.machine):''}</button>`).join('')}
+      </div>`:''}`
       :`<div style="grid-column:1/-1">
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Fiche technique</label>
         <input id="ofe-fiche-q" type="text" autocomplete="off" value="${escAttr(_v('ofe-fiche-q',''))}"
@@ -2734,6 +2754,9 @@ function renderOfEditModal(){
   // nombre d'étiquettes, délai, commandes et numéro. Le reste de l'OF vit
   // dans un bloc masqué (toujours dans le DOM : c'est lui que « Créer »
   // envoie), qu'on déplie seulement pour une correction.
+  overlay.querySelectorAll('[data-autre-fiche]').forEach(function(b){
+    b.onclick=function(){ ofeChoisirFiche(Number(b.getAttribute('data-autre-fiche'))); };
+  });
   const bSugg=overlay.querySelector('#ofe-num-sugg');
   if(bSugg) bSugg.onclick=function(){
     const champ=document.getElementById('ofe-numero');
