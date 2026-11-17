@@ -1929,6 +1929,8 @@ function ofePeindreFiches(q){
 async function ofeChoisirFiche(ficheId){
   const m=S.ofEditModal;
   if(!m||!ficheId) return;
+  // Choisie à la main (le cas d'office repose le drapeau après l'appel).
+  m._ficheAuto=false;
   captureSaisie('ofe-',m);
   let p=null;
   try{
@@ -2110,9 +2112,21 @@ async function ofeDepuisCommandes(m){
   if(S.ofEditModal!==m) return true;
   captureSaisie('ofe-',m);
   m._dom=m._dom||{};
-  const vide=id=>!String(m._dom[id]==null?'':m._dom[id]).trim();
-  if(r.qte_etiquettes&&vide('ofe-qte')){ m._dom['ofe-qte']=String(r.qte_etiquettes); m.qte_etiquettes=r.qte_etiquettes; }
-  if(r.delai_client&&vide('ofe-delai')){ m._dom['ofe-delai']=r.delai_client; m.delai_client=r.delai_client; }
+  // Quantité et délai SUIVENT les commandes tant que l'ADV ne les a pas
+  // tapés : décocher L1 et garder L2 doit donner la quantité de L2 seule
+  // (retour du 17/11/2026). Une valeur saisie à la main ne bouge plus.
+  const val=id=>String(m._dom[id]==null?'':m._dom[id]).trim();
+  const suit=(id,propose)=>!val(id)||val(id)===String(propose==null?'':propose);
+  let qteChangee=false;
+  if(suit('ofe-qte',m._qtePropose)){
+    const q=r.qte_etiquettes?String(r.qte_etiquettes):'';
+    qteChangee=q!==val('ofe-qte');
+    m._dom['ofe-qte']=q; m.qte_etiquettes=r.qte_etiquettes||null; m._qtePropose=q;
+  }
+  if(suit('ofe-delai',m._delaiPropose)){
+    const d=r.delai_client||'';
+    m._dom['ofe-delai']=d; m.delai_client=d||null; m._delaiPropose=d;
+  }
   // Le numéro exact de la création, suffixe « (2) » compris s'il est déjà
   // pris. Un numéro tapé par l'ADV n'est jamais remplacé.
   const numActuel=String(m._dom['ofe-numero']==null?(m.of_numero||''):m._dom['ofe-numero']).trim();
@@ -2126,14 +2140,23 @@ async function ofeDepuisCommandes(m){
   }
   m._cmdInfo=r;
   const f=r.fiches||[];
+  // Une fiche prise d'office pour l'ancienne commande suit le produit des
+  // nouvelles ; une fiche choisie à la main reste.
+  if(m._fiche&&m._ficheAuto&&r.article&&String(m._fiche.reference||'').split(' - ')[0].trim()!==r.article){
+    m._fiche=null;
+  }
   set({ofEditModal:m});
   renderOfEditModal();
   ofeControler(m);
-  if(m._fiche) return f.length>0;
+  if(m._fiche){
+    if(qteChangee) ofeRecalculer();
+    return f.length>0;
+  }
   // Un OF existant sans fiche retrouvée : la fiche n'est que proposée,
   // jamais posée d'office (elle réécrirait tout le produit de l'OF).
   if(f.length===1&&!m.id){
     await ofeChoisirFiche(f[0].id);
+    m._ficheAuto=true;
     return true;
   }
   if(f.length>=1){
