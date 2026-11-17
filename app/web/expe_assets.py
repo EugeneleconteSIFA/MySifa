@@ -48,6 +48,13 @@ EXPE_TRANSPORTEURS_CSS = r"""
 .expe-trp-contact-line svg{flex-shrink:0;color:var(--muted)}
 .expe-trp-contact-line .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   color:inherit}
+/* Une adresse email ne se tronque jamais : une adresse coupée ne sert à rien.
+   Trop longue pour la colonne, elle passe à la ligne, de préférence avant le
+   « @ » (<wbr>), sinon n'importe où. */
+.expe-trp-contact-email-row{align-items:flex-start}
+.expe-trp-contact-email-row svg{margin-top:3px}
+.expe-trp-contact-email-row .lbl{white-space:normal;overflow:visible;text-overflow:clip;
+  overflow-wrap:anywhere;line-height:1.35}
 .expe-trp-contact-line.tel-link{color:var(--text2)}
 .expe-trp-contact-line.tel-link:hover{color:var(--accent)}
 .expe-trp-contact-line.tel-link:hover svg{color:var(--accent)}
@@ -55,7 +62,6 @@ EXPE_TRANSPORTEURS_CSS = r"""
   font-size:11.5px;color:var(--text)}
 .expe-trp-contact-line a.lbl{color:var(--accent);font-weight:600}
 .expe-trp-contact-line a.lbl:hover{text-decoration:underline}
-.expe-trp-contact-email-row{align-items:center}
 .expe-trp-emails-badge{flex-shrink:0;font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;
   background:var(--accent-bg);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);
   letter-spacing:.2px}
@@ -124,6 +130,48 @@ tr:hover .expe-trp-contact-acts,
 .expe-trp-tarif-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-trp-tarif-table-wrap table.table-std{margin:0;font-size:12px}
 .expe-trp-tarif-table-wrap table.table-std th,.expe-trp-tarif-table-wrap table.table-std td{padding:8px 10px}
+/* Grilles tarifaires (onglet Tarifs) */
+.expe-grille-aide{margin:-6px 0 14px;font-size:12px;color:var(--muted);line-height:1.45}
+.expe-grille-vide{color:var(--muted);font-size:13px;margin:0;padding:6px 0}
+.expe-grille-liste{display:flex;flex-direction:column;gap:10px}
+.expe-grille-carte{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--card)}
+.expe-grille-carte.brouillon{border-color:color-mix(in srgb,var(--warn) 45%,var(--border))}
+.expe-grille-carte.archivee{opacity:.75}
+.expe-grille-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.expe-grille-titre{font-weight:700;font-size:13.5px;color:var(--text)}
+.expe-grille-statut{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.3px;text-transform:uppercase}
+.expe-grille-statut.active{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.expe-grille-statut.brouillon{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.expe-grille-statut.archivee{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--muted)}
+.expe-grille-meta{font-size:12px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.expe-grille-comp{font-size:12.5px;color:var(--text2);margin-top:6px;font-weight:600}
+.expe-grille-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.expe-grille-btn{border:1px solid var(--border);background:var(--bg);color:var(--text2);border-radius:8px;
+  padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+.expe-grille-btn:hover:not(:disabled){background:var(--card);border-color:var(--accent);color:var(--accent)}
+.expe-grille-btn:disabled{opacity:.45;cursor:default}
+.expe-grille-btn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.expe-grille-btn.danger:hover:not(:disabled){border-color:var(--danger);color:var(--danger)}
+.expe-grille-cta{padding:6px 14px;font-size:12px}
+.expe-grille-select{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 8px;
+  font-size:12px;color:var(--text)}
+.expe-grille-vue{margin-top:12px}
+.expe-grille-q{width:100%;max-width:320px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:8px 12px;font-size:13px;color:var(--text);margin-bottom:10px}
+.expe-grille-q:focus{outline:none;border-color:var(--accent)}
+.expe-grille-scroll{max-height:420px;overflow:auto}
+.expe-grille-table th{position:sticky;top:0;background:var(--card);z-index:1;text-align:right;white-space:nowrap}
+.expe-grille-table td{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.expe-grille-table th.expe-grille-zone,.expe-grille-table td.expe-grille-zone{text-align:left;position:sticky;left:0;
+  background:var(--card);font-weight:700;z-index:2}
+.expe-grille-unite{display:block;font-size:9px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)}
+.expe-grille-nc{color:var(--muted)}
+.expe-grille-ecart{display:block;font-size:10px;font-weight:700}
+.expe-grille-ecart.up{color:var(--danger)}
+.expe-grille-ecart.down{color:var(--success)}
+.expe-grille-ecart.eq{color:var(--muted)}
+.expe-grille-pages{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}
+.expe-grille-pages span{margin-right:auto}
 
 /* ── Portail séparé + multi-emails (modal transporteur) ── */
 .expe-trp-portail-inp-wrap{display:flex;gap:8px;align-items:stretch;width:100%}
@@ -236,10 +284,15 @@ const T={
   tarifFile:null,
   uploadDrag:false,
   modalTab:'fiche',
-  tarifs_lignes:[],
+  tarifs_grilles:[],
   tarifs_frais:[],
   tarifs_loading:false,
-  tarifs_parsing:false
+  tarifs_import:false,
+  tarifs_ouverte:null,
+  tarifs_mat:null,
+  tarifs_q:'',
+  tarifs_offset:0,
+  tarifs_avert:[]
 };
 
 const TRP_PALETTE = [
@@ -520,8 +573,7 @@ function openTransporteurModal(id){
   }
   T.tarifFile=null;
   T.modalTab='fiche';
-  T.tarifs_lignes=[];
-  T.tarifs_frais=[];
+  _tarifsReset();
   T.modalOpen=true;
   render();
 }
@@ -531,8 +583,7 @@ function closeTransporteurModal(){
   T.editId=null;
   T.tarifFile=null;
   T.modalTab='fiche';
-  T.tarifs_lignes=[];
-  T.tarifs_frais=[];
+  _tarifsReset();
   // Reprise de l'ecran devis si on est venu de la (bouton Nouveau
   // transporteur) : le modal d'envoi comme le wizard de creation sont remis
   // en place tels quels, saisie comprise.
@@ -551,199 +602,300 @@ function setTransporteurModalTab(tab){
   else render();
 }
 
+// ─── Onglet Tarifs : grilles versionnées ────────────────────────────
+// L'onglet ne charge jamais toutes les lignes de prix (42 000 chez Ceva) :
+// le résumé des grilles d'abord, puis une page de zones de la grille ouverte.
+
+function _tarifsReset(){
+  T.tarifs_grilles=[];
+  T.tarifs_frais=[];
+  T.tarifs_ouverte=null;
+  T.tarifs_mat=null;
+  T.tarifs_q='';
+  T.tarifs_offset=0;
+  T.tarifs_avert=[];
+}
+
 async function loadTarifsTransporteur(transporteurId){
   T.tarifs_loading=true;
   render();
   try{
     const data=await api('/api/expe/transporteurs/'+transporteurId+'/tarifs');
-    T.tarifs_lignes=data.lignes||[];
-    T.tarifs_frais=data.frais||[];
+    T.tarifs_grilles=(data&&data.grilles)||[];
+    T.tarifs_frais=(data&&data.frais)||[];
+    if(T.tarifs_ouverte!=null&&!T.tarifs_grilles.some(g=>Number(g.id)===Number(T.tarifs_ouverte))){
+      T.tarifs_ouverte=null;T.tarifs_mat=null;
+    }
   }catch(e){
-    showToast(e.message||'Chargement tarifs impossible','danger');
-    T.tarifs_lignes=[];
+    showToast(e.message||'Chargement des tarifs impossible.','danger');
+    T.tarifs_grilles=[];
     T.tarifs_frais=[];
   }
   T.tarifs_loading=false;
   render();
+  if(T.tarifs_ouverte!=null)void chargerMatriceGrille();
 }
 
-function expeTrpTarifRowCells(l,withCheck){
-  const trMax=l.tranche_max!=null&&l.tranche_max!==''?String(l.tranche_max):'∞';
-  const cells=[
-    withCheck?h('td',null,h('input',{type:'checkbox',className:'tarif-check','data-id':String(l.id)})):null,
-    h('td',null,escHtml(l.type_envoi||'')),
-    h('td',null,escHtml(l.base_calcul||'')),
-    h('td',null,escHtml((l.zone_type||'')+' '+String(l.zone_valeur||''))),
-    h('td',null,escHtml(String(l.tranche_min!=null?l.tranche_min:0)+' – '+trMax)),
-    h('td',null,escHtml(String(l.prix!=null?l.prix:''))),
-    h('td',null,escHtml(l.unite||'')),
-    h('td',null,l.mini_perception!=null&&l.mini_perception!==''?escHtml(String(l.mini_perception)):'—')
-  ].filter(Boolean);
-  return h('tr',null,...cells);
+function _tarifNombre(v){
+  if(v==null||v==='')return '';
+  const n=parseFloat(v);
+  return isNaN(n)?'':n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
-function expeTrpTarifsTable(lignes,withCheck){
-  if(!lignes.length)return h('p',{style:{color:'var(--muted)',fontSize:'13px',margin:'0'}},'Aucune ligne.');
-  const head=h('tr',null,
-    withCheck?h('th',{style:{width:'28px'}},''):null,
-    h('th',null,'Type'),h('th',null,'Base'),h('th',null,'Zone'),
-    h('th',null,'Tranche'),h('th',null,'Prix'),h('th',null,'Unité'),h('th',null,'Mini perception')
-  );
-  const body=lignes.map(l=>expeTrpTarifRowCells(l,withCheck));
-  return h('div',{className:'expe-trp-tarif-table-wrap'},
-    h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body))
-  );
+function _tarifPct(v){
+  if(v==null)return '—';
+  const n=parseFloat(v);
+  return (n>0?'+':'')+n.toLocaleString('fr-FR',{minimumFractionDigits:1,maximumFractionDigits:1})+' %';
 }
 
-async function validerTarifsBrouillon(ids){
-  if(T.editId==null)return;
+function _tarifDate(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m?m[3]+'/'+m[2]+'/'+m[1]:'';
+}
+
+const _TARIF_METHODES={
+  pdf_tableau:'tableau PDF',excel_tableau:'tableau Excel',csv:'CSV MySifa',csv_tableau:'tableau CSV',
+  excel_compte100346:'Excel (Compte 100346)',excel_ceva:'Excel (CEVA)',excel_transbenelux:'Excel (TRANSBENELUX)',
+  ia:'assistant IA',reprise:'reprise des tarifs existants'
+};
+
+async function importerGrilleTarif(file){
+  if(!file||T.editId==null)return;
+  const fd=new FormData();
+  fd.append('file',file);
+  T.tarifs_import=true;
+  T.tarifs_avert=[];
+  render();
   try{
-    const body=ids&&ids.length?{ids:ids.map(Number)}:{};
-    const res=await api('/api/expe/transporteurs/'+T.editId+'/tarifs/valider',{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
-    });
-    const rempl=Number(res.remplacees)||0;
-    showToast((res.activees!=null?res.activees:0)+' ligne(s) activée(s)'
-      +(rempl?' · '+rempl+' ancienne(s) remplacée(s)':'')+'.','success');
-    await loadTarifsTransporteur(T.editId);
+    const res=await api('/api/expe/transporteurs/'+T.editId+'/tarifs/importer',{method:'POST',body:fd});
+    if(res){
+      const gs=res.grilles||[];
+      const n=gs.reduce((a,g)=>a+(Number(g.nb_lignes)||0),0);
+      showToast(gs.length+' grille(s) lue(s), '+n+' prix — à contrôler avant activation.','success');
+      T.tarifs_avert=res.avertissements||[];
+      if(gs.length){T.tarifs_ouverte=gs[0].id;T.tarifs_q='';T.tarifs_offset=0;T.tarifs_mat=null;}
+    }
   }catch(e){
-    showToast(e.message||'Validation impossible','danger');
+    showToast(e.message||'Lecture du fichier impossible.','danger');
   }
+  T.tarifs_import=false;
+  await loadTarifsTransporteur(T.editId);
 }
 
-function activerTarifsSelection(){
-  const checks=document.querySelectorAll('.tarif-check:checked');
-  const ids=Array.from(checks).map(el=>Number(el.getAttribute('data-id'))).filter(n=>!isNaN(n));
-  if(!ids.length){showToast('Sélectionnez au moins une ligne.','danger');return;}
-  void validerTarifsBrouillon(ids);
+async function changerEtatGrille(g,geste){
+  if(T.editId==null)return;
+  if(geste==='activer'){
+    const c=g.comparaison||{};
+    const msg='Activer « '+(g.libelle||'')+' » ?\n\n'
+      +(c.cellules_comparees?c.cellules_comparees+' prix actifs des mêmes zones et tranches seront remplacés'
+        +(c.ecart_moyen_pct!=null?' (écart moyen '+_tarifPct(c.ecart_moyen_pct)+')':'')+'.\n':'Aucun prix actif n\'est remplacé.\n')
+      +'Retour possible : archiver la grille rétablit les prix remplacés.';
+    if(!confirm(msg))return;
+  }else if(geste==='archiver'){
+    if(!confirm('Archiver « '+(g.libelle||'')+' » ?\n\nSes prix ne sont plus utilisés par le comparateur. Les prix qu\'elle avait remplacés redeviennent actifs.'))return;
+  }else if(geste==='supprimer'){
+    if(!confirm('Supprimer « '+(g.libelle||'')+' » et ses '+(g.nb_lignes||0)+' prix ?\n\nCette suppression est définitive.'))return;
+  }
+  const url='/api/expe/transporteurs/'+T.editId+'/tarifs/grilles/'+g.id+(geste==='supprimer'?'':'/'+geste);
+  try{
+    const res=await api(url,{method:geste==='supprimer'?'DELETE':'POST'});
+    if(geste==='activer')showToast((res.activees||0)+' prix activés'+(res.remplacees?' · '+res.remplacees+' remplacés':'')+'.','success');
+    else if(geste==='archiver')showToast('Grille archivée'+(res.retablies?' · '+res.retablies+' prix rétablis':'')+'.','success');
+    else showToast('Grille supprimée.','success');
+    if(geste==='supprimer'&&Number(T.tarifs_ouverte)===Number(g.id)){T.tarifs_ouverte=null;T.tarifs_mat=null;}
+  }catch(e){
+    showToast(e.message||'Action impossible.','danger');
+  }
+  await loadTarifsTransporteur(T.editId);
+}
+
+async function changerTypeGrille(g,type){
+  if(T.editId==null||type===g.type_envoi)return;
+  try{
+    await api('/api/expe/transporteurs/'+T.editId+'/tarifs/grilles/'+g.id,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({type_envoi:type})
+    });
+    showToast('Type d\'envoi modifié.','success');
+  }catch(e){
+    showToast(e.message||'Modification impossible.','danger');
+  }
+  await loadTarifsTransporteur(T.editId);
+}
+
+function ouvrirGrille(id){
+  if(Number(T.tarifs_ouverte)===Number(id)){T.tarifs_ouverte=null;T.tarifs_mat=null;render();return;}
+  T.tarifs_ouverte=id;T.tarifs_q='';T.tarifs_offset=0;T.tarifs_mat=null;
+  render();
+  void chargerMatriceGrille();
+}
+
+let _tarifsQTimer=null;
+async function chargerMatriceGrille(){
+  if(T.editId==null||T.tarifs_ouverte==null)return;
+  const id=T.tarifs_ouverte;
+  const qs='?q='+encodeURIComponent(T.tarifs_q||'')+'&offset='+(T.tarifs_offset||0)+'&limite=60';
+  try{
+    const m=await api('/api/expe/transporteurs/'+T.editId+'/tarifs/grilles/'+id+'/matrice'+qs);
+    if(Number(T.tarifs_ouverte)!==Number(id))return;
+    T.tarifs_mat=m;
+  }catch(e){
+    showToast(e.message||'Lecture de la grille impossible.','danger');
+    T.tarifs_mat=null;
+  }
+  // Seul le tableau est redessiné : la recherche garde le focus et la saisie.
+  const box=document.getElementById('expe-grille-mat');
+  if(box)box.replaceWith(expeGrilleMatriceEl());
+  else render();
+}
+
+function expeGrilleMatriceEl(){
+  const m=T.tarifs_mat;
+  const wrap=h('div',{id:'expe-grille-mat',className:'expe-grille-mat'});
+  if(!m){wrap.appendChild(h('p',{className:'expe-grille-vide'},'Chargement…'));return wrap;}
+  if(!m.zones.length){
+    wrap.appendChild(h('p',{className:'expe-grille-vide'},T.tarifs_q?'Aucune zone pour « '+T.tarifs_q+' ».':'Grille vide.'));
+    return wrap;
+  }
+  const brouillon=m.grille&&m.grille.statut==='brouillon';
+  const head=h('tr',null,h('th',{className:'expe-grille-zone'},'Zone'),
+    ...m.tranches.map(t=>h('th',{title:t.unite==='au_100kg'?'Prix aux 100 kg':(t.unite==='au_kg'?'Prix au kg':'Forfait')},
+      t.libelle,h('span',{className:'expe-grille-unite'},t.unite==='au_100kg'?'/100 kg':(t.unite==='au_kg'?'/kg':'forfait')))));
+  const body=m.zones.map(z=>{
+    const lib=z.zone_type==='departement'?z.zone_valeur:(z.zone_type==='code_postal'?'CP '+z.zone_valeur:z.zone_valeur);
+    return h('tr',null,h('td',{className:'expe-grille-zone'},lib),
+      ...z.prix.map((p,i)=>{
+        const a=z.ancien?z.ancien[i]:null;
+        if(p==null)return h('td',{className:'expe-grille-nc'},'—');
+        if(!brouillon||a==null||!parseFloat(a))return h('td',null,_tarifNombre(p));
+        const d=(parseFloat(p)/parseFloat(a)-1)*100;
+        const cls=Math.abs(d)<0.05?'eq':(d>0?'up':'down');
+        return h('td',{title:'Prix actif : '+_tarifNombre(a)},_tarifNombre(p),
+          h('span',{className:'expe-grille-ecart '+cls},cls==='eq'?'=':_tarifPct(d)));
+      }));
+  });
+  wrap.appendChild(h('div',{className:'expe-trp-tarif-table-wrap expe-grille-scroll'},
+    h('table',{className:'table-std expe-grille-table'},h('thead',null,head),h('tbody',null,...body))));
+  const debut=m.offset+1, fin=m.offset+m.zones.length;
+  wrap.appendChild(h('div',{className:'expe-grille-pages'},
+    h('span',null,'Zones '+debut+'–'+fin+' sur '+m.total),
+    h('button',{type:'button',className:'expe-grille-btn',disabled:m.offset<=0,
+      onClick:()=>{T.tarifs_offset=Math.max(0,m.offset-60);void chargerMatriceGrille();}},'Précédentes'),
+    h('button',{type:'button',className:'expe-grille-btn',disabled:fin>=m.total,
+      onClick:()=>{T.tarifs_offset=m.offset+60;void chargerMatriceGrille();}},'Suivantes')
+  ));
+  return wrap;
+}
+
+const _TARIF_STATUTS={brouillon:['Brouillon','brouillon'],active:['Active','active'],archivee:['Archivée','archivee']};
+
+function expeGrilleCarte(g){
+  const [stLib,stCls]=_TARIF_STATUTS[g.statut]||[g.statut,''];
+  const ouverte=Number(T.tarifs_ouverte)===Number(g.id);
+  const meta=[
+    (g.nb_zones||0)+' zone(s)',
+    (g.nb_tranches||0)+' tranche(s)',
+    (g.nb_lignes||0).toLocaleString('fr-FR')+' prix',
+    g.date_effet?'effet '+_tarifDate(g.date_effet):null,
+    g.source_filename||null,
+    g.methode_lecture?'lu : '+(_TARIF_METHODES[g.methode_lecture]||g.methode_lecture):null
+  ].filter(Boolean).join(' · ');
+  const kids=[
+    h('div',{className:'expe-grille-tete'},
+      h('span',{className:'expe-grille-titre'},g.libelle||''),
+      h('span',{className:'expe-grille-statut '+stCls},stLib)
+    ),
+    h('div',{className:'expe-grille-meta'},meta)
+  ];
+  if(g.statut==='brouillon'&&g.comparaison){
+    const c=g.comparaison;
+    const txt=c.cellules_comparees
+      ?'Par rapport aux prix actifs : '+_tarifPct(c.ecart_moyen_pct)+' en moyenne (de '+_tarifPct(c.ecart_min_pct)+' à '+_tarifPct(c.ecart_max_pct)+'), sur '+c.cellules_comparees+' prix comparés'
+      :'Aucun prix actif comparable : la grille ne remplace rien.';
+    kids.push(h('div',{className:'expe-grille-comp'},txt
+      +(c.zones_nouvelles?' · '+c.zones_nouvelles+' zone(s) nouvelle(s)':'')));
+  }
+  if(g.statut==='active'&&Number(g.nb_remplacees)>0){
+    kids.push(h('div',{className:'expe-grille-meta'},g.nb_remplacees+' prix remplacés par une grille plus récente'));
+  }
+  const acts=[h('button',{type:'button',className:'expe-grille-btn'+(ouverte?' on':''),onClick:()=>ouvrirGrille(g.id)},ouverte?'Fermer':'Voir la grille')];
+  if(expeCanWrite()){
+    if(g.statut==='brouillon'){
+      acts.push(h('select',{className:'expe-grille-select',title:'Type d\'envoi',
+        onChange:e=>void changerTypeGrille(g,e.target.value)},
+        ...[['messagerie','Messagerie'],['affretement','Affrètement'],['ramasse','Ramasse'],['express_intl','Express international']]
+          .map(([v,l])=>h('option',{value:v,selected:v===g.type_envoi},l))));
+      acts.push(h('button',{type:'button',className:'btn btn-accent expe-grille-cta',onClick:()=>void changerEtatGrille(g,'activer')},'Activer'));
+      acts.push(h('button',{type:'button',className:'expe-grille-btn danger',onClick:()=>void changerEtatGrille(g,'supprimer')},'Supprimer'));
+    }else if(g.statut==='active'){
+      acts.push(h('button',{type:'button',className:'expe-grille-btn',onClick:()=>void changerEtatGrille(g,'archiver')},'Archiver'));
+    }else{
+      acts.push(h('button',{type:'button',className:'expe-grille-btn',onClick:()=>void changerEtatGrille(g,'activer')},'Réactiver'));
+      acts.push(h('button',{type:'button',className:'expe-grille-btn danger',onClick:()=>void changerEtatGrille(g,'supprimer')},'Supprimer'));
+    }
+  }
+  kids.push(h('div',{className:'expe-grille-acts'},...acts));
+  if(ouverte){
+    const rech=h('input',{type:'search',id:'expe-grille-q',className:'expe-grille-q',
+      placeholder:'Département, code postal ou pays',value:T.tarifs_q||''});
+    rech.addEventListener('input',e=>{
+      T.tarifs_q=e.target.value;T.tarifs_offset=0;
+      clearTimeout(_tarifsQTimer);_tarifsQTimer=setTimeout(()=>void chargerMatriceGrille(),250);
+    });
+    kids.push(h('div',{className:'expe-grille-vue'},rech,expeGrilleMatriceEl()));
+  }
+  return h('div',{className:'expe-grille-carte '+stCls+(ouverte?' ouverte':'')},...kids);
 }
 
 async function viderTarifsTransporteur(){
   if(T.editId==null)return;
-  const nL=(T.tarifs_lignes||[]).length;
+  const nG=(T.tarifs_grilles||[]).length;
   const nF=(T.tarifs_frais||[]).length;
-  if(!nL&&!nF){
-    showToast('Aucun tarif importé à supprimer.','info');
-    return;
-  }
-  const msg='Supprimer tous les tarifs importés pour ce transporteur ?\n\n'
-    +(nL?nL+' ligne(s) tarifaire(s)':'')
-    +(nL&&nF?' et ':'')
-    +(nF?nF+' frais annexe(s)':'')
-    +'\n\nLe fichier source uploadé n\'est pas supprimé.';
-  if(!confirm(msg))return;
+  if(!nG&&!nF){showToast('Aucun tarif à supprimer.','info');return;}
+  const nL=(T.tarifs_grilles||[]).reduce((a,g)=>a+(Number(g.nb_lignes)||0),0);
+  if(!confirm('Supprimer tous les tarifs de ce transporteur ?\n\n'+nG+' grille(s), '+nL+' prix, '+nF+' frais annexe(s).\n\nCette suppression est définitive.'))return;
   try{
     const res=await api('/api/expe/transporteurs/'+T.editId+'/tarifs',{method:'DELETE'});
-    const dl=res.deleted_lignes!=null?res.deleted_lignes:0;
-    const df=res.deleted_frais!=null?res.deleted_frais:0;
-    showToast('Tarifs supprimés ('+dl+' ligne(s), '+df+' frais).','success');
-    await loadTarifsTransporteur(T.editId);
-    render();
+    showToast('Tarifs supprimés ('+(res.deleted_lignes||0)+' prix, '+(res.deleted_frais||0)+' frais).','success');
   }catch(e){
-    showToast(e.message||'Suppression impossible','danger');
+    showToast(e.message||'Suppression impossible.','danger');
   }
-}
-
-async function importTarifsCsv(file){
-  if(!file||T.editId==null)return;
-  const fd=new FormData();
-  fd.append('file',file);
-  try{
-    const res=await api('/api/expe/transporteurs/'+T.editId+'/tarifs/import-csv',{method:'POST',body:fd});
-    showToast(res.message||(res.inserted+' lignes importées. Validez pour activer.'),'success');
-    await loadTarifsTransporteur(T.editId);
-  }catch(e){
-    showToast(e.message||'Import impossible','danger');
-  }
-}
-
-function _tarifsFileExt(){
-  const fname=(T.form&&(T.form.tarif_filename||T.form.tarif_url))||'';
-  if(fname){
-    const parts=fname.split('.');
-    if(parts.length>1)return parts.pop().toLowerCase();
-  }
-  const tr=(T.list||[]).find(t=>Number(t.id)===Number(T.editId));
-  const fn=(tr&&(tr.tarif_filename||tr.tarif_url))||'';
-  const p=fn.split('.');
-  return p.length>1?p.pop().toLowerCase():'';
-}
-
-function _tarifsParserLabel(){
-  return ['xlsx','xls'].includes(_tarifsFileExt())?'Parser (Excel)':'Parser avec IA';
-}
-
-async function parserTarifs(){
-  if(T.editId==null)return;
-  const ext=_tarifsFileExt();
-  const isExcel=['xlsx','xls'].includes(ext);
-  const endpoint=isExcel
-    ?'/api/expe/transporteurs/'+T.editId+'/tarifs/parse-excel'
-    :'/api/expe/transporteurs/'+T.editId+'/tarif/parse';
-  T.tarifs_parsing=true;
-  render();
-  try{
-    const res=await api(endpoint,{method:'POST'});
-    showToast(res.message||(res.lignes_extraites+' lignes extraites.'),'success');
-    await loadTarifsTransporteur(T.editId);
-  }catch(e){
-    const msg=e&&e.message?String(e.message):'Erreur lors du parsing.';
-    if(msg.indexOf('Format non reconnu')>=0){
-      showToast('Format non reconnu. Contacter l\'équipe pour ajouter le support de ce format.','danger');
-      console.error('Structure du fichier :',msg);
-    }else{
-      showToast(msg,'danger');
-    }
-  }
-  T.tarifs_parsing=false;
-  render();
+  _tarifsReset();
+  await loadTarifsTransporteur(T.editId);
 }
 
 function renderTarifsOnglet(){
-  if(T.tarifs_loading){
-    return h('div',{style:{color:'var(--muted)',fontSize:'13px',padding:'12px 0'}},'Chargement…');
+  if(T.tarifs_loading&&!(T.tarifs_grilles||[]).length){
+    return h('div',{className:'expe-grille-vide'},'Chargement…');
   }
-  const brouillons=(T.tarifs_lignes||[]).filter(l=>!Number(l.actif));
-  const actifs=(T.tarifs_lignes||[]).filter(l=>Number(l.actif));
   const kids=[];
   if(expeCanWrite()){
-    const csvInp=h('input',{type:'file',accept:'.csv',style:{display:'none'}});
-    csvInp.addEventListener('change',e=>{
+    const inp=h('input',{type:'file',accept:'.pdf,.xlsx,.xlsm,.csv',style:{display:'none'}});
+    inp.addEventListener('change',e=>{
       const f=e.target.files&&e.target.files[0];
-      if(f)void importTarifsCsv(f);
+      if(f)void importerGrilleTarif(f);
       e.target.value='';
     });
-    const hasTarifs=(T.tarifs_lignes||[]).length>0||(T.tarifs_frais||[]).length>0;
+    const aTarifs=(T.tarifs_grilles||[]).length>0||(T.tarifs_frais||[]).length>0;
     kids.push(h('div',{className:'expe-trp-tarif-actions'},
-      h('button',{type:'button',className:'btn btn-ghost',onClick:()=>csvInp.click()},'Importer CSV'),
-      h('button',{type:'button',id:'btn-parser-tarif',className:'btn btn-ghost',disabled:!!T.tarifs_parsing,
-        onClick:()=>void parserTarifs()},
-        T.tarifs_parsing
-          ?(['xlsx','xls'].includes(_tarifsFileExt())?'Analyse Excel en cours…':'Analyse IA en cours…')
-          :_tarifsParserLabel()),
-      h('button',{type:'button',className:'btn btn-danger',disabled:!hasTarifs,
+      h('button',{type:'button',className:'btn btn-accent',disabled:!!T.tarifs_import,onClick:()=>inp.click()},
+        iconEl('upload',13),' ',T.tarifs_import?'Lecture du fichier…':'Importer une grille'),
+      h('button',{type:'button',className:'btn btn-danger',disabled:!aTarifs||!!T.tarifs_import,
         onClick:()=>void viderTarifsTransporteur()},'Vider les tarifs'),
-      csvInp
+      inp
     ));
+    kids.push(h('p',{className:'expe-grille-aide'},
+      'PDF, Excel ou CSV. Le fichier est lu sur le serveur ; chaque tableau de prix devient une grille en brouillon, '
+      +'inutilisée par le comparateur tant qu\'elle n\'est pas activée.'));
   }
-  if(brouillons.length&&expeCanWrite()){
+  if((T.tarifs_avert||[]).length){
     kids.push(h('div',{className:'expe-trp-tarif-banner'},
-      h('span',null,'Ces lignes sont en brouillon — elles ne sont pas utilisées par le comparateur. '
-        +'Les activer remplace les tarifs actifs des mêmes zones et tranches ; les autres zones restent en place.'),
-      h('button',{type:'button',className:'btn btn-accent',onClick:()=>void validerTarifsBrouillon(null)},'Tout activer'),
-      h('button',{type:'button',className:'btn btn-ghost',onClick:activerTarifsSelection},'Activer la sélection')
-    ));
+      h('span',null,'Lecture partielle : '+T.tarifs_avert.join(' '))));
   }
+  const gs=T.tarifs_grilles||[];
   kids.push(h('div',{className:'expe-trp-tarif-sec'},
-    h('div',{className:'expe-trp-tarif-sec-h'},'Brouillons en attente de validation'),
-    expeTrpTarifsTable(brouillons,true)
-  ));
-  kids.push(h('div',{className:'expe-trp-tarif-sec'},
-    h('div',{className:'expe-trp-tarif-sec-h'},
-      h('span',null,'Tarifs actifs'),
-      actifs.length?h('span',{className:'expe-trp-badge-actif'},'Actif'):null
-    ),
-    expeTrpTarifsTable(actifs,false)
+    h('div',{className:'expe-trp-tarif-sec-h'},'Grilles'),
+    gs.length?h('div',{className:'expe-grille-liste'},...gs.map(expeGrilleCarte))
+      :h('p',{className:'expe-grille-vide'},'Aucune grille. Importer le fichier de tarifs du transporteur.')
   ));
   const fraisRows=(T.tarifs_frais||[]);
   if(fraisRows.length){
@@ -752,10 +904,10 @@ function renderTarifsOnglet(){
       h('th',null,'Mini'),h('th',null,'Inclus auto')
     );
     const fBody=fraisRows.map(fr=>h('tr',null,
-      h('td',null,escHtml(fr.libelle||'')),
-      h('td',null,escHtml(fr.mode||'')),
-      h('td',null,escHtml(String(fr.valeur!=null?fr.valeur:''))),
-      h('td',null,fr.mini!=null&&fr.mini!==''?escHtml(String(fr.mini)):'—'),
+      h('td',null,fr.libelle||''),
+      h('td',null,fr.mode||''),
+      h('td',null,String(fr.valeur!=null?fr.valeur:'')),
+      h('td',null,fr.mini!=null&&fr.mini!==''?String(fr.mini):'—'),
       h('td',null,h('input',{type:'checkbox',disabled:true,checked:!!Number(fr.applique_defaut)}))
     ));
     kids.push(h('div',{className:'expe-trp-tarif-sec'},
@@ -767,7 +919,7 @@ function renderTarifsOnglet(){
   }else{
     kids.push(h('div',{className:'expe-trp-tarif-sec'},
       h('div',{className:'expe-trp-tarif-sec-h'},'Frais annexes'),
-      h('p',{style:{color:'var(--muted)',fontSize:'13px',margin:'0'}},'Aucun frais annexe.')
+      h('p',{className:'expe-grille-vide'},'Aucun frais annexe.')
     ));
   }
   return h('div',null,...kids);
@@ -948,6 +1100,14 @@ function expeTrpCopyText(text,label){
   document.body.removeChild(ta);
 }
 
+// Email affiché avec un point de coupure avant le « @ » : sur une colonne
+// étroite, l'adresse passe à la ligne entre l'identifiant et le domaine.
+function expeTrpEmailMorceaux(email){
+  const i=String(email||'').lastIndexOf('@');
+  if(i<=0)return [String(email||'')];
+  return [email.slice(0,i),h('wbr'),email.slice(i)];
+}
+
 function expeTrpContactCell(tr){
   const emails=expeTrpReadEmails(tr);
   const portail=expeTrpReadPortail(tr);
@@ -1011,7 +1171,7 @@ function expeTrpContactCell(tr){
     const row=h('div',{className:'expe-trp-contact-line expe-trp-contact-email-row',title:tipText});
     row.appendChild(iconEl('mail',12));
     row.appendChild(h('a',{className:'lbl',href:'mailto:'+encodeURIComponent(emails.join(',')),
-      title:tipText,onClick:e=>e.stopPropagation()},escHtml(first)));
+      title:tipText,onClick:e=>e.stopPropagation()},...expeTrpEmailMorceaux(first)));
     if(more>0){
       row.appendChild(h('span',{className:'expe-trp-emails-badge',title:tipText},'+'+more));
     }

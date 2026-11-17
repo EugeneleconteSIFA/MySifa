@@ -1449,6 +1449,12 @@ CONVERTIR_PAR_HEURE = int(os.getenv("CONVERTIR_PAR_HEURE", "60"))
 # (seules ces fonctions font sortir un document du poste). Taille d'envoi
 # bornée : l'API refuse au-delà de 32 Mo (base64 compris).
 PDF_IA_MODELE = os.getenv("PDF_IA_MODELE", "claude-sonnet-5-5")
+
+# MyExpé — lecture d'une grille tarifaire transporteur par Claude, en dernier
+# recours quand aucun lecteur de tableau n'a reconnu le fichier
+# (app/services/expe_tarif_lecture.py). La grille revient en tableau compact :
+# une grille de 2 000 cases tient en quelques milliers de tokens.
+TARIF_TRANSPORT_IA_MODELE = os.getenv("TARIF_TRANSPORT_IA_MODELE", "claude-opus-5-5")
 PDF_IA_MAX_MO = int(os.getenv("PDF_IA_MAX_MO", "20"))
 PDF_IA_PAR_HEURE = int(os.getenv("PDF_IA_PAR_HEURE", "40"))
 
