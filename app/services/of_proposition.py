@@ -144,6 +144,25 @@ def qte_au_mille(fiche: Dict[str, Any]) -> Optional[float]:
     return None
 
 
+# ─── Produits vendus au mètre ────────────────────────────────────────────────
+#
+# Un rouleau sans découpe à compter (« Bobine de 45 ml », format « 58 x 45
+# ml ») n'a pas de nombre d'étiquettes par bobine. Dans Access, l'ADV tape
+# alors le NOMBRE DE ROULEAUX dans « Nb étiquettes », et l'OF en découle —
+# relevé sur l'OF 9932835 (122/0022) : 630 rouleaux → 630 bobines, 126 levées
+# (5 fronts), métrage 5 418 = 630 × 8,6 (qté au mille de la fiche, lue ici
+# par rouleau). Décision du 17/11/2026 : MySifa fait comme Access.
+
+_AU_METRE_RE = re.compile(r"^\s*(?:bobines?|rouleaux?)\s+de\s+[\d\s.,]+\s*ml\b", re.IGNORECASE)
+
+
+def vendu_au_metre(fiche: Optional[Dict[str, Any]]) -> bool:
+    """Le produit se compte en rouleaux d'une longueur, pas en étiquettes."""
+    if not fiche or _nombre(fiche.get("nb_etiq_bobin")):
+        return False
+    return bool(_AU_METRE_RE.search(str(fiche.get("conditionnement") or "")))
+
+
 def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
                        laize: Any = None,
                        grammage: Any = None) -> Dict[str, Any]:
@@ -158,17 +177,27 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
     if not q:
         return {"_manques": []}
 
+    au_metre = vendu_au_metre(fiche)
     qam = qte_au_mille(fiche)
     metrage = None
     if qam:
-        metrage = math.ceil(round(q * qam / 1000.0, 6))
+        # Au mètre, la quantité compte des rouleaux et la « qté au mille » de
+        # la fiche se lit par rouleau (Access : 630 × 8,6 = 5 418 m).
+        # Arrondi au millimètre avant le mètre supérieur : la fiche stocke la
+        # qté au mille en simple précision (8,600000381…), et 630 × 8,6 doit
+        # rester 5 418, pas 5 419.
+        metrage = math.ceil(round(q * qam / (1.0 if au_metre else 1000.0), 3))
         out["metrage"] = metrage
     else:
         manques.append("Qté au mille absente de la fiche — métrage non calculé.")
 
     eb, origine_eb = etiquettes_par_bobine(fiche)
     bobines = None
-    if eb:
+    if au_metre:
+        bobines = math.ceil(round(q, 6))
+        out["qte_bobines"] = bobines
+        out["nb_mandrins"] = bobines
+    elif eb:
         if origine_eb == "conditionnement":
             out["_info"] = ("Nb étiquettes par bobine absent de la fiche — "
                             "%d lu dans le conditionnement." % eb)
@@ -295,6 +324,8 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[s
         "champs": champs,
         "provenance": provenance,
         "calcules": [c for c in CHAMPS_CALCULES if c in champs],
+        # La quantité se compte alors en rouleaux : l'écran renomme la case.
+        "au_metre": vendu_au_metre(fiche),
         "manques": manques,
     }
 
@@ -393,8 +424,10 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
             continue
         qte = partielle if partielle else _nombre(r["qte"])
         unite, par_unite = unite_de_vente(r["cuv"], unites, r["des1"], r["des2"], r["des3"])
+        m_rl = _ROULEAUX_TETE.search(str(r["des1"] or ""))
         retenues.append({"id": r["id_ligne"], "numero": num, "ligne": ligne, "article": article,
                          "qte": qte, "unite": unite, "par_unite": par_unite,
+                         "rouleaux_par_unite": _entier_texte(m_rl.group(1)) if m_rl else None,
                          "livraison": (r["livraison"] or None),
                          "expedition": (r["expedition"] or None)})
 
@@ -441,6 +474,8 @@ _PAR_UNITE_TETE = (
     re.compile(r"^\s*[A-Za-z]{1,2}\s*(\d[\d\s.\u202f]*)\s*/\s*[EeÉé]"),     # B440/Etiq  C12000/Etiq  P500/ Etiq
     re.compile(r"^\s*[A-Za-z]{1,2}\s*/\s*(\d[\d\s.\u202f]*\d)\s*[EeÉé]"),   # C/60 000 Eti  B/1000Etique
 )
+# « C32/Rouleaux » : 32 rouleaux par carton (produits vendus au mètre).
+_ROULEAUX_TETE = re.compile(r"^\s*[A-Za-z]{1,2}\s*(\d[\d\s.\u202f]*)\s*/\s*rouleaux?", re.IGNORECASE)
 _PAR_UNITE_PHRASE = re.compile(
     r"\b(?:bobines?|cartons?|paravents?|rouleaux?|planches?)\s+de\s+(\d[\d\s.\u202f]*)\s*(?:[ée]tiq|plis)",
     re.IGNORECASE)
@@ -483,12 +518,33 @@ def quantite_etiquettes(lu: Dict[str, Any], fiche: Optional[Dict[str, Any]] = No
     messages: List[str] = []
     eb = etiquettes_par_bobine(fiche)[0] if fiche else None
     bc = _nombre((fiche or {}).get("nb_bobines_carton"))
+    au_metre = vendu_au_metre(fiche)
     for x in lu.get("lignes") or []:
         q = x.get("qte")
         if not q:
             continue
-        par = x.get("par_unite")
         unite = (x.get("unite") or "").lower()
+        if au_metre:
+            # Au mètre, on compte des ROULEAUX : un rouleau par bobine, les
+            # rouleaux par carton lus en tête de désignation (« C32/Rouleaux »)
+            # ou dans la fiche.
+            par = None
+            if "carton" in unite:
+                par = x.get("rouleaux_par_unite") or bc
+            elif "mille" not in unite:
+                par = 1.0
+            if not par:
+                messages.append("%s L%s : %s en « %s », nombre de rouleaux par %s inconnu — "
+                                "quantité à saisir." % (x["numero"], x["ligne"], _texte_qte(q),
+                                                       x.get("unite") or "unité", x.get("unite") or "unité"))
+                continue
+            total += q * par
+            if par != 1.0:
+                messages.append("%s L%s : %s %s de %s rouleaux." % (
+                    x["numero"], x["ligne"], _texte_qte(q), (x.get("unite") or "unité").lower(),
+                    _texte_qte(par)))
+            continue
+        par = x.get("par_unite")
         if not par and eb and "bobine" in unite:
             par = eb
         if not par and eb and bc and "carton" in unite:
@@ -557,6 +613,7 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]],
         numero = None
     return {
         "numero": numero,
+        "au_metre": vendu_au_metre(fiche),
         "articles": articles,
         "article": articles[0] if len(articles) == 1 else None,
         "fiches": fiches,

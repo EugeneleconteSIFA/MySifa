@@ -81,6 +81,19 @@ verifier("803 bobines ÷ 11 fronts → 73", c.get("nb_levees"), 73)
 c = op.calculer_quantites({"nb_etiq_bobin": 1000, "mod_nb_front": 4}, 8000)
 verifier("sans fronts de l'outil : pas de levées (jamais mod_nb_front)", "nb_levees" in c, False)
 
+print("Produit vendu au mètre — OF Access 9932835 (122/0022)")
+F122 = {"conditionnement": "Bobine de 45 ml", "nb_bobines_carton": 32, "outil1_nb_front": 5,
+        "qte_au_mille": 8.600000381469727, "mod_longueur": 304.8,
+        "mandrin_dia": "Tube 1500x40", "mandrin_longueur": 59.7}
+verifier("reconnu au mètre", op.vendu_au_metre(F122), True)
+verifier("une étiquette par bobine n'est pas au mètre", op.vendu_au_metre({"conditionnement": "Bobine de 500 étiquettes"}), False)
+c = op.calculer_quantites(F122, 630)
+verifier("630 rouleaux → 630 bobines (Access : 630)", c.get("qte_bobines"), 630)
+verifier("→ 126 levées (Access : 126)", c.get("nb_levees"), 126)
+verifier("→ métrage 5 418 (Access : 5 418)", c.get("metrage"), 5418)
+verifier("→ 20 cartons de 32", c.get("nb_cartons"), 20)
+verifier("pas de message « étiquettes par bobine »", [m for m in c["_manques"] if "bobine" in m], [])
+
 print("Cas limites")
 c = op.calculer_quantites({"qte_au_mille": 2.0, "nb_etiq_bobin": 500,
                            "mandrin_dia": "Bague 63,7x25", "mandrin_longueur": 20}, 10_000)
@@ -275,6 +288,18 @@ verifier("paravent : nombre lu en tête", op.unite_de_vente("2", {"2": ("B 500 P
 verifier("« C50/rouleaux » : pas un nombre d'étiquettes", op.unite_de_vente("1", {"1": ("Carton", 1.0)}, "C50/rouleaux de 1000")[1], None)
 verifier("« C11.200/étiq » : 11 200", op.unite_de_vente("1", {"1": ("Carton", 1.0)}, "C11.200/étiq 40x25")[1], 11200.0)
 verifier("Mille : la quantité est déjà en étiquettes", op.unite_de_vente("11", {"11": ("Mille", 1000.0)}, "B500/Etiq. 9")[1], 1.0)
+
+print("Commande au mètre : cartons de rouleaux")
+erp.executescript("""
+INSERT INTO cde_entete VALUES (9932835,0);
+INSERT INTO cde_ligne (numero, ligne, code1, code2, qte, amjl, amje, corbeille, cuv, des1) VALUES
+ (9932835,1,'122','0022',20,'2026-11-12 00:00','2026-11-10 00:00',0,'1','C32/Rouleaux, 58 x 45 ml');
+""")
+lu = op.lire_commandes([{"numero": "9932835", "ligne": 1}])
+q, msgs = op.quantite_etiquettes(lu, F122)
+verifier("20 cartons de 32 rouleaux = 640 rouleaux", q, 640)
+verifier("conversion dite en rouleaux", msgs, ["9932835 L1 : 20 carton de 32 rouleaux."])
+verifier("sans la fiche au mètre : rien d'inventé", op.quantite_etiquettes(lu)[0], None)
 
 print("Numéro proposé : les lignes de frais ne comptent pas")
 from app.services import rvgi_rattachement as ratt
