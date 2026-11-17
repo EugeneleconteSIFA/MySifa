@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Atelier — Changer le big bag des encres</title>
+<style>
+  /* Fiche recette A4 : bandeau titre, ligne « infos recette », préparation numérotée pleine largeur, conseil en pied */
+  :root{
+    --bg:#f1f5f9; --card:#ffffff; --border:#cbd5e1; --line:#e2e8f0;
+    --text:#0f172a; --text2:#475569; --muted:#64748b;
+    --accent:#0891b2; --accent-bg:rgba(8,145,178,0.10);
+    --danger:#dc2626; --danger-bg:rgba(220,38,38,.08);
+    --success:#059669; --success-bg:rgba(5,150,105,.10);
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif; -webkit-font-smoothing:antialiased }
+  .page{
+    width:210mm; height:297mm; padding:12mm 13mm 9mm; margin:0 auto;
+    background:var(--bg); display:flex; flex-direction:column; gap:5mm;
+  }
+
+  /* ── En-tête ───────────────────────────── */
+  .hd{ display:flex; justify-content:space-between; align-items:flex-end;
+    font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:2px; font-weight:700 }
+  .hd .b{ display:flex; align-items:center; gap:10px }
+  .logo-mark{ width:34px; height:34px; border-radius:9px; background:var(--accent-bg); color:var(--accent);
+    display:flex; align-items:center; justify-content:center }
+  .logo-mark svg{ width:22px; height:22px }
+  .logo-txt{ display:flex; flex-direction:column; gap:2px }
+  .logo-brand{ font-size:22px; font-weight:800; color:var(--text); letter-spacing:-.3px; text-transform:none; line-height:1 }
+  .logo-brand i{ font-style:normal; color:var(--accent) }
+  .logo-sub{ font-size:10px; color:var(--muted); letter-spacing:1.5px }
+
+  /* ── Titre recette ─────────────────────── */
+  .title{ display:flex; flex-direction:column; gap:3mm }
+  .eyebrow{ align-self:flex-start; padding:6px 14px; border-radius:999px;
+    background:var(--accent-bg); color:var(--accent);
+    font-size:11px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase }
+  .title h1{ margin:0; font-size:48px; line-height:1.02; font-weight:800; letter-spacing:-2px }
+  .title h1 em{ font-style:normal; color:var(--accent) }
+  .title p{ margin:0; font-size:17px; color:var(--text2); line-height:1.4; max-width:150mm }
+
+  /* ── Infos recette ─────────────────────── */
+  .meta{ display:grid; grid-template-columns:repeat(3,1fr);
+    background:var(--card); border:1px solid var(--border); border-radius:14px }
+  .meta > div{ padding:3.5mm 6mm; display:flex; align-items:center; gap:12px }
+  .meta > div + div{ border-left:1px dashed var(--border) }
+  .meta svg{ width:26px; height:26px; color:var(--accent); flex-shrink:0 }
+  .meta .k{ font-size:10px; font-weight:800; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted) }
+  .meta .v{ font-size:15px; font-weight:700; line-height:1.2 }
+
+  /* Protection (pastilles d'obligation bleues, façon signalétique EPI) */
+  .epi{ display:flex; align-items:center; gap:8mm; padding:3mm 6mm;
+    background:var(--accent-bg); border:1.5px solid var(--accent); border-radius:14px }
+  .epi-t{ flex:1 }
+  .epi .k{ font-size:10px; font-weight:800; letter-spacing:1.8px; text-transform:uppercase; color:var(--accent) }
+  .epi .v{ font-size:19px; font-weight:800; line-height:1.2; margin-top:1px }
+  .epi-i{ display:flex; align-items:center; gap:10px; font-size:18px; font-weight:800 }
+  .pastille{ width:40px; height:40px; border-radius:50%; background:var(--accent); color:white;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0 }
+  .pastille svg{ width:27px; height:27px }
+
+  /* ── Corps ─────────────────────────────── */
+  .body{ flex:1; display:flex; flex-direction:column; min-height:0 }
+  .sec-t{ display:flex; align-items:center; gap:10px; margin-bottom:4mm;
+    font-size:13px; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:var(--text) }
+  .sec-t .bar{ flex:1; height:1px; background:var(--border) }
+
+  /* Préparation */
+  .prep{ display:flex; flex-direction:column; min-height:0 }
+  .steps{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1.8mm }
+  .step{ display:grid; grid-template-columns:36px 1fr 34px; gap:14px; align-items:center;
+    background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5mm 5mm 1.5mm 4mm }
+  .num{ width:36px; height:36px; border-radius:50%; background:var(--accent); color:white;
+    display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800;
+    font-variant-numeric:tabular-nums }
+  .step .t{ font-size:17px; font-weight:800; line-height:1.2 }
+  .step .t em{ font-style:normal; color:var(--accent) }
+  .step .d{ font-size:13px; color:var(--text2); margin-top:1px; line-height:1.35 }
+  .step .ic{ color:var(--muted) }
+  .step .ic svg{ width:34px; height:34px; display:block }
+  .step .ic .o, .pastille .o{ opacity:.45 }
+  .step .ic .b{ stroke-linecap:butt }
+  .step.alert{ border-color:rgba(220,38,38,.45); background:var(--danger-bg) }
+  .step.alert .num{ background:var(--danger) }
+  .step.alert .t em, .step.alert .ic{ color:var(--danger) }
+  .step.last{ border:1.5px solid var(--success); background:var(--success-bg) }
+  .step.last .num{ background:var(--success) }
+  .step.last .t em, .step.last .ic{ color:var(--success) }
+
+  /* Conseil */
+  .tip{ display:flex; gap:12px; align-items:center; padding:3.5mm 6mm;
+    border:1.5px dashed var(--accent); border-radius:14px; background:var(--card) }
+  .tip svg{ width:30px; height:30px; color:var(--accent); flex-shrink:0 }
+  .tip .k{ font-size:10px; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:var(--accent) }
+  .tip .v{ font-size:16px; font-weight:700; line-height:1.3; margin-top:1px }
+
+  .ft{ font-size:10px; color:var(--muted); text-align:center; text-transform:uppercase; letter-spacing:1.5px }
+
+  @media screen{ body{ padding:8mm 0 } .page{ box-shadow:0 2px 16px rgba(15,23,42,.08); background:var(--bg) } }
+  @media print{ body{ padding:0 } .page{ box-shadow:none } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hd">
+    <div class="b">
+      <span class="logo-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2.7c-3 4-6 7.3-6 11a6 6 0 0 0 12 0c0-3.7-3-7-6-11z"/>
+        </svg>
+      </span>
+      <span class="logo-txt">
+        <span class="logo-brand">My<i>Sifa</i></span>
+        <span class="logo-sub">by SIFA · Fiche atelier</span>
+      </span>
+    </div>
+    <span>Salle des mélanges</span>
+  </div>
+
+  <div class="title">
+    <span class="eyebrow">La recette</span>
+    <h1>Changer le <em>big bag</em><br>des encres</h1>
+    <p>Pots vides, couvercles et chiffons.</p>
+  </div>
+
+  <div class="meta">
+    <div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+      <div><div class="k">Quand</div><div class="v">Big bag plein</div></div>
+    </div>
+    <div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9.5h15v10A1.5 1.5 0 0 1 18 21H6a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M4.5 9.5c0-2.8 3-2.8 3 0M16.5 9.5c0-2.8 3-2.8 3 0"/><path d="M10.5 9.5l.6-3h1.8l.6 3"/><path stroke-width="2.6" d="M10.4 5.2h3.2"/></svg>
+      <div><div class="k">Pour</div><div class="v">1 big bag</div></div>
+    </div>
+    <div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17.5" r=".6" fill="currentColor"/></svg>
+      <div><div class="k">Attention</div><div class="v">Produits toxiques</div></div>
+    </div>
+  </div>
+
+  <div class="epi">
+    <div class="epi-t"><div class="k">Avant de commencer</div><div class="v">Protection obligatoire</div></div>
+    <div class="epi-i"><span class="pastille"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 18.5l-3.2-4.6a1.5 1.5 0 0 1 2.4-1.8L8.5 14V6a1.25 1.25 0 0 1 2.5 0v4.5V4.5a1.25 1.25 0 0 1 2.5 0v6V5.5a1.25 1.25 0 0 1 2.5 0v5.5V7.8a1.25 1.25 0 0 1 2.5 0v7c0 1.6-.6 2.8-1.5 3.7"/><path d="M7.5 18.5h10.5V22H7.5z"/></svg></span><span>Gants</span></div>
+    <div class="epi-i"><span class="pastille"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 9c2.4-1 5-1.5 7.5-1.5s5.1.5 7.5 1.5c0 5-3.3 9.2-7.5 9.8C7.8 18.2 4.5 14 4.5 9z"/><path d="M4.5 9L2.5 6.5M19.5 9l2-2.5M5.3 13.8l-2.8 1.4M18.7 13.8l2.8 1.4"/><path stroke-width="2.4" d="M10.2 7.9h3.6"/><path class="o" d="M12 10.5v8M7.5 12.5c1.4.6 2.9.9 4.5.9s3.1-.3 4.5-.9"/></svg></span><span>Masque</span></div>
+  </div>
+
+  <div class="body">
+
+    <section class="prep">
+      <div class="sec-t">Préparation <span class="bar"></span></div>
+      <ol class="steps">
+        <li class="step">
+          <span class="num">1</span>
+          <div><div class="t">Vider <em>totalement</em> les pots</div><div class="d">Aucun reste d'encre au fond.</div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(1.5 0) rotate(130 10 9)"><path d="M6.6 5h10.8l-1.3 9.2a1 1 0 0 1-1 .8H8.9a1 1 0 0 1-1-.8z"/><path stroke-width="2.4" d="M5.4 5h13.2"/></g><path d="M15 15.4c-.9 1.3-1.4 2.1-1.4 2.7a1.4 1.4 0 0 0 2.8 0c0-.6-.5-1.4-1.4-2.7z"/><path stroke-width="2.4" d="M15 21.6h.01"/></svg></span>
+        </li>
+        <li class="step">
+          <span class="num">2</span>
+          <div><div class="t">Enlever le <em>couvercle</em></div><div class="d">Sans couvercle, les pots s'empilent.</div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.8 12h10.4l-1.1 7.6a1 1 0 0 1-1 .9H8.9a1 1 0 0 1-1-.9z"/><path stroke-width="2.4" d="M5.5 12h13"/><path d="M4.2 8.6l10.2-2.7"/><path d="M8.6 7.4l-.5-1.7 2.9-.8.5 1.7"/><path d="M19.5 10V3.5M17.3 5.7l2.2-2.2 2.2 2.2"/></svg></span>
+        </li>
+        <li class="step">
+          <span class="num">3</span>
+          <div><div class="t"><em>Empiler</em> dans le big bag</div><div class="d">Pots, couvercles et chiffons.</div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="o" d="M4 11v8.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V11M4 11c0-2.4 2.6-2.4 2.6 0M17.4 11c0-2.4 2.6-2.4 2.6 0"/><path d="M8.2 3.5h7.6M8.2 7h7.6M8.2 10.5h7.6"/><path d="M8.6 3.5l1.3 13.6a1 1 0 0 0 1 .9h2.2a1 1 0 0 0 1-.9l1.3-13.6"/></svg></span>
+        </li>
+        <li class="step">
+          <span class="num">4</span>
+          <div><div class="t">Big bag plein → le <em>fermer</em></div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 9.5h15v10A1.5 1.5 0 0 1 18 21H6a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M4.5 9.5c0-2.8 3-2.8 3 0M16.5 9.5c0-2.8 3-2.8 3 0"/><path d="M10.5 9.5l.6-3h1.8l.6 3"/><path stroke-width="2.6" d="M10.4 5.2h3.2"/><path class="o" d="M9 12.5v6M15 12.5v6"/></svg></span>
+        </li>
+        <li class="step">
+          <span class="num">5</span>
+          <div><div class="t">Poser sur <em>palette</em></div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9h14v6.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M5 9c0-2.6 2.8-2.6 2.8 0M16.2 9c0-2.6 2.8-2.6 2.8 0M10.6 9l.5-2.4h1.8l.5 2.4"/><path stroke-width="2.4" d="M10.6 5.4h2.8"/><path class="b" stroke-width="2.2" d="M2.5 17.5h19M2.5 21h19"/><path class="b" d="M3.5 18v2.5M12 18v2.5M20.5 18v2.5"/></svg></span>
+        </li>
+        <li class="step alert">
+          <span class="num">6</span>
+          <div><div class="t"><em>Filmer</em> en glissant l'<em>étiquette produits toxiques</em></div><div class="d">Sous le film, pendant qu'on filme. Stock au bout de la salle des mélanges.</div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5h11v11.5h-11z"/><path class="o" d="M3.5 7.5l11-2M3.5 16l11-2"/><path d="M9 8.2l3.4 3.4L9 15l-3.4-3.4z"/><rect x="18" y="4.5" width="3.5" height="11" rx="1.75"/><path d="M2.5 16.5h13M2.5 20h13M3.5 16.5v3.5M9 16.5v3.5M14.5 16.5v3.5"/></svg></span>
+        </li>
+        <li class="step">
+          <span class="num">7</span>
+          <div><div class="t">Déposer au <em>fond du parking</em></div><div class="d">À côté de la benne.</div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7.5h11l-1.6 10.5H3.6z"/><path class="o" d="M5.2 10v5.5M7.5 10v5.5M9.8 10v5.5"/><path d="M15.5 10h5.5v6.5h-5.5z"/><path d="M15.5 10c0-1.8 2-1.8 2 0M19 10c0-1.8 2-1.8 2 0"/><path d="M14.5 18h7.5M2 21h20"/></svg></span>
+        </li>
+        <li class="step last">
+          <span class="num">8</span>
+          <div><div class="t">Installer un <em>big bag neuf</em></div><div class="d">Au bout de la salle des mélanges, avec les étiquettes.</div></div>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 9.5h14v10A1.5 1.5 0 0 1 16 21H5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M3.5 9.5c0-2.8 3-2.8 3 0M14.5 9.5c0-2.8 3-2.8 3 0"/><path class="o" d="M3.5 9.5l2 2h10l2-2M8 14v4.5M13 14v4.5"/><path d="M20.5 2.5v5M18 5h5"/></svg></span>
+        </li>
+      </ol>
+    </section>
+
+  </div>
+
+  <div class="tip">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9V16h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3z"/></svg>
+    <div><div class="k">Le conseil du chef</div><div class="v">Un pot qui contient encore de l'encre ne va pas dans le big bag. On le vide d'abord.</div></div>
+  </div>
+
+  <div class="ft">MySifa · Fiche atelier · Encres</div>
+
+</div>
+</body>
+</html>

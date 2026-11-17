@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Lecture BL — Support de formation</title>
+<style>
+  :root{
+    --bg:#f1f5f9; --card:#ffffff; --border:#cbd5e1;
+    --text:#0f172a; --text2:#475569; --muted:#64748b;
+    --acc:#2563eb; --acc-bg:rgba(37,99,235,0.13); --acc-bg-soft:rgba(37,99,235,0.06);
+    --ok:#059669; --ok-bg:rgba(5,150,105,0.08);
+    --red:#ea580c; --red-bg:rgba(234,88,12,0.07);
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif }
+  .page{ width:210mm; height:297mm; padding:14mm 13mm 10mm; display:flex; flex-direction:column; gap:5mm; page-break-after:always; background:var(--bg); overflow:hidden }
+  .page:last-child{ page-break-after:auto }
+  .hero{ display:flex; align-items:center; gap:14px }
+  .mark{ width:48px; height:48px; border-radius:14px; background:var(--acc-bg); color:var(--acc); display:flex; align-items:center; justify-content:center; flex-shrink:0 }
+  .mark svg{ width:28px; height:28px }
+  h1{ margin:0; font-size:32px; line-height:1; font-weight:800; letter-spacing:-1px; text-transform:uppercase }
+  h1 em{ font-style:normal; color:var(--acc) }
+  .team{ margin-left:auto; padding:6px 14px; border-radius:999px; background:var(--acc-bg); color:var(--acc); font-size:12px; font-weight:800; letter-spacing:2.2px; text-transform:uppercase; white-space:nowrap }
+  .lead{ margin:0; font-size:15px; line-height:1.4; font-weight:600; color:var(--text2) }
+  .lead em{ font-style:normal; color:var(--acc); font-weight:800 }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:5mm 6mm }
+  .num{ width:24px; height:24px; border-radius:7px; background:var(--acc); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; flex-shrink:0 }
+  .ft{ margin-top:auto; font-size:9px; color:var(--muted); text-align:center; text-transform:uppercase; letter-spacing:1.5px; font-weight:700 }
+
+  /* ── BL type ── */
+  .bl{ position:relative; background:#fff; border:1.5px solid var(--text2); border-radius:6px; padding:6mm 6mm 5mm; font-size:11.5px; color:var(--text); font-family:Arial,Helvetica,sans-serif }
+  .bl .row{ display:flex; justify-content:space-between; gap:5mm }
+  .bl .four{ font-size:15px; font-weight:800; letter-spacing:.5px }
+  .bl .four small{ display:block; font-size:9.5px; font-weight:400; color:var(--muted); letter-spacing:0 }
+  .bl .titre{ font-size:15px; font-weight:800; text-align:right }
+  .bl .kv{ display:grid; grid-template-columns:auto auto; gap:1px 8px; margin-top:2mm }
+  .bl .kv span:nth-child(odd){ color:var(--muted) }
+  .bl .kv b{ font-weight:700 }
+  .bl .addr{ border:1px solid var(--border); border-radius:4px; padding:2mm 3mm; min-width:62mm }
+  .bl table{ width:100%; border-collapse:collapse; margin-top:3mm }
+  .bl th{ background:#e2e8f0; text-align:left; padding:1.6mm 2mm; font-size:9.5px; text-transform:uppercase; letter-spacing:.4px }
+  .bl td{ padding:2.6mm 2mm; border-bottom:1px solid #e2e8f0; vertical-align:top }
+  .bl td.n, .bl th.n{ text-align:right }
+  .bl .sub{ color:var(--muted); font-size:9.5px }
+  .bl .rel td{ color:var(--muted); font-style:italic }
+  .bl .bas{ display:grid; grid-template-columns:1fr 1fr; gap:4mm; margin-top:3mm }
+  .bl .box{ border:1px solid var(--border); border-radius:4px; padding:2.5mm 3mm; min-height:20mm }
+  .bl .box .l{ font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px }
+  .pin{ position:static; display:inline-flex !important; vertical-align:middle; margin:0 5px; width:19px; height:19px; border-radius:50%; background:var(--acc); color:#fff; font-family:'Segoe UI',system-ui,sans-serif; font-size:11px; font-weight:800; align-items:center; justify-content:center }
+  .bl .pin{ color:#fff !important }
+  .bl th, .bl td.n, .bl td:nth-child(2), .bl td:nth-child(6){ white-space:nowrap }
+  .legend{ display:grid; grid-template-columns:1fr 1fr; gap:2.6mm 6mm }
+  .lg{ display:flex; gap:9px; align-items:flex-start; font-size:12.5px; line-height:1.32; color:var(--text2); font-weight:600 }
+  .lg b{ color:var(--text); font-weight:800 }
+
+  /* ── Méthode ── */
+  .steps{ display:flex; flex-direction:column; gap:0; padding:1mm 6mm }
+  .step{ display:flex; gap:5mm; align-items:flex-start; padding:3.2mm 0; border-bottom:1px solid rgba(203,213,225,.7) }
+  .step:last-child{ border-bottom:none }
+  .step .num{ width:32px; height:32px; border-radius:10px; font-size:17px; background:var(--acc-bg); color:var(--acc) }
+  .step .t{ font-size:17px; font-weight:800; line-height:1.2; letter-spacing:-.3px }
+  .step .t em{ font-style:normal; color:var(--acc) }
+  .step .d{ font-size:12.5px; line-height:1.4; color:var(--text2); font-weight:600; margin-top:1.2mm }
+  .step .d b{ color:var(--text) }
+  .h2{ margin:0; font-size:12px; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; gap:10px }
+  .h2:after{ content:""; flex:1; height:1px; background:var(--border) }
+  table.t{ width:100%; border-collapse:collapse; font-size:12.5px }
+  table.t th{ text-align:left; font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); padding:0 3mm 2mm; border-bottom:2px solid var(--border) }
+  table.t td{ padding:2.4mm 3mm; border-bottom:1px solid rgba(203,213,225,.7); vertical-align:top; line-height:1.35; color:var(--text2); font-weight:600 }
+  table.t tr:last-child td{ border-bottom:none }
+  table.t td:first-child{ font-family:Consolas,'Courier New',monospace; color:var(--text); font-weight:700; white-space:nowrap }
+  table.t b{ color:var(--text) }
+  .calc{ white-space:nowrap; font-family:Consolas,'Courier New',monospace; color:var(--acc); font-weight:700 }
+
+  /* ── Écarts ── */
+  table.e td:first-child{ font-family:'Segoe UI',system-ui,sans-serif; white-space:normal; width:34% }
+  .stop{ background:var(--red-bg); border:1px dashed rgba(234,88,12,.45); border-radius:14px; padding:4mm 6mm }
+  .stop p{ margin:0; font-size:13.5px; line-height:1.42; font-weight:600; color:var(--text2) }
+  .stop p+p{ margin-top:2mm }
+  .stop b{ color:var(--text) } .stop em{ font-style:normal; color:var(--red); font-weight:800 }
+  .duo{ display:grid; grid-template-columns:1fr 1fr; gap:4mm }
+  .res{ border-radius:14px; padding:4mm 5mm; font-size:13px; line-height:1.38; font-weight:600; color:var(--text2) }
+  .res .h{ display:block; font-size:11.5px; font-weight:800; letter-spacing:1.8px; text-transform:uppercase; margin-bottom:1.5mm }
+  .res.ok{ background:var(--ok-bg); border:2px solid var(--ok) } .res.ok .h{ color:var(--ok) }
+  .res.ko{ background:var(--red-bg); border:2px solid var(--red) } .res.ko .h{ color:var(--red) }
+  .res q{ quotes:none; font-family:Consolas,'Courier New',monospace; color:var(--text); font-weight:700 }
+  .claimline{ background:var(--acc-bg-soft); border:1px dashed rgba(37,99,235,.42); border-radius:14px; padding:4mm 6mm; text-align:center }
+  .claimline p{ margin:0; font-size:16px; line-height:1.35; font-weight:700; color:var(--text2) }
+  .claimline em{ font-style:normal; color:var(--acc); font-weight:800 }
+</style>
+</head>
+<body>
+
+<!-- ═════════ PAGE 1 — LIRE UN BL ═════════ -->
+<div class="page">
+  <div class="hero">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div>
+    <h1>Lire un <em>BL</em></h1><span class="team">1 / 3 · Repères</span>
+  </div>
+  <p class="lead">Chaque fournisseur a sa mise en page, mais un bon de livraison contient <em>toujours les mêmes informations</em>. Les retrouver d'abord, contrôler ensuite.</p>
+
+  <div class="bl">
+    <div class="row">
+      <div class="four">FOURNISSEUR EXEMPLE<small>Supports adhésifs · BL fictif pour la formation</small></div>
+      <div><div class="titre">BON DE LIVRAISON</div>
+        <div class="kv"><span><span class="pin">1</span>N° BL</span><b>BL-26-08817</b><span>Date d'expédition</span><b>12/11/2026</b><span><span class="pin">2</span>Votre commande</span><b>CF-2026-0412</b></div></div>
+    </div>
+    <div class="row" style="margin-top:3mm">
+      <div class="kv" style="margin-top:0"><span>Transporteur</span><b>Transports Exemple</b><span><span class="pin">3</span>Colis</span><b>3 palettes</b><span>Poids brut</span><b>1 284 kg</b></div>
+      <div class="addr"><span class="sub">Livré à</span><br><b>Quai réception</b><br>Adresse de livraison du client</div>
+    </div>
+    <table>
+      <tr><th>L.</th><th><span class="pin">4</span>Réf. fournisseur</th><th>Désignation</th><th class="n">Cdé</th><th class="n"><span class="pin">5</span>Livré</th><th>Unité</th><th>N° lot<span class="pin">6</span></th></tr>
+      <tr><td>1</td><td>VT80-330</td><td>Vélin thermique 80 g · laize 330 mm · mandrin 76<br><span class="sub">FSC Mix Credit</span></td><td class="n">8</td><td class="n"><b>8</b></td><td>bobines</td><td>L2611-044</td></tr>
+      <tr><td>2</td><td>PP50-250</td><td>PP blanc 50 µ · laize 250 mm · 2 000 m/bobine</td><td class="n">6 000</td><td class="n"><b>6 000</b></td><td>m²</td><td>L2611-051</td></tr>
+      <tr><td>3</td><td>MND-76</td><td>Mandrins carton Ø 76 · 100 pièces/carton</td><td class="n">2</td><td class="n"><b>2</b></td><td>cartons</td><td>—</td></tr>
+      <tr class="rel"><td>4</td><td>CO80-160</td><td>Couché 80 g · laize 160 mm</td><td class="n">10</td><td class="n"><b>0</b></td><td>bobines</td><td>Reliquat : 10 à livrer<span class="pin">7</span></td></tr>
+    </table>
+    <div class="bas">
+      <div class="box"><span class="l"><span class="pin">8</span>Certification</span><br>Certificat FSC n° XXXX-COC-000000</div>
+      <div class="box"><span class="l"><span class="pin">9</span>Réception · date, nom, signature, réserves</span></div>
+    </div>
+  </div>
+
+  <div class="card legend">
+    <div class="lg"><span class="num">1</span><span><b>N° de BL et date.</b> La référence de la livraison, à reporter à la réception dans MyStock.</span></div>
+    <div class="lg"><span class="num">2</span><span><b>N° de commande SIFA.</b> Il permet de retrouver ce qui a été commandé. Absent : le signaler.</span></div>
+    <div class="lg"><span class="num">3</span><span><b>Colis, palettes, poids.</b> Le premier contrôle, devant le camion, avant de signer.</span></div>
+    <div class="lg"><span class="num">4</span><span><b>Référence et désignation.</b> La bonne matière : grammage, laize, mandrin, épaisseur.</span></div>
+    <div class="lg"><span class="num">5</span><span><b>Quantité et unité.</b> Lire l'unité avant le chiffre : bobines, m², ml, kg, cartons.</span></div>
+    <div class="lg"><span class="num">6</span><span><b>N° de lot.</b> Le même que sur l'étiquette de chaque bobine ou colis.</span></div>
+    <div class="lg"><span class="num">7</span><span><b>Reliquat.</b> Commandé mais pas livré aujourd'hui. Rien à compter, rien à réceptionner.</span></div>
+    <div class="lg"><span class="num">8</span><span><b>Allégation et certificat FSC.</b> Voir l'affiche Réception FSC.</span></div>
+    <div class="lg" style="grid-column:1 / -1"><span class="num">9</span><span><b>Zone de signature.</b> Signer sans réserve, c'est déclarer la livraison complète et en bon état. Les réserves s'écrivent ici, et sur le document du transporteur.</span></div>
+  </div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · document interne SIFA</div>
+</div>
+
+<!-- ═════════ PAGE 2 — LIGNE PAR LIGNE ═════════ -->
+<div class="page">
+  <div class="hero">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+    <h1>Ligne <em>par ligne</em></h1><span class="team">2 / 3 · Méthode</span>
+  </div>
+  <p class="lead">Le BL dit ce que le fournisseur <em>pense avoir envoyé</em>. Votre travail : confirmer ce qui est <em>réellement arrivé</em>, une ligne après l'autre.</p>
+
+  <div class="card steps">
+    <div class="step"><span class="num">1</span><div><div class="t">Devant le camion : <em>compter les colis</em></div>
+      <div class="d">Nombre de palettes ou de colis = celui du BL ? Emballages intacts, rien de mouillé ni d'écrasé ? <b>Tout se vérifie avant de signer</b> le document du transporteur.</div></div></div>
+    <div class="step"><span class="num">2</span><div><div class="t">Retrouver la <em>commande</em></div>
+      <div class="d">Avec le n° de commande du BL, ouvrir la commande SIFA. On contrôle le BL contre la commande, pas seulement contre lui-même.</div></div></div>
+    <div class="step"><span class="num">3</span><div><div class="t">Pour chaque ligne : <em>référence, quantité, unité, lot</em></div>
+      <div class="d">La matière reçue est celle de la désignation (grammage, laize, mandrin). On compte dans l'<b>unité du BL</b>. Le lot du BL est celui des étiquettes. <b>Cocher la ligne au stylo</b> une fois contrôlée.</div></div></div>
+    <div class="step"><span class="num">4</span><div><div class="t">Comparer <em>commandé</em> et <em>livré</em></div>
+      <div class="d">Écart sur une ligne, référence en plus, ligne absente : le noter sur le BL. Un reliquat annoncé n'est pas un écart.</div></div></div>
+    <div class="step"><span class="num">5</span><div><div class="t">Réceptionner <em>ce qui a été compté</em></div>
+      <div class="d">Dans MyStock, la quantité saisie est la quantité comptée, <b>jamais celle recopiée du BL</b>. Si elle diffère du BL, le signaler.</div></div></div>
+  </div>
+
+  <div class="h2">Les pièges d'unité</div>
+  <div class="card" style="padding:4mm 3mm">
+    <table class="t">
+      <tr><th style="width:25%">Le BL indique</th><th>Ce qu'on compte sur le quai</th></tr>
+      <tr><td>6 000 m²</td><td>Des bobines. Surface d'une bobine = laize × longueur : <span class="calc">0,250 m × 2 000 m = 500 m²</span>, donc <span class="calc">6 000 ÷ 500 = 12 bobines</span>.</td></tr>
+      <tr><td>24 000 ml</td><td>Mètres linéaires : la longueur cumulée, sans la laize. <span class="calc">24 000 ÷ 2 000 m = 12 bobines</span>.</td></tr>
+      <tr><td>250 kg</td><td>Des pots ou des seaux. Avec des pots de 25 kg : <span class="calc">250 ÷ 25 = 10 pots</span>. Le poids unitaire est sur l'étiquette.</td></tr>
+      <tr><td>2 cartons</td><td>Les cartons, pas leur contenu. Le nombre de pièces par carton est souvent dans la désignation.</td></tr>
+      <tr><td>3 palettes</td><td>Les palettes au camion, puis les colis ou bobines de chaque palette pour les lignes.</td></tr>
+    </table>
+  </div>
+  <p class="lead" style="font-size:13px">Le calcul ne tombe pas juste ? C'est peut-être une bobine plus courte, ou une erreur du fournisseur. <em>On ne force pas le chiffre, on signale.</em></p>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · document interne SIFA</div>
+</div>
+
+<!-- ═════════ PAGE 3 — ÉCARTS ═════════ -->
+<div class="page">
+  <div class="hero">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+    <h1>En cas <em>d'écart</em></h1><span class="team">3 / 3 · Réagir</span>
+  </div>
+  <p class="lead">Un écart signalé le jour même se règle avec le fournisseur ou le transporteur. <em>Découvert une semaine plus tard, il est à notre charge.</em></p>
+
+  <div class="card" style="padding:4mm 3mm">
+    <table class="t e">
+      <tr><th>Ce que je constate</th><th>Ce que je fais</th></tr>
+      <tr><td><b>Colis ou palette manquant, ou en trop</b></td><td>Réserve précise sur le document du transporteur, avant de signer. Le noter aussi sur le BL.</td></tr>
+      <tr><td><b>Emballage abîmé, bobine écrasée, mouillée</b></td><td>Réserve précise décrivant le dommage, photo du colis avant de le défaire, puis photo du contenu.</td></tr>
+      <tr><td><b>Quantité d'une ligne différente du BL</b></td><td>Écrire la quantité comptée sur la ligne du BL, prévenir le responsable, réceptionner la quantité comptée.</td></tr>
+      <tr><td><b>Mauvaise référence : laize, grammage, mandrin</b></td><td>Ne pas la ranger sous la référence commandée. Mettre à part, étiqueter, prévenir le responsable.</td></tr>
+      <tr><td><b>N° de lot du BL différent de l'étiquette</b></td><td>Prévenir le responsable : sans lot fiable, la traçabilité de la bobine est perdue.</td></tr>
+      <tr><td><b>Ligne en reliquat</b></td><td>Normal si le BL l'annonce. Rien à réceptionner, la commande reste ouverte pour la suite.</td></tr>
+      <tr><td><b>Pas de n° de commande, BL illisible ou absent</b></td><td>Ne pas deviner. Mettre la livraison à part et prévenir le responsable.</td></tr>
+    </table>
+  </div>
+
+  <div class="duo">
+    <div class="res ok"><span class="h">Une réserve valable</span><q>2 palettes reçues sur 3 annoncées</q><br><q>1 bobine écrasée, palette 2</q><br>Précise, chiffrée, signée, datée.</div>
+    <div class="res ko"><span class="h">Une réserve sans valeur</span><q>Sous réserve de déballage</q><br><q>Sous réserve de contrôle</q><br>Trop vague : le transporteur la rejette.</div>
+  </div>
+
+  <div class="stop">
+    <p><b>Délai de 3 jours.</b> Après la livraison, une réserve contre le transporteur doit lui être <em>confirmée par lettre recommandée sous 3 jours</em>, hors jours fériés (art. L133-3 du Code de commerce). Passé ce délai, le recours est perdu.</p>
+    <p>D'où la règle : <b>tout écart est signalé au responsable le jour même</b>, avec le BL annoté et les photos.</p>
+  </div>
+
+  <div class="claimline"><p>Le BL, c'est ce que le fournisseur annonce. <em>Ce qui compte, c'est ce que vous avez compté.</em></p></div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · document interne SIFA</div>
+</div>
+</body>
+</html>

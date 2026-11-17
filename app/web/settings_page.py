@@ -222,6 +222,8 @@ body.light .op-table tr.op-cat-row td{background:color-mix(in srgb,var(--accent,
 .op-pill.entretien{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
 .op-pill.remplacements{color:#fb923c;border-color:rgba(251,146,60,.4);background:rgba(251,146,60,.12)}
 .op-req{font-size:11px;font-weight:600;color:var(--muted)}
+.op-maint-lien{font-size:11px;color:var(--muted);margin-top:3px}
+#op-maint-code.hidden{display:none}
 .fsc-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
 @media(max-width:1000px){.fsc-kpi-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){.fsc-kpi-grid{grid-template-columns:1fr}}
@@ -1813,7 +1815,8 @@ __SETTINGS_FAMILLES__
             <select id="op-severity"><option value="info">info</option><option value="attention">attention</option><option value="critique">critique</option></select>
             <select id="op-category"></select>
             <select id="op-outil-type" title="Ce code fait-il changer un outil ?"><option value="">Aucun outil</option></select>
-            <select id="op-formulaire" title="Formulaire ouvert au poste avant la saisie"><option value="">Aucun formulaire</option></select>
+            <select id="op-formulaire" title="Formulaire ouvert au poste avant la saisie" onchange="syncOpMaintCode()"><option value="">Aucun formulaire</option></select>
+            <select id="op-maint-code" class="hidden" title="Intervention MyMaintenance sur laquelle la fenêtre s'ouvre au poste"><option value="">Intervention au choix</option></select>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="op-required"> Obligatoire</label>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -7191,6 +7194,7 @@ async function submitEditUpdate() {
 let _opItems = [];
 let _opCategories = [];
 let _opFormulaires = [];  // [{code, label}] : formulaire ouvert au poste (config.OPERATION_FORMULAIRES)
+let _opInterventions = [];  // [{code, label}] : interventions MyMaintenance (remplacements) préchoisissables
 let _opEditCode = null;
 
 /* ─── Seuils d'arrêt ────────────────────────────────────────────────────────
@@ -7337,6 +7341,12 @@ async function loadOperationCodes() {
     _opItems = (d && d.items) ? d.items : [];
     _opCategories = (d && d.categories) ? d.categories : [];
     _opFormulaires = (d && d.formulaires) ? d.formulaires : [];
+    _opInterventions = (d && d.interventions) ? d.interventions : [];
+    const selM = document.getElementById('op-maint-code');
+    if (selM) {
+      selM.innerHTML = '<option value="">Intervention au choix</option>'
+        + _opInterventions.map(i => '<option value="' + esc(i.code) + '">' + esc(i.code + ' · ' + i.label) + '</option>').join('');
+    }
     const selF = document.getElementById('op-formulaire');
     if (selF) {
       selF.innerHTML = '<option value="">Aucun formulaire</option>'
@@ -7390,7 +7400,9 @@ function renderOpList() {
         + '<td><span class="op-pill ' + esc(cat) + '">' + esc(cat) + '</span></td>'
         + '<td><span class="' + reqCls + '">' + (o.required ? 'Oui' : '—') + '</span></td>'
         + '<td>' + (o.outil_type ? '<span class="op-pill calage">' + esc(outilTypeLabel(o.outil_type)) + '</span>' : '<span class="op-req">—</span>') + '</td>'
-        + '<td>' + (o.formulaire ? '<span class="op-pill technique">' + esc((_opFormulaires.find(f => f.code === o.formulaire) || {}).label || o.formulaire) + '</span>' : '<span class="op-req">—</span>') + '</td>'
+        + '<td>' + (o.formulaire ? '<span class="op-pill technique">' + esc((_opFormulaires.find(f => f.code === o.formulaire) || {}).label || o.formulaire) + '</span>'
+            + (o.maint_code ? '<div class="op-maint-lien">' + esc(o.maint_code + ' · ' + ((_opInterventions.find(i => i.code === o.maint_code) || {}).label || '')) + '</div>' : '')
+            : '<span class="op-req">—</span>') + '</td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-op-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-op-del="' + c + '">Supprimer</button>'
@@ -7428,6 +7440,9 @@ function openOpForm(code) {
     if (selOt) selOt.value = o.outil_type || '';
     const selF = document.getElementById('op-formulaire');
     if (selF) selF.value = o.formulaire || '';
+    const selM = document.getElementById('op-maint-code');
+    if (selM) selM.value = o.maint_code || '';
+    syncOpMaintCode();
     document.getElementById('op-required').checked = !!o.required;
   } else {
     title.textContent = 'Nouveau code';
@@ -7440,8 +7455,22 @@ function openOpForm(code) {
     if (selOtNew) selOtNew.value = '';
     const selFNew = document.getElementById('op-formulaire');
     if (selFNew) selFNew.value = '';
+    const selMNew = document.getElementById('op-maint-code');
+    if (selMNew) selMNew.value = '';
+    syncOpMaintCode();
     document.getElementById('op-required').checked = false;
   }
+}
+
+// L'intervention MyMaintenance n'a de sens que pour le formulaire
+// « maintenance » : le menu n'apparaît qu'avec lui.
+function syncOpMaintCode() {
+  const selF = document.getElementById('op-formulaire');
+  const selM = document.getElementById('op-maint-code');
+  if (!selM) return;
+  const montrer = !!selF && selF.value === 'maintenance';
+  selM.classList.toggle('hidden', !montrer);
+  if (!montrer) selM.value = '';
 }
 
 function closeOpForm() {
@@ -7458,6 +7487,7 @@ async function saveOpForm() {
     category: document.getElementById('op-category').value,
     outil_type: document.getElementById('op-outil-type')?.value || '',
     formulaire: document.getElementById('op-formulaire')?.value || '',
+    maint_code: document.getElementById('op-maint-code')?.value || '',
     required: document.getElementById('op-required').checked,
   };
   try {

@@ -24,7 +24,7 @@
  *   MySifaMaintSaisie.vue({machine, machines, role})   élément durable à
  *       poser dans la page ; les appels suivants rendent le même élément
  *       (saisie en cours conservée). Machine : celle de l'opérateur.
- *   MySifaMaintSaisie.modale({machine, machines, role, titre, apres})
+ *   MySifaMaintSaisie.modale({machine, machines, role, titre, apres, intervention})
  *       le même formulaire en fenêtre, sans durée ni historique : code
  *       opération dont `formulaire` vaut « maintenance ». Une fois
  *       l'opération enregistrée dans MyMaintenance, `apres({libelle,
@@ -114,6 +114,10 @@
       M.codes = (d.items || [])
         .filter(function (c) { return c.categorie === "remplacements" && !c.libre && !c.archived; })
         .sort(function (a, b) { return String(a.label).localeCompare(String(b.label), "fr"); });
+      // Intervention préchoisie par le code opération (maint_code) : si elle
+      // n'est plus au catalogue (archivée, recatégorisée), le choix revient
+      // au conducteur plutôt que d'envoyer un code absent de la liste.
+      if (M.code && M.code !== AUTRE && !M.codes.some(function (c) { return c.code === M.code; })) M.code = "";
     } catch (e) {
       M.codes = [];
       M.erreur = e.message;
@@ -466,6 +470,10 @@
     I.M.role = opts.role || "";
     I.M.machine = opts.machine || machines[0] || "";
     I.M.machines = machines;
+    // Code opération relié à une intervention précise (Paramètres ›
+    // Opérations › Intervention MyMaintenance) : la fenêtre s'ouvre dessus,
+    // le conducteur peut encore en changer.
+    I.M.code = opts.intervention ? String(opts.intervention) : "";
     document.body.appendChild(calque);
     I.rendre();
     I.chargerCodes();

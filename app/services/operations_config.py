@@ -87,11 +87,23 @@ def _formulaire(row) -> Optional[str]:
     return val or None
 
 
+def _maint_code(row) -> Optional[str]:
+    """`maint_code` n'existe qu'a partir de la migration
+    `operation_codes_intervention_maintenance`."""
+    try:
+        val = row["maint_code"]
+    except (IndexError, KeyError):
+        return None
+    val = str(val or "").strip()
+    return val or None
+
+
 def _cols_select(conn) -> str:
     cols = _colonnes(conn)
     return ", ".join([
         "outil_type" if "outil_type" in cols else "NULL AS outil_type",
         "formulaire" if "formulaire" in cols else "NULL AS formulaire",
+        "maint_code" if "maint_code" in cols else "NULL AS maint_code",
     ])
 
 
@@ -107,6 +119,9 @@ def _row_to_entry(row) -> Dict[str, Any]:
         "outil_type": _outil_type(row),
         # Formulaire ouvert au poste avant la saisie (OPERATION_FORMULAIRES).
         "formulaire": _formulaire(row),
+        # Intervention MyMaintenance (maintenance_codes.code) sur laquelle la
+        # fenetre du formulaire « maintenance » s'ouvre. None = au choix.
+        "maint_code": _maint_code(row),
     }
 
 
@@ -231,6 +246,13 @@ def validate_operation_payload(body: dict, *, for_create: bool = True) -> dict:
     formulaire = str(body.get("formulaire") or "").strip()
     if formulaire and formulaire not in {k for k, _ in OPERATION_FORMULAIRES}:
         raise ValueError("Formulaire inconnu.")
+    # L'intervention n'a de sens que pour le formulaire « maintenance » ;
+    # son existence dans MyMaintenance est verifiee par le router (base).
+    maint_code = str(body.get("maint_code") or "").strip()
+    if formulaire != "maintenance":
+        maint_code = ""
+    if maint_code and not re.match(r"^[A-Za-z0-9_-]{1,20}$", maint_code):
+        raise ValueError("Intervention MyMaintenance invalide.")
     return {
         "code": code,
         "label": label,
@@ -240,6 +262,7 @@ def validate_operation_payload(body: dict, *, for_create: bool = True) -> dict:
         # Chaine vide = ce code ne declenche aucune saisie d'outil.
         "outil_type": outil_type or None,
         "formulaire": formulaire or None,
+        "maint_code": maint_code or None,
     }
 
 
@@ -257,6 +280,7 @@ def list_operation_codes(conn) -> list:
             "required": bool(r["required"]),
             "outil_type": _outil_type(r),
             "formulaire": _formulaire(r),
+            "maint_code": _maint_code(r),
             "updated_at": r["updated_at"],
         }
         for r in rows
