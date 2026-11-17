@@ -3210,8 +3210,22 @@ async function ofValidateImport(){
     toast(e.message||'Import impossible.','error');
   }
 }
+/* Confirmation au style de MySifa (mysifa_confirm.js) plutôt que la boîte
+   du navigateur, qui ignore le thème et ne distingue pas une suppression.
+   Repli sur confirm() si le module n'est pas chargé. */
+async function prodConfirmer(opts){
+  if(typeof window.mysifaConfirm==='function') return !!(await window.mysifaConfirm(opts));
+  return confirm([opts.title,opts.message].filter(Boolean).join('\n\n'));
+}
+
 async function ofDeleteImport(id){
-  if(!confirm('Supprimer cet import OF de la base ?')) return;
+  const row=(S.ofImports||[]).find(r=>r.id===id)||{};
+  if(!(await prodConfirmer({
+    title:'Supprimer l\'OF',
+    message:'Supprimer l\'OF '+(row.of_numero||('#'+id))+' ?',
+    detail:'Il disparaît de la liste, de son dossier relié et des besoins matières. Cette action est définitive.',
+    confirmLabel:'Supprimer', danger:true,
+  }))) return;
   try{
     await api('/api/of/'+id,{method:'DELETE'});
     toast('Import supprimé.');
@@ -3292,7 +3306,12 @@ function renderOfTab(){
           style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
           onClick:async()=>{
             const n=S.ofSelected.size;
-            if(!confirm(`Supprimer ${n} OF${n>1?'s':''} ?`)) return;
+            if(!(await prodConfirmer({
+              title:'Supprimer des OF',
+              message:`Supprimer ${n} OF sélectionné${n>1?'s':''} ?`,
+              detail:'Cette action est définitive.',
+              confirmLabel:'Supprimer', danger:true,
+            }))) return;
             try{
               await api('/api/of/bulk',{method:'DELETE',body:JSON.stringify({ids:[...S.ofSelected]})});
               toast(`${n} OF${n>1?'s':''} supprimé${n>1?'s':''}.`);
@@ -3455,7 +3474,12 @@ function renderFichesTab(){
           style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
           onClick:async()=>{
             const n=S.ficheSelected.size;
-            if(!confirm(`Supprimer ${n} fiche${n>1?'s':''} ?`)) return;
+            if(!(await prodConfirmer({
+              title:'Supprimer des fiches techniques',
+              message:`Supprimer ${n} fiche${n>1?'s':''} technique${n>1?'s':''} ?`,
+              detail:'Cette action est définitive.',
+              confirmLabel:'Supprimer', danger:true,
+            }))) return;
             try{
               await api('/api/fiches-techniques/bulk',{method:'DELETE',body:JSON.stringify({ids:[...S.ficheSelected]})});
               toast(`${n} fiche${n>1?'s':''} supprimée${n>1?'s':''}.`);
@@ -3510,7 +3534,12 @@ function renderFichesTab(){
         style:'padding:4px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger)',
         title:'Supprimer',
         onClick:async()=>{
-          if(!confirm('Supprimer cette fiche ?')) return;
+          if(!(await prodConfirmer({
+            title:'Supprimer la fiche technique',
+            message:'Supprimer la fiche '+(row.reference||('#'+row.id))+' ?',
+            detail:'Les OF qui en découlent la perdent pour leurs calculs. Cette action est définitive.',
+            confirmLabel:'Supprimer', danger:true,
+          }))) return;
           try{await api('/api/fiches-techniques/'+row.id,{method:'DELETE'});toast('Fiche supprimée.');await loadFiches();render();}
           catch(e){toast(e.message||'Erreur.','error');}
         }
