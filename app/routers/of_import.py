@@ -2031,7 +2031,11 @@ def of_depuis_commandes(request: Request):
         raise HTTPException(status_code=400, detail="Lignes de commande illisibles.")
     from app.services.of_proposition import depuis_commandes
     with get_db() as conn:
-        return depuis_commandes(conn, lignes[:200])
+        try:
+            sauf = int(request.query_params.get("of_id") or 0) or None
+        except ValueError:
+            sauf = None
+        return depuis_commandes(conn, lignes[:200], sauf_of_id=sauf)
 
 
 @router.post("/api/of/apercu")

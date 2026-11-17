@@ -1650,9 +1650,19 @@ async function ofeReprendreArticle(lignes){
    serveur. En création il n'y en a pas encore, donc on garde la sélection
    dans la modale et elle part avec le POST — c'est le même mécanisme que le
    planning utilise pour un dossier qui n'existe pas encore. */
-function ofeChoisirCommandes(mDepart,premier){
+async function ofeChoisirCommandes(mDepart,premier){
   const m=mDepart||S.ofEditModal;
   if(!m) return;
+  // OF existant : le sélecteur REMPLACE la sélection enregistrée. Sans la
+  // reprise de ce qui est déjà rattaché, cocher une commande en plus
+  // détachait toutes les autres.
+  let deja;
+  if(m.id){
+    try{
+      const ra=await api('/api/rvgi/rattachements/of/'+encodeURIComponent(m.id)+'?piece=commande');
+      deja=((ra&&ra.rattachements)||[]).map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
+    }catch(e){ deja=undefined; }
+  }
   if(!window.MysRvgiPicker){toast('Sélecteur RVGI indisponible.','error');return;}
   if(!premier) captureSaisie('ofe-',m);
   m.of_numero=(m._dom&&m._dom['ofe-numero']!==undefined)?m._dom['ofe-numero']:m.of_numero;
@@ -1667,7 +1677,7 @@ function ofeChoisirCommandes(mDepart,premier){
     objetId:m.id||null,
     // En création rien n'est encore enregistré : la sélection en cours
     // revient cochée, sinon « Modifier les commandes » repartait de zéro.
-    initial:m.id?undefined:(m._commandes||[]),
+    initial:m.id?deja:(m._commandes||[]),
     produit:/^\d+\/\d+$/.test(produit)?produit:null,
     recherche:(produit&&!m.id?produit:(m.of_numero||'')).trim(),
     titre:premier?'Nouvel OF — choisissez la ou les commandes':undefined,
@@ -1710,7 +1720,13 @@ function ofeChoisirCommandes(mDepart,premier){
       // En création, la fiche technique est obligatoire : la fiche de
       // fabrication RVGI n'a plus de rôle à jouer, et son message « 2 articles
       // différents » contredisait celui de la fiche (15/11/2026).
-      if(m.id) ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
+      // En modification aussi : numéro proposé, liens « Voir la commande »,
+      // dates, conversions. Une valeur déjà saisie n'est jamais remplacée ;
+      // la fiche de fabrication RVGI reste le repli quand aucune fiche
+      // technique ne correspond.
+      if(m.id) ofeDepuisCommandes(m).then(function(fait){
+        if(!fait) ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
+      });
       else ofeDepuisCommandes(m);
     },
   });
@@ -2082,7 +2098,7 @@ async function ofeDepuisCommandes(m){
   let r=null;
   try{
     const c=JSON.stringify(l.map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte})));
-    r=await api('/api/of/depuis-commandes?c='+encodeURIComponent(c));
+    r=await api('/api/of/depuis-commandes?c='+encodeURIComponent(c)+(m.id?'&of_id='+encodeURIComponent(m.id):''));
   }catch(e){ return false; }
   if(S.ofEditModal!==m) return true;
   captureSaisie('ofe-',m);
@@ -2093,7 +2109,12 @@ async function ofeDepuisCommandes(m){
   // Le numéro exact de la création, suffixe « (2) » compris s'il est déjà
   // pris. Un numéro tapé par l'ADV n'est jamais remplacé.
   const numActuel=String(m._dom['ofe-numero']==null?(m.of_numero||''):m._dom['ofe-numero']).trim();
-  if(r.numero&&(!numActuel||numActuel===m._numeroPropose)){
+  if(m.id){
+    // OF existant : son numéro peut déjà être sur un dossier, une étiquette,
+    // un papier atelier. On ne le change jamais d'office : on PROPOSE celui
+    // des nouvelles commandes, à accepter d'un clic (17/11/2026).
+    m._numeroSuggere=(r.numero&&r.numero!==numActuel)?r.numero:null;
+  }else if(r.numero&&(!numActuel||numActuel===m._numeroPropose)){
     m._dom['ofe-numero']=r.numero; m.of_numero=r.numero; m._numeroPropose=r.numero;
   }
   m._cmdInfo=r;
@@ -2102,11 +2123,13 @@ async function ofeDepuisCommandes(m){
   renderOfEditModal();
   ofeControler(m);
   if(m._fiche) return f.length>0;
-  if(f.length===1){
+  // Un OF existant sans fiche retrouvée : la fiche n'est que proposée,
+  // jamais posée d'office (elle réécrirait tout le produit de l'OF).
+  if(f.length===1&&!m.id){
     await ofeChoisirFiche(f[0].id);
     return true;
   }
-  if(f.length>1){
+  if(f.length>=1){
     m._fichesTrouvees=f;
     m._ficheIdx=0;
     ofePeindreFiches('');
@@ -2497,6 +2520,11 @@ function renderOfEditModal(){
         </div>
         <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>
         ${_f('ofe-numero','OF n°',m.of_numero)}
+        ${m.id&&m._numeroSuggere?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
+          Numéro proposé pour ces commandes : <strong>${escHtml(m._numeroSuggere)}</strong>
+          <button type="button" id="ofe-num-sugg" style="padding:5px 10px;border-radius:8px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">Utiliser ce numéro</button>
+          <span style="color:var(--muted)">Le numéro actuel peut déjà figurer sur un dossier ou un papier atelier.</span>
+        </div>`:''}
         ${m._rvgiOf?`
         <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
           ${(function(r){
@@ -2647,6 +2675,16 @@ function renderOfEditModal(){
   // nombre d'étiquettes, délai, commandes et numéro. Le reste de l'OF vit
   // dans un bloc masqué (toujours dans le DOM : c'est lui que « Créer »
   // envoie), qu'on déplie seulement pour une correction.
+  const bSugg=overlay.querySelector('#ofe-num-sugg');
+  if(bSugg) bSugg.onclick=function(){
+    const champ=document.getElementById('ofe-numero');
+    if(champ) champ.value=m._numeroSuggere;
+    m.of_numero=m._numeroSuggere;
+    m._dom=m._dom||{}; m._dom['ofe-numero']=m._numeroSuggere;
+    m._numeroSuggere=null;
+    bSugg.parentElement.remove();
+    ofeApercuPlusTard(m);
+  };
   const bDetail=overlay.querySelector('#ofe-detail-btn');
   if(bDetail) bDetail.onclick=function(){
     m._voirDetail=!m._voirDetail;

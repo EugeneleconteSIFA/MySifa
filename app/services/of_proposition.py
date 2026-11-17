@@ -526,7 +526,8 @@ def fiches_du_produit(conn, article: Any) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
+def depuis_commandes(conn, lignes: List[Dict[str, Any]],
+                     sauf_of_id: Optional[int] = None) -> Dict[str, Any]:
     """Ce que les commandes cochées proposent pour l'OF : fiche(s), quantité,
     délai. Une fiche n'est proposée que si les lignes portent UN SEUL
     article — deux articles, c'est un OF par ligne (« 9932770 - L1 »)."""
@@ -549,7 +550,9 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         from app.services import rvgi_rattachement as ratt
         nommees, totaux = ratt.lignes_a_numeroter(lignes)
         base = ratt.proposer_reference(nommees, totaux)
-        numero = ratt.numero_of_libre(conn, base) if base else None
+        # En modification, l'OF lui-même ne compte pas comme « déjà pris » :
+        # sans ça il se verrait proposer son propre numéro suffixé « (2) ».
+        numero = ratt.numero_of_libre(conn, base, sauf_of_id=sauf_of_id) if base else None
     except Exception:
         numero = None
     return {

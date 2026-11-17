@@ -234,6 +234,9 @@ verifier("numéro proposé, tel que la création le donnera", d["numero"], "9932
 conn.execute("INSERT INTO of_imports (of_numero) VALUES ('9932770/L1')")
 verifier("numéro déjà pris : suffixe (2) (règle num_of_auto)",
          op.depuis_commandes(conn, [{"numero": "9932770", "ligne": 1}])["numero"], "9932770/L1 (2)")
+oid = conn.execute("SELECT id FROM of_imports WHERE of_numero = '9932770/L1'").fetchone()[0]
+verifier("en modification, l'OF ne se compte pas lui-même : pas de (2)",
+         op.depuis_commandes(conn, [{"numero": "9932770", "ligne": 1}], sauf_of_id=oid)["numero"], "9932770/L1")
 conn.execute("DELETE FROM of_imports WHERE of_numero = '9932770/L1'")
 verifier("l'id de la ligne revient pour « Voir la commande »",
          [(x["numero"], x["ligne"], bool(x["id"])) for x in d["lignes"]], [("9932770", 1, True)])
