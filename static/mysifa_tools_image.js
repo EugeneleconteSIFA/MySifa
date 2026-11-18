@@ -38,7 +38,7 @@
 
   const URL_TRACER = 'https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js';
   // Module maison, ?v= figé : à incrémenter ici et dans Convertir à chaque modification.
-  const URL_VECTO = '/static/mysifa_vecto.js?v=1';
+  const URL_VECTO = '/static/mysifa_vecto.js?v=2';
   const URL_PDFLIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
   const URL_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
   const URL_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
@@ -53,7 +53,7 @@
   let CTX = { toast: () => {}, surChange: null };
   const I = {
     host: null, nom: 'image', original: null, resultat: null, mode: 'ameliorer',
-    r: null, v: null, svg: null, traceInfo: null, classes: null, enCours: false, comparaison: 50,
+    r: null, v: null, svg: null, traceInfo: null, classes: null, zoom: 1, enCours: false, comparaison: 50,
     pdf: null, pdfPage: 1, minuteur: 0, clavier: null,
     // Projet : ouvert (id, nom), nom saisi, modifications non enregistrées,
     // fichier d'origine à envoyer, fenêtre « Mes projets », projet demandé
@@ -450,7 +450,7 @@
     const p = lirePrefs();
     I.r = Object.assign({}, DEFAUT_R, { dpi: (p.r && p.r.dpi) || 300, format: (p.r && p.r.format) || 'png', qualite: (p.r && p.r.qualite) || 92 });
     I.v = Object.assign({}, DEFAUT_V);
-    Object.assign(I, { original: null, resultat: null, svg: null, traceInfo: null, classes: null, pdf: null, pdfPage: 1, nom: 'image',
+    Object.assign(I, { original: null, resultat: null, svg: null, traceInfo: null, classes: null, zoom: 1, pdf: null, pdfPage: 1, nom: 'image',
       comparaison: 50, projet: null, nomProjet: '', sale: false, source: null, sourceChange: false, demandeProjet: null });
     const g = I.host && I.host.querySelector('[data-glissiere]');
     if (g) g.value = 50;
@@ -519,7 +519,7 @@
       ctx2d(c).drawImage(bmp, 0, 0);
       clearTimeout(I.minuteur);
       appliquerReglages(d.reglages);
-      Object.assign(I, { original: c, resultat: null, svg: null, traceInfo: null, classes: null, pdf: null, nom: d.nom_source || 'image',
+      Object.assign(I, { original: c, resultat: null, svg: null, traceInfo: null, classes: null, zoom: 1, pdf: null, nom: d.nom_source || 'image',
         source: new Blob([blob], { type: d.mime }), sourceChange: false, projet: { id: d.id, nom: d.nom }, nomProjet: d.nom, sale: false });
       const g = I.host && I.host.querySelector('[data-glissiere]');
       if (g) g.value = I.comparaison;
@@ -741,8 +741,13 @@
       + '<div class="timg-depot" data-depot><strong>Déposer une image ou un PDF</strong><span>ou cliquer pour choisir. Le fichier reste sur ce poste tant qu\'il n\'est pas enregistré en projet.</span>'
       + '<button type="button" class="timg-btn" data-act="projets" data-bulle="Projets">Rouvrir un projet</button></div>'
       + '<div class="timg-compare" data-compare hidden>'
-      + '<div class="timg-damier"><canvas data-apres></canvas><div class="timg-avant" data-avant-clip><canvas data-avant></canvas></div>'
-      + '<img data-svg alt="Aperçu vectoriel" hidden></div>'
+      + '<div class="timg-zoombar" data-zoombar role="group" aria-label="Zoom">'
+      + '<button type="button" data-zoom="-1" aria-label="Zoom arrière" data-bulle="Réduire">\u2212</button>'
+      + '<span data-zoom-val data-bulle="Taille réelle = 100 %"></span>'
+      + '<button type="button" data-zoom="1" aria-label="Zoom avant" data-bulle="Agrandir">+</button>'
+      + '<button type="button" data-zoom="0" data-bulle="Toute l\'image">Ajuster</button></div>'
+      + '<div class="timg-zone" data-zone><div class="timg-damier" data-damier><canvas data-apres></canvas><div class="timg-avant" data-avant-clip><canvas data-avant></canvas></div>'
+      + '<img data-svg alt="Aperçu vectoriel" hidden></div></div>'
       + '<input type="range" class="timg-glissiere" data-glissiere min="0" max="100" value="50" aria-label="Avant / après" data-bulle="Comparer">'
       + '<div class="timg-legende"><span>Avant</span><span data-legende-apres>Après</span></div></div>'
       + '<div class="timg-occupe" data-occupe hidden role="status" aria-live="polite"><div class="timg-occupe-carte">'
@@ -793,6 +798,7 @@
     vue.addEventListener('dragleave', () => vue.classList.remove('timg-survol'));
     vue.addEventListener('drop', e => { e.preventDefault(); vue.classList.remove('timg-survol'); ouvrirFichier(e.dataTransfer.files && e.dataTransfer.files[0]); });
     $('[data-glissiere]').addEventListener('input', e => { I.comparaison = +e.target.value; majComparaison(); });
+    brancherZoom();
 
     h.addEventListener('click', async e => {
       const m = e.target.closest('[data-mode]');
@@ -883,6 +889,56 @@
     t.textContent = I.resultat.width + ' × ' + I.resultat.height + ' px — ' + mm(I.resultat.width) + ' × ' + mm(I.resultat.height) + ' mm à ' + dpi + ' dpi';
   }
 
+  // ── Zoom de l'aperçu ───────────────────────────────────────────────
+  // 1 = image entière dans le cadre ; au-delà, l'aperçu grandit et la zone
+  // défile (glisser pour se déplacer, Ctrl ou ⌘ + molette pour zoomer).
+  // Le pourcentage affiché se rapporte aux pixels réels de l'image : il
+  // montre aussi l'effet de « Agrandir », invisible quand l'image est ajustée.
+  const NIVEAUX_ZOOM = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32];
+  function echelleAjustee() {
+    const zone = $('[data-zone]');
+    if (!zone || !I.resultat) return 1;
+    const W = I.resultat.width, H = I.resultat.height;
+    return Math.min(1, (zone.clientWidth || W) / W, (window.innerHeight * 0.62) / H);
+  }
+  function appliquerZoom(garderCentre) {
+    const zone = $('[data-zone]'), dam = $('[data-damier]'), val = $('[data-zoom-val]');
+    if (!zone || !dam || !I.resultat) return;
+    const cx = zone.scrollWidth ? (zone.scrollLeft + zone.clientWidth / 2) / zone.scrollWidth : 0.5;
+    const cy = zone.scrollHeight ? (zone.scrollTop + zone.clientHeight / 2) / zone.scrollHeight : 0.5;
+    const fit = echelleAjustee();
+    if (I.zoom <= 1) { dam.style.width = ''; zone.classList.remove('timg-zoom'); }
+    else { dam.style.width = Math.round(I.resultat.width * fit * I.zoom) + 'px'; zone.classList.add('timg-zoom'); }
+    if (val) val.textContent = Math.round(fit * I.zoom * 100) + ' %';
+    if (garderCentre && I.zoom > 1) {
+      zone.scrollLeft = cx * zone.scrollWidth - zone.clientWidth / 2;
+      zone.scrollTop = cy * zone.scrollHeight - zone.clientHeight / 2;
+    }
+  }
+  function zoomer(sens) {
+    if (sens === 0) I.zoom = 1;
+    else {
+      const i = NIVEAUX_ZOOM.findIndex(z => z >= I.zoom - 1e-6);
+      I.zoom = NIVEAUX_ZOOM[Math.max(0, Math.min(NIVEAUX_ZOOM.length - 1, (i < 0 ? 0 : i) + sens))];
+    }
+    appliquerZoom(true);
+  }
+  function brancherZoom() {
+    const zone = $('[data-zone]');
+    $('[data-zoombar]').addEventListener('click', e => { const b = e.target.closest('[data-zoom]'); if (b) zoomer(+b.getAttribute('data-zoom')); });
+    zone.addEventListener('wheel', e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); zoomer(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+    let glisse = null;
+    zone.addEventListener('pointerdown', e => {
+      if (I.zoom <= 1 || e.button !== 0) return;
+      glisse = { x: e.clientX, y: e.clientY, l: zone.scrollLeft, t: zone.scrollTop };
+      zone.setPointerCapture(e.pointerId); zone.classList.add('timg-glisse');
+    });
+    zone.addEventListener('pointermove', e => { if (!glisse) return; zone.scrollLeft = glisse.l - (e.clientX - glisse.x); zone.scrollTop = glisse.t - (e.clientY - glisse.y); });
+    const fin = () => { glisse = null; zone.classList.remove('timg-glisse'); };
+    zone.addEventListener('pointerup', fin); zone.addEventListener('pointercancel', fin);
+    window.addEventListener('resize', () => appliquerZoom(true));
+  }
+
   function majComparaison() {
     const clip = $('[data-avant-clip]');
     if (clip) clip.style.width = I.comparaison + '%';
@@ -910,6 +966,7 @@
     ti.textContent = I.traceInfo ? I.traceInfo.couleurs + ' couleur' + (I.traceInfo.couleurs > 1 ? 's' : '') + ' · ' + I.traceInfo.traces.toLocaleString('fr-FR')
       + ' tracé' + (I.traceInfo.traces > 1 ? 's' : '') + ' · SVG ' + fmtKo(I.traceInfo.octets) : '';
     majComparaison();
+    appliquerZoom(true);
   }
 
   // Les réglages se suivent vite (curseurs) : on attend une courte pause.

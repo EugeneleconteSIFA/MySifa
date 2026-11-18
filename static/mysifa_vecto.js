@@ -73,6 +73,43 @@
     }
     return cen.map(c => ({ r: Math.round(c[0]), g: Math.round(c[1]), b: Math.round(c[2]), a: 255 }));
   },
+  // Couleur de frange : mélange de deux autres couleurs de la palette qui ne
+  // vit qu'en bandes fines (bord rose d'un trait rouge sur blanc, bleu pâle
+  // autour d'un filet bleu, gris entre un texte noir et le fond). On la juge
+  // sur l'image agrandie déjà classée : une vraie couleur, même mélange
+  // possible de deux autres (gris d'une ombre, entre noir et blanc), a une part
+  // de pixels « pleins » (entourés de 8 voisins de la même couleur) ; une
+  // frange n'en a presque pas. Chaque couleur est jugée contre la palette
+  // complète : l'ordre ne compte pas. Renvoie, par couleur, s'il faut la garder.
+  sansFranges(idx, w, h, pal) {
+    const n = pal.length, MIN_PLEINS = 40, MIN_PART = 0.008;
+    const P = pal.map(p => [p.r, p.g, p.b]);
+    const melange = q => {
+      for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) {
+        if (a === q || b === q) continue;
+        const d = [P[b][0] - P[a][0], P[b][1] - P[a][1], P[b][2] - P[a][2]], L = d[0] * d[0] + d[1] * d[1] + d[2] * d[2] || 1;
+        const x = P[q][0] - P[a][0], y = P[q][1] - P[a][1], z = P[q][2] - P[a][2];
+        const t = (x * d[0] + y * d[1] + z * d[2]) / L;
+        if (t < 0.08 || t > 0.92) continue;
+        const ex = x - t * d[0], ey = y - t * d[1], ez = z - t * d[2];
+        if (ex * ex + ey * ey + ez * ez < 20 * 20) return true;
+      }
+      return false;
+    };
+    const total = new Uint32Array(n), pleins = new Uint32Array(n);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const p = y * w + x, q = idx[p];
+      if (q === 255) continue;
+      total[q]++;
+      if (idx[p - 1] === q && idx[p + 1] === q && idx[p - w] === q && idx[p + w] === q
+        && idx[p - w - 1] === q && idx[p - w + 1] === q && idx[p + w - 1] === q && idx[p + w + 1] === q) pleins[q]++;
+    }
+    return pal.map((p, q) => {
+      if (n < 3 || !melange(q)) return true;
+      const part = total[q] ? pleins[q] / total[q] : 0;
+      return pleins[q] >= MIN_PLEINS && part >= MIN_PART;
+    });
+  },
   // Agrandissement bilinéaire d'un facteur f.
   agrandir(img, f) {
     const { data: o, w, h } = img, W = Math.max(1, Math.round(w * f)), H = Math.max(1, Math.round(h * f));
@@ -174,14 +211,21 @@
   async function classer(img, couleurs, etape) {
     const dire = async t => { if (etape) await etape(t); else await pause(); };
     await dire('Lecture des couleurs…');
-    const pal = VF.palette(img, Math.max(2, Math.min(32, couleurs)));
+    let pal = VF.palette(img, Math.max(2, Math.min(32, couleurs)));
     if (!pal.length) throw new Error('Image vide — rien à vectoriser.');
     const f = Math.max(1, Math.min(8, Math.sqrt(BUDGET_TRACE / (img.w * img.h))));
     await dire('Agrandissement lissé ×' + Math.round(f * 10) / 10 + '…');
     let big = f > 1.001 ? VF.agrandir(img, f) : img;
     big = VF.flou(big, Math.round(f * 0.35));
     await dire('Répartition en ' + pal.length + ' couleurs…');
-    const idx = VF.classer(big, pal);
+    let idx = VF.classer(big, pal);
+    // Couleurs de franges écartées, puis nouvelle répartition sans elles.
+    const garder = VF.sansFranges(idx, big.w, big.h, pal);
+    if (garder.some(g => !g)) {
+      pal = pal.filter((p, q) => garder[q]);
+      await dire('Répartition en ' + pal.length + ' couleurs…');
+      idx = VF.classer(big, pal);
+    }
     // Couleurs des quatre coins : sert à retirer le fond.
     const coins = [0, img.w - 1, (img.h - 1) * img.w, img.w * img.h - 1].map(p => { const i = p * 4; return [img.data[i], img.data[i + 1], img.data[i + 2], img.data[i + 3]]; });
     return { pal, idx, w: big.w, h: big.h, f, coins };
