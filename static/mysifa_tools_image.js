@@ -8,8 +8,10 @@
  *               luminosité / contraste / saturation, noir et blanc, fond rendu
  *               transparent, marges rognées ; export PNG / JPG / WebP avec la
  *               résolution d'impression inscrite dans le fichier.
- *   Vectoriser  tracé en aplats (imagetracerjs), couleurs, lissage, détails
- *               ignorés, fond retiré ; export SVG ou PDF vectoriel (pdf-lib).
+ *   Vectoriser  palette prise sur les zones franches, agrandissement lissé,
+ *               bords anticrénelés rendus à leur couleur dominante, tracé
+ *               couleur par couleur (imagetracerjs) ; lissage, détails ignorés,
+ *               fond retiré ; export SVG ou PDF vectoriel (pdf-lib).
  *
  * La vectorisation part de l'image améliorée : on nettoie d'abord, on trace
  * ensuite. Un PDF en entrée est rendu page par page (pdf.js) à 300 dpi.
@@ -38,7 +40,8 @@
   const URL_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
   const URL_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
   const MAX_PIXELS = 40e6;          // au-delà, l'agrandissement est plafonné
-  const MAX_TRACE_COTE = 2000;      // la vectorisation travaille au plus sur 2000 px de côté
+  const MAX_TRACE_COTE = 2000;      // au-delà, l'image est réduite avant d'être vectorisée
+  const BUDGET_TRACE = 6e6;         // pixels de l'image agrandie sur laquelle on trace (×8 au plus)
   const LS = 'mysifa_tools_image_v1';
   const API = '/api/tools/image/projets';
   // Types gardés tels quels côté serveur ; tout autre format part en PNG.
@@ -48,7 +51,7 @@
   let CTX = { toast: () => {}, surChange: null };
   const I = {
     host: null, nom: 'image', original: null, resultat: null, mode: 'ameliorer',
-    r: null, v: null, svg: null, traceInfo: null, enCours: false, comparaison: 50,
+    r: null, v: null, svg: null, traceInfo: null, classes: null, enCours: false, comparaison: 50,
     pdf: null, pdfPage: 1, minuteur: 0, clavier: null,
     // Projet : ouvert (id, nom), nom saisi, modifications non enregistrées,
     // fichier d'origine à envoyer, fenêtre « Mes projets », projet demandé
@@ -337,44 +340,199 @@
     telecharger(new Blob([octets], { type: mime }), I.nom + '-ameliore.' + r.format);
   }
 
+  // ── Vectorisation fine ─────────────────────────────────────────────
+  // Une image d'étiquette ou un logo pris dans un PDF est petit et anticrénelé.
+  // Tracé tel quel, il donne des contours en escalier et des liserés de
+  // couleurs intermédiaires. On procède donc ainsi : palette prise sur les
+  // seules zones franches, agrandissement lissé (précision sous le pixel),
+  // chaque pixel rangé dans une couleur de la palette, puis chaque couleur
+  // tracée seule, recadrée sur sa boîte pour tenir en mémoire.
+  // Fonctions pures sur {data, w, h} (RGBA).
+  const VF = {
+  // Palette : k-means sur les pixels « francs » (voisins quasi identiques),
+  // les bords anticrénelés n'inventent donc pas de couleurs intermédiaires.
+  palette(img, k) {
+    const { data: o, w, h } = img;
+    const pas = Math.max(1, Math.floor(Math.sqrt(w * h / 250000)));
+    const ech = [];
+    for (let y = 1; y < h - 1; y += pas) for (let x = 1; x < w - 1; x += pas) {
+      const i = (y * w + x) * 4;
+      if (o[i + 3] < 128) continue;
+      let ecart = 0;
+      for (const d of [-4, 4, -4 * w, 4 * w]) for (let c = 0; c < 3; c++) ecart = Math.max(ecart, Math.abs(o[i + c] - o[i + d + c]));
+      if (ecart <= 20) ech.push(o[i], o[i + 1], o[i + 2]);
+    }
+    const n = ech.length / 3;
+    if (!n) return [];
+    const d2 = (j, c) => { const a = ech[j * 3] - c[0], b = ech[j * 3 + 1] - c[1], e = ech[j * 3 + 2] - c[2]; return a * a + b * b + e * e; };
+    // Départ déterministe : la couleur moyenne, puis le point le plus éloigné à chaque fois.
+    const moy = [0, 0, 0]; for (let j = 0; j < n; j++) for (let c = 0; c < 3; c++) moy[c] += ech[j * 3 + c] / n;
+    const cen = [];
+    let best = 0, bd = -1;
+    for (let j = 0; j < n; j++) { const v = d2(j, moy); if (v > bd) { bd = v; best = j; } }
+    cen.push([ech[best * 3], ech[best * 3 + 1], ech[best * 3 + 2]]);
+    const dmin = new Float64Array(n).fill(Infinity);
+    while (cen.length < k) {
+      const c = cen[cen.length - 1]; best = -1; bd = -1;
+      for (let j = 0; j < n; j++) { const v = d2(j, c); if (v < dmin[j]) dmin[j] = v; if (dmin[j] > bd) { bd = dmin[j]; best = j; } }
+      if (bd < 1600) break;              // plus de couleur vraiment distincte (écart < 40)
+      cen.push([ech[best * 3], ech[best * 3 + 1], ech[best * 3 + 2]]);
+    }
+    const lab = new Uint8Array(n);
+    for (let it = 0; it < 10; it++) {
+      const acc = cen.map(() => [0, 0, 0, 0]);
+      for (let j = 0; j < n; j++) {
+        let m = 0, mv = Infinity;
+        for (let q = 0; q < cen.length; q++) { const v = d2(j, cen[q]); if (v < mv) { mv = v; m = q; } }
+        lab[j] = m; const a = acc[m]; a[0] += ech[j * 3]; a[1] += ech[j * 3 + 1]; a[2] += ech[j * 3 + 2]; a[3]++;
+      }
+      cen.forEach((c, q) => { const a = acc[q]; if (a[3]) { c[0] = a[0] / a[3]; c[1] = a[1] / a[3]; c[2] = a[2] / a[3]; } });
+    }
+    return cen.map(c => ({ r: Math.round(c[0]), g: Math.round(c[1]), b: Math.round(c[2]), a: 255 }));
+  },
+  // Agrandissement bilinéaire d'un facteur f.
+  agrandir(img, f) {
+    const { data: o, w, h } = img, W = Math.max(1, Math.round(w * f)), H = Math.max(1, Math.round(h * f));
+    const out = new Uint8ClampedArray(W * H * 4);
+    for (let Y = 0; Y < H; Y++) {
+      const sy = Math.min(h - 1, Math.max(0, (Y + 0.5) / f - 0.5)), y0 = Math.floor(sy), y1 = Math.min(h - 1, y0 + 1), fy = sy - y0;
+      for (let X = 0; X < W; X++) {
+        const sx = Math.min(w - 1, Math.max(0, (X + 0.5) / f - 0.5)), x0 = Math.floor(sx), x1 = Math.min(w - 1, x0 + 1), fx = sx - x0;
+        const a = (y0 * w + x0) * 4, b = (y0 * w + x1) * 4, c = (y1 * w + x0) * 4, d = (y1 * w + x1) * 4, j = (Y * W + X) * 4;
+        for (let k = 0; k < 4; k++) out[j + k] = (o[a + k] * (1 - fx) + o[b + k] * fx) * (1 - fy) + (o[c + k] * (1 - fx) + o[d + k] * fx) * fy;
+      }
+    }
+    return { data: out, w: W, h: H };
+  },
+  // Flou quasi gaussien : deux passes de flou boîte séparable, rayon r.
+  flou(img, r) {
+    if (r < 1) return img;
+    const { w, h } = img; let a = new Float32Array(img.data), b = new Float32Array(a.length);
+    const passe = (src, dst, horiz) => {
+      const L = horiz ? w : h, N = horiz ? h : w, st = horiz ? 4 : 4 * w, lg = horiz ? 4 * w : 4;
+      for (let n = 0; n < N; n++) {
+        const base = n * lg;
+        for (let c = 0; c < 4; c++) {
+          let s = 0;
+          for (let t = -r; t <= r; t++) s += src[base + Math.min(L - 1, Math.max(0, t)) * st + c];
+          for (let t = 0; t < L; t++) {
+            dst[base + t * st + c] = s / (2 * r + 1);
+            s += src[base + Math.min(L - 1, t + r + 1) * st + c] - src[base + Math.max(0, t - r) * st + c];
+          }
+        }
+      }
+    };
+    for (let k = 0; k < 2; k++) { passe(a, b, true); passe(b, a, false); }
+    return { data: new Uint8ClampedArray(a), w, h };
+  },
+  // Indice de couleur de chaque pixel agrandi (255 = transparent). Proche
+  // d'une couleur de la palette : il la prend. Sinon c'est un bord anticrénelé,
+  // lu comme le mélange de deux couleurs : il va à la dominante. Sans ce
+  // second cas, le rose entre rouge et blanc partirait vers le gris.
+  classer(img, pal) {
+    const { data: o, w, h } = img, idx = new Uint8Array(w * h), n = pal.length, PROCHE = 14 * 14;
+    const P = pal.map(p => [p.r, p.g, p.b]), masque = (1 << n) - 1;
+    for (let Y = 0, p = 0; Y < h; Y++) {
+      for (let X = 0; X < w; X++, p++) {
+        const i = p * 4;
+        if (o[i + 3] < 128) { idx[p] = 255; continue; }
+        const r = o[i], g = o[i + 1], bl = o[i + 2];
+        let m = 0, mv = Infinity;
+        for (let q = 0; q < n; q++) { if (!(masque >> q & 1)) continue; const x = r - P[q][0], y = g - P[q][1], z = bl - P[q][2], v = x * x + y * y + z * z; if (v < mv) { mv = v; m = q; } }
+        if (mv > PROCHE) {
+          let pv = Infinity;
+          for (let a = 0; a < n; a++) { if (!(masque >> a & 1)) continue;
+            for (let b = a + 1; b < n; b++) { if (!(masque >> b & 1)) continue;
+              const d0 = P[b][0] - P[a][0], d1 = P[b][1] - P[a][1], d2 = P[b][2] - P[a][2], L = d0 * d0 + d1 * d1 + d2 * d2 || 1;
+              const x = r - P[a][0], y = g - P[a][1], z = bl - P[a][2];
+              const t = Math.min(1, Math.max(0, (x * d0 + y * d1 + z * d2) / L));
+              const ex = x - t * d0, ey = y - t * d1, ez = z - t * d2, v = ex * ex + ey * ey + ez * ez;
+              // Le gris est sur la droite noir–blanc : à erreur égale, le mélange
+              // des deux couleurs les plus éloignées l'emporte (bord noir/blanc).
+              const score = Math.max(v, 18 * 18) - L * 0.002;
+              if (score < pv) { pv = score; m = t < 0.5 ? a : b; }
+            } }
+        }
+        idx[p] = m;
+      }
+    }
+    return idx;
+  },
+  // Tracé : chaque couleur seule, recadrée sur sa boîte, puis recollée.
+  tracer(IT, idx, w, h, pal, garder, opts) {
+    const layers = [];
+    pal.forEach((p, q) => {
+      layers[q] = [];
+      if (!garder[q]) return;
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (idx[y * w + x] === q) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < 0) return;
+      x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(w - 1, x1 + 2); y1 = Math.min(h - 1, y1 + 2);
+      const cw = x1 - x0 + 1, ch = y1 - y0 + 1, d = new Uint8ClampedArray(cw * ch * 4);
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+        const j = (y * cw + x) * 4, v = idx[(y + y0) * w + x + x0] === q ? 0 : 255;
+        d[j] = d[j + 1] = d[j + 2] = v; d[j + 3] = 255;
+      }
+      const o = Object.assign({}, opts, { pal: [{ r: 0, g: 0, b: 0, a: 255 }, { r: 255, g: 255, b: 255, a: 255 }],
+        colorsampling: 0, colorquantcycles: 1, numberofcolors: 2, blurradius: 0, mincolorratio: 0 });
+      const td = IT.imagedataToTracedata({ width: cw, height: ch, data: d }, o);
+      layers[q] = td.layers[0].map(path => {
+        path.segments.forEach(s => { s.x1 += x0; s.y1 += y0; s.x2 += x0; s.y2 += y0; if (s.type === 'Q') { s.x3 += x0; s.y3 += y0; } });
+        path.boundingbox = [path.boundingbox[0] + x0, path.boundingbox[1] + y0, path.boundingbox[2] + x0, path.boundingbox[3] + y0];
+        return path;
+      });
+    });
+    return { layers, palette: pal, width: w, height: h };
+  },
+};
+
   // ── Vectorisation ──────────────────────────────────────────────────
   async function vectoriser() {
     await etape('Chargement du traceur…');
     const IT = await tracer();
     const src = I.resultat;
     if (!src) return;
-    let c = src;
-    const f = Math.min(1, MAX_TRACE_COTE / Math.max(c.width, c.height));
-    if (f < 1) { const n = toile(c.width * f, c.height * f); const x = ctx2d(n); x.imageSmoothingQuality = 'high'; x.drawImage(c, 0, 0, n.width, n.height); c = n; }
-    const d = ctx2d(c).getImageData(0, 0, c.width, c.height);
     const v = I.v;
-    const opts = {
-      numberofcolors: Math.max(2, Math.min(32, v.couleurs)),
-      ltres: v.lissage, qtres: v.lissage,
-      pathomit: v.details, rightangleenhance: true,
-      colorsampling: 2, colorquantcycles: 4, mincolorratio: 0,
-      blurradius: 0, strokewidth: 0, linefilter: v.details > 0,
-      roundcoords: 2, viewbox: true, desc: false, scale: 1,
-    };
-    await etape('Vectorisation en ' + opts.numberofcolors + ' couleurs…');
-    const td = IT.imagedataToTracedata(d, opts);
-    // Fond retiré : couches transparentes, et la couleur de fond si demandé
-    // (la plus claire, si elle couvre les quatre coins).
-    const garder = td.palette.map(p => p.a >= 128);
-    if (v.fond) {
-      const coin = idx => { const i = idx * 4; return [d.data[i], d.data[i + 1], d.data[i + 2], d.data[i + 3]]; };
-      const coins = [0, c.width - 1, (c.height - 1) * c.width, c.width * c.height - 1].map(coin);
-      const proche = (p, k) => Math.abs(p.r - k[0]) + Math.abs(p.g - k[1]) + Math.abs(p.b - k[2]) < 60;
-      td.palette.forEach((p, i) => { if (coins.every(k => k[3] < 128 || proche(p, k))) garder[i] = false; });
+    // Classement des pixels gardé tant que l'image et le nombre de couleurs ne
+    // changent pas : lissage et détails ne relancent que le tracé.
+    let k = I.classes;
+    if (!k || k.src !== src || k.couleurs !== v.couleurs) {
+      let c = src;
+      const lim = Math.min(1, MAX_TRACE_COTE / Math.max(c.width, c.height));
+      if (lim < 1) { const n = toile(c.width * lim, c.height * lim); const x = ctx2d(n); x.imageSmoothingQuality = 'high'; x.drawImage(c, 0, 0, n.width, n.height); c = n; }
+      const d = ctx2d(c).getImageData(0, 0, c.width, c.height);
+      const img = { data: d.data, w: c.width, h: c.height };
+      await etape('Lecture des couleurs…');
+      const pal = VF.palette(img, Math.max(2, Math.min(32, v.couleurs)));
+      if (!pal.length) throw new Error('Image vide — rien à vectoriser.');
+      const f = Math.max(1, Math.min(8, Math.sqrt(BUDGET_TRACE / (img.w * img.h))));
+      await etape('Agrandissement lissé ×' + Math.round(f * 10) / 10 + '…');
+      let big = f > 1.001 ? VF.agrandir(img, f) : img;
+      big = VF.flou(big, Math.round(f * 0.35));
+      await etape('Répartition en ' + pal.length + ' couleurs…');
+      const idx = VF.classer(big, pal);
+      // Fond retiré : la couleur qui occupe les quatre coins de l'image.
+      const coins = [0, img.w - 1, (img.h - 1) * img.w, img.w * img.h - 1].map(p => { const i = p * 4; return [img.data[i], img.data[i + 1], img.data[i + 2], img.data[i + 3]]; });
+      k = I.classes = { src, couleurs: v.couleurs, pal, idx, w: big.w, h: big.h, f, coins };
     }
-    let nbTraces = 0;
-    td.layers = td.layers.map((couche, i) => { if (!garder[i]) return []; nbTraces += couche.length; return couche; });
+    const proche = (p, c) => Math.abs(p.r - c[0]) + Math.abs(p.g - c[1]) + Math.abs(p.b - c[2]) < 60;
+    const garder = k.pal.map(p => !(v.fond && k.coins.every(c => c[3] < 128 || proche(p, c))));
+    const opts = {
+      ltres: v.lissage, qtres: v.lissage,
+      // Seuil de détails exprimé à l'échelle de l'image, ramené à l'image agrandie.
+      pathomit: Math.round(v.details * k.f / 2), rightangleenhance: false,
+      strokewidth: 0, linefilter: v.details > 0,
+      roundcoords: 2, viewbox: true, desc: false, scale: 1 / k.f,
+    };
+    await etape('Tracé des contours…');
+    const td = VF.tracer(IT, k.idx, k.w, k.h, k.pal, garder, opts);
     if (I.resultat !== src) return;
     let svg = IT.getsvgstring(td, opts);
     // Dimensions réelles de l'image d'origine, viewBox à la taille tracée.
     svg = svg.replace(/<svg /, '<svg width="' + I.resultat.width + '" height="' + I.resultat.height + '" ').replace(/ desc="[^"]*"/, '');
     I.svg = svg;
-    I.traceInfo = { couleurs: garder.filter(Boolean).length, traces: nbTraces, octets: new Blob([svg]).size, w: c.width, h: c.height };
+    const nbTraces = td.layers.reduce((n, c) => n + c.filter(p => !p.isholepath).length, 0);
+    I.traceInfo = { couleurs: garder.filter(Boolean).length, traces: nbTraces, octets: new Blob([svg]).size, w: Math.round(k.w / k.f), h: Math.round(k.h / k.f) };
   }
 
   async function exporterPdf() {
@@ -465,7 +623,7 @@
     const p = lirePrefs();
     I.r = Object.assign({}, DEFAUT_R, { dpi: (p.r && p.r.dpi) || 300, format: (p.r && p.r.format) || 'png', qualite: (p.r && p.r.qualite) || 92 });
     I.v = Object.assign({}, DEFAUT_V);
-    Object.assign(I, { original: null, resultat: null, svg: null, traceInfo: null, pdf: null, pdfPage: 1, nom: 'image',
+    Object.assign(I, { original: null, resultat: null, svg: null, traceInfo: null, classes: null, pdf: null, pdfPage: 1, nom: 'image',
       comparaison: 50, projet: null, nomProjet: '', sale: false, source: null, sourceChange: false, demandeProjet: null });
     const g = I.host && I.host.querySelector('[data-glissiere]');
     if (g) g.value = 50;
@@ -534,7 +692,7 @@
       ctx2d(c).drawImage(bmp, 0, 0);
       clearTimeout(I.minuteur);
       appliquerReglages(d.reglages);
-      Object.assign(I, { original: c, resultat: null, svg: null, traceInfo: null, pdf: null, nom: d.nom_source || 'image',
+      Object.assign(I, { original: c, resultat: null, svg: null, traceInfo: null, classes: null, pdf: null, nom: d.nom_source || 'image',
         source: new Blob([blob], { type: d.mime }), sourceChange: false, projet: { id: d.id, nom: d.nom }, nomProjet: d.nom, sale: false });
       const g = I.host && I.host.querySelector('[data-glissiere]');
       if (g) g.value = I.comparaison;
