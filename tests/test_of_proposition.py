@@ -94,6 +94,23 @@ verifier("→ métrage 5 418 (Access : 5 418)", c.get("metrage"), 5418)
 verifier("→ 20 cartons de 32", c.get("nb_cartons"), 20)
 verifier("pas de message « étiquettes par bobine »", [m for m in c["_manques"] if "bobine" in m], [])
 
+print("OF Access 9931861 (24/0023, paravents) et 9931953 (901/0005) recalculés")
+F24 = {"conditionnement": "Paravent de 1 000 plis de 4 étiquettes", "outil1_nb_front": 5, "nb_bobines_carton": 3,
+       "qte_au_mille": 10.793999671936035}
+c = op.calculer_quantites(F24, 660000, laize=470, grammage=19)
+verifier("métrage 7 124 (Access : 7 124, pas 7 125)", c.get("metrage"), 7124)
+verifier("165 paravents comptés comme bobines", c.get("qte_bobines"), 165)
+verifier("165 mandrins", c.get("nb_mandrins"), 165)
+verifier("33 levées", c.get("nb_levees"), 33)
+verifier("55 cartons", c.get("nb_cartons"), 55)
+verifier("adhésif 63,6 kg", round(c.get("qte_adhesif_kg"), 1), 63.6)
+F901 = {"nb_etiq_bobin": 550, "outil1_nb_front": 3, "nb_bobines_carton": 18, "qte_au_mille": 50.8,
+        "mandrin_dia": "Tube 1500x25", "mandrin_longueur": 103}
+c = op.calculer_quantites(F901, 201300)
+verifier("9931953 : métrage 10 226", c.get("metrage"), 10226)
+verifier("9931953 : 366 bobines, 122 levées, 21 cartons, 27 tubes",
+         (c.get("qte_bobines"), c.get("nb_levees"), c.get("nb_cartons"), c.get("nb_tubes")), (366, 122, 21, 27))
+
 print("Cas limites")
 c = op.calculer_quantites({"qte_au_mille": 2.0, "nb_etiq_bobin": 500,
                            "mandrin_dia": "Bague 63,7x25", "mandrin_longueur": 20}, 10_000)
@@ -114,8 +131,10 @@ verifier("« Bobine de 1 000 étiquettes » (fiche 945/0003)",
          op.etiquettes_par_bobine({"conditionnement": "Bobine de 1 000 étiquettes"}), (1000.0, "conditionnement"))
 verifier("la colonne de la fiche prime",
          op.etiquettes_par_bobine({"nb_etiq_bobin": 500, "conditionnement": "Bobine de 1 000 étiquettes"}), (500.0, "fiche"))
-verifier("un paravent ne donne pas de nombre par bobine",
-         op.etiquettes_par_bobine({"conditionnement": "Paravent de 1000 plis de 4 étiquettes"}), (None, None))
+verifier("paravent : plis × étiquettes, comme Access (OF 9931861)",
+         op.etiquettes_par_bobine({"conditionnement": "Paravent de 1 000 plis de 4 étiquettes"}), (4000.0, "conditionnement"))
+verifier("paquet : idem (95/0006)",
+         op.etiquettes_par_bobine({"conditionnement": "Paquet de 1 000 plis de 1 étiquette"}), (1000.0, "conditionnement"))
 c = op.calculer_quantites({"conditionnement": "Bobine de 1 000 étiquettes", "outil1_nb_front": 4,
                            "nb_bobines_carton": 10, "qte_au_mille": 31.75}, 70_000)
 verifier("945/0003, 70 000 étiq. : 70 bobines", c.get("qte_bobines"), 70)
