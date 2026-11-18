@@ -807,8 +807,23 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     except Exception:
         ofs_list = []
 
+    # L'OF actif et la fiche se contredisent-ils ? Le panneau l'affiche, et
+    # l'aperçu de la fiche reçoit l'OF pour que le plus récent fasse foi.
+    fiche_accord = None
+    if row and fiche_id:
+        try:
+            from app.services import of_fiche_accord
+            with get_db() as c4:
+                acc = of_fiche_accord.charger(c4, row["id"], fiche_id)
+            if acc:
+                fiche_accord = acc["verdict"]
+        except Exception:
+            fiche_accord = None
+
     base = {"entry_numero_of": numero_of, "ref_produit": ref_produit,
-            "fiche_id": fiche_id, "ofs": ofs_list}
+            "fiche_id": fiche_id, "ofs": ofs_list,
+            "of_actif_id": row["id"] if row else None,
+            "fiche_accord": fiche_accord}
 
     if not row:
         return {"linked": False, **base}
@@ -1051,20 +1066,34 @@ async def update_fiche(fiche_id: int, request: Request):
 
 
 @router.get("/api/fiches-techniques/{fiche_id}/pdf-preview")
-def preview_fiche_pdf(fiche_id: int, request: Request):
-    """Génère et retourne le PDF d'une fiche technique (auth session)."""
+def preview_fiche_pdf(fiche_id: int, request: Request, of_id: Optional[int] = None):
+    """Génère et retourne le PDF d'une fiche technique (auth session).
+
+    `of_id` : l'OF du dossier depuis lequel on regarde la fiche. S'il la
+    contredit, un bandeau le dit, et s'il est plus récent ses valeurs sont
+    imprimées à la place de celles de la fiche, marquées « (OF) »
+    (app/services/of_fiche_accord.py). La fiche en base n'est pas modifiée.
+    """
     get_current_user(request)
+    avertissement = None
     with get_db() as conn:
         row = conn.execute(
             "SELECT * FROM fiches_techniques WHERE id=?", (fiche_id,)
         ).fetchone()
         from app.services.encres_couleurs import charger as charger_encres
         encres = charger_encres(conn)
+        fiche = dict(row) if row else None
+        if fiche and of_id:
+            from app.services import of_fiche_accord
+            acc = of_fiche_accord.charger(conn, of_id, fiche_id)
+            if acc and not acc["verdict"]["accord"]:
+                fiche = of_fiche_accord.fiche_affichee(acc["fiche"], acc["of"], acc["verdict"])
+                avertissement = acc["verdict"]["message"]
     if not row:
         raise HTTPException(status_code=404, detail="Fiche introuvable.")
     try:
         from app.services.fiche_pdf import generate_fiche_pdf
-        pdf_bytes = generate_fiche_pdf(dict(row), encres=encres)
+        pdf_bytes = generate_fiche_pdf(fiche, encres=encres, avertissement=avertissement)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
     ref = re.sub(r"[^\w\-]+", "_", str(row["reference"] or fiche_id))

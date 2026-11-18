@@ -22,6 +22,17 @@ _LAVENDER = colors.HexColor("#E8CFEC")
 _WHITE    = colors.white
 _BLACK    = colors.black
 _LIGHT_GRAY = colors.HexColor("#F5F5F5")
+_ALERTE    = colors.HexColor("#B91C1C")  # hex-ok : bandeau d'écart OF / fiche (PDF)
+
+# Champ de la fiche remplacé par l'OF → colonnes imprimées concernées
+# (cf. app/services/of_fiche_accord.fiche_affichee).
+_COLONNES_SUBSTITUEES = {
+    "machine": ("machine",),
+    "format": ("format", "eti_laize", "eti_longueur"),
+    "matiere": ("support",),
+    "laize": ("laize",),
+    "qte_au_mille": ("qte_au_mille",),
+}
 
 W, H = A4  # 595.28 x 841.89 pt
 
@@ -98,13 +109,33 @@ def _teinte(fiche: dict, pref: str, cref: str, encres: Optional[dict]) -> Option
     return None if hx == _PANTONE_FALLBACK else hx
 
 
-def generate_fiche_pdf(fiche: dict, encres: Optional[dict] = None) -> bytes:
+def _bandeau(c: canvas.Canvas, x: float, y: float, w: float, texte: str) -> float:
+    """Bandeau rouge d'écart OF / fiche. Rend sa hauteur."""
+    style = ParagraphStyle("alerte", fontName="Helvetica-Bold", fontSize=7.5,
+                           leading=9.5, textColor=_WHITE, alignment=TA_LEFT)
+    p = Paragraph(texte.replace("&", "&amp;").replace("<", "&lt;"), style)
+    pad = 2 * mm
+    _, h = p.wrap(w - 2 * pad, 40 * mm)
+    hauteur = h + 2 * pad
+    c.setFillColor(_ALERTE)
+    c.rect(x, y - hauteur, w, hauteur, fill=1, stroke=0)
+    p.drawOn(c, x + pad, y - hauteur + pad)
+    c.setFillColor(_BLACK)
+    return hauteur
+
+
+def generate_fiche_pdf(fiche: dict, encres: Optional[dict] = None,
+                       avertissement: Optional[str] = None) -> bytes:
     """
     Génère le PDF d'une fiche technique à partir d'un dict de données.
     Retourne les bytes du PDF.
 
     ``encres`` : référentiel {clé: hex} (app.services.encres_couleurs.charger).
     Fourni, chaque tête porte une pastille à la teinte de son encre.
+
+    ``avertissement`` : écart avec l'OF du dossier, imprimé en bandeau sous le
+    titre. Les colonnes listées dans ``fiche["_substitutions"]`` portent la
+    mention « (OF) » : la valeur imprimée n'est pas celle de la fiche en base.
     """
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -119,13 +150,20 @@ def generate_fiche_pdf(fiche: dict, encres: Optional[dict] = None) -> bytes:
     row_h = 5.5 * mm
     sh = 5 * mm  # section header height
 
+    substituees = {col for champ in (fiche.get("_substitutions") or [])
+                   for col in _COLONNES_SUBSTITUEES.get(champ, ())}
+
     def _f(key: str, suffix: str = "") -> str:
-        return _v(fiche.get(key), suffix)
+        val = _v(fiche.get(key), suffix)
+        return f"{val} (OF)" if val and key in substituees else val
 
     # ── Titre ────────────────────────────────────────────────────────
     c.setFont("Helvetica-Bold", 11)
     c.drawCentredString(W / 2, y - 6 * mm, "FICHE TECHNIQUE")
     y -= 10 * mm
+
+    if avertissement:
+        y -= _bandeau(c, ml, y, pw, avertissement) + 1.5 * mm
 
     # ── REF / Dernière modif ─────────────────────────────────────────
     ref_w = pw * 0.45

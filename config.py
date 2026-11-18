@@ -2175,3 +2175,23 @@ COMPTA_CMP_TOLERANCE = float(os.getenv("COMPTA_CMP_TOLERANCE", "0.05"))
 # Journal des ventes dans le grand-livre CW : seules ses lignes sont des
 # factures ou des avoirs (VIO = règlements, à ignorer).
 COMPTA_CMP_JOURNAL_VENTES = os.getenv("COMPTA_CMP_JOURNAL_VENTES", "VE")
+
+
+# ── Accord OF / fiche technique (app/services/of_fiche_accord.py) ──────
+# Familles de matière reconnues dans les libellés libres d'Access : un OF en
+# « PP 95µ BLANC MAT » et une fiche en « VELIN H400 » ne parlent pas du même
+# support. Un libellé qui ne tombe dans aucune famille, ou dans deux, ne
+# permet pas de conclure : aucun écart n'est alors signalé sur la matière.
+FAMILLES_MATIERE = {
+    "pp": ("pp", "polypro", "polypropylene", "synthetique"),
+    "pe": ("pe", "polyethylene"),
+    "pet": ("pet", "polyester"),
+    "velin": ("velin",),
+    "thermique": ("thermique", "therm", "thermo"),
+    "couche": ("couche", "coated"),
+    "kraft": ("kraft",),
+}
+# Écart de format toléré entre l'OF et la fiche, en mm.
+ACCORD_FORMAT_TOLERANCE_MM = float(os.getenv("ACCORD_FORMAT_TOLERANCE_MM", "1.5"))
+# Écart relatif toléré sur la quantité au mille.
+ACCORD_QAM_TOLERANCE = float(os.getenv("ACCORD_QAM_TOLERANCE", "0.01"))

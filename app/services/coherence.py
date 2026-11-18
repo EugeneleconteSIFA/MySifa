@@ -105,7 +105,8 @@ REGLES: Dict[str, Regle] = {r.code: r for r in (
           "basse", "/expe#suivi_departs"),
     Regle("documents.of_fiche", "documents", "OF différent de la fiche technique",
           "Dossier à produire dont l'OF ne dit pas la même chose que sa fiche technique "
-          "(laize, quantité au mille, matières, mandrin, carton).",
+          "(machine, format, support, laize, quantité au mille, adhésif, glassine, mandrin, "
+          "carton). Le document le plus récent fait foi à l'écran.",
           "haute", "/planning"),
     Regle("documents.of_planning", "documents", "OF différent du planning",
           "Machine ou laize de l'OF différente de celle du dossier au planning.",
@@ -532,11 +533,12 @@ def ctrl_flux_date_enlevement(conn, s, aujourdhui: str, **_) -> List[dict]:
 
 # ─── OF, fiches techniques, planning ────────────────────────────────────────
 
+# Machine, format, support, laize et quantité au mille : of_fiche_accord.comparer
+# (le support y est comparé par famille quand les ids manquent, ce qui est le
+# cas de tout document venu d'Access). Restent ici les matières qu'on ne sait
+# comparer que par leur référence MyStock.
 _CHAMPS_OF_FICHE = (
     # (libellé, colonne OF, colonne fiche, nature)
-    ("Laize", "laize", "laize", "mm"),
-    ("Quantité au mille", "qte_au_mille", "qte_au_mille", "qam"),
-    ("Support", "matiere_ref_id", "support_ref_id", "matiere"),
     ("Adhésif", "adhesif_ref_id", "adhesif_ref_id", "matiere"),
     ("Glassine", "glassine_ref_id", "glassine_ref_id", "matiere"),
     ("Mandrin", "mandrin_ref_id", "mandrin_ref_id", "matiere"),
@@ -552,11 +554,14 @@ def _designation(conn, mid: Any) -> str:
 def ctrl_documents(conn, s, actives: Dict[str, bool], **_) -> List[dict]:
     from app.services.coherence_fiche import controler
     from app.services.fiche_choix import choisir_fiche
+    from app.services import of_fiche_accord
 
     rows = conn.execute(
         """SELECT pe.id AS pe_id, pe.reference AS dossier, pe.ref_produit, pe.laize AS pe_laize,
                   m.nom AS machine,
                   o.of_numero, o.reference AS of_reference, o.machine AS of_machine, o.laize,
+                  o.format AS of_format, o.matiere AS of_matiere,
+                  o.date_creation AS of_date_creation, o.date_import AS of_date_import,
                   o.qte_au_mille, o.matiere_ref_id, o.adhesif_ref_id, o.glassine_ref_id,
                   o.mandrin_ref_id, o.carton_ref_id
              FROM planning_entries pe
@@ -582,32 +587,41 @@ def ctrl_documents(conn, s, actives: Dict[str, bool], **_) -> List[dict]:
             continue
 
         if actives.get("documents.of_fiche"):
-            diffs = []
+            of_doc = {"of_numero": r["of_numero"], "machine": r.get("of_machine"),
+                      "format": r.get("of_format"), "matiere": r.get("of_matiere"),
+                      "matiere_ref_id": r.get("matiere_ref_id"), "laize": r.get("laize"),
+                      "qte_au_mille": r.get("qte_au_mille"),
+                      "date_creation": r.get("of_date_creation"),
+                      "date_import": r.get("of_date_import")}
+            # Une matière choisie par référence n'a pas toujours son libellé :
+            # l'écart doit nommer la matière, pas son id.
+            if not of_doc["matiere"] and of_doc["matiere_ref_id"]:
+                of_doc["matiere"] = _designation(conn, of_doc["matiere_ref_id"])
+            ft_doc = dict(ft)
+            if not ft_doc.get("support") and ft_doc.get("support_ref_id"):
+                ft_doc["support"] = _designation(conn, ft_doc["support_ref_id"])
+            v = of_fiche_accord.verdict(
+                of_doc, ft_doc, of_fiche_accord.derniere_correction_fiche(conn, ft.get("id")))
+            diffs = [f"{e['libelle']} « {e['of']} » sur l'OF, « {e['fiche']} » sur la fiche"
+                     for e in v["ecarts"]]
             for libelle, c_of, c_ft, nature in _CHAMPS_OF_FICHE:
                 v_of, v_ft = r.get(c_of), ft.get(c_ft)
-                if v_of in (None, "") or v_ft in (None, ""):
+                if v_of in (None, "") or v_ft in (None, "") or int(v_of) == int(v_ft):
                     continue
-                if nature == "mm":
-                    if abs(float(v_of) - float(v_ft)) <= 0.5:
-                        continue
-                    diffs.append(f"{libelle} {_nombre_fr(v_of)} sur l'OF, {_nombre_fr(v_ft)} sur la fiche")
-                elif nature == "qam":
-                    if float(v_ft) and abs(float(v_of) - float(v_ft)) / float(v_ft) <= 0.01:
-                        continue
-                    diffs.append(f"{libelle} {_nombre_fr(round(float(v_of), 2))} sur l'OF, "
-                                 f"{_nombre_fr(round(float(v_ft), 2))} sur la fiche")
-                else:
-                    if int(v_of) == int(v_ft):
-                        continue
-                    diffs.append(f"{libelle} « {_designation(conn, v_of)} » sur l'OF, "
-                                 f"« {_designation(conn, v_ft)} » sur la fiche")
+                diffs.append(f"{libelle} « {_designation(conn, v_of)} » sur l'OF, "
+                             f"« {_designation(conn, v_ft)} » sur la fiche")
             if diffs:
+                tete = ("Fiche d'un autre produit ? " if v["autre_produit"] else "")
+                foi = ("l'OF, plus récent, fait foi à l'écran" if v["source"] == "of"
+                       else "la fiche, plus récente, fait foi : vérifier l'OF")
                 out.append(_ecart(
                     "documents.of_fiche", "dossier", dos, titre,
-                    f"OF {r['of_numero'] or ''} contre fiche {ft.get('reference') or ft.get('id')} : "
-                    + " ; ".join(diffs) + ".",
+                    f"{tete}OF {r['of_numero'] or ''} contre fiche "
+                    f"{ft.get('reference') or ft.get('id')} : " + " ; ".join(diffs)
+                    + f". {foi[0].upper() + foi[1:]}.",
                     {"planning_entry_id": pe_id, "of": r["of_numero"], "fiche_id": ft.get("id"),
-                     "champs": len(diffs)}))
+                     "champs": len(diffs), "autre_produit": v["autre_produit"],
+                     "source": v["source"]}))
 
         if actives.get("documents.fiche_incoherente"):
             try:
