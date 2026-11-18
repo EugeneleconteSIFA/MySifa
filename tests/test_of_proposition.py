@@ -557,6 +557,19 @@ op.appliquer_corrections(k, g, {"metrage": 1000, "nb_mandrins": 100}, ["metrage"
 verifier("métrage corrigé → adhésif en kg", k.get("qte_adhesif_kg"), 8.93)
 verifier("mandrins corrigés → tubes", k.get("nb_tubes"), 6)
 
+print("OF corrigé directement sur la feuille")
+gen_src = open("app/services/of_pdf_generator.py", encoding="utf-8").read()
+js_src = open("static/mysifa_prod_core.js", encoding="utf-8").read()
+bloc = re.search(r"const OFE_FEUILLE = \{(.*?)\n\};", js_src, re.S).group(1)
+imprimees = re.findall(r'^    \("(\w+)",\s+[\d.]+,\s+[\d.]+,', gen_src, re.M)
+verifier("le générateur liste ses cases", len(imprimees) > 40, True)
+verifier("chaque case imprimée se corrige à l'écran",
+         [c for c in imprimees if not re.search(r"\b%s:'" % c, bloc)], [])
+ids_payload = set(re.findall(r"[tni]v\('(ofe-[\w-]+)'\)", js_src))
+ids_feuille = set(re.findall(r"'(?:ref:\w+:)?(ofe-[\w-]+)", bloc))
+hors = {"ofe-outa-forme", "ofe-outa-numero", "ofe-outa-angle", "ofe-outa-fournisseur", "ofe-nb-fronts"}
+verifier("rien de ce qui s'enregistre ne manque à la feuille", sorted(ids_payload - ids_feuille - hors), [])
+
 print("Dates de l'OF imprimé")
 gen = open("app/services/of_pdf_generator.py", encoding="utf-8").read()
 ns = {"re": re, "Any": object}
