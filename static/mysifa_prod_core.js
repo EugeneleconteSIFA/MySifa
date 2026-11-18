@@ -1563,6 +1563,19 @@ async function openOfEditModal(row){
       // Une saisie faite avant l'arrivée de la fiche n'a rien pu recalculer.
       if(m._modifie) ofeRecalculer();
     }).catch(function(){});
+    // Les dates de ses commandes, pour les proposer aussi en modification.
+    api('/api/rvgi/rattachements/of/'+plein.id+'?piece=commande').then(function(ra){
+      const l=((ra&&ra.rattachements)||[]).map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
+      if(!l.length) return null;
+      return api('/api/of/depuis-commandes?c='+encodeURIComponent(JSON.stringify(l))+'&of_id='+encodeURIComponent(plein.id));
+    }).then(function(r){
+      const m=S.ofEditModal;
+      if(!r||!m||m.id!==plein.id) return;
+      captureSaisie('ofe-',m);
+      m._cmdInfo=r;
+      set({ofEditModal:m});
+      renderOfEditModal();
+    }).catch(function(){});
   }
 }
 function openOfCreateModal(){
@@ -2040,7 +2053,15 @@ function ofePeindreEcarts(m){
   e.forEach(function(x){
     h+='<div style="'+ligne+'"><span>'+escHtml(x.lib)+' : <span style="color:var(--muted)">'+escHtml(ofeTexteValeur(x.fiche))+'</span> → <strong>'+escHtml(ofeTexteValeur(x.of))+'</strong></span><button type="button" data-ecart="'+escAttr(x.col)+'" style="'+bouton+'">Revenir à la fiche</button></div>';
   });
-  const total=e.length+inc.length;
+  // Le délai reste libre, mais un écart avec la commande se voit.
+  const cmd=m._cmdInfo||{}, champDelai=document.getElementById('ofe-delai');
+  const dateCmd=cmd.date_livraison||cmd.date_expedition;
+  const ecartDelai=!!(dateCmd&&champDelai&&champDelai.value!==cmd.date_livraison&&champDelai.value!==cmd.date_expedition);
+  if(ecartDelai){
+    const fr=d=>d?String(d).split('-').reverse().join('/'):'vide';
+    h+='<div style="'+ligne+'"><span>Délai client : <span style="color:var(--muted)">commande '+escHtml(fr(dateCmd))+'</span> → <strong>'+escHtml(fr(champDelai.value))+'</strong></span><button type="button" data-reprendre-delai="'+escAttr(dateCmd)+'" style="'+bouton+'">Reprendre la date de la commande</button></div>';
+  }
+  const total=e.length+inc.length+(ecartDelai?1:0);
   z.style.display=total?'block':'none';
   z.innerHTML=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">À relire avant d\'enregistrer</div>'+h:'';
   if(pied){
@@ -2601,8 +2622,11 @@ function ofeBrancherDates(overlay,m){
       const champ=document.getElementById('ofe-delai');
       if(champ) champ.value=d;
       m._dom=m._dom||{}; m._dom['ofe-delai']=d; m.delai_client=d;
+      // Une date de la commande continue de suivre la commande.
+      m._delaiPropose=d;
       m._modifie=true;
       ofeRepeindreDates(overlay,m);
+      ofePeindreEcarts(m);
       ofeApercuPlusTard(m);
     });
   });
@@ -2701,8 +2725,21 @@ function ofeBrancherFiche(overlay,m){
     });
   }
   overlay.addEventListener('click',function(e){
-    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],#ofe-ecarts-pied');
+    // Le calendrier s'ouvre au clic sur toute la case.
+    if(e.target.matches&&e.target.matches('.ofe-case[type=date]')){
+      try{ e.target.showPicker(); }catch(err){}
+    }
+    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],#ofe-ecarts-pied');
     if(!b) return;
+    if(b.hasAttribute('data-reprendre-delai')){
+      const d=b.getAttribute('data-reprendre-delai'), champ=document.getElementById('ofe-delai');
+      if(champ) champ.value=d;
+      m._dom=m._dom||{}; m._dom['ofe-delai']=d; m.delai_client=d; m._delaiPropose=d; m._modifie=true;
+      ofeRepeindreDates(overlay,m);
+      ofePeindreEcarts(m);
+      ofeApercuPlusTard(m);
+      return;
+    }
     if(b.id==='ofe-ecarts-pied'){ const z=document.getElementById('ofe-ecarts'); if(z) z.scrollIntoView({block:'center'}); return; }
     if(b.hasAttribute('data-ecart')) ofeRevenirFiche(m,b.getAttribute('data-ecart'));
     else ofeAligner(m,Number(b.getAttribute('data-incoh')));
@@ -2712,9 +2749,13 @@ function ofeBrancherFiche(overlay,m){
   if(ref&&!m.id) ref.addEventListener('change',function(){ ofeControler(m); });
   ofeBrancherDates(overlay,m);
   const champDelai=overlay.querySelector('#ofe-delai');
-  if(champDelai) champDelai.addEventListener('change',function(){
-    m._dom=m._dom||{}; m._dom['ofe-delai']=champDelai.value;
-    ofeRepeindreDates(overlay,m);
+  if(champDelai) ['input','change'].forEach(function(evt){
+    champDelai.addEventListener(evt,function(){
+      m._dom=m._dom||{}; m._dom['ofe-delai']=champDelai.value;
+      m.delai_client=champDelai.value||null;
+      ofeRepeindreDates(overlay,m);
+      ofePeindreEcarts(m);
+    });
   });
   // Une case corrigée à la main le reste, et ce qui en dépend suit. La vider
   // la rend au calcul.
