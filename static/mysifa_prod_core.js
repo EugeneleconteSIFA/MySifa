@@ -1990,6 +1990,136 @@ function ofeMarquerSuivi(el){
   el.classList.add('ofe-case-suit');
   setTimeout(function(){ el.classList.remove('ofe-case-suit'); },2500);
 }
+/* Écarts avec la fiche (18/11/2026). L'OF peut s'en écarter, mais ça se voit
+   avant de créer, et chaque case revient à la fiche d'un clic. */
+const OFE_REF_DE = {
+  matiere:'matiere_ref_id', glassine:'glassine_ref_id', adhesif_label:'adhesif_ref_id',
+  cartons_type:'carton_ref_id', mandrins_dia:'mandrin_ref_id', palette_type:'palette_ref_id',
+};
+const OFE_ECART_LIBELLES = {
+  format:'Format', machine:'Machine', laize:'Laize', matiere:'Matière', glassine:'Glassine', adhesif_label:'Adhésif',
+  qte_au_mille:'Qté au mille', nb_fronts:'Nb fronts', outil_1_forme:'Outil 1 — forme', outil_1_numero:'Outil 1 — n°',
+  outil_2_forme:'Outil 2 — forme', outil_2_numero:'Outil 2 — n°', mandrins_dia:'Mandrin', mandrin_longueur:'Longueur du mandrin',
+  conditionnement:'Conditionnement', cartons_type:'Carton', cales_sachets:'Cales et sachets', palette_type:'Palette',
+  particularites:'Particularités',
+};
+function ofeMemeValeur(col,a,b,corrige){
+  const x=String(a==null?'':a).trim(), y=String(b==null?'':b).trim();
+  const nx=Number(x.replace(',','.')), ny=Number(y.replace(',','.'));
+  if(x!==''&&y!==''&&isFinite(nx)&&isFinite(ny)){
+    // Un OF Access porte la qté au mille arrondie à une décimale.
+    return Math.abs(nx-ny)<=((col==='qte_au_mille'&&!corrige)?0.06:0.0001);
+  }
+  return x.toLowerCase()===y.toLowerCase();
+}
+function ofeEcartsListe(m){
+  const r=m._ficheRef||{}, out=[];
+  Object.keys(r).forEach(function(col){
+    if(col==='reference'||OFE_REFS.indexOf(col)>=0) return;
+    const id=OFE_CHAMPS[col], el=id?document.getElementById(id):null;
+    if(!el||ofeMemeValeur(col,el.value,r[col],!!(m._manuels||{})[id])) return;
+    out.push({col:col,id:id,lib:OFE_ECART_LIBELLES[col]||col,fiche:String(r[col]),of:String(el.value||'').trim(),refId:m[OFE_REF_DE[col]]||null});
+  });
+  return out;
+}
+function ofeTexteValeur(v){
+  const t=String(v==null?'':v).trim();
+  if(t==='') return 'vide';
+  return /^-?\d+([.,]\d+)?$/.test(t)?Number(t.replace(',','.')).toLocaleString('fr-FR'):t;
+}
+function ofePeindreEcarts(m){
+  const z=document.getElementById('ofe-ecarts'), pied=document.getElementById('ofe-ecarts-pied');
+  if(!z) return;
+  const e=ofeEcartsListe(m), inc=m._incoherences||[];
+  const bouton='padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap';
+  const ligne='display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border-top:1px solid var(--border);font-size:13px;color:var(--text)';
+  let h='';
+  inc.forEach(function(x,i){
+    h+='<div style="'+ligne+'"><span style="color:var(--warn)">'+escHtml(x.message)+'</span><button type="button" data-incoh="'+i+'" style="'+bouton+'">'+(x.action==='completer'?'Compléter la levée':'Reprendre le calcul')+'</button></div>';
+  });
+  e.forEach(function(x){
+    h+='<div style="'+ligne+'"><span>'+escHtml(x.lib)+' : <span style="color:var(--muted)">'+escHtml(ofeTexteValeur(x.fiche))+'</span> → <strong>'+escHtml(ofeTexteValeur(x.of))+'</strong></span><button type="button" data-ecart="'+escAttr(x.col)+'" style="'+bouton+'">Revenir à la fiche</button></div>';
+  });
+  const total=e.length+inc.length;
+  z.style.display=total?'block':'none';
+  z.innerHTML=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">À relire avant d\'enregistrer</div>'+h:'';
+  if(pied){
+    pied.style.display=total?'inline-flex':'none';
+    pied.textContent=total+(total>1?' points à relire':' point à relire');
+  }
+}
+let _ofeEcartsJeton=0;
+async function ofeActualiserEcarts(m){
+  if(!m||!m._fiche) return;
+  const jeton=++_ofeEcartsJeton;
+  let p=null;
+  try{
+    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(m._fiche.id)+'&qte='+encodeURIComponent(_ofeQte())+
+      '&valeurs='+encodeURIComponent(JSON.stringify(ofeValeursCalcul()))+'&corriges='+encodeURIComponent(JSON.stringify(ofeCorriges(m))));
+  }catch(e){ return; }
+  if(S.ofEditModal!==m||jeton!==_ofeEcartsJeton) return;
+  m._ficheRef=p.fiche_valeurs||{};
+  m._incoherences=p.incoherences||[];
+  ofePeindreEcarts(m);
+}
+function ofeRevenirFiche(m,col){
+  const r=m._ficheRef||{}, id=OFE_CHAMPS[col];
+  if(!id||r[col]===undefined) return;
+  captureSaisie('ofe-',m);
+  m._dom=m._dom||{};
+  m._dom[id]=String(r[col]);
+  m[col]=r[col];
+  if(OFE_REF_DE[col]) m[OFE_REF_DE[col]]=r[OFE_REF_DE[col]]||null;
+  if(m._manuels) delete m._manuels[id];
+  m._modifie=true;
+  set({ofEditModal:m});
+  renderOfEditModal();
+  ofeRecalculer();
+}
+function ofeAligner(m,i){
+  const x=(m._incoherences||[])[i];
+  if(!x) return;
+  m._manuels=m._manuels||{};
+  if(x.action==='completer'){
+    const el=document.getElementById('ofe-bobines');
+    if(el) el.value=String(x.attendu);
+    m._manuels['ofe-bobines']=true;
+    delete m._manuels['ofe-nb-levees'];
+    m._qtePropose=''; m._arrondi=null; m._qteArrondir=false;
+  }else{
+    delete m._manuels[OFE_CALCULES[x.champ]];
+  }
+  m._modifie=true;
+  ofePeindreCases(m);
+  ofeRecalculer();
+}
+/* Changer de fiche : l'ADV dit quelles corrections suivent. Rend la liste des
+   champs gardés, ou null si elle renonce. */
+function ofeChoisirCorrections(ecarts){
+  return new Promise(function(fin){
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+    ov.innerHTML='<div role="dialog" aria-modal="true" aria-label="Changer de fiche technique" style="background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="padding:18px 22px;border-bottom:1px solid var(--border);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Changer de fiche technique</div>'+
+      '<div style="padding:16px 22px;overflow-y:auto;font-size:13px;line-height:1.5;color:var(--text)">Les valeurs de la nouvelle fiche remplacent celles de l\'OF. Cochez les corrections à garder.'+
+      ecarts.map(function(x,i){
+        return '<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border);margin-top:8px;cursor:pointer"><input type="checkbox" data-garde="'+i+'" style="margin-top:3px"><span>'+escHtml(x.lib)+' : <strong>'+escHtml(ofeTexteValeur(x.of))+'</strong></span></label>';
+      }).join('')+'</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border);background:var(--bg)">'+
+      '<button type="button" data-non style="padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Annuler</button>'+
+      '<button type="button" data-oui style="padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg,white);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Changer de fiche</button></div></div>';
+    const fermer=function(v){ document.removeEventListener('keydown',clavier,true); ov.remove(); fin(v); };
+    const clavier=function(e){ if(e.key==='Escape'){ e.stopPropagation(); fermer(null); } };
+    document.addEventListener('keydown',clavier,true);
+    ov.querySelector('[data-non]').onclick=function(){ fermer(null); };
+    ov.querySelector('[data-oui]').onclick=function(){
+      fermer(ecarts.filter(function(x,i){ return ov.querySelector('[data-garde="'+i+'"]').checked; }));
+    };
+    document.body.appendChild(ov);
+    ov.querySelector('[data-oui]').focus();
+  });
+}
+
 async function ofeVoirPdf(){
   const m=S.ofEditModal;
   if(!m) return;
@@ -2129,6 +2259,17 @@ async function ofeChoisirFiche(ficheId){
   // Choisie à la main (le cas d'office repose le drapeau après l'appel).
   m._ficheAuto=false;
   captureSaisie('ofe-',m);
+  // Rien ne se perd sans le dire : les corrections en cours sont soumises à l'ADV.
+  const ecartsAvant=ofeEcartsListe(m);
+  let gardes=[];
+  if(ecartsAvant.length){
+    gardes=await ofeChoisirCorrections(ecartsAvant);
+    if(gardes===null){
+      if(!m._fiche&&m._ficheAvant){ m._fiche=m._ficheAvant; set({ofEditModal:m}); renderOfEditModal(); }
+      return;
+    }
+    captureSaisie('ofe-',m);
+  }
   // Tant que l'ADV n'a pas tapé la quantité, elle repart de la commande : le
   // nombre de fronts, donc la levée, change avec la fiche.
   const saisie=String((m._dom&&m._dom['ofe-qte'])==null?'':m._dom['ofe-qte']).trim();
@@ -2165,7 +2306,14 @@ async function ofeChoisirFiche(ficheId){
     m[col]=val;
     poses.push(col);
   });
+  gardes.forEach(function(x){
+    m._dom[x.id]=x.of; m[x.col]=x.of;
+    if(OFE_REF_DE[x.col]) m[OFE_REF_DE[x.col]]=x.refId;
+    if(Object.values(OFE_CORRIGEABLES).indexOf(x.id)>=0) m._manuels[x.id]=true;
+  });
   m._ficheCols=poses;
+  m._ficheRef=p.fiche_valeurs||{};
+  m._incoherences=p.incoherences||[];
   m._fiche=p.fiche;
   m._auMetre=!!p.au_metre;
   m._modifie=true;
@@ -2177,6 +2325,7 @@ async function ofeChoisirFiche(ficheId){
   const q=document.getElementById('ofe-qte');
   if(q&&!q.value) q.focus({preventScroll:true});
   ofeControler(m);
+  if(gardes.length) ofeRecalculer();
 }
 window.ofeChoisirFiche = ofeChoisirFiche;
 
@@ -2189,6 +2338,7 @@ function ofeChangerFiche(){
   // fallait retaper une recherche à vide (retour du 17/11/2026).
   const cle=m._fiche&&m._fiche.reference?String(m._fiche.reference).split(' - ')[0].trim():'';
   const duProduit=((m._cmdInfo&&m._cmdInfo.fiches)||[]);
+  m._ficheAvant=m._fiche;
   m._fiche=null;
   m._fichesTrouvees=duProduit.length?duProduit:[];
   m._ficheIdx=0;
@@ -2261,6 +2411,7 @@ function ofeApercuPlusTard(m,delai){
 }
 async function ofeApercu(m){
   if(!m||S.ofEditModal!==m||(!m._fiche&&!m.id)) return;
+  ofeActualiserEcarts(m);
   if(document.querySelector('.ofe-feuille')){
     // La feuille montre déjà les cases : seules les bobinettes en découlent.
     const jetonB=++_ofeApercuJeton;
@@ -2549,6 +2700,14 @@ function ofeBrancherFiche(overlay,m){
       _ofeCalcTimer=setTimeout(ofeRecalculer,250);
     });
   }
+  overlay.addEventListener('click',function(e){
+    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],#ofe-ecarts-pied');
+    if(!b) return;
+    if(b.id==='ofe-ecarts-pied'){ const z=document.getElementById('ofe-ecarts'); if(z) z.scrollIntoView({block:'center'}); return; }
+    if(b.hasAttribute('data-ecart')) ofeRevenirFiche(m,b.getAttribute('data-ecart'));
+    else ofeAligner(m,Number(b.getAttribute('data-incoh')));
+  });
+  ofePeindreEcarts(m);
   const ref=overlay.querySelector('#ofe-reference');
   if(ref&&!m.id) ref.addEventListener('change',function(){ ofeControler(m); });
   ofeBrancherDates(overlay,m);
@@ -2917,6 +3076,7 @@ function renderOfEditModal(){
           ${(m._rvgiOf.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
         </div>`:''}`,true)}
       ${_sec('2 · Fiche technique, quantité et délai',_secFiche(),true)}
+      <div id="ofe-ecarts" style="display:none;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;padding:12px 16px 6px;background:var(--card)"></div>
       ${surOF?`<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;background:var(--accent-bg);border-bottom:1px solid var(--border)">
           <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">3 · L'OF — cliquez sur une case pour la corriger</span>
@@ -3036,7 +3196,7 @@ function renderOfEditModal(){
         +_ta('ofe-observations','Observations',m.observations,4),false)}
       </div>`}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding:12px 0 18px;border-top:1px solid var(--border);flex-wrap:wrap;position:sticky;bottom:-18px;background:var(--card);z-index:2">
-        <div>${m.id?`<button id="ofe-dossier-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Créer directement un dossier de prod</button>`:''}</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${m.id?`<button id="ofe-dossier-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Créer directement un dossier de prod</button>`:''}<button type="button" id="ofe-ecarts-pied" style="display:none;padding:7px 11px;border-radius:8px;border:1px solid var(--warn);background:transparent;color:var(--warn);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700"></button></div>
         <div style="display:flex;gap:10px">
           <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
           <button id="ofe-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">${creation?'Créer':'Enregistrer'}</button>
@@ -3065,7 +3225,7 @@ function renderOfEditModal(){
     // Toute modification redessine l'OF : frappe, choix d'une liste, case
     // recopiée de la fiche ou recalculée (ces dernières appellent aussi
     // ofeApercuPlusTard, car un .value posé par le code ne déclenche rien).
-    overlay.addEventListener('input',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q'){ m._modifie=true; ofeApercuPlusTard(m); } });
+    overlay.addEventListener('input',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q'){ m._modifie=true; ofePeindreEcarts(m); ofeApercuPlusTard(m); } });
     overlay.addEventListener('change',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q') m._modifie=true; ofeApercuPlusTard(m); });
     const bRecalc=overlay.querySelector('#ofe-recalc-btn');
     if(bRecalc) bRecalc.onclick=function(){

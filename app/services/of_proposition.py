@@ -374,6 +374,42 @@ def appliquer_corrections(calc: Dict[str, Any], fiche: Dict[str, Any], valeurs: 
         calc["qte_adhesif_kg"] = round(g * metrage * lz / 1_000_000, 3)
 
 
+_LIBELLES_COHERENCE = {
+    "metrage": ("Métrage", " m"), "nb_cartons": ("Cartons", ""), "nb_mandrins": ("Mandrins", ""),
+    "nb_tubes": ("Tubes", ""), "qte_adhesif_kg": ("Adhésif", " kg"),
+}
+
+
+def controler_coherence(attendus: Dict[str, Any], valeurs: Dict[str, Any],
+                        fiche: Dict[str, Any], corriges: Any) -> List[Dict[str, Any]]:
+    """Ce que l'OF affiche et qui contredit son propre calcul.
+
+    Rien ne bloque : l'ADV peut avoir ses raisons. On le dit, chiffres à
+    l'appui, et l'écran propose d'aligner d'un clic.
+    """
+    corr = lire_corriges(corriges)
+    out: List[Dict[str, Any]] = []
+    for col, (libelle, unite) in _LIBELLES_COHERENCE.items():
+        attendu, actuel = _nombre(attendus.get(col)), _nombre(valeurs.get(col))
+        if col not in corr or not attendu or not actuel:
+            continue
+        if abs(attendu - actuel) > (0.05 if col == "qte_adhesif_kg" else 0.5):
+            out.append({"champ": col, "action": "calcul", "attendu": attendus[col],
+                        "message": "%s : le calcul donne %s%s, l'OF indique %s%s." % (
+                            libelle, _texte_qte(attendu), unite, _texte_qte(actuel), unite)})
+    bobines, fronts = _nombre(valeurs.get("qte_bobines")), _nombre(fiche.get("outil1_nb_front"))
+    if bobines and fronts:
+        levees = math.ceil(round(bobines / fronts, 6))
+        complet = levees * fronts
+        if abs(complet - bobines) > 0.001:
+            out.append({"champ": "qte_bobines", "action": "completer", "attendu": int(round(complet)),
+                        "message": "Dernière levée incomplète : %s bobines pour %s levées de %s. "
+                                   "Des levées complètes font %s bobines." % (
+                                       _texte_qte(bobines), _texte_qte(levees),
+                                       _texte_qte(fronts), _texte_qte(complet))})
+    return out
+
+
 def arrondir_a_la_levee(fiche: Dict[str, Any], qte: Any) -> Optional[Dict[str, Any]]:
     """La quantité commandée, portée à la levée complète supérieure.
 
@@ -520,11 +556,15 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
         poser("qte_au_mille", round(qam, 4),
               "fiche" if _nombre(fiche.get("qte_au_mille")) else "calcul")
 
+    # Ce que dit la fiche, avant tout calcul : la référence des écarts de l'OF.
+    fiche_valeurs = dict(champs)
     adhesif = valeurs.get("adhesif_label") or champs.get("adhesif_label")
     grammage = grammage_adhesif(conn, adhesif)
     laize = _nombre(valeurs.get("laize")) or champs.get("laize")
     calc = calculer_quantites(base_calcul, qte_etiquettes, laize=laize, grammage=grammage)
+    attendus = {c: calc[c] for c in CHAMPS_CALCULES if c in calc}
     appliquer_corrections(calc, base_calcul, valeurs, corriges, laize, grammage)
+    incoherences = controler_coherence(attendus, calc, base_calcul, corriges)
     manques = calc.pop("_manques", [])
     if calc.get("_info"):
         manques.insert(0, calc.pop("_info"))
@@ -544,6 +584,8 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
         "champs": champs,
         "provenance": provenance,
         "calcules": [c for c in CHAMPS_CALCULES if c in champs],
+        "fiche_valeurs": fiche_valeurs,
+        "incoherences": incoherences,
         "qte_proposee": int(round(_nombre(qte_etiquettes) or 0)) or None,
         # Absent quand la commande tombe déjà sur une levée complète.
         "arrondi": arrondi if arrondi and arrondi["proposee"] != arrondi["commandee"] else None,
