@@ -3461,7 +3461,7 @@ function renderExpeDevisModal(){
     };
     ss.addEventListener('change',e=>{f.sans_suite=e.target.checked;majSansSuite();});
     box.appendChild(h('div',{className:'expe-devis-grid'},
-      h('label',{className:'expe-devis-label'},'Prix HT (€)',prix),
+      h('label',{className:'expe-devis-label',title:'Taxe carburant, surcharges et frais annexes inclus : ajouter la taxe si le transporteur l\'a donnée à part.'},'Prix HT tout compris (€)',prix),
       h('label',{className:'expe-devis-label'},'Délai (j. ouvrés)',del),
       h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Commentaire',com)
     ));

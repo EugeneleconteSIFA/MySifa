@@ -75,15 +75,21 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
                 "no account and no password required."
             ),
             "step2": (
-                "Enter your <strong style=\"color:#0f172a\">net price (excl. tax)</strong> "
+                "Enter your <strong style=\"color:#0f172a\">all-in price, excluding VAT</strong> "
                 "and your <strong style=\"color:#0f172a\">delivery lead time</strong>."
             ),
             "step3": "Submit. Your quote reaches our shipping department instantly.",
             "cta": "Submit my quote on the portal",
             "copy_link": "If the button does not work, copy this link into your browser:",
             "ask": (
-                "Please submit your <strong style=\"color:#0f172a\">best net price (excl. tax)</strong> "
+                "Please submit your <strong style=\"color:#0f172a\">best all-in price, excluding VAT</strong> "
                 "and <strong style=\"color:#0f172a\">estimated delivery time</strong> on the portal."
+            ),
+            "allin_title": "All-in price",
+            "allin": (
+                "Fuel surcharge, other surcharges and ancillary fees (appointment, tail lift, "
+                "security, etc.) included. Only VAT is excluded. A price that leaves out the fuel "
+                "surcharge cannot be compared with the other quotes."
             ),
             "hint": "It takes less than a minute: price and lead time only.",
             "regards": "Kind regards,",
@@ -111,15 +117,21 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
             "sans compte ni mot de passe."
         ),
         "step2": (
-            "Renseignez votre <strong style=\"color:#0f172a\">prix HT</strong> "
+            "Renseignez votre <strong style=\"color:#0f172a\">prix HT tout compris</strong> "
             "et votre <strong style=\"color:#0f172a\">délai de livraison</strong>."
         ),
         "step3": "Validez. Votre tarif arrive immédiatement au service expéditions.",
         "cta": "Saisir mon tarif sur le portail",
         "copy_link": "Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :",
         "ask": (
-            "Merci de nous transmettre votre <strong style=\"color:#0f172a\">meilleur tarif HT</strong> "
+            "Merci de nous transmettre votre <strong style=\"color:#0f172a\">meilleur tarif HT tout compris</strong> "
             "et le <strong style=\"color:#0f172a\">délai de livraison estimé</strong> sur le portail."
+        ),
+        "allin_title": "Prix tout compris",
+        "allin": (
+            "Taxe carburant (gazole), surcharges et frais annexes (prise de rendez-vous, hayon, "
+            "sûreté…) inclus. Seule la TVA est exclue. Un prix hors taxe carburant ne peut pas "
+            "être comparé aux autres offres."
         ),
         "hint": "La saisie prend moins d'une minute : prix et délai uniquement.",
         "regards": "Cordialement,",

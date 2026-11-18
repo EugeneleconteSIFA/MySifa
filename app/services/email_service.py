@@ -294,6 +294,21 @@ def _rfq_email_body_block(
             "</tr>"
         )
 
+    # Prix « tout compris » : sans cette mention, une partie des transporteurs
+    # répondait hors taxe carburant et l'autre gazole inclus, et le
+    # comparateur classait des prix qui ne mesuraient pas la même chose.
+    allin_block = f"""
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:0 0 16px">
+      <tr>
+        <td bgcolor="#fef9e7" style="background:#fef9e7;border:1px solid #fcd34d;border-radius:12px;padding:14px 18px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.55px;color:#92400e;font-weight:800;margin-bottom:6px">
+            {_esc(s["allin_title"])}
+          </div>
+          <div style="font-size:13px;color:#78350f;line-height:1.6">{_esc(s["allin"])}</div>
+        </td>
+      </tr>
+    </table>"""
+
     how_block = f"""
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:0 0 4px">
       <tr>
@@ -317,6 +332,7 @@ def _rfq_email_body_block(
     {cp_highlight}
     {detail_table}
     <p style="margin:0 0 16px;font-size:14px;color:#475569;line-height:1.65">{s["ask"]}</p>
+    {allin_block}
     {how_block}
     {cta}
     <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
