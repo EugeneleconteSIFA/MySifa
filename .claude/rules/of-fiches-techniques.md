@@ -256,6 +256,13 @@ esthétiques, les déplacer sort le texte de sa case.
 Le modèle est en **A4** (595,28 × 841,92). La première version du générateur
 supposait du US Letter : 46 points de décalage cumulés en bas de page.
 
+**L'OF se corrige directement à l'écran** (décision du 18/11/2026). Au-delà de
+900 px, la fenêtre pose une vraie case sur chaque valeur, aux positions de
+`_CHAMPS` (`cases_du_modele()`, `GET /api/of/modele`), sur `data/of_modele.png`.
+Refaire le modèle PDF impose de refaire cette image. Une case imprimée ajoutée à
+`_CHAMPS` s'ajoute aussi à `OFE_FEUILLE` (`mysifa_prod_core.js`) ; le test le
+vérifie. Sous 900 px, le formulaire reste.
+
 Piège : `merge_page` colle la surcouche à la suite du flux du modèle, qui finit
 par « … W* n Q » sans retour à la ligne. Collé au « Q » qu'ouvre pypdf, cela
 donne l'opérateur « QQ », que ne connaît aucun lecteur — et la page s'affiche

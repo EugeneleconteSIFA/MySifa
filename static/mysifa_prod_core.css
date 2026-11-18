@@ -1919,3 +1919,20 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
   .table-std.table-actions-wide.prod-liste-of th.th-actions,
   .table-std.table-actions-wide.prod-liste-of td.td-actions{width:auto !important;min-width:0 !important;max-width:none !important}
 }
+
+/* OF corrigé directement sur la feuille. La feuille reste blanche dans tous les
+   thèmes : c'est le papier de l'atelier. */
+.ofe-feuille{position:relative;container-type:inline-size;width:100%;max-width:1040px;margin:0 auto;aspect-ratio:595.28/841.92;background:#fff center/100% 100% no-repeat}
+.ofe-case{position:absolute;box-sizing:border-box;margin:0;padding:0 2px;border:1px dashed transparent;border-radius:3px;background:transparent;color:#000;font-family:Helvetica,Arial,sans-serif;font-weight:700;line-height:1.1;outline:none;min-width:0;appearance:none;-webkit-appearance:none}
+.ofe-case[type=number]{-moz-appearance:textfield}
+.ofe-case::-webkit-outer-spin-button,.ofe-case::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.ofe-case::-webkit-calendar-picker-indicator{display:none}
+textarea.ofe-case{resize:none;overflow:hidden}
+button.ofe-case{cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ofe-case:hover{border-color:#0891b2;background:rgba(8,145,178,.08)}
+.ofe-case:focus{border:1px solid #0891b2;background:#fff}
+.ofe-case.ofe-case-cor{background:rgba(8,145,178,.2);border:1px solid #0891b2;color:#155e75}
+.ofe-case.ofe-case-suit{background:rgba(22,163,74,.25);border:1px solid #16a34a;transition:background .3s}
+.ofe-bobinette{position:absolute;line-height:1;color:#000;font-family:Helvetica,Arial,sans-serif;font-weight:700;white-space:nowrap;pointer-events:none}
+.ofe-legende{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.ofe-legende i{display:inline-block;width:11px;height:11px;border-radius:3px}

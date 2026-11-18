@@ -222,6 +222,51 @@ _BOBINETTES_X = 397.8
 _BOBINETTES_Y = [778.6, 790.5, 802.3, 814.2]
 
 
+# Largeur des petites cases à l'écran : celle du cadre du modèle. Sans elle, une
+# case corrigée se colore par-dessus le libellé voisin.
+_LARGEURS_ECRAN = {
+    "date_creation": 54.0, "delai_client": 62.0, "laize": 54.0, "ref_adhesif": 50.0,
+    "qte_adhesif_g": 44.0, "qte_adhesif_kg": 40.0, "qte_au_mille": 36.0, "nb_levees": 34.0,
+    "qte_etiquettes": 48.0, "qte_bobines": 48.0, "metrage": 50.0, "machine": 120.0,
+    "bobinettes_completes": 70.0, "mandrin_longueur": 60.0, "nb_cartons": 50.0,
+    "nb_mandrins": 50.0, "nb_tubes": 50.0, "nb_palettes": 34.0,
+}
+
+
+def cases_du_modele() -> dict:
+    """Où poser les cases modifiables à l'écran : les positions de l'impression.
+
+    L'écran et le PDF lisent les mêmes `_CHAMPS` : une case déplacée ici bouge
+    aux deux endroits. La largeur s'arrête avant la case voisine de la ligne.
+    """
+    def gauche(c):
+        return c[1] - _LARGEURS_ECRAN.get(c[0], 72.0) if c[5] == "d" else c[1]
+
+    cases = []
+    for c in _CHAMPS:
+        cle, x, y, taille, _gras, align, _fmt_c = c
+        h = taille * 1.55
+        if align == "d":
+            l = _LARGEURS_ECRAN.get(cle, 72.0)
+        else:
+            suivantes = [gauche(o) for o in _CHAMPS
+                         if o[0] != cle and abs(o[2] - y) < 9 and gauche(o) > x]
+            borne = min(suivantes) - 3 if suivantes else 572.0
+            l = min(borne - x, _LARGEURS_ECRAN.get(cle, _LARGEURS.get(cle, 150.0)))
+        cases.append({"cle": cle, "x": round(gauche(c), 1), "y": round(y - h + 2, 1),
+                      "l": round(l, 1), "h": round(h, 1), "taille": taille, "align": align})
+    zones = [{"cle": cle, "x": x, "y": round(y - taille * 1.2, 1), "l": largeur,
+              "h": round(interligne * maxi + 3, 1), "taille": taille}
+             for cle, x, y, largeur, taille, interligne, maxi in _ZONES]
+    return {"page": {"l": _PAGE_W, "h": _PAGE_H}, "cases": cases, "zones": zones,
+            "bobinettes": {"x": _BOBINETTES_X, "y": _BOBINETTES_Y, "taille": 10}}
+
+
+def lignes_bobinettes(d: dict) -> list:
+    """Les lignes de bobinettes de l'OF, telles qu'elles seront imprimées."""
+    return _lignes_bobinettes(dict(d or {}))
+
+
 def _lignes_bobinettes(d: dict) -> list:
     """Les quatre lignes de l'étiquette de bobinette.
 

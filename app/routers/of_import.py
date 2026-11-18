@@ -17,7 +17,7 @@ import pdfplumber
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 
-from config import UPLOAD_DIR
+from config import BASE_DIR, UPLOAD_DIR
 from database import get_db
 from services.auth_service import get_current_user, require_superadmin
 from app.services.documents_verite import (
@@ -2078,6 +2078,39 @@ def of_depuis_commandes(request: Request):
         except ValueError:
             sauf = None
         return depuis_commandes(conn, lignes[:200], sauf_of_id=sauf)
+
+
+@router.get("/api/of/modele")
+def of_modele(request: Request):
+    """Les positions des cases de l'OF, pour les corriger directement dessus."""
+    _require_of_access(request)
+    from app.services.of_pdf_generator import cases_du_modele
+    return cases_du_modele()
+
+
+@router.get("/api/of/modele.png")
+def of_modele_image(request: Request):
+    """Le modèle vierge de l'OF en image, fond de la feuille à l'écran."""
+    _require_of_access(request)
+    chemin = os.path.join(BASE_DIR, "data", "of_modele.png")
+    if not os.path.isfile(chemin):
+        raise HTTPException(status_code=503, detail="Modèle d'OF introuvable sur le serveur.")
+    return FileResponse(chemin, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.post("/api/of/apercu-derives")
+async def of_apercu_derives(request: Request):
+    """Ce que l'OF imprime sans que ce soit une case : les bobinettes."""
+    _require_of_access(request)
+    body = await request.json()
+    champs = {k: _coerce_of_value(k, v) for k, v in body.items() if k in OF_DATA_FIELDS}
+    from app.services.of_pdf_generator import lignes_bobinettes
+    from app.services.of_proposition import libelles_de_la_fiche
+    with get_db() as conn:
+        _appliquer_references(conn, champs, REFERENCES_OF)
+        libelles_de_la_fiche(conn, champs, body.get("fiche_id"))
+    return {"bobinettes": lignes_bobinettes(champs)}
 
 
 @router.post("/api/of/apercu")
