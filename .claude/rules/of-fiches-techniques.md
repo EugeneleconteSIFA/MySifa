@@ -143,6 +143,13 @@ besoin matière faux, et l'erreur se voyait à l'inventaire, pas à l'écran.
 référence de la fiche. L'id reste posé : besoins matières et déstockage le
 lisent. Une matière changée à la main garde sa désignation MyStock.
 
+**Une correction de l'ADV reste sur l'OF** (décision du 18/11/2026).
+`of_imports.champs_corriges` liste les cases corrigées à la main ; `champs_manuels`
+ne peut pas servir, il marque tout à la création. Les calculs partent de la fiche
+vue à travers l'OF (`of_proposition.fiche_selon_of`). Étiquettes, bobines et levées
+forment une chaîne : la dernière corrigée mène les deux autres. Une correction ne
+modifie jamais la fiche technique.
+
 Un id à `None` détache la référence **sans effacer le texte** : un OF Access
 porte un libellé qu'aucune référence ne recouvre encore, et le perdre serait
 perdre la seule chose qu'on sache de sa matière. L'écran affiche alors

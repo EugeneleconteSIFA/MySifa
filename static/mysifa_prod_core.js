@@ -1533,7 +1533,9 @@ async function openOfEditModal(row){
       return;
     }
   }
-  set({ofEditModal:{...plein}});
+  const ouvert={...plein};
+  ofeLireCorriges(ouvert);
+  set({ofEditModal:ouvert});
   renderOfEditModal();
   // Un OF existant ne stocke pas sa fiche : on la retrouve comme l'aperçu,
   // pour que l'étape 2 la montre et que le nombre d'étiquettes recalcule.
@@ -1551,8 +1553,15 @@ async function openOfEditModal(row){
       if(!m||m.id!==plein.id||!r||!r.fiche) return;
       captureSaisie('ofe-',m);
       m._fiche=r.fiche;
+      // OF antérieur au nombre de fronts : celui de sa fiche.
+      if(m.nb_fronts==null&&r.fiche.nb_fronts){
+        m.nb_fronts=Math.round(r.fiche.nb_fronts);
+        m._dom['ofe-nb-fronts']=String(m.nb_fronts);
+      }
       set({ofEditModal:m});
       renderOfEditModal();
+      // Une saisie faite avant l'arrivée de la fiche n'a rien pu recalculer.
+      if(m._modifie) ofeRecalculer();
     }).catch(function(){});
   }
 }
@@ -1579,7 +1588,7 @@ const OFE_CHAMPS = {
   laize:'ofe-laize', matiere:'ofe-matiere', glassine:'ofe-glassine',
   adhesif_label:'ofe-adhesif-label', ref_adhesif:'ofe-ref-adhesif',
   qte_adhesif_g:'ofe-qte-adhesif-g', qte_adhesif_kg:'ofe-qte-adhesif-kg',
-  qte_au_mille:'ofe-qte-mille', nb_levees:'ofe-nb-levees',
+  qte_au_mille:'ofe-qte-mille', nb_levees:'ofe-nb-levees', nb_fronts:'ofe-nb-fronts',
   conditionnement:'ofe-cond', tolerance:'ofe-tolerance',
   cartons_type:'ofe-cartons-type', mandrins_dia:'ofe-mandrins-dia',
   mandrin_longueur:'ofe-mandrin-longueur', cales_sachets:'ofe-cales',
@@ -1777,8 +1786,12 @@ function ofeChoisirRef(famille, colId, domId, colTxt){
       m[colTxt]=r.designation;
       m._dom=m._dom||{};
       m._dom[domId]=r.designation;
+      if(colId==='mandrin_ref_id'){ m._manuels=m._manuels||{}; m._manuels[domId]=true; }
+      m._modifie=true;
       set({ofEditModal:m});
       renderOfEditModal();
+      // Le mandrin change les tubes, l'adhésif son grammage.
+      if(colId==='mandrin_ref_id'||colId==='adhesif_ref_id') ofeRecalculer();
       if(r.brouillon) toast('Référence créée en brouillon — à compléter dans MyStock.','info');
     },
   });
@@ -1882,7 +1895,45 @@ const OFE_CALCULES_LIBELLES = {
   nb_levees:'levées', nb_tubes:'tubes', nb_cartons:'cartons',
   qte_adhesif_g:'grammage adhésif', qte_adhesif_kg:'adhésif (kg)',
 };
-let _ofeFicheTimer=null, _ofeCalcTimer=null;
+/* Cases de l'OF qui nourrissent le calcul : corrigées, elles priment sur la
+   fiche. Étiquettes, bobines et levées forment une chaîne : la dernière
+   corrigée mène les deux autres. */
+const OFE_SOURCES = {
+  nb_fronts:'ofe-nb-fronts', laize:'ofe-laize', qte_au_mille:'ofe-qte-mille',
+  conditionnement:'ofe-cond', mandrins_dia:'ofe-mandrins-dia', mandrin_longueur:'ofe-mandrin-longueur',
+};
+const OFE_SOURCES_LIBELLES = {
+  nb_fronts:'nb de fronts', laize:'laize', qte_au_mille:'qté au mille',
+  conditionnement:'conditionnement', mandrins_dia:'mandrin', mandrin_longueur:'longueur du mandrin',
+};
+const OFE_CORRIGEABLES = Object.assign({},OFE_CALCULES,OFE_SOURCES);
+let _ofeFicheTimer=null, _ofeCalcTimer=null, _ofeCalcJeton=0;
+
+/* Les corrections enregistrées redeviennent des corrections à l'ouverture. */
+function ofeLireCorriges(m){
+  m._manuels={};
+  let l=[];
+  try{ l=JSON.parse(m.champs_corriges||'[]'); }catch(e){ l=[]; }
+  (Array.isArray(l)?l:[]).forEach(function(c){ if(OFE_CORRIGEABLES[c]) m._manuels[OFE_CORRIGEABLES[c]]=true; });
+}
+function ofeCorriges(m){
+  return Object.keys(OFE_CORRIGEABLES).filter(c=>(m._manuels||{})[OFE_CORRIGEABLES[c]]);
+}
+/* Ce que le serveur doit relire sur l'OF pour recalculer. */
+function ofeValeursCalcul(){
+  const v={};
+  Object.keys(OFE_CORRIGEABLES).forEach(function(c){
+    const el=document.getElementById(OFE_CORRIGEABLES[c]);
+    if(el&&String(el.value).trim()!=='') v[c]=el.value;
+  });
+  const a=document.getElementById('ofe-adhesif-label');
+  if(a&&a.value) v.adhesif_label=a.value;
+  return v;
+}
+function ofeQteSuitCommande(m){
+  const v=_ofeQte();
+  return !!m._qteCommandee&&(!v||v===String(m._qtePropose==null?'':m._qtePropose));
+}
 
 function _ofeQte(){
   const el=document.getElementById('ofe-qte');
@@ -1995,6 +2046,9 @@ async function ofeChoisirFiche(ficheId){
   m._qteArrondir=false;
   if(arrondir) ofePoserQte(m,p); else m._arrondi=null;
   m._manuels=m._manuels||{};
+  // Une autre fiche, c'est un autre produit : ses fronts, sa laize et ses
+  // levées remplacent ceux de la fiche précédente.
+  Object.values(OFE_SOURCES).concat(['ofe-nb-levees','ofe-bobines']).forEach(function(id){ delete m._manuels[id]; });
   // Ce que la fiche précédente avait posé s'efface : sinon une case que la
   // nouvelle fiche laisse vide garderait la valeur d'un autre produit.
   (m._ficheCols||[]).forEach(function(col){
@@ -2059,15 +2113,22 @@ async function ofeRecalculer(){
   if(!m||!m._fiche) return;
   const arrondir=!!m._qteArrondir&&!!m._qteCommandee;
   const qte=arrondir?String(m._qteCommandee):_ofeQte();
+  const jeton=++_ofeCalcJeton;
   let p=null;
   try{
-    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(m._fiche.id)+'&qte='+encodeURIComponent(qte)+(arrondir?'&arrondir=1':''));
+    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(m._fiche.id)+'&qte='+encodeURIComponent(qte)+(arrondir?'&arrondir=1':'')+
+      '&valeurs='+encodeURIComponent(JSON.stringify(ofeValeursCalcul()))+'&corriges='+encodeURIComponent(JSON.stringify(ofeCorriges(m))));
   }catch(e){ return; }
-  if(S.ofEditModal!==m) return;
   // Une frappe arrivée pendant la demande l'emporte sur sa réponse.
-  if(arrondir?!m._qteArrondir:_ofeQte()!==qte) return;
+  if(S.ofEditModal!==m||jeton!==_ofeCalcJeton) return;
   m._dom=m._dom||{};
   if(arrondir){ m._qteArrondir=false; ofePoserQte(m,p); }
+  else if(((m._manuels||{})['ofe-nb-levees']||(m._manuels||{})['ofe-bobines'])&&p.qte_proposee){
+    // Levées ou bobines corrigées : la quantité les suit.
+    const s=String(p.qte_proposee), champ=document.getElementById('ofe-qte');
+    if(champ) champ.value=s;
+    m._dom['ofe-qte']=s; m.qte_etiquettes=p.qte_proposee;
+  }
   m._manuels=m._manuels||{};
   Object.keys(OFE_CALCULES).forEach(function(col){
     const id=OFE_CALCULES[col];
@@ -2291,8 +2352,9 @@ function ofeRepeindreDates(overlay,m){
 
 function ofeInfoFiche(m){
   const calc=(m._ficheCalcules||[]).map(c=>OFE_CALCULES_LIBELLES[c]||c);
-  const manuels=Object.keys(OFE_CALCULES).filter(c=>(m._manuels||{})[OFE_CALCULES[c]])
-    .map(c=>OFE_CALCULES_LIBELLES[c]||c);
+  const libelles=Object.assign({},OFE_CALCULES_LIBELLES,OFE_SOURCES_LIBELLES);
+  const mene=(m._manuels||{})['ofe-nb-levees']?'levées':((m._manuels||{})['ofe-bobines']?'bobines':'');
+  const manuels=ofeCorriges(m).filter(c=>c!=='nb_levees'&&c!=='qte_bobines').map(c=>libelles[c]||c);
   let h='';
   const r=m._cmdInfo;
   if(r&&!r.article&&(m._commandes||[]).length){
@@ -2323,7 +2385,8 @@ function ofeInfoFiche(m){
       '<button type="button" onclick="ofeGarderQteCommandee()" style="background:none;border:none;padding:0;color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;text-decoration:underline">Garder '+n(a.commandee)+'</button></div>';
   }
   if(calc.length) h+='<div>Calculé à partir du nombre '+(m._auMetre?'de rouleaux':'d\'étiquettes')+' : '+escHtml(calc.join(', '))+'.</div>';
-  if(manuels.length) h+='<div>Corrigé à la main, plus recalculé : '+escHtml(manuels.join(', '))+'.</div>';
+  if(mene) h+='<div>La quantité suit les '+mene+' corrigées.</div>';
+  if(manuels.length) h+='<div>Corrigé à la main : '+escHtml(manuels.join(', '))+'.</div>';
   (m._ficheManques||[]).forEach(function(x){ h+='<div style="color:var(--danger)">· '+escHtml(x)+'</div>'; });
   return h;
 }
@@ -2366,6 +2429,9 @@ function ofeBrancherFiche(overlay,m){
   if(qte){
     qte.addEventListener('input',function(){
       m._qteArrondir=false; m._arrondi=null;
+      // La quantité reprend la main sur les bobines et les levées.
+      if(m._manuels){ delete m._manuels['ofe-nb-levees']; delete m._manuels['ofe-bobines']; }
+      _ofeCalcJeton++;
       clearTimeout(_ofeCalcTimer);
       _ofeCalcTimer=setTimeout(ofeRecalculer,250);
     });
@@ -2378,14 +2444,24 @@ function ofeBrancherFiche(overlay,m){
     m._dom=m._dom||{}; m._dom['ofe-delai']=champDelai.value;
     ofeRepeindreDates(overlay,m);
   });
-  // Une case calculée corrigée à la main n'est plus recalculée.
-  const ids=Object.values(OFE_CALCULES);
+  // Une case corrigée à la main le reste, et ce qui en dépend suit. La vider
+  // la rend au calcul.
+  const ids=Object.values(OFE_CORRIGEABLES);
   overlay.addEventListener('input',function(e){
     const id=e.target&&e.target.id;
-    if(id&&ids.indexOf(id)>=0){
-      m._manuels=m._manuels||{};
-      m._manuels[id]=true;
+    if(!id||ids.indexOf(id)<0) return;
+    m._manuels=m._manuels||{};
+    if(String(e.target.value).trim()==='') delete m._manuels[id]; else m._manuels[id]=true;
+    if(id==='ofe-nb-levees'||id==='ofe-bobines'){
+      delete m._manuels[id==='ofe-nb-levees'?'ofe-bobines':'ofe-nb-levees'];
+      m._arrondi=null; m._qteArrondir=false; m._qtePropose='';
+    }else if((id==='ofe-nb-fronts'||id==='ofe-cond')&&ofeQteSuitCommande(m)){
+      // Une levée d'une autre taille : l'arrondi de la commande est à refaire.
+      m._qteArrondir=true;
     }
+    _ofeCalcJeton++;
+    clearTimeout(_ofeCalcTimer);
+    _ofeCalcTimer=setTimeout(ofeRecalculer,300);
   });
 }
 
@@ -2420,6 +2496,8 @@ function ofeLirePayload(m){
     adhesif_label:        tv('ofe-adhesif-label'),
     qte_au_mille:         nv('ofe-qte-mille'),
     nb_levees:            iv('ofe-nb-levees'),
+    nb_fronts:            iv('ofe-nb-fronts'),
+    champs_corriges:      ofeCorriges(m),
     qte_etiquettes:       iv('ofe-qte'),
     qte_bobines:          nv('ofe-bobines'),
     metrage:              iv('ofe-metrage'),
@@ -2721,11 +2799,12 @@ function renderOfEditModal(){
         </div>`:''}`,true)}
       ${_sec('2 · Fiche technique, quantité et délai',_secFiche(),true)}
       ${_sec('3 · Quantités à vérifier',[
+        _f('ofe-nb-fronts','Nb fronts',m.nb_fronts,'number'),
         _f('ofe-nb-levees','Nb levées',m.nb_levees,'number'),
         _f('ofe-bobines','Qté bobines',m.qte_bobines,'number'),
         _f('ofe-metrage','Métrage',m.metrage,'number'),
         `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
-          Calculées depuis la fiche et le nombre d'étiquettes. Une valeur corrigée à la main (levées arrondies…) n'est plus recalculée.
+          Corriger les levées ou les bobines met à jour la quantité. Les autres valeurs corrigées à la main restent telles quelles.
           <button type="button" id="ofe-recalc-btn" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
         </div>`,
       ].join(''),true)}
@@ -2848,7 +2927,11 @@ function renderOfEditModal(){
     overlay.addEventListener('input',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q'){ m._modifie=true; ofeApercuPlusTard(m); } });
     overlay.addEventListener('change',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q') m._modifie=true; ofeApercuPlusTard(m); });
     const bRecalc=overlay.querySelector('#ofe-recalc-btn');
-    if(bRecalc) bRecalc.onclick=function(){ m._manuels={}; ofeRecalculer(); };
+    if(bRecalc) bRecalc.onclick=function(){
+      // Les quantités repartent du calcul ; fronts, laize et mandrin corrigés restent.
+      Object.values(OFE_CALCULES).forEach(function(id){ if(m._manuels) delete m._manuels[id]; });
+      ofeRecalculer();
+    };
     ofeApercuPlusTard(m,0);
   }
   // En création, le questionnaire ne montre que ce que l'ADV remplit : fiche,

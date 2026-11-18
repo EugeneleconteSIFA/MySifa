@@ -36,7 +36,7 @@ OF_REAL_FIELDS = frozenset({
 })
 OF_INT_FIELDS = frozenset({
     "nb_levees", "qte_etiquettes", "metrage", "nb_cartons",
-    "nb_mandrins", "nb_tubes", "nb_palettes",
+    "nb_mandrins", "nb_tubes", "nb_palettes", "nb_fronts",
     "matiere_ref_id", "glassine_ref_id", "adhesif_ref_id",
     "carton_ref_id", "mandrin_ref_id", "palette_ref_id",
 })
@@ -75,6 +75,8 @@ OF_DATA_FIELDS = [
     "plieuse_pignon", "nb_pouces", "texte_bobinettes",
     # Type de palette : UN champ, pas deux compteurs Europe/perdues.
     "palette_type", "nb_palettes",
+    # Nombre de fronts retenu pour cet OF : il part de la fiche, l'ADV l'ajuste.
+    "nb_fronts",
     # Références MyStock. C'est l'id qui fait foi ; la colonne texte en
     # découle (voir _appliquer_references).
     "matiere_ref_id", "glassine_ref_id", "adhesif_ref_id",
@@ -536,9 +538,10 @@ async def validate_of(
             avant = dict(conn.execute(
                 "SELECT * FROM of_imports WHERE id = ?", (replaced_id,)
             ).fetchone())
-            set_cols = list(OF_DATA_FIELDS) + tail_cols
+            # Le papier remplace tout : les corrections d'avant n'ont plus d'objet.
+            set_cols = list(OF_DATA_FIELDS) + tail_cols + ["champs_corriges"]
             set_sql = ", ".join(f"{c} = ?" for c in set_cols)
-            vals = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals + [replaced_id]
+            vals = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals + [None, replaced_id]
             conn.execute(f"UPDATE of_imports SET {set_sql} WHERE id = ?", vals)
             constater_remplacement(
                 conn, "of_imports", replaced_id, avant,
@@ -652,10 +655,14 @@ async def update_of_import(of_id: int, request: Request):
     # `laize` en faisait partie, alors qu'elle alimente le calcul adhesif MyStock.
     EDITABLE = frozenset(OF_DATA_FIELDS)
     # Cles techniques que la modale peut renvoyer sans qu'il faille les ecrire.
-    IGNORABLES = frozenset({"id", "statut", "pdf_filename", "date_import", "imported_by", "fiche_id"})
+    IGNORABLES = frozenset({"id", "statut", "pdf_filename", "date_import", "imported_by",
+                            "fiche_id", "champs_corriges"})
 
     updates = {k: _coerce_of_value(k, v) for k, v in body.items() if k in EDITABLE}
     ignores = sorted(k for k in body if k not in EDITABLE and k not in IGNORABLES)
+    if "champs_corriges" in body:
+        from app.services.of_proposition import lire_corriges
+        updates["champs_corriges"] = json.dumps(lire_corriges(body.get("champs_corriges")))
     if not updates:
         raise HTTPException(
             status_code=400,
@@ -2036,9 +2043,15 @@ def of_proposition(request: Request):
     if not fiche_id:
         raise HTTPException(status_code=400, detail="Fiche technique absente.")
     from app.services.of_proposition import proposer
+    try:
+        valeurs = json.loads(request.query_params.get("valeurs") or "{}")
+    except ValueError:
+        valeurs = {}
     with get_db() as conn:
         res = proposer(conn, fiche_id, request.query_params.get("qte"),
-                       arrondir=request.query_params.get("arrondir") == "1")
+                       arrondir=request.query_params.get("arrondir") == "1",
+                       valeurs=valeurs if isinstance(valeurs, dict) else {},
+                       corriges=request.query_params.get("corriges"))
     if not res:
         raise HTTPException(status_code=404, detail="Fiche technique introuvable.")
     return res
@@ -2211,6 +2224,10 @@ async def create_of(request: Request):
     body = await request.json()
 
     champs = {k: _coerce_of_value(k, v) for k, v in body.items() if k in OF_DATA_FIELDS}
+    from app.services.of_proposition import lire_corriges
+    corriges = lire_corriges(body.get("champs_corriges"))
+    if corriges:
+        champs["champs_corriges"] = json.dumps(corriges)
     commandes = _lignes_commandes(body.get("commandes"))
 
     numero = (champs.get("of_numero") or "").strip() if champs.get("of_numero") else ""
@@ -2503,7 +2520,8 @@ def of_fiche(of_id: int, request: Request):
         fiche = None
         if fiche_id:
             f = conn.execute(
-                "SELECT id, reference, machine, format FROM fiches_techniques WHERE id = ?",
+                "SELECT id, reference, machine, format, outil1_nb_front AS nb_fronts "
+                "FROM fiches_techniques WHERE id = ?",
                 (fiche_id,),
             ).fetchone()
             fiche = dict(f) if f else None
