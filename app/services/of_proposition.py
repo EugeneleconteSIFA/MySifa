@@ -49,6 +49,7 @@ Lecture seule : rien n'est écrit en base. La création passe par
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from typing import Any, Dict, List, Optional
@@ -84,6 +85,13 @@ CHAMPS_CALCULES = (
     "metrage", "qte_bobines", "nb_mandrins", "nb_levees", "nb_tubes", "nb_cartons",
     "qte_adhesif_g", "qte_adhesif_kg",
 )
+
+# Cases dont la valeur de l'OF prend le pas sur la fiche une fois corrigées.
+CHAMPS_SOURCES = (
+    "nb_fronts", "laize", "qte_au_mille", "conditionnement",
+    "mandrins_dia", "mandrin_longueur",
+)
+CHAMPS_CORRIGEABLES = frozenset(CHAMPS_CALCULES) | frozenset(CHAMPS_SOURCES)
 
 _TUBE_RE = re.compile(r"\btube\s*(\d+(?:[.,]\d+)?)\s*[x×]", re.IGNORECASE)
 # Désignation MyStock : « Tube carton Ø 40 mm, Lg. 1500 mm, ép. 4 mm ».
@@ -191,6 +199,17 @@ def vendu_au_metre(fiche: Optional[Dict[str, Any]]) -> bool:
     return bool(_AU_METRE_RE.search(str(fiche.get("conditionnement") or "")))
 
 
+def _nb_tubes(fiche: Dict[str, Any], mandrins: Any) -> Optional[int]:
+    """⌈ mandrins ÷ ⌊ long. du tube ÷ long. du mandrin ⌋ ⌉, None sans tube."""
+    n = _nombre(mandrins)
+    tube = longueur_tube(fiche.get("mandrin_dia"))
+    ml = _nombre(fiche.get("mandrin_longueur"))
+    if not (n and tube and ml):
+        return None
+    par_tube = math.floor(round(tube / ml, 6))
+    return math.ceil(round(n / par_tube, 6)) if par_tube >= 1 else None
+
+
 def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
                        laize: Any = None,
                        grammage: Any = None) -> Dict[str, Any]:
@@ -253,12 +272,9 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
         else:
             manques.append("Nb bobines par carton absent de la fiche — cartons non calculés.")
 
-        tube = longueur_tube(fiche.get("mandrin_dia"))
-        ml = _nombre(fiche.get("mandrin_longueur"))
-        if tube and ml:
-            par_tube = math.floor(round(tube / ml, 6))
-            if par_tube >= 1:
-                out["nb_tubes"] = math.ceil(round(bobines / par_tube, 6))
+        tubes = _nb_tubes(fiche, bobines)
+        if tubes is not None:
+            out["nb_tubes"] = tubes
 
     g = _nombre(grammage)
     lz = _nombre(laize)
@@ -269,6 +285,93 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
 
     out["_manques"] = manques
     return out
+
+
+def lire_corriges(brut: Any) -> List[str]:
+    """Les cases corrigées, depuis une liste ou son JSON. Inconnues écartées.
+
+    Étiquettes, bobines et levées forment une seule chaîne : une seule mène.
+    Si bobines et levées arrivent ensemble, les levées mènent.
+    """
+    if isinstance(brut, str):
+        try:
+            brut = json.loads(brut)
+        except ValueError:
+            return []
+    if not isinstance(brut, (list, tuple)):
+        return []
+    corriges = {str(c) for c in brut if str(c) in CHAMPS_CORRIGEABLES}
+    if "nb_levees" in corriges:
+        corriges.discard("qte_bobines")
+    return sorted(corriges)
+
+
+def fiche_selon_of(fiche: Dict[str, Any], valeurs: Optional[Dict[str, Any]],
+                   corriges: Any = None) -> Dict[str, Any]:
+    """La fiche, vue à travers ce que l'OF porte : la base de tout recalcul.
+
+    Corriger la quantité au mille d'un OF doit changer son métrage, pas
+    seulement la case. Une valeur vide de l'OF laisse celle de la fiche.
+    """
+    f = dict(fiche)
+    v = valeurs or {}
+    corr = set(lire_corriges(corriges))
+    fronts = _nombre(v.get("nb_fronts"))
+    if fronts:
+        f["outil1_nb_front"] = fronts
+    # Un OF Access porte la qté au mille arrondie à une décimale (10,9 pour
+    # 10,885) : sans correction, seul un vrai écart l'emporte sur la fiche.
+    qam = _nombre(v.get("qte_au_mille"))
+    lue = qte_au_mille(fiche)
+    if qam and ("qte_au_mille" in corr or not lue or abs(qam - lue) > 0.06):
+        f["qte_au_mille"] = qam
+    cond = str(v.get("conditionnement") or "").strip()
+    if cond and cond.lower() != str(fiche.get("conditionnement") or "").strip().lower():
+        essai = {"conditionnement": cond}
+        par_bobine = etiquettes_par_bobine(essai)[0]
+        if par_bobine or vendu_au_metre(essai):
+            f["conditionnement"] = cond
+            f["nb_etiq_bobin"] = par_bobine
+    if str(v.get("mandrins_dia") or "").strip():
+        f["mandrin_dia"] = v.get("mandrins_dia")
+    if _nombre(v.get("mandrin_longueur")):
+        f["mandrin_longueur"] = _nombre(v.get("mandrin_longueur"))
+    return f
+
+
+def quantite_menee(fiche: Dict[str, Any], valeurs: Dict[str, Any], corriges: Any, qte: Any) -> Any:
+    """Le nombre d'étiquettes quand l'ADV a corrigé les levées ou les bobines.
+
+    `fiche` est déjà vue à travers l'OF (`fiche_selon_of`). Sans correction, ou
+    sans de quoi convertir, la quantité reste celle de l'OF.
+    """
+    corr = lire_corriges(corriges)
+    par_bobine = 1.0 if vendu_au_metre(fiche) else etiquettes_par_bobine(fiche)[0]
+    if not par_bobine:
+        return qte
+    bobines = None
+    if "nb_levees" in corr:
+        levees, fronts = _nombre(valeurs.get("nb_levees")), _nombre(fiche.get("outil1_nb_front"))
+        bobines = levees * fronts if levees and fronts else None
+    elif "qte_bobines" in corr:
+        bobines = _nombre(valeurs.get("qte_bobines"))
+    return int(round(bobines * par_bobine)) if bobines else qte
+
+
+def appliquer_corrections(calc: Dict[str, Any], fiche: Dict[str, Any], valeurs: Dict[str, Any],
+                          corriges: Any, laize: Any, grammage: Any) -> None:
+    """Une case corrigée garde sa valeur, et ce qui en dépend la suit."""
+    corr = lire_corriges(corriges)
+    for col in CHAMPS_CALCULES:
+        if col in corr and valeurs.get(col) not in (None, ""):
+            calc[col] = valeurs[col]
+    if "nb_mandrins" in corr and "nb_tubes" not in corr:
+        tubes = _nb_tubes(fiche, calc.get("nb_mandrins"))
+        if tubes is not None:
+            calc["nb_tubes"] = tubes
+    g, lz, metrage = _nombre(calc.get("qte_adhesif_g") or grammage), _nombre(laize), _nombre(calc.get("metrage"))
+    if "qte_adhesif_kg" not in corr and g and lz and metrage:
+        calc["qte_adhesif_kg"] = round(g * metrage * lz / 1_000_000, 3)
 
 
 def arrondir_a_la_levee(fiche: Dict[str, Any], qte: Any) -> Optional[Dict[str, Any]]:
@@ -369,11 +472,14 @@ def _cle_produit(reference: Any) -> Optional[str]:
 
 
 def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
-             arrondir: bool = False) -> Optional[Dict[str, Any]]:
+             arrondir: bool = False, valeurs: Optional[Dict[str, Any]] = None,
+             corriges: Any = None) -> Optional[Dict[str, Any]]:
     """L'OF tel qu'il découle de la fiche `fiche_id`. None si elle n'existe pas.
 
     `arrondir` : `qte_etiquettes` est la quantité commandée, le calcul part de
-    la levée complète (`qte_proposee`, détail dans `arrondi`)."""
+    la levée complète (`qte_proposee`, détail dans `arrondi`).
+    `valeurs` et `corriges` : l'OF en cours de saisie, dont les calculs partent
+    au lieu de repartir de la fiche seule."""
     row = conn.execute(
         "SELECT * FROM fiches_techniques WHERE id = ?", (fiche_id,)
     ).fetchone()
@@ -381,9 +487,12 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
         return None
     fiche = dict(row)
 
-    arrondi = arrondir_a_la_levee(fiche, qte_etiquettes) if arrondir else None
+    valeurs = valeurs or {}
+    base_calcul = fiche_selon_of(fiche, valeurs, corriges)
+    arrondi = arrondir_a_la_levee(base_calcul, qte_etiquettes) if arrondir else None
     if arrondi:
         qte_etiquettes = arrondi["proposee"]
+    qte_etiquettes = quantite_menee(base_calcul, valeurs, corriges, qte_etiquettes)
 
     champs: Dict[str, Any] = {}
     provenance: Dict[str, str] = {}
@@ -395,6 +504,9 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
         provenance[col] = origine
 
     poser("reference", _cle_produit(fiche.get("reference")), "fiche")
+    fronts_fiche = _nombre(fiche.get("outil1_nb_front"))
+    if fronts_fiche:
+        poser("nb_fronts", int(round(fronts_fiche)), "fiche")
     poser("format", fiche.get("format"), "fiche")
     for col_of, col_ft in CORRESPONDANCES:
         poser(col_of, fiche.get(col_ft), "fiche")
@@ -408,15 +520,17 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
         poser("qte_au_mille", round(qam, 4),
               "fiche" if _nombre(fiche.get("qte_au_mille")) else "calcul")
 
-    grammage = grammage_adhesif(conn, champs.get("adhesif_label"))
-    calc = calculer_quantites(fiche, qte_etiquettes,
-                              laize=champs.get("laize"), grammage=grammage)
+    adhesif = valeurs.get("adhesif_label") or champs.get("adhesif_label")
+    grammage = grammage_adhesif(conn, adhesif)
+    laize = _nombre(valeurs.get("laize")) or champs.get("laize")
+    calc = calculer_quantites(base_calcul, qte_etiquettes, laize=laize, grammage=grammage)
+    appliquer_corrections(calc, base_calcul, valeurs, corriges, laize, grammage)
     manques = calc.pop("_manques", [])
     if calc.get("_info"):
         manques.insert(0, calc.pop("_info"))
     for col, val in calc.items():
         poser(col, val, "adhésif d'un OF précédent" if col == "qte_adhesif_g" else "calcul")
-    poser("ref_adhesif", ref_adhesif_precedente(conn, champs.get("adhesif_label")),
+    poser("ref_adhesif", ref_adhesif_precedente(conn, adhesif),
           "adhésif d'un OF précédent")
 
     return {
@@ -434,7 +548,7 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
         # Absent quand la commande tombe déjà sur une levée complète.
         "arrondi": arrondi if arrondi and arrondi["proposee"] != arrondi["commandee"] else None,
         # La quantité se compte alors en rouleaux : l'écran renomme la case.
-        "au_metre": vendu_au_metre(fiche),
+        "au_metre": vendu_au_metre(base_calcul),
         "manques": manques,
     }
 
