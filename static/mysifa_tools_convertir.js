@@ -25,7 +25,7 @@
 
   const URL_TRACER = 'https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js';
   // Module maison, ?v= figé : à incrémenter ici et dans l'outil Image à chaque modification.
-  const URL_VECTO = '/static/mysifa_vecto.js?v=1';
+  const URL_VECTO = '/static/mysifa_vecto.js?v=2';
   const URL_PDFLIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
   const URL_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
   const URL_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
