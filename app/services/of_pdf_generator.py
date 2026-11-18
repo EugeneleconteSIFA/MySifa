@@ -92,6 +92,19 @@ def _fmt_fr(v: Any) -> str:
     return _fmt(v).replace(".", ",")
 
 
+def _fmt_1(v: Any) -> str:
+    """Une décimale, à la française, comme l'OF Access : qté au mille
+    10,794 → « 10,8 », adhésif 63,617 kg → « 63,6 » (OF 9931861 et 9931953,
+    comparés le 17/11/2026). Un entier reste entier (470 → « 470 »)."""
+    if v is None or v == "":
+        return ""
+    try:
+        n = round(float(v), 1)
+    except (TypeError, ValueError):
+        return str(v)
+    return (str(int(n)) if n == int(n) else ("%.1f" % n)).replace(".", ",")
+
+
 def _fmt_dec(v: Any) -> str:
     """165.0 → '165,00' pour les quantités de bobines, à la française."""
     if v is None or v == "":
@@ -124,9 +137,9 @@ _CHAMPS = [
     # sur le document d'origine : c'est ce que l'opérateur lit de loin.
     ("ref_adhesif",            86.4, 129.0, 15,   True,  "g", _fmt),
     ("qte_adhesif_g",         162.7, 136.9, 22,   True,  "g", _fmt),
-    ("qte_adhesif_kg",        307.3, 125.8, 10,   True,  "d", _fmt_fr),
+    ("qte_adhesif_kg",        307.3, 125.8, 10,   True,  "d", _fmt_1),
     ("adhesif_label",          58.4, 151.4, 10,   True,  "g", _fmt),
-    ("qte_au_mille",          102.8, 168.6, 10,   True,  "g", _fmt_fr),
+    ("qte_au_mille",          102.8, 168.6, 10,   True,  "g", _fmt_1),
     ("nb_levees",             301.3, 168.6, 10,   True,  "g", _fmt),
     # Quantités théoriques — colonne de droite, alignées sur le bord des cases
     ("qte_etiquettes",        477.1, 100.6, 10,   True,  "d", _fmt_qte),
@@ -220,7 +233,9 @@ def _lignes_bobinettes(d: dict) -> list:
     if brut:
         return brut.splitlines()[:4]
 
-    date = _fmt_date(d.get("delai_client")) or _fmt_date(d.get("date_creation"))
+    # La date de l'OF (sa création), pas le délai client : c'est elle que
+    # porte l'OF Access 9931953 (« 28/05/2026 », délai le 18/06).
+    date = _fmt_date(d.get("date_creation")) or _fmt_date(d.get("delai_client"))
     adhesif = (d.get("adhesif_label") or "").replace("Adhésif", "").strip()
     # « Permanent 2028Y - 1 » → « Permanent » : l'étiquette ne porte que la
     # nature de la colle et celle du support.

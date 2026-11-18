@@ -78,6 +78,12 @@ _TUBE_LG_RE = re.compile(r"\b(?:lg|long(?:ueur)?)\.?\s*:?\s*(\d[\d\s\u202f]*(?:[
 # Conditionnement de la fiche : « Bobine de 1 000 étiquettes ».
 _BOBINE_DE_RE = re.compile(r"^\s*bobines?\s+de\s+(\d[\d\s\u202f.]*)\s*[ée]tiquettes?\b",
                            re.IGNORECASE)
+# « Paravent de 1 000 plis de 4 étiquettes », « Paquet de 1 000 plis de 1
+# étiquette » : un paravent (ou paquet) compte plis × étiquettes, et Access le
+# traite comme une bobine — OF 9931861 : 660 000 ÷ 4 000 = 165 « bobines »,
+# 165 mandrins, 33 levées, 55 cartons (comparaison du 17/11/2026).
+_PLIS_RE = re.compile(r"^\s*(?:paravents?|paquets?)\s+de\s+(\d[\d\s\u202f.]*)\s*plis\s+de\s+(\d[\d\s\u202f.]*)\s*[ée]tiquettes?\b",
+                      re.IGNORECASE)
 
 
 def _nombre(v: Any) -> Optional[float]:
@@ -114,16 +120,24 @@ def longueur_tube(mandrin: Any) -> Optional[float]:
 def etiquettes_par_bobine(fiche: Dict[str, Any]):
     """(nombre, origine). La fiche le porte (`nbetiquette` d'Access) ; à
     défaut on le lit dans son conditionnement, « Bobine de 1 000 étiquettes »,
-    que l'OF imprime mot pour mot. Rien d'autre n'est deviné : « Paravent de
-    1000 plis de 4 étiquettes » ne dit pas un nombre par bobine."""
+    que l'OF imprime mot pour mot. Un paravent ou un paquet compte plis ×
+    étiquettes (« Paravent de 1 000 plis de 4 étiquettes » = 4 000), comme
+    Access. Rien d'autre n'est deviné."""
     lu = _nombre(fiche.get("nb_etiq_bobin"))
     if lu:
         return lu, "fiche"
-    m = _BOBINE_DE_RE.search(str(fiche.get("conditionnement") or ""))
+    cond = str(fiche.get("conditionnement") or "")
+    m = _BOBINE_DE_RE.search(cond)
     if m:
         n = _nombre(re.sub(r"[\s\u202f.]", "", m.group(1)))
         if n:
             return n, "conditionnement"
+    m = _PLIS_RE.search(cond)
+    if m:
+        plis = _nombre(re.sub(r"[\s\u202f.]", "", m.group(1)))
+        par = _nombre(re.sub(r"[\s\u202f.]", "", m.group(2)))
+        if plis and par:
+            return plis * par, "conditionnement"
     return None, None
 
 
@@ -183,10 +197,13 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
     if qam:
         # Au mètre, la quantité compte des rouleaux et la « qté au mille » de
         # la fiche se lit par rouleau (Access : 630 × 8,6 = 5 418 m).
-        # Arrondi au millimètre avant le mètre supérieur : la fiche stocke la
-        # qté au mille en simple précision (8,600000381…), et 630 × 8,6 doit
-        # rester 5 418, pas 5 419.
-        metrage = math.ceil(round(q * qam / (1.0 if au_metre else 1000.0), 3))
+        # Arrondi au mètre LE PLUS PROCHE, comme l'OF Access imprimé :
+        # 9931861 = 7 124,04 → 7 124 ; 9931953 = 10 226,04 → 10 226 ;
+        # 9932770 L2 = 1 796,6 → 1 797. (Jusqu'au 17/11/2026 on arrondissait
+        # au-dessus, ce qui donnait 7 125.) Le millimètre d'abord : la fiche
+        # stocke la qté au mille en simple précision (8,600000381…).
+        brut = round(q * qam / (1.0 if au_metre else 1000.0), 3)
+        metrage = int(math.floor(brut + 0.5))
         out["metrage"] = metrage
     else:
         manques.append("Qté au mille absente de la fiche — métrage non calculé.")
@@ -238,6 +255,25 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
 
     out["_manques"] = manques
     return out
+
+
+def ref_adhesif_precedente(conn, libelle: Any) -> Optional[str]:
+    """La réf. adhésif (« 2028Y ») du dernier OF qui porte ce libellé —
+    Access la tire de sa table Adhesif, que MySifa ne reçoit pas."""
+    lib = str(libelle or "").strip()
+    if not lib:
+        return None
+    try:
+        r = conn.execute(
+            """SELECT ref_adhesif FROM of_imports
+                WHERE LOWER(TRIM(adhesif_label)) = LOWER(?)
+                  AND TRIM(COALESCE(ref_adhesif, '')) <> ''
+                ORDER BY id DESC LIMIT 1""",
+            (lib,),
+        ).fetchone()
+    except Exception:
+        return None
+    return str(r[0]).strip() if r else None
 
 
 def grammage_adhesif(conn, libelle: Any) -> Optional[float]:
@@ -312,6 +348,8 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[s
         manques.insert(0, calc.pop("_info"))
     for col, val in calc.items():
         poser(col, val, "adhésif d'un OF précédent" if col == "qte_adhesif_g" else "calcul")
+    poser("ref_adhesif", ref_adhesif_precedente(conn, champs.get("adhesif_label")),
+          "adhésif d'un OF précédent")
 
     return {
         "fiche": {

@@ -111,15 +111,23 @@ def s(val) -> str | None:
     v = str(val).strip()
     return v if v else None
 
+def _chiffres(val) -> str:
+    """« 3 500 » → « 3500 », « 7,257 » → « 7.257 ». Access garde certains
+    nombres en TEXTE avec des espaces de milliers (nbetiquette) : int() les
+    refusait, et le nombre d'étiquettes par bobine arrivait vide (fiche
+    245/0123 : « 3 500 » imprimé, rien en base — constat du 17/11/2026)."""
+    return str(val).replace("\u202f", "").replace("\xa0", "").replace(" ", "").replace(",", ".").strip()
+
+
 def f(val) -> float | None:
     try:
-        return float(val) if val is not None else None
+        return float(_chiffres(val)) if val is not None and _chiffres(val) else None
     except (ValueError, TypeError):
         return None
 
 def i(val) -> int | None:
     try:
-        return int(val) if val is not None else None
+        return int(float(_chiffres(val))) if val is not None and _chiffres(val) else None
     except (ValueError, TypeError):
         return None
 
