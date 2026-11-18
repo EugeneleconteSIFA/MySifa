@@ -148,7 +148,9 @@ lisent. Une matière changée à la main garde sa désignation MyStock.
 ne peut pas servir, il marque tout à la création. Les calculs partent de la fiche
 vue à travers l'OF (`of_proposition.fiche_selon_of`). Étiquettes, bobines et levées
 forment une chaîne : la dernière corrigée mène les deux autres. Une correction ne
-modifie jamais la fiche technique.
+modifie jamais la fiche technique. Les écarts avec la fiche et les incohérences de
+l'OF (`controler_coherence`) se montrent avant d'enregistrer mais ne bloquent pas.
+Changer de fiche demande quelles corrections garder.
 
 Un id à `None` détache la référence **sans effacer le texte** : un OF Access
 porte un libellé qu'aucune référence ne recouvre encore, et le perdre serait
