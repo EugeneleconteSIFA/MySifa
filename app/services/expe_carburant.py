@@ -224,6 +224,44 @@ def enregistrer_saisie(
     return {"pct_avant": pct_avant, "pct": pct, "maj_le": now}
 
 
+# Une validation répétée du même taux par le même compte dans ce délai est un
+# double envoi (double clic, ou second clic faute de voir la page changer
+# quand le taux ne bouge pas) : elle n'écrit rien et ne notifie personne.
+DOUBLON_SECONDES = 600
+
+
+def _ecart_nul(a, b) -> bool:
+    return a is not None and b is not None and abs(float(a) - float(b)) < 0.005
+
+
+def doublon_recent(avant: dict, pct: float, auteur: str | None, maintenant: str) -> bool:
+    """La même saisie portail vient d'être enregistrée par le même compte."""
+    if not _ecart_nul(avant.get("taxe_carburant_pct"), pct):
+        return False
+    if _statut(avant) == "en_attente":
+        return False  # une demande est arrivée depuis : c'est une réponse
+    if (avant.get("taxe_carburant_maj_source") or "") != SOURCE_PORTAIL:
+        return False
+    if (avant.get("taxe_carburant_maj_par") or "").strip().lower() != (auteur or "").strip().lower():
+        return False
+    maj = avant.get("taxe_carburant_maj_le") or ""
+    try:
+        ecart = (datetime.fromisoformat(maintenant) - datetime.fromisoformat(maj)).total_seconds()
+    except ValueError:
+        return False
+    return 0 <= ecart < DOUBLON_SECONDES
+
+
+def faut_notifier(avant: dict, pct: float) -> bool:
+    """Une saisie portail mérite un email si le taux change, ou si elle répond
+    à une demande en cours (confirmer un taux inchangé est alors la réponse
+    attendue). Une confirmation spontanée d'un taux inchangé reste silencieuse :
+    elle date la taxe dans l'onglet, sans rien apprendre à personne."""
+    if not _ecart_nul(avant.get("taxe_carburant_pct"), pct) or not avant.get("taxe_carburant_maj_le"):
+        return True
+    return _statut(avant) == "en_attente"
+
+
 def noter_demande(conn, *, transporteur_id: int, auteur: str | None) -> str:
     now = now_paris_iso()
     conn.execute(
@@ -459,15 +497,25 @@ def email_taxe_recue(
     """Sujet et corps HTML — notification interne « taxe carburant reçue »."""
     from app.services.email_service import _esc, email_mysifa_layout
 
+    inchangee = pct_avant is not None and abs(float(pct_avant) - float(pct)) < 0.005
     if pct_avant is None:
         evolution = "—"
-    elif abs(float(pct_avant) - float(pct)) < 0.005:
+    elif inchangee:
         evolution = "Inchangée"
     else:
         ecart = float(pct) - float(pct_avant)
         evolution = ("+" if ecart > 0 else "−") + fmt_pct(abs(ecart)).replace(" %", " pt")
 
-    subject = f"[MySifa] Taxe carburant — {nom_transporteur} — {fmt_pct(pct)}"
+    # Le sujet dit d'emblée s'il y a quelque chose à retenir : une
+    # confirmation sans changement ne doit pas se lire comme une hausse.
+    if inchangee:
+        subject = f"[MySifa] Taxe carburant confirmée — {nom_transporteur} — {fmt_pct(pct)} (inchangée)"
+        action = "a confirmé sa taxe carburant, sans changement, sur le portail transporteur."
+        subtitle = "Taxe carburant confirmée"
+    else:
+        subject = f"[MySifa] Taxe carburant modifiée — {nom_transporteur} — {fmt_pct(pct)} ({evolution})"
+        action = "a mis à jour sa taxe carburant sur le portail transporteur."
+        subtitle = "Taxe carburant modifiée"
     qui = f" ({_esc(email_saisie)})" if email_saisie else ""
 
     # Couleurs pleines et non rgba() : Outlook bureau ignore rgba.
@@ -482,7 +530,7 @@ def email_taxe_recue(
 
     inner = f"""
     <p style="margin:0 0 14px;color:#0f172a">
-      <strong>{_esc(nom_transporteur)}</strong>{qui} a renseigné sa taxe carburant sur le portail transporteur.
+      <strong>{_esc(nom_transporteur)}</strong>{qui} {action}
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px">
       <tr>
@@ -494,10 +542,10 @@ def email_taxe_recue(
       </tr>
     </table>
     <p style="margin:0;color:#475569;font-size:13px">
-      Le comparateur de tarifs applique ce taux dès maintenant.
+      {"Le taux appliqué par le comparateur ne change pas." if inchangee else "Le comparateur de tarifs applique ce taux dès maintenant."}
     </p>"""
     body = email_mysifa_layout(
-        subtitle="Taxe carburant reçue",
+        subtitle=subtitle,
         body_html=inner,
         cta_href=f"{public_base_url()}/expe#carburant",
         cta_label="Ouvrir MyExpé",
