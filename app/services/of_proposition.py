@@ -26,9 +26,11 @@ Deux familles de cases
        adhésif kg = grammage × métrage × laize ÷ 1 000 000   (vue Access
                     [adhesif_necessaire_sans_date_prev], cf. access_sync_of.py)
 
-   Le métrage est arrondi au mètre SUPÉRIEUR : c'est ce que font les OF
-   Access récents (1 796,6 → 1 797), et une bobine trop courte ne se rattrape
-   pas en fin de tirage.
+   Le métrage est arrondi au mètre le plus proche, comme l'OF Access imprimé
+   (7 124,04 → 7 124 ; 1 796,6 → 1 797).
+
+   La quantité proposée depuis une commande est arrondie à la LEVÉE COMPLÈTE
+   (`arrondir_a_la_levee`) : c'est ce que fait l'ADV dans Access.
 
 La longueur du tube se LIT dans le libellé du mandrin (« Tube 1500x40 ») :
 une bague (« Bague 63,7x25 ») ne se coupe pas dans un tube, et il n'y a
@@ -62,6 +64,18 @@ REFERENCES = (
     ("carton_ref_id",   "carton_ref_id"),
     ("mandrin_ref_id",  "mandrin_ref_id"),
     ("palette_ref_id",  "palette_ref_id"),
+)
+
+# Texte imprimé sur l'OF : (id fiche, texte fiche, id OF, texte OF). Access
+# imprime le libellé de la fiche (« THERMIQUE PRO », « Permanent 2028Y - 19 »),
+# pas la désignation MyStock (comparaison du 18/11/2026).
+LIBELLES_FICHE = (
+    ("support_ref_id",  "support",      "matiere_ref_id",  "matiere"),
+    ("glassine_ref_id", "glassine",     "glassine_ref_id", "glassine"),
+    ("adhesif_ref_id",  "adhesif",      "adhesif_ref_id",  "adhesif_label"),
+    ("carton_ref_id",   "cartons",      "carton_ref_id",   "cartons_type"),
+    ("mandrin_ref_id",  "mandrin_dia",  "mandrin_ref_id",  "mandrins_dia"),
+    ("palette_ref_id",  "palette_type", "palette_ref_id",  "palette_type"),
 )
 
 # Cases que le calcul remplit. L'écran ne les écrase plus dès qu'un humain
@@ -257,6 +271,52 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
     return out
 
 
+def arrondir_a_la_levee(fiche: Dict[str, Any], qte: Any) -> Optional[Dict[str, Any]]:
+    """La quantité commandée, portée à la levée complète supérieure.
+
+    Une levée sort une bobine par front : l'ADV lance donc un nombre entier de
+    levées. Relevé le 18/11/2026 sur 26 OF Access : 13 arrondis ainsi, 7 déjà
+    ronds, 3 doublés par choix de l'ADV, 3 en cartons non vérifiables.
+    OF 9931861 : 650 000 ÷ (4 000 × 5) = 32,5 → 33 levées → 660 000.
+
+    None quand la fiche ne dit pas le nombre de fronts ou d'étiquettes par
+    bobine : la quantité commandée reste alors telle quelle.
+    """
+    q = _nombre(qte)
+    fronts = _nombre(fiche.get("outil1_nb_front"))
+    par_bobine = 1.0 if vendu_au_metre(fiche) else etiquettes_par_bobine(fiche)[0]
+    if not (q and fronts and par_bobine):
+        return None
+    par_levee = par_bobine * fronts
+    levees = math.ceil(round(q / par_levee, 6))
+    return {"commandee": int(round(q)), "proposee": int(round(levees * par_levee)),
+            "levees": levees, "par_levee": int(round(par_levee))}
+
+
+def libelles_de_la_fiche(conn, valeurs: Dict[str, Any], fiche_id: Any) -> None:
+    """Remet sur l'OF le libellé de sa fiche, à la place de la désignation
+    MyStock, pour chaque matière dont l'OF porte la référence de la fiche.
+
+    Le serveur écrit ce texte, jamais le client. La référence reste posée : les
+    besoins matières et le déstockage continuent de lire l'id. Une référence
+    changée à la main garde la désignation de la matière choisie.
+    """
+    try:
+        fid = int(fiche_id or 0)
+    except (TypeError, ValueError):
+        return
+    if not fid:
+        return
+    row = conn.execute("SELECT * FROM fiches_techniques WHERE id = ?", (fid,)).fetchone()
+    if not row:
+        return
+    fiche = dict(row)
+    for id_ft, txt_ft, id_of, txt_of in LIBELLES_FICHE:
+        ref = valeurs.get(id_of)
+        if ref and ref == fiche.get(id_ft) and not _vide(fiche.get(txt_ft)):
+            valeurs[txt_of] = fiche[txt_ft]
+
+
 def ref_adhesif_precedente(conn, libelle: Any) -> Optional[str]:
     """La réf. adhésif (« 2028Y ») du dernier OF qui porte ce libellé —
     Access la tire de sa table Adhesif, que MySifa ne reçoit pas."""
@@ -308,14 +368,22 @@ def _cle_produit(reference: Any) -> Optional[str]:
     return cle or brut
 
 
-def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[str, Any]]:
-    """L'OF tel qu'il découle de la fiche `fiche_id`. None si elle n'existe pas."""
+def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
+             arrondir: bool = False) -> Optional[Dict[str, Any]]:
+    """L'OF tel qu'il découle de la fiche `fiche_id`. None si elle n'existe pas.
+
+    `arrondir` : `qte_etiquettes` est la quantité commandée, le calcul part de
+    la levée complète (`qte_proposee`, détail dans `arrondi`)."""
     row = conn.execute(
         "SELECT * FROM fiches_techniques WHERE id = ?", (fiche_id,)
     ).fetchone()
     if not row:
         return None
     fiche = dict(row)
+
+    arrondi = arrondir_a_la_levee(fiche, qte_etiquettes) if arrondir else None
+    if arrondi:
+        qte_etiquettes = arrondi["proposee"]
 
     champs: Dict[str, Any] = {}
     provenance: Dict[str, str] = {}
@@ -362,6 +430,9 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[s
         "champs": champs,
         "provenance": provenance,
         "calcules": [c for c in CHAMPS_CALCULES if c in champs],
+        "qte_proposee": int(round(_nombre(qte_etiquettes) or 0)) or None,
+        # Absent quand la commande tombe déjà sur une levée complète.
+        "arrondi": arrondi if arrondi and arrondi["proposee"] != arrondi["commandee"] else None,
         # La quantité se compte alors en rouleaux : l'écran renomme la case.
         "au_metre": vendu_au_metre(fiche),
         "manques": manques,
@@ -378,9 +449,8 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None) -> Optional[Dict[s
 # 152 produits sur 785) : c'est alors à l'ADV de choisir.
 #
 # Quantité : celle des lignes cochées, ou la quantité partielle saisie dans
-# le sélecteur. L'ADV arrondit parfois au-dessus (1 075 000 → 1 080 000, une
-# levée complète) mais pas toujours : on propose la quantité commandée, elle
-# corrige.
+# le sélecteur. Elle dépend ensuite de la fiche choisie : `proposer(arrondir=
+# True)` la porte à la levée complète, et l'ADV peut revenir à la commande.
 #
 # Délai : la date de livraison de la ligne (`amjl`) — celle des OF 9932770 et
 # 9932856. La plus proche quand plusieurs lignes sont cochées.

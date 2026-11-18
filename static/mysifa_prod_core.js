@@ -1890,6 +1890,38 @@ function _ofeQte(){
   return v===''?'':String(parseInt(v,10)||'');
 }
 
+/* Quantité portée à la levée complète par le serveur (18/11/2026). */
+function ofePoserQte(m,p){
+  m._arrondi=p.arrondi||null;
+  if(!p.qte_proposee) return;
+  const s=String(p.qte_proposee);
+  const el=document.getElementById('ofe-qte');
+  if(el) el.value=s;
+  m._dom=m._dom||{};
+  m._dom['ofe-qte']=s;
+  m.qte_etiquettes=p.qte_proposee;
+  m._qtePropose=s;
+}
+
+/* Revenir à la quantité commandée : elle ne sera plus arrondie ensuite. */
+function ofeGarderQteCommandee(){
+  const m=S.ofEditModal;
+  if(!m||!m._arrondi) return;
+  const s=String(m._arrondi.commandee);
+  const el=document.getElementById('ofe-qte');
+  if(el) el.value=s;
+  m._dom=m._dom||{};
+  m._dom['ofe-qte']=s;
+  m.qte_etiquettes=m._arrondi.commandee;
+  m._qtePropose='';
+  m._qteCommandee=null;
+  m._qteArrondir=false;
+  m._arrondi=null;
+  m._modifie=true;
+  ofeRecalculer();
+}
+window.ofeGarderQteCommandee = ofeGarderQteCommandee;
+
 async function ofeChercherFiche(q){
   const zone=document.getElementById('ofe-fiche-res');
   const m=S.ofEditModal;
@@ -1947,14 +1979,21 @@ async function ofeChoisirFiche(ficheId){
   // Choisie à la main (le cas d'office repose le drapeau après l'appel).
   m._ficheAuto=false;
   captureSaisie('ofe-',m);
+  // Tant que l'ADV n'a pas tapé la quantité, elle repart de la commande : le
+  // nombre de fronts, donc la levée, change avec la fiche.
+  const saisie=String((m._dom&&m._dom['ofe-qte'])==null?'':m._dom['ofe-qte']).trim();
+  const arrondir=!!m._qteCommandee&&(!saisie||saisie===String(m._qtePropose==null?'':m._qtePropose));
+  const qteDemandee=arrondir?String(m._qteCommandee):_ofeQte();
   let p=null;
   try{
-    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(ficheId)+'&qte='+encodeURIComponent(_ofeQte()));
+    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(ficheId)+'&qte='+encodeURIComponent(qteDemandee)+(arrondir?'&arrondir=1':''));
   }catch(e){
     toast(e.message||'Fiche technique illisible.','error');
     return;
   }
   m._dom=m._dom||{};
+  m._qteArrondir=false;
+  if(arrondir) ofePoserQte(m,p); else m._arrondi=null;
   m._manuels=m._manuels||{};
   // Ce que la fiche précédente avait posé s'efface : sinon une case que la
   // nouvelle fiche laisse vide garderait la valeur d'un autre produit.
@@ -2018,13 +2057,17 @@ window.ofeChangerFiche = ofeChangerFiche;
 async function ofeRecalculer(){
   const m=S.ofEditModal;
   if(!m||!m._fiche) return;
-  const qte=_ofeQte();
+  const arrondir=!!m._qteArrondir&&!!m._qteCommandee;
+  const qte=arrondir?String(m._qteCommandee):_ofeQte();
   let p=null;
   try{
-    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(m._fiche.id)+'&qte='+encodeURIComponent(qte));
+    p=await api('/api/of/proposition?fiche_id='+encodeURIComponent(m._fiche.id)+'&qte='+encodeURIComponent(qte)+(arrondir?'&arrondir=1':''));
   }catch(e){ return; }
-  if(S.ofEditModal!==m||_ofeQte()!==qte) return;
+  if(S.ofEditModal!==m) return;
+  // Une frappe arrivée pendant la demande l'emporte sur sa réponse.
+  if(arrondir?!m._qteArrondir:_ofeQte()!==qte) return;
   m._dom=m._dom||{};
+  if(arrondir){ m._qteArrondir=false; ofePoserQte(m,p); }
   m._manuels=m._manuels||{};
   Object.keys(OFE_CALCULES).forEach(function(col){
     const id=OFE_CALCULES[col];
@@ -2153,6 +2196,8 @@ async function ofeDepuisCommandes(m){
     const q=r.qte_etiquettes?String(r.qte_etiquettes):'';
     qteChangee=q!==val('ofe-qte');
     m._dom['ofe-qte']=q; m.qte_etiquettes=r.qte_etiquettes||null; m._qtePropose=q;
+    // La levée dépend de la fiche : l'arrondi vient avec sa proposition.
+    m._qteCommandee=r.qte_etiquettes||null; m._qteArrondir=!!r.qte_etiquettes; m._arrondi=null;
   }
   if(suit('ofe-delai',m._delaiPropose)){
     const d=r.delai_client||'';
@@ -2272,6 +2317,11 @@ function ofeInfoFiche(m){
     if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+
       ' — à créer avant l\'OF. Une autre fiche reste possible, avec le motif de l\'écart.</div>';
   }
+  if(m._arrondi){
+    const a=m._arrondi, n=x=>Number(x).toLocaleString('fr-FR');
+    h+='<div style="color:var(--text)">Arrondi à la levée complète : <strong>'+n(a.levees)+(a.levees>1?' levées':' levée')+' de '+n(a.par_levee)+' = '+n(a.proposee)+'</strong> (commande : '+n(a.commandee)+'). '+
+      '<button type="button" onclick="ofeGarderQteCommandee()" style="background:none;border:none;padding:0;color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;text-decoration:underline">Garder '+n(a.commandee)+'</button></div>';
+  }
   if(calc.length) h+='<div>Calculé à partir du nombre '+(m._auMetre?'de rouleaux':'d\'étiquettes')+' : '+escHtml(calc.join(', '))+'.</div>';
   if(manuels.length) h+='<div>Corrigé à la main, plus recalculé : '+escHtml(manuels.join(', '))+'.</div>';
   (m._ficheManques||[]).forEach(function(x){ h+='<div style="color:var(--danger)">· '+escHtml(x)+'</div>'; });
@@ -2315,6 +2365,7 @@ function ofeBrancherFiche(overlay,m){
   const qte=overlay.querySelector('#ofe-qte');
   if(qte){
     qte.addEventListener('input',function(){
+      m._qteArrondir=false; m._arrondi=null;
       clearTimeout(_ofeCalcTimer);
       _ofeCalcTimer=setTimeout(ofeRecalculer,250);
     });
@@ -2415,6 +2466,8 @@ function ofeLirePayload(m){
     carton_ref_id:        m.carton_ref_id||null,
     mandrin_ref_id:       m.mandrin_ref_id||null,
     palette_ref_id:       m.palette_ref_id||null,
+    // Le serveur en tire les libellés matière imprimés, comme Access.
+    fiche_id:             m._fiche?m._fiche.id:null,
     plieuse_pignon:       tv('ofe-plieuse'),
     nb_pouces:            tv('ofe-pouces'),
     particularites:       tv('ofe-particularites'),

@@ -136,6 +136,13 @@ texte — mais un document saisi dans MySifa n'a plus besoin de lui. Une frappe
 près (« ITASA KA » contre « ITASA jaune KA ») suffisait à faire sortir un
 besoin matière faux, et l'erreur se voyait à l'inventaire, pas à l'écran.
 
+**Un OF créé depuis une fiche imprime le libellé de la fiche** (décision du
+18/11/2026, comparaison aux OF Access) : « THERMIQUE PRO », pas « Thermique Pro
+70 g/m² ». `of_proposition.libelles_de_la_fiche()` passe après
+`_appliquer_references()`, côté serveur, pour chaque matière dont l'OF porte la
+référence de la fiche. L'id reste posé : besoins matières et déstockage le
+lisent. Une matière changée à la main garde sa désignation MyStock.
+
 Un id à `None` détache la référence **sans effacer le texte** : un OF Access
 porte un libellé qu'aucune référence ne recouvre encore, et le perdre serait
 perdre la seule chose qu'on sache de sa matière. L'écran affiche alors
