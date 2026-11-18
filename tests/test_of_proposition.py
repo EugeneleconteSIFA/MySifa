@@ -468,6 +468,59 @@ ordre = [r[0] for r in t.execute("SELECT id FROM o ORDER BY %s DESC, o.id DESC" 
 verifier("OF créé aujourd'hui en tête, dates françaises et ISO mêlées ; "
          "date de création future rangée à sa date d'arrivée", ordre, [4, 3, 2, 5, 1, 6])
 
+print("Quantité arrondie à la levée complète (OF Access)")
+for lib, fiche, cde, attendu in [
+    ("9931861 paravent 4 000 × 5", {"outil1_nb_front": 5, "conditionnement": "Paravent de 1 000 plis de 4 étiquettes"}, 650000, 660000),
+    ("9931953 550 × 3", {"outil1_nb_front": 3, "nb_etiq_bobin": 550}, 200000, 201300),
+    ("9932898 7 850 × 7", {"outil1_nb_front": 7, "conditionnement": "Bobine de 7 850 étiquettes"}, 300000, 329700),
+    ("9932823 3 000 × 4", {"outil1_nb_front": 4, "conditionnement": "Bobine de 3 000 étiquettes"}, 500000, 504000),
+    ("9932815 1 000 × 3", {"outil1_nb_front": 3, "nb_etiq_bobin": 1000}, 80000, 81000),
+    ("9932796 3 000 × 11", {"outil1_nb_front": 11, "nb_etiq_bobin": 3000}, 2400000, 2409000),
+    ("9932766 4 700 × 7", {"outil1_nb_front": 7, "conditionnement": "Bobine de 4.700 étiquettes"}, 384800, 394800),
+    ("9932864 35 bobines → 36", {"outil1_nb_front": 4, "nb_etiq_bobin": 3000}, 105000, 108000),
+    ("9932862 déjà rond", {"outil1_nb_front": 3, "conditionnement": "Bobine de 4.000 étiquettes"}, 600000, 600000),
+    ("9932695 déjà rond", {"outil1_nb_front": 8, "nb_etiq_bobin": 126}, 50400, 50400),
+]:
+    verifier(lib, op.arrondir_a_la_levee(fiche, cde)["proposee"], attendu)
+verifier("sans fronts : pas d'arrondi", op.arrondir_a_la_levee({"nb_etiq_bobin": 500}, 1000), None)
+verifier("sans étiquettes par bobine : pas d'arrondi", op.arrondir_a_la_levee({"outil1_nb_front": 4}, 1000), None)
+verifier("au mètre : levée = rouleaux par front",
+         op.arrondir_a_la_levee({"outil1_nb_front": 5, "conditionnement": "Bobine de 45 ml"}, 628)["proposee"], 630)
+
+print("Proposition et libellés de la fiche")
+b = sqlite3.connect(":memory:")
+b.row_factory = sqlite3.Row
+b.execute("""CREATE TABLE fiches_techniques (id INTEGER PRIMARY KEY, reference TEXT, machine TEXT, format TEXT,
+    valide INT, outil1_nb_front INT, conditionnement TEXT, qte_au_mille REAL, nb_bobines_carton INT,
+    support TEXT, glassine TEXT, adhesif TEXT, cartons TEXT, mandrin_dia TEXT, palette_type TEXT,
+    support_ref_id INT, glassine_ref_id INT, adhesif_ref_id INT, carton_ref_id INT, mandrin_ref_id INT, palette_ref_id INT)""")
+b.execute("""INSERT INTO fiches_techniques (id, reference, outil1_nb_front, conditionnement, qte_au_mille,
+    nb_bobines_carton, support, glassine, adhesif, palette_type, support_ref_id, glassine_ref_id, adhesif_ref_id, palette_ref_id)
+    VALUES (1, '24/0023', 5, 'Paravent de 1 000 plis de 4 étiquettes', 10.96, 3,
+            'THERMIQUE PRO', 'ITASA KA', 'Permanent 2028Y - 19', 'PERDUE', 31, 53, 24, 40)""")
+p = op.proposer(b, 1, 650000, arrondir=True)
+verifier("9931861 : 660 000 proposées", p["qte_proposee"], 660000)
+verifier("9931861 : 165 bobines", p["champs"].get("qte_bobines"), 165)
+verifier("9931861 : 33 levées", p["champs"].get("nb_levees"), 33)
+verifier("9931861 : 55 cartons", p["champs"].get("nb_cartons"), 55)
+verifier("9931861 : détail de l'arrondi", p["arrondi"],
+         {"commandee": 650000, "proposee": 660000, "levees": 33, "par_levee": 20000})
+verifier("sans demande d'arrondi, la quantité reste", op.proposer(b, 1, 650000)["champs"].get("qte_bobines"), 163)
+verifier("déjà rond : rien à signaler", op.proposer(b, 1, 660000, arrondir=True)["arrondi"], None)
+v = {"matiere_ref_id": 31, "matiere": "Thermique Pro 70 g/m²",
+     "glassine_ref_id": 53, "glassine": "Glassine jaune siliconée 58-60 g/m²",
+     "adhesif_ref_id": 99, "adhesif_label": "Autre adhésif MyStock",
+     "palette_ref_id": 40, "palette_type": "Pallet Perdue"}
+op.libelles_de_la_fiche(b, v, 1)
+verifier("support : libellé de la fiche", v["matiere"], "THERMIQUE PRO")
+verifier("glassine : libellé de la fiche", v["glassine"], "ITASA KA")
+verifier("palette : libellé de la fiche", v["palette_type"], "PERDUE")
+verifier("référence conservée pour le stock", v["matiere_ref_id"], 31)
+verifier("matière changée à la main : sa désignation reste", v["adhesif_label"], "Autre adhésif MyStock")
+w = {"matiere_ref_id": 31, "matiere": "Thermique Pro 70 g/m²"}
+op.libelles_de_la_fiche(b, w, None)
+verifier("sans fiche : désignation MyStock", w["matiere"], "Thermique Pro 70 g/m²")
+
 print("Dates de l'OF imprimé")
 gen = open("app/services/of_pdf_generator.py", encoding="utf-8").read()
 ns = {"re": re, "Any": object}

@@ -652,7 +652,7 @@ async def update_of_import(of_id: int, request: Request):
     # `laize` en faisait partie, alors qu'elle alimente le calcul adhesif MyStock.
     EDITABLE = frozenset(OF_DATA_FIELDS)
     # Cles techniques que la modale peut renvoyer sans qu'il faille les ecrire.
-    IGNORABLES = frozenset({"id", "statut", "pdf_filename", "date_import", "imported_by"})
+    IGNORABLES = frozenset({"id", "statut", "pdf_filename", "date_import", "imported_by", "fiche_id"})
 
     updates = {k: _coerce_of_value(k, v) for k, v in body.items() if k in EDITABLE}
     ignores = sorted(k for k in body if k not in EDITABLE and k not in IGNORABLES)
@@ -669,6 +669,8 @@ async def update_of_import(of_id: int, request: Request):
         if not row:
             raise HTTPException(status_code=404, detail="OF introuvable.")
         _appliquer_references(conn, updates, REFERENCES_OF)
+        from app.services.of_proposition import libelles_de_la_fiche
+        libelles_de_la_fiche(conn, updates, body.get("fiche_id"))
         # Une correction humaine a le dernier mot (`proteger_manuels=False`) et
         # devient protegee a son tour (`marquer_manuels=True`) : le prochain
         # sync Access ne la reecrira pas. Elle perime aussi la validation si
@@ -2035,7 +2037,8 @@ def of_proposition(request: Request):
         raise HTTPException(status_code=400, detail="Fiche technique absente.")
     from app.services.of_proposition import proposer
     with get_db() as conn:
-        res = proposer(conn, fiche_id, request.query_params.get("qte"))
+        res = proposer(conn, fiche_id, request.query_params.get("qte"),
+                       arrondir=request.query_params.get("arrondir") == "1")
     if not res:
         raise HTTPException(status_code=404, detail="Fiche technique introuvable.")
     return res
@@ -2079,9 +2082,11 @@ async def of_apercu(request: Request):
     body = await request.json()
     champs = {k: _coerce_of_value(k, v) for k, v in body.items() if k in OF_DATA_FIELDS}
     with get_db() as conn:
-        # Le texte imprimé d'une matière découle de sa référence, comme à
-        # l'enregistrement.
+        # Le texte imprimé d'une matière découle de sa référence et de la
+        # fiche, comme à l'enregistrement.
         _appliquer_references(conn, champs, REFERENCES_OF)
+        from app.services.of_proposition import libelles_de_la_fiche
+        libelles_de_la_fiche(conn, champs, body.get("fiche_id"))
     try:
         from app.services.of_pdf_generator import generate_of_pdf
         pdf_bytes = generate_of_pdf(champs)
@@ -2255,10 +2260,11 @@ async def create_of(request: Request):
         champs["observations"] = ((champs.get("observations") or "").strip() + "\n" + note).strip()
 
     with get_db() as conn:
-        # La désignation de la référence devient le texte imprimé, AVANT
-        # l'insertion : sinon le document naîtrait avec un texte que personne
-        # n'a choisi.
+        # Le texte imprimé est posé AVANT l'insertion : la désignation de la
+        # référence, puis le libellé de la fiche quand c'est sa matière.
         _appliquer_references(conn, champs, REFERENCES_OF)
+        from app.services.of_proposition import libelles_de_la_fiche
+        libelles_de_la_fiche(conn, champs, fiche_id)
         if propose:
             numero = ratt.numero_of_libre(conn, numero)
             champs["of_numero"] = numero
