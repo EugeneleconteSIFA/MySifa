@@ -127,7 +127,13 @@
     '  box-shadow:inset 4px 0 0 var(--accent,#2563eb)}',
     '.mrp-l.coche .lg,.mrp-l.coche .art{color:var(--accent,#2563eb)}',
     '.mrp-l.coche .des{color:var(--text,#111827);font-weight:600}',
-    '.mrp-l input[type=checkbox],.mrp-bascule input{accent-color:var(--accent,#2563eb)}',
+    '.mrp-bascule input{accent-color:var(--accent,#2563eb)}',
+    // La case à cocher n'est plus montrée : la ligne entière se choisit, et sa
+    // couleur dit qu'elle est prise (retour du 19/11/2026). Elle reste dans la
+    // page, invisible, parce que tout le reste du sélecteur s'appuie sur elle.
+    '.mrp-l{position:relative}',
+    '.mrp-l input[type=checkbox]{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;margin:0}',
+    '.mrp-l:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:-2px}',
     '.mrp-l input[type=checkbox]{width:16px;height:16px;cursor:pointer;flex:0 0 auto}',
     '.mrp-l .lg{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted,#6b7280);flex:0 0 30px}',
     '.mrp-l .art{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;flex:0 0 96px}',
@@ -143,7 +149,7 @@
     '.mrp-l.entete{background:transparent;border-bottom:1px solid var(--border,#dcdfe4);font-size:10.5px;font-weight:700;',
     '  text-transform:uppercase;letter-spacing:.4px;color:var(--muted,#6b7280);padding-top:4px;padding-bottom:4px}',
     '.mrp-l.entete .note{color:var(--muted,#6b7280);font-size:10.5px}',
-    '.mrp-l.entete .case{flex:0 0 13px}',
+    '.mrp-l.entete .case{display:none}',
     /* La machine sur laquelle l'article est censé tourner : ce que le
        planificateur regarde en premier, juste après le produit. */
     '.mrp-mac{display:inline-block;padding:1px 7px;border-radius:6px;font-size:10.5px;font-weight:700;',
@@ -516,7 +522,8 @@
           var k = cle(p, l);
           var c = etat.choix[k];
           var pris = (l.rattachement && l.rattachement.objets) || [];
-          h += '<div class="mrp-l' + (c ? ' coche' : '') + '" data-p="' + ip + '" data-l="' + il + '">' +
+          h += '<div class="mrp-l' + (c ? ' coche' : '') + '" data-p="' + ip + '" data-l="' + il + '"' +
+               ' tabindex="0" role="checkbox" aria-checked="' + (c ? 'true' : 'false') + '">' +
                '<input type="checkbox" data-coche="' + esc(k) + '"' + (c ? ' checked' : '') + '>' +
                '<span class="lg">' + (l.ligne != null ? 'L' + l.ligne : '') + '</span>' +
                '<span class="art">' + esc(l.article || (l.numcde ? 'cde ' + l.numcde : '')) + '</span>' +
@@ -550,12 +557,21 @@
       // Toute la ligne se coche, pas seulement le petit carré (retour du
       // 19/11/2026). La quantité à prendre garde son propre clic.
       corps.querySelectorAll('.mrp-l').forEach(function (row) {
-        row.addEventListener('click', function (ev) {
-          if (ev.target.closest('input, button, a, select, textarea')) return;
+        function basculerLigne() {
           var cb = row.querySelector('[data-coche]');
           if (!cb || cb.disabled) return;
           cb.checked = !cb.checked;
           cb.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        row.addEventListener('click', function (ev) {
+          if (ev.target.closest('input:not([data-coche]), button, a, select, textarea')) return;
+          basculerLigne();
+        });
+        // Au clavier : Espace ou Entrée sur la ligne.
+        row.addEventListener('keydown', function (ev) {
+          if (ev.target !== row || (ev.key !== ' ' && ev.key !== 'Enter')) return;
+          ev.preventDefault();
+          basculerLigne();
         });
       });
       corps.querySelectorAll('[data-qte]').forEach(function (el) {
@@ -637,7 +653,10 @@
       if (q) { q.disabled = !coche; if (!coche) q.value = ''; }
       var cb = corps.querySelector('[data-coche="' + CSS_escape(k) + '"]');
       var ligneEl = cb && cb.closest('.mrp-l');
-      if (ligneEl) ligneEl.classList.toggle('coche', !!coche);
+      if (ligneEl) {
+        ligneEl.classList.toggle('coche', !!coche);
+        ligneEl.setAttribute('aria-checked', coche ? 'true' : 'false');
+      }
       // Le produit de l'OF peut venir de changer (première ligne cochée) :
       // on remarque les lignes tout de suite, sans perdre la position.
       if (o.unProduit && !o.produit) {
