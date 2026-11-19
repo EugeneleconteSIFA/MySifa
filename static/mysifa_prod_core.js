@@ -4527,9 +4527,15 @@ function renderOfTab(){
       }),
       bouton('Télécharger PDF','download',()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}),
       // Le papier atelier annoté, une fois l'OF terminé et scanné (17/11/2026).
+      // Sans scan : signalé seulement quand l'OF est terminé au planning
+      // (19/11/2026). 1 100 icônes grises ne disaient rien ; une icône vide
+      // garde l'alignement de la colonne.
       row.scan_id
         ? bouton('Scan de l\'OF terminé','file-text',()=>{window.open('/api/produits/documents/'+row.scan_id+'/pdf','_blank');})
-        : h('button',{style:bStyle+';opacity:.35;cursor:default',disabled:true,title:'Pas encore de scan pour cet OF'},iconEl('file-text',13)),
+        : row.termine
+          ? h('button',{style:bStyle+';color:var(--warn);border-color:var(--warn)',title:'OF terminé, scan attendu. Ouvrir Scans d\'OF',
+              onClick:()=>{ set({page:'scans'}); nav(); }},iconEl('file-text',13))
+          : h('span',{style:bStyle+';visibility:hidden;display:inline-flex','aria-hidden':'true'},iconEl('file-text',13)),
       // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
       // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
       bouton('Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),
@@ -4611,6 +4617,37 @@ function renderOfTab(){
   );
 }
 
+/* Dernier import des scans d'OF (19/11/2026), en sous-titre de la page.
+   Chargé au plus une fois par minute. Un import qui ne tourne plus se lit
+   dans le texte : « il y a N jours ». */
+function scansActualisationTexte(){
+  if(!S._scansActuLe||Date.now()-S._scansActuLe>60000){
+    S._scansActuLe=Date.now();
+    api('/api/of/scans/actualisation').then(function(a){
+      const avant=JSON.stringify(S.scansActualisation||null);
+      S.scansActualisation=a||null;
+      if(JSON.stringify(a||null)!==avant&&S.page==='scans') render();
+    }).catch(function(){});
+  }
+  const a=S.scansActualisation;
+  if(!a) return '';
+  const quand=function(iso){
+    const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    return m?m[3]+'/'+m[2]+'/'+m[1]+' à '+m[4]+':'+m[5]:'';
+  };
+  const age=function(iso){
+    const d=new Date(String(iso||'').replace(' ','T'));
+    const j=Math.floor((Date.now()-d.getTime())/86400000);
+    return isFinite(j)&&j>=3?' (il y a '+j+' jours)':'';
+  };
+  const p=a.passage;
+  if(p){
+    const n=Number(p.creees)||0;
+    return 'Dernier import le '+quand(p.recu_le)+age(p.recu_le)+' · '+(n?n+(n>1?' scans reçus':' scan reçu'):'aucun nouveau scan')+
+      (p.erreurs?' · '+p.erreurs+(p.erreurs>1?' erreurs':' erreur')+' sur le poste d\'import':'');
+  }
+  return a.derniere_reception?'Dernier scan reçu le '+quand(a.derniere_reception)+age(a.derniere_reception):'Aucun scan reçu';
+}
 /* Dernière actualisation des fiches depuis Access (19/11/2026). Le passage
    vient du compte rendu que le script envoie à chaque exécution ; avant sa
    mise à jour sur le poste, seule la dernière fiche reçue est connue. */
@@ -17231,6 +17268,8 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
     }else if(S.page === 'scans'){
       pageTitle = 'Scans d\'OF';
       pageSubtitle = 'Deposer les OF termines scannes, et rattacher ceux qui n\'ont pas pu l\'etre';
+      const _actu = scansActualisationTexte();
+      if(_actu) pageSubtitle += ' · ' + _actu;
       // Le contenu est construit par mysifa_produit_memoire.js — le meme ecran
       // que la surcouche, rendu ici dans la page. On passe le contenant a
       // chaque rendu : MyProd reconstruit son DOM, une reference gardee d'un

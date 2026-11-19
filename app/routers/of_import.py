@@ -625,6 +625,7 @@ def list_of_imports(request: Request):
                     o.nb_mandrins, o.nb_cartons, o.nb_tubes,
                     o.date_import, o.statut, o.pdf_filename, o.imported_by,
                     CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie,
+                    MAX(CASE WHEN pe.statut = 'termine' THEN 1 ELSE 0 END) AS termine,
                     ({_SQL_DERNIER_SCAN}) AS scan_id
                 FROM of_imports o
                 LEFT JOIN planning_entries pe ON pe.of_import_id = o.id
@@ -639,7 +640,7 @@ def list_of_imports(request: Request):
         "total":  total,
         "offset": offset,
         "limit":  limit,
-        "rows":   [{**_row_dict(r), "lie": bool(r["lie"])} for r in rows],
+        "rows":   [{**_row_dict(r), "lie": bool(r["lie"]), "termine": bool(r["termine"])} for r in rows],
     }
 
 
@@ -1025,6 +1026,26 @@ def fiches_actualisation(request: Request):
             pass
     recue = max([d for d in (creee, modifiee) if d], default=None)
     return {"passage": passage, "derniere_reception": recue}
+
+
+@router.get("/api/of/scans/actualisation")
+def scans_actualisation(request: Request):
+    """Fraîcheur des scans d'OF : dernier passage de l'import (le script envoie
+    son compte rendu depuis le 19/11/2026) et dernier scan reçu. Les 473
+    premiers scans sont arrivés en une fois le 26/08/2026, puis plus rien
+    pendant trois mois sans que personne ne le voie."""
+    _require_of_access(request)
+    with get_db() as conn:
+        passage = None
+        try:
+            r = conn.execute(
+                "SELECT recu_le, lues, envoyees, creees, maj, erreurs FROM ponts_passages "
+                "WHERE pont='scans' ORDER BY recu_le DESC, id DESC LIMIT 1").fetchone()
+            passage = dict(r) if r else None
+        except Exception:
+            passage = None
+        recu = conn.execute("SELECT MAX(importe_le) FROM produit_documents").fetchone()[0]
+    return {"passage": passage, "derniere_reception": recu}
 
 
 @router.get("/api/fiches-techniques/list")
