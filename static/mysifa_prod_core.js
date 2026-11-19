@@ -1985,9 +1985,14 @@ function ofeFeuilleHtml(m){
     return '<input id="'+id+'" class="ofe-case" type="'+type+'"'+(type==='number'?' step="any"':'')+
       ' autocomplete="off" value="'+escAttr(v)+'" style="'+pos(c)+(c.align==='d'?';text-align:right':'')+'">';
   }).join('');
+  const libres=(_ofeModele.libres||[]).map(function(c){
+    const id='ofe-libre-'+c.cle;
+    const v=(m._dom&&m._dom[id]!==undefined)?m._dom[id]:((m._libres||{})[c.cle]||'');
+    return '<input id="'+escAttr(id)+'" data-libre="'+escAttr(c.cle)+'" class="ofe-case" type="text" maxlength="60" autocomplete="off" value="'+escAttr(v)+'" style="'+pos(c)+'">';
+  }).join('');
   const b=_ofeModele.bobinettes;
   const bob=b.y.map((y,i)=>'<div class="ofe-bobinette" id="ofe-bob-'+i+'" style="left:'+(b.x/P.l*100)+'%;top:'+((y-b.taille)/P.h*100)+'%;font-size:'+(b.taille/P.l*100)+'cqw"></div>').join('');
-  return '<div class="ofe-feuille" style="background-image:url(/api/of/modele.png)">'+cases+bob+'</div>';
+  return '<div class="ofe-feuille" style="background-image:url(/api/of/modele.png)">'+cases+libres+bob+'</div>';
 }
 /* Les cases corrigées se voient d'un coup d'œil. */
 function ofePeindreCases(m){
@@ -2161,6 +2166,8 @@ window.ofeVoirPdf = ofeVoirPdf;
 
 /* Les corrections enregistrées redeviennent des corrections à l'ouverture. */
 function ofeLireCorriges(m){
+  // Les cadres libres du papier (nombre de tours, autres outils…).
+  try{ m._libres=JSON.parse(m.cases_libres||'{}')||{}; }catch(e){ m._libres={}; }
   m._manuels={};
   let l=[];
   try{ l=JSON.parse(m.champs_corriges||'[]'); }catch(e){ l=[]; }
@@ -2632,6 +2639,9 @@ function ofeBrancherDates(overlay,m){
   });
 }
 function ofeRepeindreDates(overlay,m){
+  // Le délai de l'étape 2 et celui de la feuille ne font qu'un.
+  const a=document.getElementById('ofe-delai'), b=document.getElementById('ofe-delai-etape2');
+  if(a&&b&&document.activeElement!==b) b.value=a.value;
   const z=document.getElementById('ofe-dates');
   if(!z) return;
   z.outerHTML=ofeDatesHtml(m);
@@ -2748,6 +2758,15 @@ function ofeBrancherFiche(overlay,m){
   const ref=overlay.querySelector('#ofe-reference');
   if(ref&&!m.id) ref.addEventListener('change',function(){ ofeControler(m); });
   ofeBrancherDates(overlay,m);
+  const delai2=overlay.querySelector('#ofe-delai-etape2');
+  if(delai2) ['input','change'].forEach(function(evt){
+    delai2.addEventListener(evt,function(){
+      const c=document.getElementById('ofe-delai');
+      if(!c||c.value===delai2.value) return;
+      c.value=delai2.value;
+      c.dispatchEvent(new Event(evt,{bubbles:true}));
+    });
+  });
   const champDelai=overlay.querySelector('#ofe-delai');
   if(champDelai) ['input','change'].forEach(function(evt){
     champDelai.addEventListener(evt,function(){
@@ -2862,6 +2881,12 @@ function ofeLirePayload(m){
     palette_ref_id:       m.palette_ref_id||null,
     // Le serveur en tire les libellés matière imprimés, comme Access.
     fiche_id:             m._fiche?m._fiche.id:null,
+    // Les cadres libres n'existent que sur la feuille : absents, rien n'est envoyé.
+    cases_libres:         document.querySelector('.ofe-feuille')?(function(){
+      const o={};
+      document.querySelectorAll('.ofe-feuille [data-libre]').forEach(function(el){ if(el.value.trim()) o[el.getAttribute('data-libre')]=el.value.trim(); });
+      return o;
+    })():undefined,
     plieuse_pignon:       tv('ofe-plieuse'),
     nb_pouces:            tv('ofe-pouces'),
     particularites:       tv('ofe-particularites'),
@@ -3041,7 +3066,10 @@ function renderOfEditModal(){
       // Produit vendu au mètre (« Bobine de 45 ml ») : on compte des rouleaux,
       // comme dans Access (17/11/2026).
       +(surOF?'':_f('ofe-qte',m._auMetre?'Nb rouleaux':'Nb étiquettes',m.qte_etiquettes,'number'))
-      +(surOF?'':_f('ofe-delai','Délai client',ofeIso(m.delai_client),'date'))
+      +(surOF?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label for="ofe-delai-etape2" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Délai client</label>
+          <input id="ofe-delai-etape2" type="date" value="${escAttr(ofeIso(_v('ofe-delai',m.delai_client))||'')}" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
+        </div>`:_f('ofe-delai','Délai client',ofeIso(m.delai_client),'date'))
       +ofeDatesHtml(m)
       +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`
       +`<div id="ofe-ecart" style="grid-column:1/-1">${ofeEcartHtml(m)}</div>`
