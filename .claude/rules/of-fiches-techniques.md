@@ -157,6 +157,10 @@ Le panneau « Modifications et points à relire » tient le journal des cases
 changées à la main (valeur d'avant → valeur actuelle, heure) ; chaque ligne
 s'annule : retour à la fiche, au calcul, ou à la commande pour la chaîne
 étiquettes / bobines / levées, et tout ce qui en dépend se recalcule.
+Les flèches Annuler / Rétablir de la barre de l'OF (`ofeMemoriser`,
+`ofeRestaurer`) mémorisent l'état complet avant chaque geste et le restaurent
+sans recalcul. Une case en cours de frappe n'est jamais réécrite par le calcul
+(`ofeEnFrappe`).
 
 Un id à `None` détache la référence **sans effacer le texte** : un OF Access
 porte un libellé qu'aucune référence ne recouvre encore, et le perdre serait
