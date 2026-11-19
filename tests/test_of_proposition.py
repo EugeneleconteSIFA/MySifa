@@ -592,6 +592,8 @@ case = {c["cle"]: c for c in mod["cases"]}
 verifier("le N° d'outil prend tout son cadre", case["outil_1_numero"]["x"], 131.8)
 verifier("la forme d'outil reste dans son cadre", case["outil_1_forme"]["x"] + case["outil_1_forme"]["l"] <= 127.6, True)
 verifier("les cadres vides deviennent des cases libres", len(mod["libres"]) > 60, True)
+verifier("« Qté totale » s'arrête avant « kg »", case["qte_adhesif_kg"]["x"] + case["qte_adhesif_kg"]["l"] < 311.8, True)
+verifier("« Qté totale » commence après son libellé", case["qte_adhesif_kg"]["x"] > 270.3, True)
 verifier("aucune case libre ne chevauche un champ",
          [l["cle"] for l in mod["libres"] for c in mod["cases"]
           if gen._recouvre((l["x"], l["y"], l["x"] + l["l"], l["y"] + l["h"]),

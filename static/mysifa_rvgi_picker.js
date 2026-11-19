@@ -110,6 +110,8 @@
        rattachement de production, la couleur est donc la sienne. */
     '.mrp-etiq.autre{background:rgba(248,113,113,.14);color:var(--danger,#dc2626)}',
     '.mrp-sel{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--border,#dcdfe4)}',
+    '.mrp-sel{min-height:41px;box-sizing:border-box}',
+    '.mrp-sel .vide{font-size:12px;color:var(--muted,#6b7280)}',
     '.mrp-sel .t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#6b7280);margin-right:4px}',
     '.mrp-puce{display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 9px;border-radius:999px;font-size:12px;',
     '  background:var(--accent-bg,rgba(37,99,235,.1));color:var(--accent,#2563eb);border:1px solid var(--accent,#2563eb)}',
@@ -117,7 +119,9 @@
     '.mrp-etiq.expediee{background:rgba(99,102,241,.16);color:#4338ca}',
     '.mrp-l{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border,#dcdfe4);font-size:12.5px}',
     '.mrp-l:last-child{border-bottom:none}',
+    '.mrp-l{cursor:pointer;user-select:none}',
     '.mrp-l:hover{background:rgba(37,99,235,.05)}',
+    '.mrp-l.coche{background:rgba(37,99,235,.09)}',
     '.mrp-l input[type=checkbox]{width:16px;height:16px;cursor:pointer;flex:0 0 auto}',
     '.mrp-l .lg{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted,#6b7280);flex:0 0 30px}',
     '.mrp-l .art{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;flex:0 0 96px}',
@@ -387,7 +391,10 @@
         // Ce qui est déjà coché reste sous les yeux, quelle que soit la
         // recherche en cours : sans ça, chercher une deuxième commande
         // cachait la première, et on ne savait plus ce qu'on avait pris.
-        '<div class="mrp-sel" id="mrp-sel" style="display:none"></div>' +
+        // Toujours affichée : apparaître au premier choix décalait la liste sous
+        // la souris, et le clic suivant tombait sur la ligne voisine.
+        '<div class="mrp-sel" id="mrp-sel"><span class="t">Lignes choisies</span>' +
+          '<span class="vide">aucune — cliquez sur une ligne pour la prendre</span></div>' +
         '<div class="mrp-corps" id="mrp-corps"><div class="mrp-msg">Tape au moins deux caractères.</div></div>' +
         '<div class="mrp-pied">' +
           '<span class="mrp-choix" id="mrp-choix">Aucune ligne cochée</span>' +
@@ -503,7 +510,7 @@
           var k = cle(p, l);
           var c = etat.choix[k];
           var pris = (l.rattachement && l.rattachement.objets) || [];
-          h += '<div class="mrp-l" data-p="' + ip + '" data-l="' + il + '">' +
+          h += '<div class="mrp-l' + (c ? ' coche' : '') + '" data-p="' + ip + '" data-l="' + il + '">' +
                '<input type="checkbox" data-coche="' + esc(k) + '"' + (c ? ' checked' : '') + '>' +
                '<span class="lg">' + (l.ligne != null ? 'L' + l.ligne : '') + '</span>' +
                '<span class="art">' + esc(l.article || (l.numcde ? 'cde ' + l.numcde : '')) + '</span>' +
@@ -533,6 +540,17 @@
 
       corps.querySelectorAll('[data-coche]').forEach(function (el) {
         el.addEventListener('change', function () { basculer(el.getAttribute('data-coche'), el.checked); });
+      });
+      // Toute la ligne se coche, pas seulement le petit carré (retour du
+      // 19/11/2026). La quantité à prendre garde son propre clic.
+      corps.querySelectorAll('.mrp-l').forEach(function (row) {
+        row.addEventListener('click', function (ev) {
+          if (ev.target.closest('input, button, a, select, textarea')) return;
+          var cb = row.querySelector('[data-coche]');
+          if (!cb || cb.disabled) return;
+          cb.checked = !cb.checked;
+          cb.dispatchEvent(new Event('change', { bubbles: true }));
+        });
       });
       corps.querySelectorAll('[data-qte]').forEach(function (el) {
         el.addEventListener('input', function () {
@@ -611,6 +629,9 @@
       }
       var q = corps.querySelector('[data-qte="' + CSS_escape(k) + '"]');
       if (q) { q.disabled = !coche; if (!coche) q.value = ''; }
+      var cb = corps.querySelector('[data-coche="' + CSS_escape(k) + '"]');
+      var ligneEl = cb && cb.closest('.mrp-l');
+      if (ligneEl) ligneEl.classList.toggle('coche', !!coche);
       // Le produit de l'OF peut venir de changer (première ligne cochée) :
       // on remarque les lignes tout de suite, sans perdre la position.
       if (o.unProduit && !o.produit) {
@@ -674,8 +695,11 @@
       var z = $('mrp-sel');
       if (!z) return;
       var cles = Object.keys(etat.choix);
-      if (!cles.length) { z.style.display = 'none'; z.innerHTML = ''; return; }
-      z.style.display = 'flex';
+      if (!cles.length) {
+        z.innerHTML = '<span class="t">Lignes choisies</span>' +
+          '<span class="vide">aucune — cliquez sur une ligne pour la prendre</span>';
+        return;
+      }
       z.innerHTML = '<span class="t">Lignes choisies</span>' + cles.map(function (k) {
         var c = etat.choix[k];
         var lib = c.numero + (c.ligne == null ? ' (entière)' : ' L' + c.ligne) +
