@@ -110,6 +110,37 @@ verifier("machine + laize l'emporte sur la récence (497)", meilleure_fiche(fts,
 verifier("sans date : la plus grande id",
          meilleure_fiche([{"id": 3, "machine": "DSI"}, {"id": 9, "machine": "DSI"}], "DSI")["id"], 9)
 
+print("Planning : la matière affichée suit le plus récent")
+import sqlite3
+mem = sqlite3.connect(":memory:")
+mem.row_factory = sqlite3.Row
+mem.executescript("""
+CREATE TABLE of_imports (id INTEGER PRIMARY KEY, of_numero TEXT, machine TEXT, format TEXT,
+  matiere TEXT, matiere_ref_id INTEGER, laize REAL, qte_au_mille REAL, date_creation TEXT, date_import TEXT);
+CREATE TABLE fiches_techniques (id INTEGER PRIMARY KEY, reference TEXT, machine TEXT, format TEXT,
+  eti_laize REAL, eti_longueur REAL, support TEXT, support_ref_id INTEGER, laize REAL,
+  qte_au_mille REAL, date_modif TEXT, date_import TEXT);
+CREATE TABLE documents_valeurs_historique (table_nom TEXT, doc_id INTEGER, at TEXT, refuse INTEGER, origine TEXT);
+""")
+cols_of = [k for k in OF_1341]
+mem.execute(f"INSERT INTO of_imports ({','.join(cols_of)}) VALUES ({','.join('?'*len(cols_of))})",
+            [OF_1341[k] for k in cols_of])
+cols_ft = ["id", "reference", "machine", "format", "eti_laize", "eti_longueur", "support", "laize",
+           "qte_au_mille", "date_modif", "date_import"]
+mem.execute(f"INSERT INTO fiches_techniques ({','.join(cols_ft)}) VALUES ({','.join('?'*len(cols_ft))})",
+            [FT_1341.get(k) for k in cols_ft])
+dossiers = acc.appliquer_aux_dossiers(mem, [
+    {"id": 744, "of_import_id": 1648, "_ft_id": 924, "_ft_support": "VELIN H400"},
+    {"id": 1, "of_import_id": None, "_ft_id": 924, "_ft_support": "VELIN H400"},
+])
+verifier("9932921 : PP 95µ affiché", dossiers[0]["_ft_support"], "PP 95µ BLANC MAT")
+verifier("9932921 : verdict porté", dossiers[0]["_accord"]["autre_produit"], True)
+verifier("sans OF : fiche inchangée", (dossiers[1]["_ft_support"], "_accord" in dossiers[1]), ("VELIN H400", False))
+mem.execute("INSERT INTO documents_valeurs_historique VALUES ('fiches_techniques', 924, '2026-11-19T08:00:00', 0, 'manuel')")
+d = acc.appliquer_aux_dossiers(mem, [{"of_import_id": 1648, "_ft_id": 924, "_ft_support": "VELIN H400"}])[0]
+verifier("fiche corrigée à la main après l'OF : la fiche fait foi", (d["_ft_support"], d["_accord"]["source"]),
+         ("VELIN H400", "fiche"))
+
 print("PDF")
 v = acc.verdict(OF_1341, FT_1341)
 pdf = generate_fiche_pdf(acc.fiche_affichee(FT_1341, OF_1341, v), avertissement=v["message"])
