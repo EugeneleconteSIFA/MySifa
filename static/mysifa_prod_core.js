@@ -2030,6 +2030,14 @@ function ofePeindreCases(m){
     const cible=el&&el.type==='hidden'?el.previousElementSibling:el;
     if(cible) cible.classList.toggle('ofe-case-cor',!!(m._manuels||{})[id]);
   });
+  // « Tout recalculer » n'apparaît que si une quantité a été forcée.
+  const forcees=Object.values(OFE_CALCULES).filter(id=>(m._manuels||{})[id]).length;
+  const bRecalc=document.getElementById('ofe-recalc-btn');
+  if(bRecalc){
+    bRecalc.style.display=forcees?'':'none';
+    bRecalc.textContent='Tout recalculer ('+forcees+')';
+    bRecalc.title='Rendre au calcul '+(forcees>1?'les '+forcees+' cases forcées':'la case forcée');
+  }
   OFE_VERROUILLES.forEach(function(id){
     const el=document.getElementById(id);
     if(!el||!el.classList.contains('ofe-case')) return;
@@ -3618,7 +3626,7 @@ function renderOfEditModal(){
             <label for="ofe-nb-fronts" style="font-size:12px;font-weight:600;color:var(--text2)">Fronts</label>
             <input id="ofe-nb-fronts" type="number" min="1" value="${escAttr(String(_v('ofe-nb-fronts',m.nb_fronts)==null?'':_v('ofe-nb-fronts',m.nb_fronts)))}" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 8px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
             <button type="button" id="ofe-histo-annuler" onclick="ofeAnnulerDernier()" title="Annuler la dernière modification (Cmd/Ctrl + Z)" aria-label="Annuler la dernière modification" style="width:32px;height:28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button type="button" id="ofe-histo-retablir" onclick="ofeRetablir()" title="Rétablir (Cmd/Ctrl + Maj + Z)" aria-label="Rétablir la modification annulée" style="width:32px;height:28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-            <button type="button" id="ofe-recalc-btn" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
+            <button type="button" id="ofe-recalc-btn" style="display:none;padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
             <button type="button" onclick="ofeVoirPdf()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Voir le PDF</button>
           </span>
         </div>
@@ -3637,7 +3645,7 @@ function renderOfEditModal(){
         _f('ofe-metrage','Métrage',m.metrage,'number'),
         `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
           Corriger les levées ou les bobines met à jour la quantité. Les autres valeurs corrigées à la main restent telles quelles.
-          <button type="button" id="ofe-recalc-btn" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
+          <button type="button" id="ofe-recalc-btn" style="display:none;padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
         </div>`,
       ].join(''),true)}
       ${`<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
