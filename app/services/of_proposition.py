@@ -83,7 +83,7 @@ LIBELLES_FICHE = (
 # les a touchées.
 CHAMPS_CALCULES = (
     "metrage", "qte_bobines", "nb_mandrins", "nb_levees", "nb_tubes", "nb_cartons",
-    "qte_adhesif_g", "qte_adhesif_kg",
+    "nb_palettes", "qte_adhesif_g", "qte_adhesif_kg",
 )
 
 # Cases dont la valeur de l'OF prend le pas sur la fiche une fois corrigées.
@@ -210,6 +210,34 @@ def _nb_tubes(fiche: Dict[str, Any], mandrins: Any) -> Optional[int]:
     return math.ceil(round(n / par_tube, 6)) if par_tube >= 1 else None
 
 
+def cartons_par_palette(fiche: Dict[str, Any]) -> Optional[float]:
+    """Cartons au sol × cartons en hauteur de la fiche. None s'il en manque un."""
+    sol = _nombre(fiche.get("palette_nb_cartons_sol"))
+    haut = _nombre(fiche.get("palette_nb_cartons_hauteur"))
+    return sol * haut if sol and haut else None
+
+
+def _nb_palettes(fiche: Dict[str, Any], cartons: Any) -> Optional[int]:
+    """⌈ cartons ÷ cartons par palette ⌉ (la dernière palette est entamée)."""
+    n, par = _nombre(cartons), cartons_par_palette(fiche)
+    return math.ceil(round(n / par, 6)) if n and par else None
+
+
+def qte_au_mille_selon_fronts(fiche: Dict[str, Any], fronts: Any) -> Optional[float]:
+    """La qté au mille de la fiche, ramenée à un autre nombre de fronts.
+
+    La fiche la porte pour SON outil : la même longueur de module se partage
+    entre ses fronts. 890/0017 : 31,9 à 4 fronts, 25,5 à 5 (31,9 × 4 ÷ 5).
+    """
+    qam = qte_au_mille(fiche)
+    ff, fo = _nombre(fiche.get("outil1_nb_front")), _nombre(fronts)
+    if not qam:
+        return None
+    if ff and fo and abs(ff - fo) > 1e-9:
+        return round(qam * ff / fo, 4)
+    return qam
+
+
 def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
                        laize: Any = None,
                        grammage: Any = None) -> Dict[str, Any]:
@@ -269,6 +297,9 @@ def calculer_quantites(fiche: Dict[str, Any], qte_etiquettes: Any,
         bc = _nombre(fiche.get("nb_bobines_carton"))
         if bc:
             out["nb_cartons"] = math.ceil(round(bobines / bc, 6))
+            palettes = _nb_palettes(fiche, out["nb_cartons"])
+            if palettes is not None:
+                out["nb_palettes"] = palettes
         else:
             manques.append("Nb bobines par carton absent de la fiche — cartons non calculés.")
 
@@ -317,13 +348,20 @@ def fiche_selon_of(fiche: Dict[str, Any], valeurs: Optional[Dict[str, Any]],
     v = valeurs or {}
     corr = set(lire_corriges(corriges))
     fronts = _nombre(v.get("nb_fronts"))
+    # D'autres fronts : la qté au mille de la fiche est ramenée à ce nombre,
+    # sinon le métrage resterait celui de l'outil de la fiche.
+    lue = qte_au_mille_selon_fronts(fiche, fronts)
     if fronts:
         f["outil1_nb_front"] = fronts
+    if lue:
+        f["qte_au_mille"] = lue
     # Un OF Access porte la qté au mille arrondie à une décimale (10,9 pour
     # 10,885) : sans correction, seul un vrai écart l'emporte sur la fiche.
+    # Celle de la fiche, restée dans la case, n'est pas un écart : elle suit.
     qam = _nombre(v.get("qte_au_mille"))
-    lue = qte_au_mille(fiche)
-    if qam and ("qte_au_mille" in corr or not lue or abs(qam - lue) > 0.06):
+    brute = qte_au_mille(fiche)
+    if qam and ("qte_au_mille" in corr or not lue
+                or (abs(qam - lue) > 0.06 and not (brute and abs(qam - brute) <= 0.06))):
         f["qte_au_mille"] = qam
     cond = str(v.get("conditionnement") or "").strip()
     if cond and cond.lower() != str(fiche.get("conditionnement") or "").strip().lower():
@@ -365,6 +403,10 @@ def appliquer_corrections(calc: Dict[str, Any], fiche: Dict[str, Any], valeurs: 
     for col in CHAMPS_CALCULES:
         if col in corr and valeurs.get(col) not in (None, ""):
             calc[col] = valeurs[col]
+    if "nb_cartons" in corr and "nb_palettes" not in corr:
+        palettes = _nb_palettes(fiche, calc.get("nb_cartons"))
+        if palettes is not None:
+            calc["nb_palettes"] = palettes
     if "nb_mandrins" in corr and "nb_tubes" not in corr:
         tubes = _nb_tubes(fiche, calc.get("nb_mandrins"))
         if tubes is not None:
@@ -376,7 +418,7 @@ def appliquer_corrections(calc: Dict[str, Any], fiche: Dict[str, Any], valeurs: 
 
 _LIBELLES_COHERENCE = {
     "metrage": ("Métrage", " m"), "nb_cartons": ("Cartons", ""), "nb_mandrins": ("Mandrins", ""),
-    "nb_tubes": ("Tubes", ""), "qte_adhesif_kg": ("Adhésif", " kg"),
+    "nb_tubes": ("Tubes", ""), "nb_palettes": ("Palettes", ""), "qte_adhesif_kg": ("Adhésif", " kg"),
 }
 
 
@@ -570,6 +612,9 @@ def proposer(conn, fiche_id: int, qte_etiquettes: Any = None,
         manques.insert(0, calc.pop("_info"))
     for col, val in calc.items():
         poser(col, val, "adhésif d'un OF précédent" if col == "qte_adhesif_g" else "calcul")
+    qam_calc = _nombre(base_calcul.get("qte_au_mille"))
+    if qam and qam_calc and abs(qam_calc - qam) > 1e-6:
+        poser("qte_au_mille", round(qam_calc, 4), "calcul")
     poser("ref_adhesif", ref_adhesif_precedente(conn, adhesif),
           "adhésif d'un OF précédent")
 

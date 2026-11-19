@@ -1915,11 +1915,11 @@ window.ofCreerDossierProd = ofCreerDossierProd;
 const OFE_CALCULES = {
   metrage:'ofe-metrage', qte_bobines:'ofe-bobines', nb_mandrins:'ofe-mandrins',
   nb_levees:'ofe-nb-levees', nb_tubes:'ofe-tubes', nb_cartons:'ofe-cartons',
-  qte_adhesif_g:'ofe-qte-adhesif-g', qte_adhesif_kg:'ofe-qte-adhesif-kg',
+  nb_palettes:'ofe-nb-palettes', qte_adhesif_g:'ofe-qte-adhesif-g', qte_adhesif_kg:'ofe-qte-adhesif-kg',
 };
 const OFE_CALCULES_LIBELLES = {
   metrage:'métrage', qte_bobines:'bobines', nb_mandrins:'mandrins',
-  nb_levees:'levées', nb_tubes:'tubes', nb_cartons:'cartons',
+  nb_levees:'levées', nb_tubes:'tubes', nb_cartons:'cartons', nb_palettes:'palettes',
   qte_adhesif_g:'grammage adhésif', qte_adhesif_kg:'adhésif (kg)',
 };
 /* Cases de l'OF qui nourrissent le calcul : corrigées, elles priment sur la
@@ -2377,10 +2377,14 @@ function ofeCorriges(m){
 }
 /* Ce que le serveur doit relire sur l'OF pour recalculer. */
 function ofeValeursCalcul(){
-  const v={};
+  const v={}, m=S.ofEditModal||{};
   Object.keys(OFE_CORRIGEABLES).forEach(function(c){
     const el=document.getElementById(OFE_CORRIGEABLES[c]);
-    if(el&&String(el.value).trim()!=='') v[c]=el.value;
+    if(!el||String(el.value).trim()==='') return;
+    // Qté au mille posée par le calcul : le serveur la refait (elle suit les
+    // fronts). L'envoyer la figerait à l'ancien nombre de fronts.
+    if(c==='qte_au_mille'&&!(m._manuels||{})['ofe-qte-mille']&&m._qamCalcule!=null&&el.value===String(m._qamCalcule)) return;
+    v[c]=el.value;
   });
   const a=document.getElementById('ofe-adhesif-label');
   if(a&&a.value) v.adhesif_label=a.value;
@@ -2520,6 +2524,7 @@ async function ofeChoisirFiche(ficheId){
     poses.push(col);
   });
   m._ficheCols=poses;
+  m._qamCalcule=m._dom['ofe-qte-mille'];
   m._ficheRef=p.fiche_valeurs||{};
   m._incoherences=p.incoherences||[];
   m._fiche=p.fiche;
@@ -2759,6 +2764,13 @@ async function ofeRecalculer(){
     m._dom[id]=txt;
     m[col]=(val===undefined)?null:val;
   });
+  // La qté au mille suit le nombre de fronts tant qu'elle n'est pas corrigée.
+  const qamEl=document.getElementById('ofe-qte-mille'), qam=(p.champs||{}).qte_au_mille;
+  if(qamEl&&!m._manuels['ofe-qte-mille']&&!ofeEnFrappe(qamEl)&&qam!=null){
+    const t=String(qam);
+    if(qamEl.value!==''&&qamEl.value!==t) ofeMarquerSuivi(qamEl);
+    qamEl.value=t; m._dom['ofe-qte-mille']=t; m.qte_au_mille=qam; m._qamCalcule=t;
+  }
   ofePeindreCases(m);
   m._ficheManques=p.manques||[];
   m._ficheCalcules=p.calcules||[];

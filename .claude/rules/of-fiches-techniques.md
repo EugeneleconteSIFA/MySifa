@@ -157,6 +157,17 @@ Le panneau « Modifications et points à relire » tient le journal des cases
 changées à la main (valeur d'avant → valeur actuelle, heure) ; chaque ligne
 s'annule : retour à la fiche, au calcul, ou à la commande pour la chaîne
 étiquettes / bobines / levées, et tout ce qui en dépend se recalcule.
+**Fronts et qté au mille** (19/11/2026) : la qté au mille de la fiche vaut
+pour SON outil. Corriger les fronts la ramène à proportion
+(`qte_au_mille_selon_fronts` : 890/0017, 31,9 à 4 fronts = 25,5 à 5), et le
+métrage suit. Une qté au mille corrigée à la main prime. L'écran n'envoie pas
+la valeur posée par le calcul (`m._qamCalcule`), sinon elle figerait l'ancien
+nombre de fronts.
+
+**Palettes** (19/11/2026) : `nb_palettes` = ⌈ cartons ÷ (cartons au sol ×
+cartons en hauteur de la fiche) ⌉, calculées comme les autres quantités et
+suivant des cartons corrigés.
+
 Les flèches Annuler / Rétablir de la barre de l'OF (`ofeMemoriser`,
 `ofeRestaurer`) mémorisent l'état complet avant chaque geste et le restaurent
 sans recalcul. Une case en cours de frappe n'est jamais réécrite par le calcul

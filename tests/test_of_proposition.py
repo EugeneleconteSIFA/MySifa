@@ -614,6 +614,29 @@ verifier("ISO → français", ns["_fmt_date"]("2026-11-18"), "18/11/2026")
 verifier("français inchangé", ns["_fmt_date"]("18/11/2026"), "18/11/2026")
 verifier("vide", ns["_fmt_date"](None), "")
 
+print("Fronts corrigés : la qté au mille suit, palettes depuis les cartons")
+from app.services.of_proposition import (fiche_selon_of as _fso, calculer_quantites as _cq,
+    appliquer_corrections as _ac, quantite_menee as _qm)
+_F = {"outil1_nb_front": 4, "qte_au_mille": 31.91, "conditionnement": "Bobine de 1 500 étiquettes",
+      "nb_bobines_carton": 4, "palette_nb_cartons_sol": 6, "palette_nb_cartons_hauteur": 5}
+def _of(v, corr, q=1500000):
+    b = _fso(_F, v, corr); q = _qm(b, v, corr, q)
+    c = _cq(b, q); _ac(c, b, v, corr, None, None)
+    return b["qte_au_mille"], c
+qam, c = _of({}, [])
+verifier("4 fronts : qté au mille de la fiche", qam, 31.91)
+verifier("1 000 bobines → 250 cartons → 9 palettes de 30", c.get("nb_palettes"), 9)
+qam, c = _of({"nb_fronts": "5", "qte_au_mille": "31.91"}, ["nb_fronts"])
+verifier("890/0017 : 5 fronts → 31,91 × 4 ÷ 5", qam, 25.528)
+verifier("5 fronts : métrage réduit d'autant", c.get("metrage"), 38292)
+verifier("5 fronts : 200 levées", c.get("nb_levees"), 200)
+qam, c = _of({"nb_fronts": "5", "qte_au_mille": "30"}, ["nb_fronts", "qte_au_mille"])
+verifier("qté au mille corrigée : elle prime sur les fronts", qam, 30.0)
+qam, c = _of({"nb_cartons": "300"}, ["nb_cartons"])
+verifier("cartons corrigés : les palettes suivent", c.get("nb_palettes"), 10)
+qam, c = _of({}, [], q=1500000) if False else (None, _cq(dict(_F, palette_nb_cartons_hauteur=None), 1500000))
+verifier("sans cartons en hauteur : pas de palettes", c.get("nb_palettes"), None)
+
 print()
 print("ÉCHECS : %d" % ko if ko else "Tout est vert.")
 sys.exit(1 if ko else 0)
