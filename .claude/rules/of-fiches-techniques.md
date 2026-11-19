@@ -417,6 +417,16 @@ l'affiche (`GET /api/fiches-techniques/actualisation`). Tant que le script
 n'est pas redéployé sur le poste, seule la dernière fiche reçue est connue
 (création ou mise à jour via `documents_valeurs_historique`).
 
+**Scans d'OF** (19/11/2026) : `scripts/of_scans_import_quotidien.py` rend
+compte de chaque passage de la même façon (pont `scans`, clé `scan:write` ;
+`PONTS` de `api_bridge.py` donne le droit exigé par pont), y compris un
+dossier introuvable (1 erreur). Le sous-titre de MyProd › Scans d'OF affiche
+le dernier import (`GET /api/of/scans/actualisation`), « il y a N jours » au
+delà de 3 jours. Constat : 473 scans importés en une fois le 26/08/2026, plus
+rien ensuite, l'import quotidien n'ayant jamais été planifié. Liste des OF :
+icône de scan active s'il y en a un, orange « scan attendu » si l'OF est
+terminé au planning (`termine` de `/api/of/list`), sinon rien.
+
 ## L'OF et la fiche se contredisent — `app/services/of_fiche_accord.py`
 
 Constat du 18/11/2026, dossier 9932921 : fiche 1341/0012 dupliquée de la

@@ -29,9 +29,11 @@ import argparse
 import os
 import sys
 import time
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from of_scans_commun import arguments_communs, importer, log, verifier_cle  # noqa: E402
+from of_scans_commun import (arguments_communs, envoyer_passage, importer, log,  # noqa: E402
+                             verifier_cle)
 
 
 def main() -> int:
@@ -53,11 +55,21 @@ def main() -> int:
     depuis = time.time() - max(1, args.jours) * 86400
     log("Passe quotidienne — %d dernier(s) jour(s) dans %s" % (args.jours, args.dossier))
 
-    bilan = importer(
-        args.dossier, args.url, args.cle, args.index,
-        age_min=args.age_min, modifie_depuis=depuis, annee_min=args.annee_min,
-        simulation=args.simulation,
-    )
+    debut = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        bilan = importer(
+            args.dossier, args.url, args.cle, args.index,
+            age_min=args.age_min, modifie_depuis=depuis, annee_min=args.annee_min,
+            simulation=args.simulation,
+        )
+    except SystemExit:
+        # Partage non monté ou dossier déplacé : le dire à MySifa plutôt
+        # que de se taire, c'est la panne la plus probable.
+        if not args.simulation:
+            envoyer_passage(args.url, args.cle, {"vus": 0, "echecs": 1}, debut)
+        raise
+    if not args.simulation:
+        envoyer_passage(args.url, args.cle, bilan, debut)
     # Code de sortie non nul en cas d'echec : le planificateur Windows le
     # remonte, ce qui evite une tache qui « reussit » tous les soirs sans rien
     # envoyer parce que le partage n'est plus monte.

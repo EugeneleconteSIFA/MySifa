@@ -255,6 +255,29 @@ def importer(racine: str, url: str, cle: str, index_path: str, *,
     return bilan
 
 
+def envoyer_passage(url: str, cle: str, bilan: dict, debut: str) -> None:
+    """Compte rendu du passage (19/11/2026), affiché en tête de MyProd ›
+    Scans d'OF. Un passage sans compte rendu = la tâche ne tourne plus. Un
+    échec ici ne fait jamais échouer l'import."""
+    try:
+        requests.post(
+            url.rstrip("/") + "/api/bridge/passage",
+            headers={"X-Api-Key": cle},
+            json={
+                "pont": "scans", "debut": debut,
+                "fin": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                "lues": bilan.get("vus"), "envoyees": bilan.get("envoyes"),
+                "creees": bilan.get("envoyes"), "maj": bilan.get("rattaches"),
+                "identiques": (bilan.get("doublons") or 0) + (bilan.get("deja_indexes") or 0),
+                "erreurs": bilan.get("echecs"),
+                "poste": os.environ.get("COMPUTERNAME", ""),
+            },
+            timeout=30,
+        ).raise_for_status()
+    except Exception as exc:
+        log("AVERTISSEMENT  compte rendu du passage non envoye : %s" % exc)
+
+
 def arguments_communs(parser):
     parser.add_argument("--dossier", default=os.getenv("OF_SCANS_DIR", DOSSIER_DEFAUT),
                         help="Dossier des scans (defaut : %s)" % DOSSIER_DEFAUT)

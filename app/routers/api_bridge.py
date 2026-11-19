@@ -8,7 +8,7 @@ Endpoints :
   GET  /api/bridge/of          → liste les OF importés (of:read)
   POST /api/bridge/of          → pousse un OF depuis Access (of:write)
   GET  /api/bridge/fiches      → liste les fiches techniques importées (of:read)
-  POST /api/bridge/passage     → compte rendu d'un passage de synchro (of:write)
+  POST /api/bridge/passage     → compte rendu d'un passage (of:write, scan:write pour les scans)
 """
 import hashlib
 import os
@@ -403,7 +403,9 @@ def push_of(
 # Le pont des fiches n'appelle MySifa que pour une fiche modifiée : sans ce
 # compte rendu, un passage sans changement ne laissait aucune trace (19/11/2026).
 
-PONTS = ("fiches", "of")
+# Chaque pont rend compte avec la clé qu'il utilise déjà : celle des scans
+# porte `scan:write`, pas `of:write`.
+PONTS = {"fiches": "of:write", "of": "of:write", "scans": "scan:write"}
 
 
 class PassageIn(BaseModel):
@@ -423,9 +425,9 @@ class PassageIn(BaseModel):
 @router.post("/passage")
 def enregistrer_passage(body: PassageIn, x_api_key: Optional[str] = Header(default=None)):
     """Un passage du pont a eu lieu, avec ou sans fiche à envoyer."""
-    _require_scope(x_api_key, "of:write")
     if body.pont not in PONTS:
         raise HTTPException(status_code=400, detail="Pont inconnu : " + ", ".join(PONTS) + ".")
+    _require_scope(x_api_key, PONTS[body.pont])
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     court = lambda v: (str(v)[:40] if v else None)
     with get_db() as conn:

@@ -16,7 +16,7 @@ def appliquer(conn):
         """
         CREATE TABLE IF NOT EXISTS ponts_passages (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            pont        TEXT    NOT NULL,   -- 'fiches' | 'of'
+            pont        TEXT    NOT NULL,   -- 'fiches' | 'of' | 'scans'
             recu_le     TEXT    NOT NULL,   -- heure serveur (Paris) de réception
             debut       TEXT,
             fin         TEXT,
