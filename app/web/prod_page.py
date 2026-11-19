@@ -95,7 +95,7 @@ __ARRIVEE_PLANNING__
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1-msb1">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent19-san3-sev1-opk2-ofl7">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent19-san3-sev1-opk2-ofl8">
 <!-- Portrait telephone de MyProd > Production. Le socle mobile partage
      (prefixe .msf-) fournit les briques ; la feuille qui suit ne porte que
      ce qui appartient a MyProd (.mpm-) et quelques reprises du bureau. -->

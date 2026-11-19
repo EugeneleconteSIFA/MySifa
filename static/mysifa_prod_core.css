@@ -1932,7 +1932,7 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 textarea.ofe-case{resize:none;overflow:auto}
 button.ofe-case{cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ofe-case:hover{border-color:#0891b2;background:rgba(8,145,178,.08)}
-.ofe-case:focus{border:1px solid #0891b2;background:#fff}
+.ofe-case:focus{border:1px solid #0891b2;background:transparent}
 .ofe-case.ofe-case-cor{background:rgba(8,145,178,.2);border:1px solid #0891b2;color:#155e75}
 .ofe-case.ofe-case-suit{background:rgba(22,163,74,.25);border:1px solid #16a34a;transition:background .3s}
 .ofe-bobinette{position:absolute;line-height:1;color:#000;font-family:Helvetica,Arial,sans-serif;font-weight:700;white-space:nowrap;pointer-events:none}
