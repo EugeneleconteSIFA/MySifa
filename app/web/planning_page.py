@@ -123,6 +123,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .tip-quad .tip-grid{padding-top:0;border-top:none}
 .tip-quad .tip-grid .v{font-family:inherit;font-weight:600;overflow-wrap:anywhere}
 .tip-v-fort{color:var(--accent)!important}
+.tip-v-alerte{color:var(--danger)!important;font-weight:700}
 .tip-vide{font-size:11px;color:var(--muted);font-style:italic}
 .tip-devis-pt{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;vertical-align:middle}
 .tip-devis-rouge{background:var(--danger)}
@@ -3818,6 +3819,13 @@ function infosDossierSections(s){
   const tech=[];
   if(s.laize) tech.push(L("Laize",s.laize+" mm"));
   if(s.ft_support) tech.push(L("Frontal",s.ft_support));
+  // OF et fiche en désaccord (app/services/of_fiche_accord.py) : la valeur
+  // affichée est celle du document le plus récent, et on le dit.
+  const ec=s.fiche_ecart;
+  if(ec&&ec.champs&&ec.champs.length){
+    tech.push(L(ec.autre_produit?"Fiche douteuse":"Écart OF / fiche",
+      ec.champs.join(", ").toLowerCase()+(ec.source==="of"?" · OF retenu":" · fiche retenue, vérifier l'OF"),"alerte"));
+  }
   if(s.ft_adhesif) tech.push(L("Adhésif",s.ft_adhesif));
   if(s.ft_nb_couleurs) tech.push(L("Couleurs",s.ft_nb_couleurs));
   const man=mandrinDiaTxt(s.ft_mandrin_dia);

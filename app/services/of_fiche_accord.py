@@ -303,3 +303,57 @@ def charger(conn, of_id: Any, fiche_id: Any) -> Optional[Dict[str, Any]]:
     of, ft = dict(of), dict(ft)
     return {"of": of, "fiche": ft,
             "verdict": verdict(of, ft, derniere_correction_fiche(conn, ft["id"]))}
+
+
+def appliquer_aux_dossiers(conn, entries: List[dict], cle_fiche: str = "_ft_id",
+                           cle_support: str = "_ft_support") -> List[dict]:
+    """Applique la règle du plus récent à une liste de dossiers du planning.
+
+    L'infobulle du planning lisait la matière de la fiche sans la confronter à
+    l'OF : 9932921 affichait « VELIN H400 » alors que l'OF, plus récent, dit
+    « PP 95µ BLANC MAT » (constat du 19/11/2026). Chaque dossier doit porter
+    `of_import_id` et l'id de sa fiche (`cle_fiche`) ; en sortie, `cle_support`
+    porte la matière qui fait foi et `_accord` le verdict (None si accord).
+
+    Trois requêtes pour toute la liste, jamais une par dossier.
+    """
+    paires = [(e.get("of_import_id"), e.get(cle_fiche)) for e in entries]
+    of_ids = sorted({int(o) for o, f in paires if o and f})
+    ft_ids = sorted({int(f) for o, f in paires if o and f})
+    if not of_ids:
+        return entries
+
+    def _par_id(table: str, ids: List[int]) -> Dict[int, dict]:
+        ph = ",".join("?" * len(ids))
+        rows = conn.execute(f"SELECT * FROM {table} WHERE id IN ({ph})", ids).fetchall()
+        return {int(r["id"]): dict(r) for r in rows}
+
+    try:
+        ofs, fts = _par_id("of_imports", of_ids), _par_id("fiches_techniques", ft_ids)
+        corrections: Dict[int, str] = {}
+        try:
+            ph = ",".join("?" * len(ft_ids))
+            for r in conn.execute(
+                "SELECT doc_id, MAX(at) AS dernier FROM documents_valeurs_historique "
+                f"WHERE table_nom = 'fiches_techniques' AND doc_id IN ({ph}) "
+                "AND refuse = 0 AND origine = 'manuel' GROUP BY doc_id", ft_ids,
+            ).fetchall():
+                corrections[int(r["doc_id"])] = r["dernier"]
+        except Exception:
+            corrections = {}
+    except Exception:
+        return entries  # l'affichage du planning ne tombe jamais pour un contrôle
+
+    for e in entries:
+        o, f = e.get("of_import_id"), e.get(cle_fiche)
+        of, ft = ofs.get(int(o)) if o else None, fts.get(int(f)) if f else None
+        if not of or not ft:
+            continue
+        v = verdict(of, ft, corrections.get(int(f)))
+        if v["accord"]:
+            continue
+        e["_accord"] = v
+        aff = fiche_affichee(ft, of, v)
+        if "matiere" in aff["_substitutions"]:
+            e[cle_support] = aff.get("support")
+    return entries
