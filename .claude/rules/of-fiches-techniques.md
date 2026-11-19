@@ -354,6 +354,15 @@ cartons, palette, particularités. Lecture seule : rien n'est écrit en base.
 La case Réf. porte la clé produit, jamais le numéro d'OF ni le libellé
 complet de la fiche (qu'Access envoie aussi dans `format`).
 
+## Fiche manquante : l'ADV la signale
+
+Environ 40 % des articles commandés n'ont pas de fiche (relevé du 19/11/2026).
+Le bouton « Signaler la fiche manquante » de la fenêtre OF appelle
+`POST /api/of/signaler-fiche-manquante`, qui crée une tâche (type support,
+module prod) assignée aux superadmins par `creer_tache_pour()`, avec article,
+désignation, commande, quantité, délai, fiches du même client et OF déjà faits.
+Un article déjà signalé et pas traité ne crée pas de seconde tâche.
+
 ## Relier un OF à un dossier : `_promote_of_link`, jamais un UPDATE direct
 
 Le slot lit `planning_entries.of_import_id`, l'œil « Voir l'OF relié » lit

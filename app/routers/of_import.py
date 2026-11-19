@@ -2083,6 +2083,104 @@ def of_depuis_commandes(request: Request):
         return depuis_commandes(conn, lignes[:200], sauf_of_id=sauf)
 
 
+_TITRE_FICHE_MANQUANTE = "Fiche technique manquante"
+SIGNALEMENTS_FICHE_PAR_JOUR = 30
+
+
+@router.post("/api/of/signaler-fiche-manquante")
+async def of_signaler_fiche_manquante(request: Request):
+    """L'ADV signale qu'aucune fiche technique n'existe pour l'article d'une
+    commande. Une tâche part dans le gestionnaire, assignée aux superadmins,
+    avec de quoi analyser sans rouvrir l'OF : article, désignation, commande,
+    quantité, délai, fiches voisines du même client, OF déjà faits.
+
+    Un article déjà signalé et pas encore traité ne crée pas de seconde tâche.
+    """
+    from config import ROLE_SUPERADMIN, TACHES_STATUTS, public_base_url, role_label
+    from app.routers.taches import creer_tache_pour
+    from app.services.of_proposition import _cle_produit, depuis_commandes, fiches_du_produit
+
+    user = _require_of_access(request)
+    body = await request.json()
+    lignes = _lignes_commandes(body.get("commandes"))[:50]
+    commentaire = " ".join(str(body.get("commentaire") or "").split())[:1000]
+    finals = [s["code"] for s in TACHES_STATUTS if s.get("final")]
+
+    with get_db() as conn:
+        info = depuis_commandes(conn, lignes) if lignes else {}
+        article = _cle_produit(info.get("article") or body.get("article"))
+        if not article:
+            raise HTTPException(status_code=400, detail="Aucun article à signaler : choisissez d'abord la commande.")
+        if fiches_du_produit(conn, article):
+            raise HTTPException(status_code=409,
+                                detail="Une fiche technique existe pour l'article %s : choisissez-la dans la recherche." % article)
+        titre = "%s — article %s" % (_TITRE_FICHE_MANQUANTE, article)
+        deja = conn.execute(
+            "SELECT id FROM taches WHERE titre = ? AND statut NOT IN (%s) ORDER BY id DESC LIMIT 1"
+            % ",".join("?" * len(finals)), [titre] + finals,
+        ).fetchone()
+        if deja:
+            return {"success": True, "deja": True, "tache_id": deja["id"]}
+        nb = conn.execute(
+            "SELECT COUNT(*) FROM taches WHERE createur_user_id = ? AND titre LIKE ? AND substr(created_at,1,10) = ?",
+            (user["id"], _TITRE_FICHE_MANQUANTE + "%", _now_paris_iso()[:10]),
+        ).fetchone()[0]
+        if nb >= SIGNALEMENTS_FICHE_PAR_JOUR:
+            raise HTTPException(status_code=429, detail="Trop de signalements aujourd'hui — réessayez demain.")
+        superadmins = [r["id"] for r in conn.execute(
+            "SELECT id FROM users WHERE role = ? AND actif = 1 ORDER BY id", (ROLE_SUPERADMIN,)
+        ).fetchall()]
+        if not superadmins:
+            raise HTTPException(status_code=503, detail="Aucun administrateur pour recevoir le signalement.")
+
+        client = article.split("/")[0]
+        voisines = [r["reference"] for r in conn.execute(
+            "SELECT DISTINCT reference FROM fiches_techniques WHERE ref_produit_norm LIKE ? ORDER BY reference LIMIT 12",
+            (client + "/%",),
+        ).fetchall()]
+        ofs = conn.execute(
+            "SELECT of_numero, date_creation FROM of_imports WHERE reference = ? ORDER BY id DESC LIMIT 5",
+            (article,),
+        ).fetchall()
+
+        fr = lambda d: "/".join(reversed(str(d)[:10].split("-"))) if d else ""
+        cmd = info.get("lignes") or []
+        designation = next((x.get("designation") for x in cmd if x.get("designation")), None)
+        desc = [
+            "Aucune fiche technique dans MySifa pour l'article %s, au moment de créer un OF." % article,
+            "",
+            "Signalé par : %s (%s)" % (user.get("nom") or user.get("email") or "", role_label(user.get("role"))),
+        ]
+        if designation:
+            desc.append("Désignation : %s" % designation)
+        if cmd:
+            desc.append("Commande : %s" % ", ".join(
+                "%s%s" % (x["numero"], (" L%s" % x["ligne"]) if x.get("ligne") is not None else "") for x in cmd))
+        if info.get("qte_etiquettes"):
+            desc.append("Quantité commandée : %s %s" % (
+                "{:,}".format(int(info["qte_etiquettes"])).replace(",", " "),
+                "rouleaux" if info.get("au_metre") else "étiquettes"))
+        if info.get("date_livraison"):
+            desc.append("Livraison : %s" % fr(info["date_livraison"]))
+        desc.append("Fiches du même client (%s) : %s" % (
+            client, ", ".join(voisines) if voisines else "aucune"))
+        desc.append("OF déjà faits dans MySifa pour cet article : %s" % (
+            ", ".join("%s (%s)" % (o["of_numero"], o["date_creation"] or "?") for o in ofs) if ofs else "aucun"))
+        if cmd and cmd[0].get("id"):
+            desc.append("Commande dans l'ERP : %s/erp#/commandes?fiche=commandes:%s" % (public_base_url(), cmd[0]["id"]))
+        desc.append("Les fiches viennent de la base Access des fiches techniques, synchronisée vers MySifa.")
+        if commentaire:
+            desc += ["", "Commentaire : %s" % commentaire]
+        try:
+            tid = creer_tache_pour(conn, user, titre=titre, description="\n".join(desc),
+                                   ttype="support", module="prod", service=ROLE_SUPERADMIN,
+                                   assignes=superadmins)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from None
+        conn.commit()
+    return {"success": True, "deja": False, "tache_id": tid}
+
+
 @router.get("/api/of/modele")
 def of_modele(request: Request):
     """Les positions des cases de l'OF, pour les corriger directement dessus."""

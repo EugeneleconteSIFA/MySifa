@@ -2146,6 +2146,37 @@ function ofeChoisirCorrections(ecarts){
   });
 }
 
+/* Aucune fiche pour l'article de la commande : l'ADV le signale d'un clic,
+   une tâche part dans le gestionnaire avec de quoi analyser (19/11/2026). */
+async function ofeSignalerFicheManquante(m){
+  const r=m._cmdInfo||{};
+  if(!r.article) return;
+  let commentaire='';
+  if(typeof window.mysifaConfirm==='function'){
+    const v=await window.mysifaConfirm({
+      title:'Signaler la fiche manquante',
+      message:'Une tâche sera créée pour l\'article '+r.article+', avec la commande, la quantité et le délai.',
+      detail:'Elle part dans le gestionnaire de tâches, assignée aux administrateurs.',
+      confirmLabel:'Signaler',
+      saisie:{label:'Commentaire (facultatif)',placeholder:'Ex. : fiche à dupliquer d\'un produit voisin, nouveau code article du client…'},
+    });
+    if(v===false) return;
+    commentaire=typeof v==='string'?v:'';
+  }
+  const lignes=((m._commandes&&m._commandes.length)?m._commandes:(r.lignes||[]))
+    .map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
+  try{
+    const res=await api('/api/of/signaler-fiche-manquante',{method:'POST',
+      body:JSON.stringify({article:r.article,commandes:lignes,commentaire:commentaire})});
+    m._ficheSignalee=true;
+    toast(res.deja?'Déjà signalé : une tâche est ouverte pour cet article.':'Signalement envoyé au gestionnaire de tâches.');
+    const info=document.getElementById('ofe-fiche-info');
+    if(info) info.innerHTML=ofeInfoFiche(m);
+  }catch(e){
+    toast(e.message||'Signalement impossible.','error');
+  }
+}
+
 async function ofeVoirPdf(){
   const m=S.ofEditModal;
   if(!m) return;
@@ -2712,7 +2743,11 @@ function ofeInfoFiche(m){
     });
     if(!m._fiche&&n>=1) h+='<div style="color:var(--danger)">· '+(n>1?n+' fiches pour ce produit — choisissez celle de la machine.':'Choisissez la fiche proposée.')+'</div>';
     if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+
-      ' — à créer avant l\'OF. Une autre fiche reste possible, avec le motif de l\'écart.</div>';
+      ' — à créer avant l\'OF. Une autre fiche reste possible, avec le motif de l\'écart. '+
+      (m._ficheSignalee
+        ? '<span style="color:var(--success);font-weight:600">Signalé ✓</span>'
+        : '<button type="button" data-signaler-fiche style="margin-left:4px;padding:3px 9px;border-radius:7px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">Signaler la fiche manquante</button>')+
+      '</div>';
   }
   if(m._arrondi){
     const a=m._arrondi, n=x=>Number(x).toLocaleString('fr-FR');
@@ -2776,8 +2811,9 @@ function ofeBrancherFiche(overlay,m){
     if(e.target.matches&&e.target.matches('.ofe-case[type=date],#ofe-delai-etape2')){
       try{ e.target.showPicker(); }catch(err){}
     }
-    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],#ofe-ecarts-pied');
+    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],[data-signaler-fiche],#ofe-ecarts-pied');
     if(!b) return;
+    if(b.hasAttribute('data-signaler-fiche')){ ofeSignalerFicheManquante(m); return; }
     if(b.hasAttribute('data-reprendre-delai')){
       const d=b.getAttribute('data-reprendre-delai'), champ=document.getElementById('ofe-delai');
       if(champ) champ.value=d;
