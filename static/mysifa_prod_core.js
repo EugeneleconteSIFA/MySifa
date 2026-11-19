@@ -1007,6 +1007,12 @@ async function loadFiches(){
     const q=encodeURIComponent(S.ficheSearch||'');
     const offset=(S.fichePage||0)*50;
     const url='/api/fiches-techniques/list?limit=50&offset='+offset+(q?'&q='+q:'');
+    // Fraîcheur des fiches d'Access : à part, une erreur ne bloque pas la liste.
+    api('/api/fiches-techniques/actualisation').then(function(a){
+      const avant=JSON.stringify(S.fichesActualisation||null);
+      S.fichesActualisation=a||null;
+      if(JSON.stringify(a||null)!==avant&&S.page==='fiches') render();
+    }).catch(function(){});
     const data=await api(url);
     set({fiches:Array.isArray(data.rows)?data.rows:[],ficheTotal:data.total||0,fichesLoading:false});
   }catch(e){
@@ -4605,6 +4611,29 @@ function renderOfTab(){
   );
 }
 
+/* Dernière actualisation des fiches depuis Access (19/11/2026). Le passage
+   vient du compte rendu que le script envoie à chaque exécution ; avant sa
+   mise à jour sur le poste, seule la dernière fiche reçue est connue. */
+function fichesActualisationEl(){
+  const a=S.fichesActualisation;
+  if(!a) return null;
+  const quand=function(iso){
+    const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    return m?m[3]+'/'+m[2]+'/'+m[1]+' à '+m[4]+':'+m[5]:'';
+  };
+  let txt='', titre='';
+  const p=a.passage;
+  if(p){
+    const recues=(Number(p.creees)||0)+(Number(p.maj)||0);
+    txt='Access · actualisé le '+quand(p.recu_le)+' · '+(recues?recues+(recues>1?' fiches reçues':' fiche reçue'):'aucune modification');
+    titre='Dernier passage du pont Access : '+(p.lues!=null?p.lues+' fiches lues, ':'')+(p.creees||0)+' créée(s), '+(p.maj||0)+' mise(s) à jour'+(p.erreurs?', '+p.erreurs+' erreur(s)':'')+'.';
+    if(a.derniere_reception) titre+=' Dernière fiche reçue le '+quand(a.derniere_reception)+'.';
+  }else if(a.derniere_reception){
+    txt='Access · dernière fiche reçue le '+quand(a.derniere_reception);
+    titre="Les passages sans fiche modifiée ne sont pas encore tracés : le script du poste Access doit être mis à jour.";
+  }else return null;
+  return h('span',{title:titre,style:{marginLeft:'auto',fontSize:'12px',color:(p&&p.erreurs)?'var(--warn)':'var(--muted)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}},iconEl('rotate-cw',12),' '+txt);
+}
 function renderFichesTab(){
   const PAGE_SIZE=50;
   const total=S.ficheTotal||0;
@@ -4660,7 +4689,8 @@ function renderFichesTab(){
             }catch(e){toast(e.message||'Erreur.','error');}
           }
         },iconEl('trash',13),` Supprimer (${S.ficheSelected.size})`)
-      : null
+      : null,
+    fichesActualisationEl()
   );
 
   const rows=(S.fiches||[]).map(row=>{

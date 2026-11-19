@@ -984,6 +984,34 @@ def delete_of_import(request: Request, of_id: int):
 # Fiches techniques
 # ══════════════════════════════════════════════════
 
+@router.get("/api/fiches-techniques/actualisation")
+def fiches_actualisation(request: Request):
+    """Fraîcheur des fiches venues d'Access : dernier passage du pont et
+    dernière fiche reçue (création ou mise à jour). Le passage n'existe que
+    depuis que le script envoie son compte rendu (19/11/2026)."""
+    _require_of_access(request)
+    with get_db() as conn:
+        passage = None
+        try:
+            r = conn.execute(
+                "SELECT recu_le, lues, envoyees, creees, maj, erreurs FROM ponts_passages "
+                "WHERE pont='fiches' ORDER BY recu_le DESC, id DESC LIMIT 1").fetchone()
+            passage = dict(r) if r else None
+        except Exception:
+            passage = None
+        creee = conn.execute(
+            "SELECT MAX(date_import) FROM fiches_techniques WHERE source='access_bridge'").fetchone()[0]
+        modifiee = None
+        try:
+            modifiee = conn.execute(
+                "SELECT MAX(at) FROM documents_valeurs_historique WHERE table_nom='fiches_techniques' "
+                "AND origine='access_bridge' AND refuse=0").fetchone()[0]
+        except Exception:
+            pass
+    recue = max([d for d in (creee, modifiee) if d], default=None)
+    return {"passage": passage, "derniere_reception": recue}
+
+
 @router.get("/api/fiches-techniques/list")
 def list_fiches(request: Request):
     _require_of_access(request)

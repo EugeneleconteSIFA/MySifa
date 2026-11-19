@@ -274,6 +274,21 @@ def push_fiche(payload: dict) -> dict:
     return resp.json()
 
 
+def envoyer_passage(bilan: dict) -> None:
+    """Compte rendu du passage, même sans fiche envoyée (19/11/2026) : c'est
+    lui qui date la dernière actualisation dans MyProd › Fiches techniques.
+    Un échec ici ne doit jamais faire échouer la synchro elle-même."""
+    try:
+        requests.post(
+            f"{MYSIFA_BASE_URL}/api/bridge/passage",
+            json=dict(bilan, pont="fiches", poste=os.environ.get("COMPUTERNAME", "")),
+            headers=HEADERS,
+            timeout=15,
+        ).raise_for_status()
+    except Exception as e:
+        print(f"  [AVERTISSEMENT] Compte rendu du passage non envoyé : {e}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────
 
 def main():
@@ -289,6 +304,7 @@ def main():
         print('  setx MYSIFA_API_KEY "msk_..."   puis rouvrir le terminal.')
         return
     empreintes = lire_empreintes()
+    debut = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     print(f"Connexion à Access : {ACCESS_DB_PATH}")
     print(f"Table             : {TABLE_NAME}")
     if not empreintes:
@@ -354,6 +370,14 @@ def main():
 
     ecrire_empreintes(empreintes)
     save_date_depuis()
+    # Un passage partiel (--ref) ne dit rien de la fraîcheur de l'ensemble.
+    if not args.ref:
+        envoyer_passage({
+            "debut": debut, "fin": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "lues": len(rows), "envoyees": a_envoyer, "creees": created,
+            "maj": updated, "identiques": identiques, "conflits": conflits,
+            "erreurs": errors,
+        })
 
 
 if __name__ == "__main__":
