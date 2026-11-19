@@ -693,7 +693,8 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
                          "qte": qte, "unite": unite, "par_unite": par_unite,
                          "rouleaux_par_unite": _entier_texte(m_rl.group(1)) if m_rl else None,
                          "livraison": (r["livraison"] or None),
-                         "expedition": (r["expedition"] or None)})
+                         "expedition": (r["expedition"] or None),
+                         "designation": (r["des1"] or "").strip() or None})
 
     articles = sorted({x["article"] for x in retenues})
     dates = sorted(x["livraison"] for x in retenues if x["livraison"])
@@ -888,7 +889,8 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]],
         # Pour « Voir la commande » : l'id de la ligne ouvre sa fiche dans
         # l'écran Commandes de l'ERP (/erp#/commandes?fiche=commandes:<id>).
         "lignes": [{"id": x["id"], "numero": x["numero"], "ligne": x["ligne"],
-                    "article": x["article"]} for x in lu.get("lignes") or []],
+                    "article": x["article"], "designation": x.get("designation")}
+                   for x in lu.get("lignes") or []],
         "delai_client": lu["delai_client"],
     }
 
