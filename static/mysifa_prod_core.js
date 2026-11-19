@@ -3581,7 +3581,7 @@ function renderOfEditModal(){
   overlay.innerHTML=`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:1400px;width:100%;max-height:calc(100vh - ${_sousBandeau} - ${_sousDock});overflow-y:auto;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px">${creation?"Nouvel OF":"Modifier l'OF"}${window.MySifaGuides?MySifaGuides.bookBtn('myprod-of'):''}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
       ${_sec("1 · Commandes",`
@@ -17259,7 +17259,7 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
     // La page Traçabilité manquait à cette table : son bouton d'aide ne
     // s'affichait jamais, alors même que PROD_VIEW_GUIDE la référençait.
     const _gk = ({menu:'myprod-overview', production:'myprod-production',
-                  traceabilite:'myprod-tracabilite'})[S.page] || '';
+                  traceabilite:'myprod-tracabilite', of:'myprod-of'})[S.page] || '';
     const _mkGuide = function(){
       try{
         if(!window.MySifaGuides || !_gk) return null;
@@ -17443,6 +17443,107 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
       {
         title: 'Le chiffre a surveiller',
         body: `Une fiche produit ne vaut que ce que vaut son <strong>rattachement</strong>. Si des dossiers ne sont relies a aucune reference — faute d'OF rattache — la memoire produit est incomplete <em>sans le dire</em>. Le <span class="mguide-hl">taux de rattachement</span> mesure cette part. Quand il baisse, ce sont les onglets <span class="mguide-tag">Mappings a valider</span> et <span class="mguide-tag">Dossiers sans OF</span> qu'il faut traiter, pas la fiche produit.`
+      }
+    ]},
+
+    // Guide « Créer un OF » (19/11/2026) : destiné aux ADV, donc ouvert à
+    // tous les rôles qui accèdent à l'onglet OF (`tous: true`).
+    'myprod-of': { tous: true, steps: [
+      {
+        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`,
+        title: 'Créer un OF',
+        body: `Un OF part d'une <strong>commande</strong> et d'une <strong>fiche technique</strong>. MySifa remplit l'OF à partir des deux, calcule les quantités, et vous laisse corriger ce qui doit l'être avant de créer. Le bouton <span class="mguide-tag">Créer un OF</span> ouvre la fenêtre en trois blocs.`,
+        illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
+          <text x="8" y="20" font-size="11" fill="var(--text)" font-weight="800">Ordres de fabrication</text>
+          <rect x="236" y="7" width="96" height="22" rx="6" fill="var(--accent)"/><text x="284" y="22" font-size="9.5" fill="#fff" font-weight="700" text-anchor="middle">Créer un OF</text>
+          <g font-size="8.5">
+            <rect x="8" y="40" width="324" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="18" y="52" fill="var(--muted)" font-weight="700">1 · COMMANDES</text><text x="18" y="64" fill="var(--text2)">Les lignes de commande à produire</text>
+            <rect x="8" y="76" width="324" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="18" y="88" fill="var(--muted)" font-weight="700">2 · FICHE ET DÉLAI</text><text x="18" y="100" fill="var(--text2)">La fiche technique et la date de livraison</text>
+            <rect x="8" y="112" width="324" height="30" rx="7" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="18" y="124" fill="var(--accent)" font-weight="700">3 · OF</text><text x="18" y="136" fill="var(--text2)">L'OF tel qu'il sera imprimé, à relire et corriger</text>
+          </g>
+        </svg>`,
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire</div><ul class="mguide-svc-list"><li>Choisir la ou les lignes de commande du produit.</li><li>Vérifier la fiche technique proposée et le délai.</li><li>Relire l'OF, corriger les paramètres si besoin, puis cliquer <strong>Créer</strong>.</li></ul></div></div>`
+      },
+      {
+        title: 'Choisir les commandes',
+        body: `Cliquez sur une ligne pour la choisir, recliquez pour la retirer. Plusieurs lignes du <strong>même produit</strong> peuvent aller sur un seul OF : leurs quantités s'additionnent. Sur l'OF, la croix d'une ligne la retire. <span class="mguide-tag">OF sans commande</span> part d'une fiche seule.`,
+        illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
+          <rect x="8" y="8" width="324" height="22" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="16" y="23" font-size="9" fill="var(--muted)">N° de commande, client, article…</text>
+          <g font-size="8.5">
+            <rect x="8" y="38" width="324" height="24" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/><rect x="8" y="38" width="3" height="24" fill="var(--accent)"/><text x="18" y="53" fill="var(--text)" font-weight="700">9932501 L1</text><text x="96" y="53" fill="var(--text2)">890/0017</text><text x="170" y="53" fill="var(--text2)">1 495 000 étiq.</text><text x="324" y="53" fill="var(--text2)" text-anchor="end">05/10/2026</text>
+            <rect x="8" y="66" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="18" y="81" fill="var(--text)">9932501 L2</text><text x="96" y="81" fill="var(--text2)">890/0017</text><text x="170" y="81" fill="var(--text2)">500 000 étiq.</text><text x="324" y="81" fill="var(--text2)" text-anchor="end">19/10/2026</text>
+            <rect x="8" y="94" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="18" y="109" fill="var(--text)">9932507 L1</text><text x="96" y="109" fill="var(--text2)">1315/0004</text><text x="170" y="109" fill="var(--text2)">80 000 étiq.</text><text x="324" y="109" fill="var(--text2)" text-anchor="end">12/10/2026</text>
+          </g>
+          <rect x="8" y="124" width="180" height="20" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="16" y="138" font-size="8.5" fill="var(--text)">9932501 L1</text><text x="70" y="138" font-size="8.5" fill="var(--accent)">Voir la commande</text><text x="176" y="138" font-size="10" fill="var(--muted)" text-anchor="middle">×</text>
+          <rect x="262" y="124" width="70" height="20" rx="6" fill="var(--accent)"/><text x="297" y="138" font-size="9" fill="#fff" font-weight="700" text-anchor="middle">Valider</text>
+        </svg>`
+      },
+      {
+        title: 'Fiche technique et délai',
+        body: `La fiche du produit est trouvée seule. Si le produit en a plusieurs (autre machine, autre laize, autre outil), <span class="mguide-tag">Choisir la fiche technique</span> les compare : le choix change les quantités. Aucune fiche ? <span class="mguide-tag">Signaler</span> crée une tâche pour la faire ajouter. Le délai reprend la date de la commande, ou une date libre.`,
+        illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
+          <rect x="8" y="8" width="324" height="134" rx="8" fill="var(--card)" stroke="var(--border)"/>
+          <text x="18" y="26" font-size="9" fill="var(--muted)" font-weight="700">2 · FICHE ET DÉLAI</text>
+          <text x="18" y="50" font-size="8.5" fill="var(--muted)" font-weight="700">FICHE</text>
+          <rect x="62" y="38" width="150" height="20" rx="6" fill="var(--accent)"/><text x="137" y="52" font-size="8" fill="#fff" font-weight="700" text-anchor="middle">890/0017 – COHESIO2 – L440</text>
+          <text x="218" y="52" font-size="8" fill="var(--muted)">Autre :</text><rect x="246" y="40" width="78" height="16" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="285" y="51" font-size="7.5" fill="var(--text2)" text-anchor="middle">COHESIO2 – L530</text>
+          <text x="18" y="82" font-size="8.5" fill="var(--muted)" font-weight="700">DÉLAI</text>
+          <rect x="62" y="70" width="108" height="20" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="116" y="84" font-size="8.5" fill="var(--accent)" font-weight="700" text-anchor="middle">Livraison 05/10/2026</text>
+          <rect x="176" y="70" width="80" height="20" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="216" y="84" font-size="8.5" fill="var(--text2)" text-anchor="middle">jj/mm/aaaa</text>
+          <text x="18" y="114" font-size="8.5" fill="var(--text)">Arrondi à la levée : <tspan font-weight="700">1 500 000</tspan> (commande 1 495 000)</text>
+          <rect x="262" y="102" width="56" height="18" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="290" y="115" font-size="8.5" fill="var(--text)" text-anchor="middle">Garder</text>
+          <text x="18" y="134" font-size="8" fill="var(--muted)">La quantité est portée à la levée complète. « Garder » revient à la commande.</text>
+        </svg>`
+      },
+      {
+        title: 'Ce que vous modifiez, ce qui se calcule',
+        body: `Vous changez les <strong>paramètres</strong> (quantité, fronts, conditionnement, qté au mille, laize, mandrin, adhésif) ; le reste se recalcule et reste <strong>verrouillé</strong>. Pour une exception, le <span class="mguide-hl">cadenas</span> d'une case permet de forcer sa valeur, et le recliquer la rend au calcul.`,
+        illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
+          <rect x="8" y="8" width="324" height="134" rx="4" fill="var(--card)" stroke="var(--text)" stroke-width="1.5"/>
+          <g font-size="9" fill="var(--text)">
+            <text x="20" y="32">Quantité étiq.</text><rect x="104" y="20" width="70" height="17" rx="2" fill="none" stroke="var(--accent)" stroke-dasharray="3 2"/><text x="168" y="32" text-anchor="end" font-weight="700">1 500 000</text>
+            <text x="20" y="56">Nb de fronts</text><rect x="104" y="44" width="70" height="17" rx="2" fill="none" stroke="var(--accent)" stroke-dasharray="3 2"/><text x="168" y="56" text-anchor="end" font-weight="700">4</text>
+            <text x="20" y="80">Levées</text><rect x="104" y="68" width="70" height="17" rx="2" fill="none" stroke="var(--accent)" stroke-dasharray="3 2"/><text x="168" y="80" text-anchor="end" font-weight="700">250</text>
+            <text x="190" y="32">Métrage</text><text x="300" y="32" text-anchor="end" font-weight="700">47 865</text>
+            <text x="190" y="56">Cartons</text><text x="300" y="56" text-anchor="end" font-weight="700">250</text>
+            <text x="190" y="80">Palettes</text><rect x="252" y="68" width="54" height="17" rx="2" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="300" y="80" text-anchor="end" font-weight="700" fill="var(--accent)">10</text>
+          </g>
+          <g stroke="var(--muted)" stroke-width="1.3" fill="none"><rect x="306" y="23" width="9" height="7" rx="1.5"/><path d="M308 23v-2a2.5 2.5 0 0 1 5 0v2"/></g>
+          <g stroke="var(--accent)" stroke-width="1.3" fill="none"><rect x="310" y="71" width="9" height="7" rx="1.5"/><path d="M312 71v-2a2.5 2.5 0 0 1 4.8-.7"/></g>
+          <line x1="20" y1="98" x2="320" y2="98" stroke="var(--border)"/>
+          <rect x="20" y="108" width="12" height="9" rx="2" fill="none" stroke="var(--accent)" stroke-dasharray="3 2"/><text x="38" y="116" font-size="8.5" fill="var(--text2)">Paramètre : modifiable, tout le reste suit</text>
+          <g stroke="var(--muted)" stroke-width="1.3" fill="none"><rect x="21" y="126" width="9" height="7" rx="1.5"/><path d="M23 126v-2a2.5 2.5 0 0 1 5 0v2"/></g><text x="38" y="133" font-size="8.5" fill="var(--text2)">Calculé : verrouillé, le cadenas permet de forcer</text>
+        </svg>`
+      },
+      {
+        title: 'À relire et retour en arrière',
+        body: `<span class="mguide-tag">À relire</span> liste ce qui s'écarte de la fiche, les valeurs forcées et les incohérences, chacune avec son bouton de retour. Rien ne bloque : c'est à vous de juger. Les <strong>flèches</strong> annulent et rétablissent chaque modification, comme dans un traitement de texte (Cmd/Ctrl + Z hors d'une case).`,
+        illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
+          <rect x="8" y="8" width="324" height="104" rx="8" fill="var(--card)" stroke="var(--border)"/>
+          <text x="18" y="26" font-size="9" fill="var(--muted)" font-weight="700">À RELIRE</text>
+          <g font-size="8.5">
+            <line x1="18" y1="34" x2="322" y2="34" stroke="var(--border)"/><text x="18" y="50" fill="var(--warn)">Cartons : le calcul donne 250, l'OF indique 260.</text><rect x="246" y="39" width="76" height="17" rx="5" fill="none" stroke="var(--border)"/><text x="284" y="51" fill="var(--text)" text-anchor="middle">Revenir au calcul</text>
+            <line x1="18" y1="62" x2="322" y2="62" stroke="var(--border)"/><text x="18" y="78" fill="var(--text)">Laize : <tspan fill="var(--muted)">440</tspan> → <tspan font-weight="700">450</tspan></text><rect x="246" y="67" width="76" height="17" rx="5" fill="none" stroke="var(--border)"/><text x="284" y="79" fill="var(--text)" text-anchor="middle">Revenir à la fiche</text>
+            <line x1="18" y1="90" x2="322" y2="90" stroke="var(--border)"/><text x="18" y="104" fill="var(--text)">Délai : <tspan fill="var(--muted)">05/10/2026</tspan> → <tspan font-weight="700">02/10/2026</tspan></text>
+          </g>
+          <rect x="8" y="122" width="34" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><path d="M20 137l-4-4 4-4M16 133h9a4 4 0 0 1 0 8h-2" fill="none" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,-3)"/>
+          <rect x="46" y="122" width="34" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><path d="M66 137l4-4-4-4M70 133h-9a4 4 0 0 0 0 8h2" fill="none" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,-3)"/>
+          <text x="90" y="137" font-size="8.5" fill="var(--muted)">Annuler · Rétablir</text>
+        </svg>`
+      },
+      {
+        title: 'Vérifier et créer',
+        body: `<span class="mguide-tag">Voir le PDF</span> montre l'OF exactement tel que l'atelier le recevra. <span class="mguide-tag">Créer</span> l'enregistre : il rejoint la liste des OF, prêt à imprimer. Changer de commande ou de fiche remet l'OF à zéro, après confirmation si des corrections seraient perdues.`,
+        illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
+          <rect x="8" y="8" width="324" height="96" rx="8" fill="var(--card)" stroke="var(--border)"/>
+          <text x="18" y="26" font-size="9" fill="var(--muted)" font-weight="700">3 · OF</text>
+          <rect x="246" y="15" width="76" height="18" rx="6" fill="none" stroke="var(--border)"/><text x="284" y="28" font-size="8.5" fill="var(--text)" text-anchor="middle">Voir le PDF</text>
+          <rect x="18" y="40" width="304" height="56" rx="2" fill="var(--bg)" stroke="var(--text)"/>
+          <g stroke="var(--border)"><line x1="28" y1="54" x2="140" y2="54"/><line x1="28" y1="66" x2="120" y2="66"/><line x1="28" y1="78" x2="150" y2="78"/><line x1="190" y1="54" x2="310" y2="54"/><line x1="190" y1="66" x2="290" y2="66"/><line x1="190" y1="78" x2="300" y2="78"/></g>
+          <rect x="8" y="114" width="96" height="26" rx="7" fill="none" stroke="var(--warn)"/><text x="56" y="131" font-size="8.5" fill="var(--warn)" text-anchor="middle">2 points à relire</text>
+          <rect x="204" y="114" width="60" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="234" y="131" font-size="9" fill="var(--text)" text-anchor="middle">Annuler</text>
+          <rect x="272" y="114" width="60" height="26" rx="7" fill="var(--accent)"/><text x="302" y="131" font-size="9.5" fill="#fff" font-weight="700" text-anchor="middle">Créer</text>
+        </svg>`
       }
     ]},
 

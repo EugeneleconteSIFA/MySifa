@@ -39,7 +39,8 @@
   function register(key, g){ if(!key || !g || !Array.isArray(g.steps)) return; registry[key] = g; }
   // Les guides sont réservés aux superadmins. Exception par guide :
   // `tous: true` dans sa définition l'ouvre (auto-open + bouton) à tous les
-  // rôles — aujourd'hui « accueil-widgets » seulement (mysifa_accueil.js).
+  // rôles — « accueil-widgets » (mysifa_accueil.js) et « myprod-of », le
+  // guide de création d'OF destiné aux ADV (mysifa_prod_core.js, 19/11/2026).
   function visible(key){ return role === "superadmin" || !!(registry[key] && registry[key].tous); }
   function registerMany(obj){ Object.keys(obj||{}).forEach(function(k){ register(k, obj[k]); }); }
   function isAcked(key){ return ackedKeys.has(key); }
