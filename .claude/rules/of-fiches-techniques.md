@@ -150,7 +150,9 @@ vue à travers l'OF (`of_proposition.fiche_selon_of`). Étiquettes, bobines et l
 forment une chaîne : la dernière corrigée mène les deux autres. Une correction ne
 modifie jamais la fiche technique. Les écarts avec la fiche et les incohérences de
 l'OF (`controler_coherence`) se montrent avant d'enregistrer mais ne bloquent pas.
-Changer de fiche demande quelles corrections garder.
+Changer de fiche ou de commande remet l'OF à zéro (`ofeViderOF`) : une
+autre fiche ou une autre commande, c'est un autre OF. Une confirmation annonce
+ce qui serait perdu (corrections, cases libres, écarts).
 
 Un id à `None` détache la référence **sans effacer le texte** : un OF Access
 porte un libellé qu'aucune référence ne recouvre encore, et le perdre serait

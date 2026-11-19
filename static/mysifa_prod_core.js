@@ -1724,6 +1724,18 @@ async function ofeChoisirCommandes(mDepart,premier){
         requestAnimationFrame(function(){ const el=document.getElementById('ofe-numero'); if(el) el.focus(); });
         return;
       }
+      const cleCmd=l=>(l||[]).map(x=>x.numero+':'+(x.ligne==null?'':x.ligne)+':'+(x.qte==null?'':x.qte)).sort().join(',');
+      if(!m.id&&m._fiche&&cleCmd(m._commandes)!==cleCmd((res&&res.lignes)||[])){
+        // D'autres commandes, c'est un autre OF : il repart de zéro.
+        const nouvelles=(res&&res.lignes)||[];
+        ofeConfirmerRemiseAZero(m,'Changer les commandes').then(function(ok){
+          if(!ok) return;
+          const ref=res&&res.reference;
+          ofeRemettreSurCommandes(m,nouvelles);
+          if(ref&&!(m.of_numero||'').trim()){ m.of_numero=ref; m._numeroPropose=ref; m._dom['ofe-numero']=ref; }
+        });
+        return;
+      }
       m._commandes=(res&&res.lignes)||[];
       // Le numéro d'OF suit la même règle que la référence d'un dossier : il
       // se propose depuis les commandes. On ne l'impose jamais — un numéro
@@ -2119,64 +2131,6 @@ function ofeAligner(m,i){
   ofePeindreCases(m);
   ofeRecalculer();
 }
-/* Changer de fiche : l'ADV dit quelles corrections suivent. Rend la liste des
-   champs gardés, ou null si elle renonce. */
-function ofeChoisirCorrections(ecarts){
-  return new Promise(function(fin){
-    const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
-    ov.innerHTML='<div role="dialog" aria-modal="true" aria-label="Changer de fiche technique" style="background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
-      '<div style="padding:18px 22px;border-bottom:1px solid var(--border);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Changer de fiche technique</div>'+
-      '<div style="padding:16px 22px;overflow-y:auto;font-size:13px;line-height:1.5;color:var(--text)">Les valeurs de la nouvelle fiche remplacent celles de l\'OF. Cochez les corrections à garder.'+
-      ecarts.map(function(x,i){
-        return '<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border);margin-top:8px;cursor:pointer"><input type="checkbox" data-garde="'+i+'" style="margin-top:3px"><span>'+escHtml(x.lib)+' : <strong>'+escHtml(ofeTexteValeur(x.of))+'</strong></span></label>';
-      }).join('')+'</div>'+
-      '<div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border);background:var(--bg)">'+
-      '<button type="button" data-non style="padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Annuler</button>'+
-      '<button type="button" data-oui style="padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg,white);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Changer de fiche</button></div></div>';
-    const fermer=function(v){ document.removeEventListener('keydown',clavier,true); ov.remove(); fin(v); };
-    const clavier=function(e){ if(e.key==='Escape'){ e.stopPropagation(); fermer(null); } };
-    document.addEventListener('keydown',clavier,true);
-    ov.querySelector('[data-non]').onclick=function(){ fermer(null); };
-    ov.querySelector('[data-oui]').onclick=function(){
-      fermer(ecarts.filter(function(x,i){ return ov.querySelector('[data-garde="'+i+'"]').checked; }));
-    };
-    document.body.appendChild(ov);
-    ov.querySelector('[data-oui]').focus();
-  });
-}
-
-/* Aucune fiche pour l'article de la commande : l'ADV le signale d'un clic,
-   une tâche part dans le gestionnaire avec de quoi analyser (19/11/2026). */
-async function ofeSignalerFicheManquante(m){
-  const r=m._cmdInfo||{};
-  if(!r.article) return;
-  let commentaire='';
-  if(typeof window.mysifaConfirm==='function'){
-    const v=await window.mysifaConfirm({
-      title:'Signaler la fiche manquante',
-      message:'Une tâche sera créée pour l\'article '+r.article+', avec la commande, la quantité et le délai.',
-      detail:'Elle part dans le gestionnaire de tâches, assignée aux administrateurs.',
-      confirmLabel:'Signaler',
-      saisie:{label:'Commentaire (facultatif)',placeholder:'Ex. : fiche à dupliquer d\'un produit voisin, nouveau code article du client…'},
-    });
-    if(v===false) return;
-    commentaire=typeof v==='string'?v:'';
-  }
-  const lignes=((m._commandes&&m._commandes.length)?m._commandes:(r.lignes||[]))
-    .map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
-  try{
-    const res=await api('/api/of/signaler-fiche-manquante',{method:'POST',
-      body:JSON.stringify({article:r.article,commandes:lignes,commentaire:commentaire})});
-    m._ficheSignalee=true;
-    toast(res.deja?'Déjà signalé : une tâche est ouverte pour cet article.':'Signalement envoyé au gestionnaire de tâches.');
-    const info=document.getElementById('ofe-fiche-info');
-    if(info) info.innerHTML=ofeInfoFiche(m);
-  }catch(e){
-    toast(e.message||'Signalement impossible.','error');
-  }
-}
-
 async function ofeVoirPdf(){
   const m=S.ofEditModal;
   if(!m) return;
@@ -2318,16 +2272,11 @@ async function ofeChoisirFiche(ficheId){
   // Choisie à la main (le cas d'office repose le drapeau après l'appel).
   m._ficheAuto=false;
   captureSaisie('ofe-',m);
-  // Rien ne se perd sans le dire : les corrections en cours sont soumises à l'ADV.
-  const ecartsAvant=ofeEcartsListe(m);
-  let gardes=[];
-  if(ecartsAvant.length){
-    gardes=await ofeChoisirCorrections(ecartsAvant);
-    if(gardes===null){
-      if(!m._fiche&&m._ficheAvant){ m._fiche=m._ficheAvant; set({ofEditModal:m}); renderOfEditModal(); }
-      return;
-    }
-    captureSaisie('ofe-',m);
+  // Une autre fiche, c'est un autre OF : tout repart de zéro (retour du
+  // 19/11/2026). Ce qui serait perdu est d'abord annoncé.
+  if(m._ficheRef||m.id){
+    if(!(await ofeConfirmerRemiseAZero(m,'Changer de fiche technique'))) return;
+    ofeViderOF(m);
   }
   // Tant que l'ADV n'a pas tapé la quantité, elle repart de la commande : le
   // nombre de fronts, donc la levée, change avec la fiche.
@@ -2345,16 +2294,6 @@ async function ofeChoisirFiche(ficheId){
   m._qteArrondir=false;
   if(arrondir) ofePoserQte(m,p); else m._arrondi=null;
   m._manuels=m._manuels||{};
-  // Une autre fiche, c'est un autre produit : ses fronts, sa laize et ses
-  // levées remplacent ceux de la fiche précédente.
-  Object.values(OFE_SOURCES).concat(['ofe-nb-levees','ofe-bobines']).forEach(function(id){ delete m._manuels[id]; });
-  // Ce que la fiche précédente avait posé s'efface : sinon une case que la
-  // nouvelle fiche laisse vide garderait la valeur d'un autre produit.
-  (m._ficheCols||[]).forEach(function(col){
-    if(OFE_REFS.indexOf(col)>=0){ m[col]=null; return; }
-    const id=OFE_CHAMPS[col]||OFE_CALCULES[col];
-    if(id&&!m._manuels[id]){ m._dom[id]=''; m[col]=null; }
-  });
   const poses=[];
   Object.keys(p.champs||{}).forEach(function(col){
     const val=p.champs[col];
@@ -2364,11 +2303,6 @@ async function ofeChoisirFiche(ficheId){
     m._dom[id]=String(val);
     m[col]=val;
     poses.push(col);
-  });
-  gardes.forEach(function(x){
-    m._dom[x.id]=x.of; m[x.col]=x.of;
-    if(OFE_REF_DE[x.col]) m[OFE_REF_DE[x.col]]=x.refId;
-    if(Object.values(OFE_CORRIGEABLES).indexOf(x.id)>=0) m._manuels[x.id]=true;
   });
   m._ficheCols=poses;
   m._ficheRef=p.fiche_valeurs||{};
@@ -2384,9 +2318,49 @@ async function ofeChoisirFiche(ficheId){
   const q=document.getElementById('ofe-qte');
   if(q&&!q.value) q.focus({preventScroll:true});
   ofeControler(m);
-  if(gardes.length) ofeRecalculer();
 }
 window.ofeChoisirFiche = ofeChoisirFiche;
+
+/* Ce qu'une remise à zéro ferait perdre : corrections, cases libres remplies,
+   écarts avec la fiche. */
+function ofeTravailEnCours(m){
+  // Une case corrigée qui s'écarte aussi de la fiche ne compte qu'une fois.
+  const cols=new Set(ofeCorriges(m).concat(ofeEcartsListe(m).map(x=>x.col)));
+  let n=cols.size;
+  document.querySelectorAll('.ofe-feuille [data-libre]').forEach(function(el){ if(el.value.trim()) n++; });
+  const obs=document.getElementById('ofe-observations');
+  if(obs&&obs.value.trim()) n++;
+  return n;
+}
+async function ofeConfirmerRemiseAZero(m,geste){
+  captureSaisie('ofe-',m);
+  const n=ofeTravailEnCours(m);
+  if(!n&&!m.id) return true;
+  return await prodConfirmer({
+    title:'Repartir de zéro',
+    message:geste+' remet l\'OF à zéro : toutes ses cases repartent de la commande et de la fiche.',
+    detail:n?(n+(n>1?' valeurs corrigées ou saisies à la main seront perdues.':' valeur corrigée ou saisie à la main sera perdue.'))
+            :'Les valeurs enregistrées de cet OF seront remplacées.',
+    confirmLabel:'Repartir de zéro', cancelLabel:'Annuler', danger:true,
+  });
+}
+/* Vide l'OF : tout ce qui découle de la fiche ou a été corrigé. Restent le
+   numéro, la date de création et le délai ; la quantité repart de la commande
+   quand il y en a une. */
+function ofeViderOF(m){
+  m._dom=m._dom||{};
+  const avecCommande=!!(m._commandes&&m._commandes.length);
+  const garder=['ofe-numero','ofe-date','ofe-delai','ofe-delai-etape2'].concat(avecCommande?[]:['ofe-qte']);
+  Object.keys(m._dom).forEach(function(id){ if(garder.indexOf(id)<0) delete m._dom[id]; });
+  const cols=new Set(Object.keys(OFE_FEUILLE).concat(Object.keys(OFE_CHAMPS),Object.keys(OFE_CORRIGEABLES),OFE_REFS,
+    ['outil_alt_forme','outil_alt_numero','outil_alt_angle','outil_alt_fournisseur','texte_bobinettes']));
+  ['of_numero','date_creation','delai_client'].concat(avecCommande?[]:['qte_etiquettes']).forEach(c=>cols.delete(c));
+  cols.forEach(function(c){ m[c]=null; });
+  if(avecCommande){ m.qte_etiquettes=null; m._qtePropose=null; }
+  m._manuels={}; m._libres={}; m.cases_libres=null; m.champs_corriges=null;
+  m._ficheRef=null; m._incoherences=[]; m._ficheCols=[]; m._arrondi=null; m._qteArrondir=false;
+  m._ficheManques=[]; m._ficheCalcules=[];
+}
 
 function ofeChangerFiche(){
   const m=S.ofEditModal;
@@ -2501,24 +2475,29 @@ async function ofeOuvrirChoixFiche(mDepart){
 }
 window.ofeOuvrirChoixFiche = ofeOuvrirChoixFiche;
 
-/* Retirer une ligne de commande de l'OF en création, d'un clic sur sa croix. */
+/* Retirer une ligne de commande de l'OF en création, d'un clic sur sa croix.
+   L'OF repart de zéro sur les commandes qui restent (retour du 19/11/2026). */
 async function ofeRetirerCommande(i){
   const m=S.ofEditModal;
   if(!m||m.id) return;
-  captureSaisie('ofe-',m);
-  m._commandes=(m._commandes||[]).filter((x,k)=>k!==i);
-  m._modifie=true;
-  if(m._commandes.length){ await ofeDepuisCommandes(m); return; }
-  // Plus aucune commande : ce qu'elles proposaient s'efface, ce qui a été
-  // tapé à la main reste.
+  if(!(await ofeConfirmerRemiseAZero(m,'Retirer cette ligne de commande'))) return;
+  ofeRemettreSurCommandes(m,(m._commandes||[]).filter((x,k)=>k!==i));
+}
+/* L'OF repart des commandes données : fiche, quantités et cases à zéro. */
+function ofeRemettreSurCommandes(m,commandes){
   const val=id=>String((m._dom||{})[id]==null?'':m._dom[id]).trim();
-  if(val('ofe-numero')===String(m._numeroPropose||'')){ m._dom['ofe-numero']=''; m.of_numero=null; m._numeroPropose=null; }
-  if(val('ofe-qte')===String(m._qtePropose||'')){ m._dom['ofe-qte']=''; m.qte_etiquettes=null; m._qtePropose=null; }
-  if(val('ofe-delai')===String(m._delaiPropose||'')){ m._dom['ofe-delai']=''; m.delai_client=null; m._delaiPropose=null; }
-  m._cmdInfo=null; m._qteCommandee=null; m._arrondi=null;
+  const numeroPropose=val('ofe-numero')===String(m._numeroPropose||'');
+  const delaiPropose=val('ofe-delai')===String(m._delaiPropose||'');
+  m._commandes=commandes;
+  ofeViderOF(m);
+  m._fiche=null; m._ficheAuto=false; m._ficheAvant=null;
+  m._cmdInfo=null; m._qteCommandee=null; m._modifie=true;
+  if(numeroPropose){ m._dom['ofe-numero']=''; m.of_numero=null; m._numeroPropose=null; }
+  if(delaiPropose){ m._dom['ofe-delai']=''; m.delai_client=null; m._delaiPropose=null; }
   set({ofEditModal:m});
   renderOfEditModal();
   ofeControler(m);
+  if(m._commandes.length) ofeDepuisCommandes(m);
 }
 window.ofeRetirerCommande = ofeRetirerCommande;
 
