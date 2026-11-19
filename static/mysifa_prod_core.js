@@ -1807,6 +1807,7 @@ function ofeChoisirRef(famille, colId, domId, colTxt){
     valeur: m[colTxt]||'',
     refId: m[colId]||null,
     onChoisir: function(r){
+      ofeNoterModif(m,domId,(m._dom&&m._dom[domId]!==undefined)?m._dom[domId]:(m[colTxt]||''),r.designation,m[colId]||null);
       m[colId]=r.id;
       m[colTxt]=r.designation;
       m._dom=m._dom||{};
@@ -2057,16 +2058,129 @@ function ofeTexteValeur(v){
   if(t==='') return 'vide';
   return /^-?\d+([.,]\d+)?$/.test(t)?Number(t.replace(',','.')).toLocaleString('fr-FR'):t;
 }
+/* Journal des modifications de l'OF (19/11/2026). Chaque case changée à la
+   main garde sa valeur d'avant ; la liste se relit avant d'enregistrer et
+   chaque ligne s'annule d'un clic : retour à la fiche, au calcul ou à la
+   commande selon la case. Il vit avec la fenêtre : l'OF enregistré garde, lui,
+   ses corrections (champs_corriges) et l'historique de la base. */
+const OFE_JOURNAL_HORS=['ofe-delai','ofe-delai-etape2','ofe-fiche-q','ofe-motif-ecart','ofe-date'];
+const OFE_CHAINE_QTE=['ofe-qte','ofe-nb-levees','ofe-bobines'];
+const OFE_LIBELLES_JOURNAL={
+  of_numero:'N° d\'OF', reference:'Référence', format:'Format', machine:'Machine', laize:'Laize', matiere:'Matière',
+  ref_matiere:'Substitution matière', ref_matiere_fournisseur:'Substitution fournisseur', glassine:'Glassine',
+  adhesif_label:'Adhésif', ref_adhesif:'Réf. adhésif', qte_adhesif_g:'Grammage adhésif', qte_adhesif_kg:'Adhésif (kg)',
+  qte_au_mille:'Qté au mille', nb_levees:'Nb levées', nb_fronts:'Nb fronts', qte_etiquettes:'Nb étiquettes',
+  qte_bobines:'Qté bobines', metrage:'Métrage', bobinettes_completes:'Bobinettes complètes', conditionnement:'Conditionnement',
+  tolerance:'Tolérance', cartons_type:'Carton', cales_sachets:'Cales et sachets', mandrins_dia:'Mandrin',
+  mandrin_longueur:'Longueur du mandrin', nb_cartons:'Nb cartons', nb_mandrins:'Nb mandrins', nb_tubes:'Nb tubes',
+  nb_palettes:'Nb palettes', palette_type:'Palette', plieuse_pignon:'Plieuse — pignon', nb_pouces:'Nb pouces',
+  particularites:'Particularités', observations:'Observations',
+};
+function ofeColDeId(id){
+  if(id.indexOf('ofe-libre-')===0) return 'libre:'+id.slice(10);
+  for(const col in OFE_FEUILLE){
+    const d=OFE_FEUILLE[col];
+    if((d.indexOf('ref:')===0?d.split(':')[2]:d.split(':')[0])===id) return col;
+  }
+  for(const col in OFE_CORRIGEABLES){ if(OFE_CORRIGEABLES[col]===id) return col; }
+  for(const col in OFE_CHAMPS){ if(OFE_CHAMPS[col]===id) return col; }
+  return null;
+}
+function ofeLibelleJournal(col,id){
+  if(col&&col.indexOf('libre:')===0) return 'Case libre';
+  if(OFE_LIBELLES_JOURNAL[col]) return OFE_LIBELLES_JOURNAL[col];
+  const t=(col||id||'').replace(/^ofe-/,'').replace(/_/g,' ').replace(/-/g,' ');
+  return t.charAt(0).toUpperCase()+t.slice(1);
+}
+/* Une case vient de changer à la main : on la note, ou on l'efface du journal
+   si elle est revenue à sa valeur d'avant. */
+function ofeNoterModif(m,id,origine,actuel,refAvant){
+  if(!id||OFE_JOURNAL_HORS.indexOf(id)>=0) return;
+  const col=ofeColDeId(id);
+  if(!col) return;
+  m._journal=m._journal||{};
+  // Étiquettes, bobines et levées : seule la dernière corrigée mène, les
+  // autres en découlent et quittent le journal.
+  if(OFE_CHAINE_QTE.indexOf(id)>=0) OFE_CHAINE_QTE.forEach(function(k){ if(k!==id) delete m._journal[k]; });
+  const deja=m._journal[id];
+  const avant=deja?deja.origine:origine;
+  if(String(avant==null?'':avant).trim()===String(actuel==null?'':actuel).trim()){ delete m._journal[id]; return; }
+  const d=new Date();
+  m._journal[id]={id:id,col:col,lib:ofeLibelleJournal(col,id),origine:avant,actuel:actuel,
+    refAvant:deja?deja.refAvant:(refAvant===undefined?null:refAvant),
+    t:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),ordre:Date.now()};
+}
+function ofeActionAnnuler(m,x){
+  if(OFE_CHAINE_QTE.indexOf(x.id)>=0) return m._qteCommandee?'Revenir à la commande':'Annuler';
+  if(Object.values(OFE_CALCULES).indexOf(x.id)>=0) return 'Revenir au calcul';
+  if((m._ficheRef||{})[x.col]!==undefined) return 'Revenir à la fiche';
+  return 'Annuler';
+}
+/* Annule une modification du journal : chaque case revient à ce dont elle
+   découle, et tout ce qui en dépend se recalcule. */
+function ofeAnnulerModif(m,id){
+  const x=(m._journal||{})[id];
+  if(!x) return;
+  m._manuels=m._manuels||{}; m._dom=m._dom||{};
+  const el=document.getElementById(id);
+  if(OFE_CHAINE_QTE.indexOf(id)>=0){
+    // Étiquettes, bobines et levées forment une chaîne : on la reprend entière
+    // depuis la commande (ou la quantité d'avant, sans commande).
+    OFE_CHAINE_QTE.forEach(function(k){ delete m._manuels[k]; });
+    const avantQte=(m._journal['ofe-qte']||{}).origine;
+    OFE_CHAINE_QTE.forEach(function(k){ delete m._journal[k]; });
+    const q=document.getElementById('ofe-qte');
+    if(m._qteCommandee){
+      if(q) q.value=String(m._qteCommandee);
+      m._dom['ofe-qte']=String(m._qteCommandee); m._qtePropose=''; m._qteArrondir=true;
+    }else if(avantQte!==undefined){
+      if(q) q.value=avantQte;
+      m._dom['ofe-qte']=avantQte;
+    }
+    ofePeindreCases(m); ofeRecalculer(); ofePeindreEcarts(m);
+    return;
+  }
+  delete m._journal[id];
+  if(Object.values(OFE_CALCULES).indexOf(id)>=0){
+    delete m._manuels[id];
+    ofePeindreCases(m); ofeRecalculer(); ofePeindreEcarts(m);
+    return;
+  }
+  if((m._ficheRef||{})[x.col]!==undefined){ ofeRevenirFiche(m,x.col); return; }
+  if(el) el.value=x.origine==null?'':x.origine;
+  m._dom[id]=x.origine==null?'':x.origine;
+  if(OFE_CORRIGEABLES[x.col]) delete m._manuels[id];
+  if(OFE_REF_DE[x.col]){
+    // Une matière MyStock : le lien d'avant revient avec son texte.
+    m[OFE_REF_DE[x.col]]=x.refAvant||null;
+    m[x.col]=x.origine==null?'':x.origine;
+    captureSaisie('ofe-',m);
+    set({ofEditModal:m});
+    renderOfEditModal();
+  }
+  ofePeindreCases(m); ofeRecalculer(); ofePeindreEcarts(m); ofeApercuPlusTard(m);
+}
+
 function ofePeindreEcarts(m){
   const z=document.getElementById('ofe-ecarts'), pied=document.getElementById('ofe-ecarts-pied');
   if(!z) return;
-  const e=ofeEcartsListe(m), inc=m._incoherences||[];
+  const journal=Object.values(m._journal||{}).sort((a,b)=>b.ordre-a.ordre);
+  const dansJournal=new Set(journal.map(x=>x.col));
+  const e=ofeEcartsListe(m).filter(x=>!dansJournal.has(x.col)), inc=m._incoherences||[];
   const bouton='padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap';
   const ligne='display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border-top:1px solid var(--border);font-size:13px;color:var(--text)';
   let h='';
   inc.forEach(function(x,i){
     h+='<div style="'+ligne+'"><span style="color:var(--warn)">'+escHtml(x.message)+'</span><button type="button" data-incoh="'+i+'" style="'+bouton+'">'+(x.action==='completer'?'Compléter la levée':'Reprendre le calcul')+'</button></div>';
   });
+  if(journal.length){
+    h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:10px 0 2px">Vos modifications, la plus récente en tête</div>';
+    journal.forEach(function(x){
+      h+='<div style="'+ligne+'"><span><span style="color:var(--muted);font-variant-numeric:tabular-nums;margin-right:8px">'+escHtml(x.t)+'</span>'+escHtml(x.lib)+' : <span style="color:var(--muted)">'+escHtml(ofeTexteValeur(x.origine))+'</span> → <strong>'+escHtml(ofeTexteValeur(x.actuel))+'</strong></span>'+
+        '<button type="button" data-annuler-modif="'+escAttr(x.id)+'" style="'+bouton+'">'+escHtml(ofeActionAnnuler(m,x))+'</button></div>';
+    });
+  }
+  if(e.length) h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:10px 0 2px">Différences avec la fiche</div>';
   e.forEach(function(x){
     h+='<div style="'+ligne+'"><span>'+escHtml(x.lib)+' : <span style="color:var(--muted)">'+escHtml(ofeTexteValeur(x.fiche))+'</span> → <strong>'+escHtml(ofeTexteValeur(x.of))+'</strong></span><button type="button" data-ecart="'+escAttr(x.col)+'" style="'+bouton+'">Revenir à la fiche</button></div>';
   });
@@ -2078,9 +2192,9 @@ function ofePeindreEcarts(m){
     const fr=d=>d?String(d).split('-').reverse().join('/'):'vide';
     h+='<div style="'+ligne+'"><span>Délai client : <span style="color:var(--muted)">commande '+escHtml(fr(dateCmd))+'</span> → <strong>'+escHtml(fr(champDelai.value))+'</strong></span><button type="button" data-reprendre-delai="'+escAttr(dateCmd)+'" style="'+bouton+'">Reprendre la date de la commande</button></div>';
   }
-  const total=e.length+inc.length+(ecartDelai?1:0);
+  const total=journal.length+e.length+inc.length+(ecartDelai?1:0);
   z.style.display=total?'block':'none';
-  z.innerHTML=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">À relire avant d\'enregistrer</div>'+h:'';
+  z.innerHTML=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">Modifications et points à relire</div>'+h:'';
   if(pied){
     pied.style.display=total?'inline-flex':'none';
     pied.textContent=total+(total>1?' points à relire':' point à relire');
@@ -2103,6 +2217,7 @@ async function ofeActualiserEcarts(m){
 function ofeRevenirFiche(m,col){
   const r=m._ficheRef||{}, id=OFE_CHAMPS[col];
   if(!id||r[col]===undefined) return;
+  if(m._journal) delete m._journal[id];
   captureSaisie('ofe-',m);
   m._dom=m._dom||{};
   m._dom[id]=String(r[col]);
@@ -2118,6 +2233,7 @@ function ofeAligner(m,i){
   const x=(m._incoherences||[])[i];
   if(!x) return;
   m._manuels=m._manuels||{};
+  if(m._journal) delete m._journal[OFE_CALCULES[x.champ]];
   if(x.action==='completer'){
     const el=document.getElementById('ofe-bobines');
     if(el) el.value=String(x.attendu);
@@ -2357,7 +2473,7 @@ function ofeViderOF(m){
   ['of_numero','date_creation','delai_client'].concat(avecCommande?[]:['qte_etiquettes']).forEach(c=>cols.delete(c));
   cols.forEach(function(c){ m[c]=null; });
   if(avecCommande){ m.qte_etiquettes=null; m._qtePropose=null; }
-  m._manuels={}; m._libres={}; m.cases_libres=null; m.champs_corriges=null;
+  m._manuels={}; m._libres={}; m.cases_libres=null; m.champs_corriges=null; m._journal={}; m._origines={};
   m._ficheRef=null; m._incoherences=[]; m._ficheCols=[]; m._arrondi=null; m._qteArrondir=false;
   m._ficheManques=[]; m._ficheCalcules=[];
 }
@@ -2896,8 +3012,9 @@ function ofeBrancherFiche(overlay,m){
     if(e.target.matches&&e.target.matches('.ofe-case[type=date],#ofe-delai-etape2')){
       try{ e.target.showPicker(); }catch(err){}
     }
-    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],[data-signaler-fiche],#ofe-ecarts-pied');
+    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],[data-signaler-fiche],[data-annuler-modif],#ofe-ecarts-pied');
     if(!b) return;
+    if(b.hasAttribute('data-annuler-modif')){ ofeAnnulerModif(m,b.getAttribute('data-annuler-modif')); return; }
     if(b.hasAttribute('data-signaler-fiche')){ ofeSignalerFicheManquante(m); return; }
     if(b.hasAttribute('data-reprendre-delai')){
       const d=b.getAttribute('data-reprendre-delai'), champ=document.getElementById('ofe-delai');
@@ -2911,6 +3028,20 @@ function ofeBrancherFiche(overlay,m){
     if(b.id==='ofe-ecarts-pied'){ const z=document.getElementById('ofe-ecarts'); if(z) z.scrollIntoView({block:'center'}); return; }
     if(b.hasAttribute('data-ecart')) ofeRevenirFiche(m,b.getAttribute('data-ecart'));
     else ofeAligner(m,Number(b.getAttribute('data-incoh')));
+  });
+  // Journal : la valeur d'avant se prend à l'entrée dans la case, la
+  // modification se note quand on la quitte.
+  overlay.addEventListener('focusin',function(e){
+    const t=e.target;
+    if(!t||!t.id||t.id.indexOf('ofe-')!==0||!/^(INPUT|TEXTAREA)$/.test(t.tagName)) return;
+    m._origines=m._origines||{};
+    if(!(m._journal||{})[t.id]) m._origines[t.id]=t.value;
+  });
+  overlay.addEventListener('change',function(e){
+    const t=e.target;
+    if(!t||!t.id||!(m._origines||{}).hasOwnProperty(t.id)) return;
+    ofeNoterModif(m,t.id,m._origines[t.id],t.value);
+    ofePeindreEcarts(m);
   });
   ofePeindreEcarts(m);
   const ref=overlay.querySelector('#ofe-reference');
@@ -3453,7 +3584,8 @@ function renderOfEditModal(){
     const bRecalc=overlay.querySelector('#ofe-recalc-btn');
     if(bRecalc) bRecalc.onclick=function(){
       // Les quantités repartent du calcul ; fronts, laize et mandrin corrigés restent.
-      Object.values(OFE_CALCULES).forEach(function(id){ if(m._manuels) delete m._manuels[id]; });
+      Object.values(OFE_CALCULES).forEach(function(id){ if(m._manuels) delete m._manuels[id]; if(m._journal) delete m._journal[id]; });
+      if(m._journal) delete m._journal['ofe-qte'];
       ofeRecalculer();
     };
     ofeApercuPlusTard(m,0);
