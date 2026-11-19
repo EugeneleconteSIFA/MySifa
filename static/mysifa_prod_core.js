@@ -2392,27 +2392,135 @@ function ofeChangerFiche(){
   const m=S.ofEditModal;
   if(!m) return;
   captureSaisie('ofe-',m);
-  // « Changer » repropose d'abord les fiches du MÊME produit : c'est presque
-  // toujours une autre machine ou une autre laize qu'on cherche. Avant, il
-  // fallait retaper une recherche à vide (retour du 17/11/2026).
-  const cle=m._fiche&&m._fiche.reference?String(m._fiche.reference).split(' - ')[0].trim():'';
-  const duProduit=((m._cmdInfo&&m._cmdInfo.fiches)||[]);
-  m._ficheAvant=m._fiche;
-  m._fiche=null;
-  m._fichesTrouvees=duProduit.length?duProduit:[];
-  m._ficheIdx=0;
-  set({ofEditModal:m});
-  renderOfEditModal();
-  if(duProduit.length){
-    ofePeindreFiches('');
-  }else if(cle){
-    const el=document.getElementById('ofe-fiche-q');
-    if(el) el.value=cle;
-    ofeChercherFiche(cle);
-  }
-  requestAnimationFrame(function(){ const el=document.getElementById('ofe-fiche-q'); if(el) el.focus(); });
+  ofeOuvrirChoixFiche(m);
 }
 window.ofeChangerFiche = ofeChangerFiche;
+
+/* Choisir la fiche technique dans une fenêtre à part, comme les commandes
+   (retour du 19/11/2026 : la recherche dans l'étape 2 était à l'étroit). Les
+   fiches du produit de la commande s'affichent d'emblée, la recherche couvre
+   toutes les fiches. La fiche en place ne change qu'au choix d'une autre. */
+async function ofeOuvrirChoixFiche(mDepart){
+  const m=mDepart||S.ofEditModal;
+  if(!m||document.getElementById('ofe-cf-fond')) return;
+  const article=(m._cmdInfo&&m._cmdInfo.article)||(m._fiche&&String(m._fiche.reference||'').split(' - ')[0].trim())||'';
+  const actuelle=m._fiche?m._fiche.id:null;
+  let fiches=[], vise=-1, minuteur=null, jeton=0;
+  const fond=document.createElement('div');
+  fond.id='ofe-cf-fond';
+  fond.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  fond.innerHTML='<div role="dialog" aria-modal="true" aria-label="Choisir la fiche technique" style="background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:880px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden">'+
+    '<div style="display:flex;align-items:flex-start;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">'+
+      '<div style="flex:1"><div style="font-size:16px;font-weight:800;color:var(--text)">Choisir la fiche technique</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:2px">'+(article?'Article de la commande : <strong style="color:var(--text)">'+escHtml(article)+'</strong> · ':'')+
+      'les quantités et l\'OF en découlent.</div></div>'+
+      '<button type="button" data-cf-fermer aria-label="Fermer" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:16px;line-height:1">×</button></div>'+
+    '<div style="padding:12px 20px;border-bottom:1px solid var(--border)"><input data-cf-q type="search" autocomplete="off" placeholder="Rechercher une fiche : référence, format, machine, support…" '+
+      'style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;outline:none"></div>'+
+    '<div data-cf-liste style="overflow-y:auto;flex:1;min-height:120px"></div>'+
+    '<div style="display:flex;align-items:center;gap:10px;padding:12px 20px;border-top:1px solid var(--border);background:var(--bg)">'+
+      '<span data-cf-pied style="flex:1;font-size:12px;color:var(--muted)"></span>'+
+      '<button type="button" data-cf-fermer style="padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Annuler</button></div>'+
+    '</div>';
+  document.body.appendChild(fond);
+  const q=fond.querySelector('[data-cf-q]'), liste=fond.querySelector('[data-cf-liste]'), pied=fond.querySelector('[data-cf-pied]');
+  const fermer=function(){ document.removeEventListener('keydown',clavier,true); fond.remove(); };
+  const choisir=function(f){ if(!f) return; fermer(); if(f.id!==actuelle) ofeChoisirFiche(f.id); };
+  const peindre=function(titre){
+    if(!fiches.length){
+      liste.innerHTML='<div style="padding:28px 20px;text-align:center;font-size:13px;color:var(--muted)">'+
+        (q.value.trim()?'Aucune fiche pour « '+escHtml(q.value.trim())+' ».'
+          :(article?'Aucune fiche technique pour l\'article '+escHtml(article)+'. Cherchez une autre fiche (un motif sera demandé), ou signalez la fiche manquante depuis l\'étape 2.'
+                   :'Tapez une référence, un format ou une machine.'))+'</div>';
+      pied.textContent='';
+      return;
+    }
+    liste.innerHTML=(titre?'<div style="padding:10px 20px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">'+escHtml(titre)+'</div>':'')+
+      fiches.map(function(f,i){
+        const duProduit=article&&(f.ref_produit_norm===article||String(f.reference||'').split(' - ')[0].trim()===article);
+        return '<div data-cf-i="'+i+'" style="display:grid;grid-template-columns:minmax(150px,1.3fr) 110px minmax(90px,1fr) minmax(120px,1.2fr);gap:12px;align-items:center;padding:10px 20px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)">'+
+          '<span style="display:flex;align-items:center;gap:6px;min-width:0"><strong style="font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(f.reference||'')+'</strong>'+
+            (f.id===actuelle?'<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:var(--accent-bg);color:var(--accent)">actuelle</span>':'')+
+            (duProduit&&f.id!==actuelle?'<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:var(--accent-bg);color:var(--accent)">commande</span>':'')+'</span>'+
+          '<span style="color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(f.machine||'—')+'</span>'+
+          '<span style="color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(f.format||'')+'</span>'+
+          '<span style="color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escAttr([f.support,f.conditionnement].filter(Boolean).join(' · '))+'">'+escHtml([f.support,f.conditionnement].filter(Boolean).join(' · '))+'</span>'+
+          '</div>';
+      }).join('');
+    // Le survol ne fait que déplacer la surbrillance : redessiner la liste
+    // sous la souris faisait perdre le clic.
+    liste.querySelectorAll('[data-cf-i]').forEach(function(el){
+      el.addEventListener('click',function(){ choisir(fiches[Number(el.getAttribute('data-cf-i'))]); });
+      el.addEventListener('mouseenter',function(){ marquer(Number(el.getAttribute('data-cf-i'))); });
+    });
+    marquer(vise);
+    pied.textContent=fiches.length+(fiches.length>1?' fiches':' fiche')+' · Entrée pour choisir, Échap pour fermer';
+  };
+  const marquer=function(i){
+    vise=i;
+    liste.querySelectorAll('[data-cf-i]').forEach(function(el){
+      const oui=Number(el.getAttribute('data-cf-i'))===i;
+      el.style.background=oui?'color-mix(in srgb,var(--accent) 18%,transparent)':'';
+      el.style.boxShadow=oui?'inset 4px 0 0 var(--accent)':'';
+    });
+  };
+  const charger=async function(){
+    const t=q.value.trim(), monJeton=++jeton;
+    const cherche=t||article;
+    if(!cherche){ fiches=[]; vise=-1; peindre(''); return; }
+    liste.innerHTML='<div style="padding:22px 20px;font-size:13px;color:var(--muted)">Recherche…</div>';
+    let r=null;
+    try{ r=await api('/api/fiches-techniques/list?limit=40&q='+encodeURIComponent(cherche)); }catch(e){
+      if(monJeton===jeton) liste.innerHTML='<div style="padding:22px 20px;font-size:13px;color:var(--danger)">'+escHtml(e.message||'Recherche impossible.')+'</div>';
+      return;
+    }
+    if(monJeton!==jeton) return;
+    fiches=(r&&r.rows)||[];
+    // Sans recherche : seulement les fiches du produit de la commande, la
+    // fiche actuelle en tête.
+    if(!t&&article) fiches=fiches.filter(f=>f.ref_produit_norm===article||String(f.reference||'').split(' - ')[0].trim()===article);
+    fiches.sort((a,b)=>(b.id===actuelle)-(a.id===actuelle));
+    vise=fiches.length?0:-1;
+    peindre(t?'':(article?'Fiches du produit '+article:''));
+  };
+  const clavier=function(e){
+    if(e.key==='Escape'){ e.stopPropagation(); e.preventDefault(); fermer(); return; }
+    if(!fiches.length) return;
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      e.preventDefault();
+      marquer((vise+(e.key==='ArrowDown'?1:-1)+fiches.length)%fiches.length);
+      const el=liste.querySelector('[data-cf-i="'+vise+'"]'); if(el) el.scrollIntoView({block:'nearest'});
+    }else if(e.key==='Enter'){ e.preventDefault(); choisir(fiches[vise]); }
+  };
+  document.addEventListener('keydown',clavier,true);
+  fond.addEventListener('mousedown',function(e){ if(e.target===fond) fermer(); });
+  fond.querySelectorAll('[data-cf-fermer]').forEach(b=>b.addEventListener('click',fermer));
+  q.addEventListener('input',function(){ clearTimeout(minuteur); minuteur=setTimeout(charger,220); });
+  requestAnimationFrame(function(){ q.focus(); });
+  charger();
+}
+window.ofeOuvrirChoixFiche = ofeOuvrirChoixFiche;
+
+/* Retirer une ligne de commande de l'OF en création, d'un clic sur sa croix. */
+async function ofeRetirerCommande(i){
+  const m=S.ofEditModal;
+  if(!m||m.id) return;
+  captureSaisie('ofe-',m);
+  m._commandes=(m._commandes||[]).filter((x,k)=>k!==i);
+  m._modifie=true;
+  if(m._commandes.length){ await ofeDepuisCommandes(m); return; }
+  // Plus aucune commande : ce qu'elles proposaient s'efface, ce qui a été
+  // tapé à la main reste.
+  const val=id=>String((m._dom||{})[id]==null?'':m._dom[id]).trim();
+  if(val('ofe-numero')===String(m._numeroPropose||'')){ m._dom['ofe-numero']=''; m.of_numero=null; m._numeroPropose=null; }
+  if(val('ofe-qte')===String(m._qtePropose||'')){ m._dom['ofe-qte']=''; m.qte_etiquettes=null; m._qtePropose=null; }
+  if(val('ofe-delai')===String(m._delaiPropose||'')){ m._dom['ofe-delai']=''; m.delai_client=null; m._delaiPropose=null; }
+  m._cmdInfo=null; m._qteCommandee=null; m._arrondi=null;
+  set({ofEditModal:m});
+  renderOfEditModal();
+  ofeControler(m);
+}
+window.ofeRetirerCommande = ofeRetirerCommande;
 
 /* Recalcul au fil de la frappe du nombre d'étiquettes. Pas de re-render :
    les cases sont posées une à une, le champ garde son focus. */
@@ -2621,9 +2729,7 @@ async function ofeDepuisCommandes(m){
     return true;
   }
   if(f.length>=1){
-    m._fichesTrouvees=f;
-    m._ficheIdx=0;
-    ofePeindreFiches('');
+    ofeOuvrirChoixFiche(m);
     return true;
   }
   // Plusieurs articles ou aucun : c'est dit sous la fiche (ofeInfoFiche),
@@ -3128,12 +3234,12 @@ function renderOfEditModal(){
         Autre${autres.length>1?'s':''} fiche${autres.length>1?'s':''} de ce produit :
         ${autres.map(x=>`<button type="button" data-autre-fiche="${escAttr(String(x.id))}" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-family:inherit;font-size:12px"><strong>${escHtml(x.reference||'')}</strong>${x.machine?' · '+escHtml(x.machine):''}</button>`).join('')}
       </div>`:''}`
-      :`<div style="grid-column:1/-1">
-        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Fiche technique</label>
-        <input id="ofe-fiche-q" type="text" autocomplete="off" value="${escAttr(_v('ofe-fiche-q',''))}"
-          placeholder="Rechercher une fiche (référence, format, machine, support…)"
-          style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-        <div id="ofe-fiche-res" style="margin-top:6px;display:flex;flex-direction:column;gap:2px"></div>
+      :`<div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Fiche technique</span>
+        <button type="button" onclick="ofeOuvrirChoixFiche()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg,#fff);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Choisir la fiche technique</button>
+        <span style="font-size:12px;color:var(--muted)">${((m._cmdInfo&&m._cmdInfo.fiches)||[]).length
+          ? escHtml(String(m._cmdInfo.fiches.length))+(m._cmdInfo.fiches.length>1?' fiches pour ce produit':' fiche pour ce produit')
+          : 'Recherche par référence, format, machine ou support'}</span>
       </div>`;
     return choix
       // Produit vendu au mètre (« Bobine de 45 ml ») : on compte des rouleaux,
@@ -3404,7 +3510,16 @@ function renderOfEditModal(){
   const zone=overlay.querySelector('#ofe-cmd-resume');
   if(zone){
     if(m.id&&window.MysRvgiPicker){
-      MysRvgiPicker.resume(zone,'of',m.id);
+      // Une croix par ligne : détacher une commande se fait sans rouvrir le
+      // sélecteur, et le numéro proposé suit (retour du 19/11/2026).
+      MysRvgiPicker.resume(zone,'of',m.id,'commande',{detacher:true,onChange:function(res){
+        const mm=S.ofEditModal;
+        if(!mm||mm.id!==m.id) return;
+        captureSaisie('ofe-',mm);
+        mm._commandes=(res.lignes||[]).map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
+        if(mm._commandes.length) ofeDepuisCommandes(mm);
+        else { mm._cmdInfo=null; mm._numeroSuggere=null; set({ofEditModal:mm}); renderOfEditModal(); }
+      }});
     }else{
       // Chaque commande cochée s'ouvre dans l'écran Commandes de l'ERP, dans
       // un nouvel onglet : l'ADV vérifie la commande sans quitter l'OF. Une
@@ -3416,13 +3531,19 @@ function renderOfEditModal(){
         const id=x.ligne!=null?ids[x.numero+':'+x.ligne]:null;
         const url='/erp#/commandes?q='+encodeURIComponent(x.numero)+(id?'&fiche='+encodeURIComponent('commandes:'+id):'');
         const lib=String(x.numero)+(x.ligne!=null?(' L'+x.ligne):' (entière)');
-        return '<a href="'+escAttr(url)+'" target="_blank" rel="noopener" title="Voir la commande dans MyERP (nouvel onglet)" '+
-          'style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-decoration:none;font-size:12px;font-weight:600">'+
-          escHtml(lib)+' <span style="color:var(--accent)">Voir la commande ↗</span></a>';
+        return '<span style="display:inline-flex;align-items:center;border-radius:8px;border:1px solid var(--border);background:var(--bg);overflow:hidden">'+
+          '<a href="'+escAttr(url)+'" target="_blank" rel="noopener" title="Voir la commande dans MyERP (nouvel onglet)" '+
+          'style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 10px;color:var(--text);text-decoration:none;font-size:12px;font-weight:600">'+
+          escHtml(lib)+' <span style="color:var(--accent)">Voir la commande ↗</span></a>'+
+          '<button type="button" data-retirer-cmd="'+l.indexOf(x)+'" title="Retirer '+escAttr(lib)+' de l\'OF" aria-label="Retirer '+escAttr(lib)+'" '+
+          'style="align-self:stretch;padding:0 9px;border:none;border-left:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1">×</button></span>';
       };
       zone.innerHTML=l.length
         ? '<div style="display:flex;gap:6px;flex-wrap:wrap">'+l.map(lien).join('')+'</div>'
         : '<div style="font-size:12px;color:var(--muted)">Aucune commande rattachée — le numéro d\'OF devra être saisi à la main.</div>';
+      zone.querySelectorAll('[data-retirer-cmd]').forEach(function(b){
+        b.addEventListener('click',function(){ ofeRetirerCommande(Number(b.getAttribute('data-retirer-cmd'))); });
+      });
     }
   }
 }
