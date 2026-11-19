@@ -215,7 +215,9 @@ _LARGEURS = {
 # Zones de texte libre : (clé, x, y_bas de la première ligne, largeur, taille,
 # interligne, nombre de lignes maximum).
 _ZONES = [
-    ("particularites", 100.3, 344.1, 420.0, 10, 12.4, 4),
+    # Tout l'aplat jaune (x = 100 → 573) : une particularité longue (560
+    # caractères pour 1341/0006) était coupée à 4 lignes.
+    ("particularites", 100.3, 344.1, 468.0, 10, 12.4, 4),
     ("observations",    32.0, 692.0, 350.0,  9, 11.0, 9),
 ]
 
@@ -493,8 +495,22 @@ def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes
         valeur = d.get(cle)
         if not valeur:
             continue
-        for i, ligne in enumerate(_couper(valeur, largeur, _GRAS, taille)[:maxi]):
-            _poser(x, y + i * interligne, ligne, taille, True, "g")
+        # Le texte se resserre jusqu'à 6 pt pour tenir dans la hauteur de la
+        # zone ; au-delà seulement, il est coupé, et la coupure se voit (« … »).
+        bas = y + (maxi - 1) * interligne
+        t_z, lignes = float(taille), []
+        while True:
+            il = interligne * t_z / taille
+            places = 1 + int((bas - y) // il)
+            lignes = _couper(valeur, largeur, _GRAS, t_z)
+            if len(lignes) <= places or t_z <= 6.0:
+                break
+            t_z -= 0.5
+        if len(lignes) > places:
+            lignes = lignes[:places]
+            lignes[-1] = lignes[-1].rstrip() + " …"
+        for i, ligne in enumerate(lignes):
+            _poser(x, y + i * il, ligne, t_z, True, "g")
 
     for y, ligne in zip(_BOBINETTES_Y, _lignes_bobinettes(d)):
         _poser(_BOBINETTES_X, y, ligne, 10, True, "g")

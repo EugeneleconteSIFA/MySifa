@@ -2271,13 +2271,12 @@ function ofePeindreEcarts(m){
     h+='<div style="'+ligne+'"><span style="color:var(--warn)">'+escHtml(x.message)+'</span><button type="button" data-incoh="'+i+'" style="'+bouton+'">'+(x.action==='completer'?'Compléter la levée':'Reprendre le calcul')+'</button></div>';
   });
   if(journal.length){
-    h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:10px 0 2px">Vos modifications, la plus récente en tête</div>';
     journal.forEach(function(x){
       h+='<div style="'+ligne+'"><span><span style="color:var(--muted);font-variant-numeric:tabular-nums;margin-right:8px">'+escHtml(x.t)+'</span>'+escHtml(x.lib)+' : <span style="color:var(--muted)">'+escHtml(ofeTexteValeur(x.origine))+'</span> → <strong>'+escHtml(ofeTexteValeur(x.actuel))+'</strong></span>'+
         '<button type="button" data-annuler-modif="'+escAttr(x.id)+'" style="'+bouton+'">'+escHtml(ofeActionAnnuler(m,x))+'</button></div>';
     });
   }
-  if(e.length) h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:10px 0 2px">Différences avec la fiche</div>';
+  if(e.length) h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:10px 0 2px">Écarts avec la fiche</div>';
   e.forEach(function(x){
     h+='<div style="'+ligne+'"><span>'+escHtml(x.lib)+' : <span style="color:var(--muted)">'+escHtml(ofeTexteValeur(x.fiche))+'</span> → <strong>'+escHtml(ofeTexteValeur(x.of))+'</strong></span><button type="button" data-ecart="'+escAttr(x.col)+'" style="'+bouton+'">Revenir à la fiche</button></div>';
   });
@@ -2291,7 +2290,7 @@ function ofePeindreEcarts(m){
   }
   const total=journal.length+e.length+inc.length+(ecartDelai?1:0);
   z.style.display=total?'block':'none';
-  z.innerHTML=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">Modifications et points à relire</div>'+h:'';
+  z.innerHTML=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">À relire</div>'+h:'';
   if(pied){
     pied.style.display=total?'inline-flex':'none';
     pied.textContent=total+(total>1?' points à relire':' point à relire');
@@ -2983,9 +2982,8 @@ function ofeDelaiHtml(m){
   const r=m._cmdInfo||{};
   const libre=!!actuel&&actuel!==r.date_livraison&&actuel!==r.date_expedition;
   return '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
-    '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Délai client</span>'+
-    ((r.date_livraison||r.date_expedition)?'<span>Commande :</span>'+ofeDatesPuces(m):'<span id="ofe-dates"></span>')+
-    '<label for="ofe-delai-etape2" style="margin-left:4px">Autre date :</label>'+
+    '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Délai</span>'+
+    ((r.date_livraison||r.date_expedition)?ofeDatesPuces(m):'<span id="ofe-dates"></span>')+
     '<input id="ofe-delai-etape2" type="date" value="'+escAttr(actuel)+'" title="Choisir librement le délai client" '+
     'style="background:var(--bg);border:1px solid '+(libre?'var(--accent)':'var(--border)')+';border-radius:8px;padding:5px 9px;color:var(--text);font-size:13px;font-family:inherit;outline:none;cursor:pointer">'+
     '</div>';
@@ -3035,37 +3033,30 @@ function ofeInfoFiche(m){
     // Jamais de silence : sans article, la fenêtre resterait vide sans dire
     // pourquoi (constat du 15/11/2026 sur 9921842, commande supprimée).
     h+=(r.articles||[]).length>1
-      ? '<div style="color:var(--danger)">· Les lignes cochées portent '+r.articles.length+' articles ('+escHtml(r.articles.join(', '))+') : un OF ne couvre qu\'un produit. Gardez une seule ligne, ou choisissez la fiche (un motif sera demandé).</div>'
-      : '<div style="color:var(--danger)">· Aucune ligne de produit retrouvée dans RVGI pour les commandes cochées (commande supprimée, ou lignes de frais seulement). Choisissez la fiche et saisissez la quantité.</div>';
+      ? '<div style="color:var(--danger)">· '+r.articles.length+' articles ('+escHtml(r.articles.join(', '))+') : un OF = un produit.</div>'
+      : '<div style="color:var(--danger)">· Aucune ligne de produit dans RVGI pour ces commandes.</div>';
   }
   if(r&&r.article){
     const n=(r.fiches||[]).length;
-    const bouts=['Article de la commande : '+r.article];
-    if(r.qte_etiquettes) bouts.push(Number(r.qte_etiquettes).toLocaleString('fr-FR')+(r.au_metre?' rouleaux commandés':' étiquettes commandées'));
-    if(r.delai_client) bouts.push('livraison le '+r.delai_client.split('-').reverse().join('/'));
-    h+='<div>'+escHtml(bouts.join(' · '))+'.</div>';
     // Une commande en bobines ou en cartons est convertie en étiquettes :
     // l'ADV voit comment, et ce qui n'a pas pu l'être (15/11/2026).
     (r.conversions||[]).forEach(function(x){
       h+='<div'+(/inconnu/.test(x)?' style="color:var(--danger)"':'')+'>· '+escHtml(x)+'</div>';
     });
-    if(!m._fiche&&n>=1) h+='<div style="color:var(--danger)">· '+(n>1?n+' fiches pour ce produit — choisissez celle de la machine.':'Choisissez la fiche proposée.')+'</div>';
-    if(!n) h+='<div style="color:var(--danger)">· Aucune fiche technique pour l\'article '+escHtml(r.article)+
-      ' — à créer avant l\'OF. Une autre fiche reste possible, avec le motif de l\'écart. '+
+    if(!m._fiche&&n>=1) h+='<div style="color:var(--danger)">· Choisissez la fiche.</div>';
+    if(!n) h+='<div style="color:var(--danger)">· Aucune fiche pour '+escHtml(r.article)+'. '+
       (m._ficheSignalee
         ? '<span style="color:var(--success);font-weight:600">Signalé ✓</span>'
-        : '<button type="button" data-signaler-fiche style="margin-left:4px;padding:3px 9px;border-radius:7px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">Signaler la fiche manquante</button>')+
+        : '<button type="button" data-signaler-fiche style="margin-left:4px;padding:3px 9px;border-radius:7px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">Signaler</button>')+
       '</div>';
   }
   if(m._arrondi){
     const a=m._arrondi, n=x=>Number(x).toLocaleString('fr-FR');
-    h+='<div style="color:var(--text)">Arrondi à la levée complète : <strong>'+n(a.levees)+(a.levees>1?' levées':' levée')+' de '+n(a.par_levee)+' = '+n(a.proposee)+'</strong> (commande : '+n(a.commandee)+'). '+
+    h+='<div style="color:var(--text)">Arrondi à la levée : <strong>'+n(a.proposee)+'</strong> (commande '+n(a.commandee)+') · '+
       '<button type="button" onclick="ofeGarderQteCommandee()" style="background:none;border:none;padding:0;color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;text-decoration:underline">Garder '+n(a.commandee)+'</button></div>';
   }
-  if(calc.length) h+='<div>Calculé à partir du nombre '+(m._auMetre?'de rouleaux':'d\'étiquettes')+' : '+escHtml(calc.join(', '))+'.</div>';
-  if(mene) h+='<div>La quantité suit les '+mene+' corrigées.</div>';
-  if(manuels.length) h+='<div>Corrigé à la main : '+escHtml(manuels.join(', '))+'.</div>';
-  (m._ficheManques||[]).forEach(function(x){ h+='<div style="color:var(--danger)">· '+escHtml(x)+'</div>'; });
+  // Seuls les manques bloquants restent : une valeur lue ailleurs n'en est pas un.
+  (m._ficheManques||[]).filter(x=>!/lu dans le conditionnement/.test(x)).forEach(function(x){ h+='<div style="color:var(--danger)">· '+escHtml(x)+'</div>'; });
   return h;
 }
 
@@ -3399,7 +3390,7 @@ function ofeScansProduitHtml(m){
   const l=m._scansProduit||[];
   if(!m._fiche||!l.length) return '';
   return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
-    'Derniers OF scannés de ce produit :'+
+    'Scans :'+
     l.map(x=>'<a href="/api/produits/documents/'+encodeURIComponent(x.id)+'/pdf" target="_blank" rel="noopener" '+
       'title="Papier atelier annoté de l\'OF '+escAttr(x.of_numero||'')+'" '+
       'style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-decoration:none">'+
@@ -3467,15 +3458,15 @@ function renderOfEditModal(){
         <button type="button" onclick="ofeChangerFiche()" style="${bouton}">Changer de fiche</button>
       </div>
       ${autres.length?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
-        Autre${autres.length>1?'s':''} fiche${autres.length>1?'s':''} de ce produit :
+        Autre${autres.length>1?'s':''} :
         ${autres.map(x=>`<button type="button" data-autre-fiche="${escAttr(String(x.id))}" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-family:inherit;font-size:12px"><strong>${escHtml(x.reference||'')}</strong>${x.machine?' · '+escHtml(x.machine):''}</button>`).join('')}
       </div>`:''}`
       :`<div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Fiche technique</span>
         <button type="button" onclick="ofeOuvrirChoixFiche()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg,#fff);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Choisir la fiche technique</button>
         <span style="font-size:12px;color:var(--muted)">${((m._cmdInfo&&m._cmdInfo.fiches)||[]).length
-          ? escHtml(String(m._cmdInfo.fiches.length))+(m._cmdInfo.fiches.length>1?' fiches pour ce produit':' fiche pour ce produit')
-          : 'Recherche par référence, format, machine ou support'}</span>
+          ? escHtml(String(m._cmdInfo.fiches.length))+(m._cmdInfo.fiches.length>1?' fiches':' fiche')
+          : ''}</span>
       </div>`;
     return choix
       // Produit vendu au mètre (« Bobine de 45 ml ») : on compte des rouleaux,
@@ -3518,17 +3509,12 @@ function renderOfEditModal(){
         <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
-      ${_sec("1 · Commandes RVGI et numéro d'OF",`
+      ${_sec("1 · Commandes",`
         <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <button type="button" onclick="ofeChoisirCommandes()"
             style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">
             ${(m._commandes&&m._commandes.length)||!creation?'Modifier les commandes':'Choisir des commandes'}
           </button>
-          <div style="font-size:12px;color:var(--muted)">
-            ${creation
-              ? "Commencez par la commande : elle propose le numéro d'OF, la fiche technique, le nombre d'étiquettes et le délai. Sans commande (stock, marché), saisissez le numéro et choisissez la fiche."
-              : "Le sélecteur enregistre directement le rattachement de cet OF."}
-          </div>
         </div>
         <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>
         ${surOF?'':_f('ofe-numero','OF n°',m.of_numero)}
@@ -3539,7 +3525,6 @@ function renderOfEditModal(){
         ${m.id&&m._numeroSuggere?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
           Numéro proposé pour ces commandes : <strong>${escHtml(m._numeroSuggere)}</strong>
           <button type="button" id="ofe-num-sugg" style="padding:5px 10px;border-radius:8px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">Utiliser ce numéro</button>
-          <span style="color:var(--muted)">Le numéro actuel peut déjà figurer sur un dossier ou un papier atelier.</span>
         </div>`:''}
         ${m._rvgiOf?`
         <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
@@ -3555,15 +3540,15 @@ function renderOfEditModal(){
           })(m._rvgiOf)}
           ${(m._rvgiOf.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
         </div>`:''}`,true)}
-      ${_sec('2 · Fiche technique, quantité et délai',_secFiche(),true)}
+      ${_sec('2 · Fiche et délai',_secFiche(),true)}
       <div id="ofe-ecarts" style="display:none;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;padding:12px 16px 6px;background:var(--card)"></div>
       ${surOF?`<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;background:var(--accent-bg);border-bottom:1px solid var(--border)">
-          <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">3 · L'OF — cliquez sur une case pour la corriger</span>
+          <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)">3 · OF</span>
           <span style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <span class="ofe-legende"><i style="background:rgba(8,145,178,.45)"></i>Corrigé</span>
             <span class="ofe-legende"><i style="background:rgba(22,163,74,.45)"></i>Recalculé à la suite</span>
-            <label for="ofe-nb-fronts" style="font-size:12px;font-weight:600;color:var(--text2)">Nb fronts</label>
+            <label for="ofe-nb-fronts" style="font-size:12px;font-weight:600;color:var(--text2)">Fronts</label>
             <input id="ofe-nb-fronts" type="number" min="1" value="${escAttr(String(_v('ofe-nb-fronts',m.nb_fronts)==null?'':_v('ofe-nb-fronts',m.nb_fronts)))}" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 8px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
             <button type="button" id="ofe-histo-annuler" onclick="ofeAnnulerDernier()" title="Annuler la dernière modification (Cmd/Ctrl + Z)" aria-label="Annuler la dernière modification" style="width:32px;height:28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button type="button" id="ofe-histo-retablir" onclick="ofeRetablir()" title="Rétablir (Cmd/Ctrl + Maj + Z)" aria-label="Rétablir la modification annulée" style="width:32px;height:28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
             <button type="button" id="ofe-recalc-btn" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
@@ -3572,7 +3557,7 @@ function renderOfEditModal(){
         </div>
         ${ofeFeuilleHtml(m)}
       </div>
-      ${_sec('Outil de remplacement — absent de l\'OF imprimé',[
+      ${_sec('Outil de remplacement',[
         _f('ofe-outa-forme','Outil alt. — forme',m.outil_alt_forme),
         _f('ofe-outa-numero','Outil alt. — n°',m.outil_alt_numero),
         _f('ofe-outa-angle','Outil alt. — angle',m.outil_alt_angle),
@@ -3807,7 +3792,7 @@ function renderOfEditModal(){
       };
       zone.innerHTML=l.length
         ? '<div style="display:flex;gap:6px;flex-wrap:wrap">'+l.map(lien).join('')+'</div>'
-        : '<div style="font-size:12px;color:var(--muted)">Aucune commande rattachée — le numéro d\'OF devra être saisi à la main.</div>';
+        : '<div style="font-size:12px;color:var(--muted)">Sans commande : numéro à saisir.</div>';
       zone.querySelectorAll('[data-retirer-cmd]').forEach(function(b){
         b.addEventListener('click',function(){ ofeRetirerCommande(Number(b.getAttribute('data-retirer-cmd'))); });
       });
