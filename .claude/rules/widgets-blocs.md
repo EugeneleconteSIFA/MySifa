@@ -381,8 +381,9 @@ bandeau du mode capture propose aussi « Faire une demande ».
 
 Guide in-app : `accueil-widgets`, défini dans `mysifa_accueil.js`
 (moteur partagé `mysifa_guides.js`), bouton « ? » dans l'en-tête de la
-colonne. Seul guide ouvert à **tous les rôles** (`tous: true`, décision du
-06/10/2026) : les autres guides restent réservés aux superadmins. Toute
+colonne. Ouvert à **tous les rôles** (`tous: true`, décision du
+06/10/2026), comme `myprod-of` (création d'OF, destiné aux ADV, 19/11/2026) :
+les autres guides restent réservés aux superadmins. Toute
 évolution visible des tableaux de bord (capture, questionnaire, colonne)
 impose de relire ses 6 étapes et leurs illustrations.
 

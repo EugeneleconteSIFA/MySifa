@@ -8400,6 +8400,7 @@ const _FMT_GUIDES = {
   'expe-devis': 'MyExpé — Devis transporteurs',
   'mystock-flux-matieres': 'MyStock — Déstockage et écarts RVGI',
   'accueil-widgets': 'Accueil — Mes tableaux de bord',
+  'myprod-of': 'MyProd — Créer un OF',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }
