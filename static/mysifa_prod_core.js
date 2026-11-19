@@ -2617,8 +2617,40 @@ function ofeDatesHtml(m){
              :'border:1px solid var(--border);background:var(--bg);color:var(--text)')+'">'+
       escHtml(lib)+' '+escHtml(fr(d))+'</button>';
   };
-  return '<div id="ofe-dates" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
-    'Dates de la commande :'+puce('Livraison',r.date_livraison)+puce('Expédition',r.date_expedition)+'</div>';
+  return '<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
+    'Dates de la commande :'+ofeDatesPuces(m)+'</div>';
+}
+/* Les dates de la commande, en boutons. Seule cette partie se redessine : le
+   champ de date libre voisin garde son focus pendant la saisie. */
+function ofeDatesPuces(m){
+  const r=m._cmdInfo||{};
+  const actuel=(m._dom&&m._dom['ofe-delai']!==undefined)?m._dom['ofe-delai']:(m.delai_client||'');
+  const fr=d=>String(d).split('-').reverse().join('/');
+  const puce=function(lib,d){
+    if(!d) return '';
+    const choisi=actuel===d;
+    return '<button type="button" data-delai="'+escAttr(d)+'" title="Prendre cette date comme délai client" '+
+      'style="padding:5px 10px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;'+
+      (choisi?'border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:700'
+             :'border:1px solid var(--border);background:var(--bg);color:var(--text)')+'">'+
+      escHtml(lib)+' '+escHtml(fr(d))+'</button>';
+  };
+  return '<span id="ofe-dates" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+    puce('Livraison',r.date_livraison)+puce('Expédition',r.date_expedition)+'</span>';
+}
+/* Ordinateur : un seul endroit pour le délai, les dates de la commande en
+   boutons et une date libre au calendrier, à égalité (retour du 19/11/2026). */
+function ofeDelaiHtml(m){
+  const actuel=ofeIso((m._dom&&m._dom['ofe-delai']!==undefined)?m._dom['ofe-delai']:(m.delai_client||''))||'';
+  const r=m._cmdInfo||{};
+  const libre=!!actuel&&actuel!==r.date_livraison&&actuel!==r.date_expedition;
+  return '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
+    '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Délai client</span>'+
+    ((r.date_livraison||r.date_expedition)?'<span>Commande :</span>'+ofeDatesPuces(m):'<span id="ofe-dates"></span>')+
+    '<label for="ofe-delai-etape2" style="margin-left:4px">Autre date :</label>'+
+    '<input id="ofe-delai-etape2" type="date" value="'+escAttr(actuel)+'" title="Choisir librement le délai client" '+
+    'style="background:var(--bg);border:1px solid '+(libre?'var(--accent)':'var(--border)')+';border-radius:8px;padding:5px 9px;color:var(--text);font-size:13px;font-family:inherit;outline:none;cursor:pointer">'+
+    '</div>';
 }
 
 // Un clic sur une date de la commande la prend comme délai client.
@@ -2642,9 +2674,14 @@ function ofeRepeindreDates(overlay,m){
   // Le délai de l'étape 2 et celui de la feuille ne font qu'un.
   const a=document.getElementById('ofe-delai'), b=document.getElementById('ofe-delai-etape2');
   if(a&&b&&document.activeElement!==b) b.value=a.value;
+  if(a&&b){
+    const r=m._cmdInfo||{};
+    const libre=!!a.value&&a.value!==r.date_livraison&&a.value!==r.date_expedition;
+    b.style.borderColor=libre?'var(--accent)':'var(--border)';
+  }
   const z=document.getElementById('ofe-dates');
   if(!z) return;
-  z.outerHTML=ofeDatesHtml(m);
+  z.outerHTML=ofeDatesPuces(m);
   ofeBrancherDates(overlay,m);
 }
 
@@ -2736,7 +2773,7 @@ function ofeBrancherFiche(overlay,m){
   }
   overlay.addEventListener('click',function(e){
     // Le calendrier s'ouvre au clic sur toute la case.
-    if(e.target.matches&&e.target.matches('.ofe-case[type=date]')){
+    if(e.target.matches&&e.target.matches('.ofe-case[type=date],#ofe-delai-etape2')){
       try{ e.target.showPicker(); }catch(err){}
     }
     const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],#ofe-ecarts-pied');
@@ -3066,11 +3103,7 @@ function renderOfEditModal(){
       // Produit vendu au mètre (« Bobine de 45 ml ») : on compte des rouleaux,
       // comme dans Access (17/11/2026).
       +(surOF?'':_f('ofe-qte',m._auMetre?'Nb rouleaux':'Nb étiquettes',m.qte_etiquettes,'number'))
-      +(surOF?`<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <label for="ofe-delai-etape2" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Délai client</label>
-          <input id="ofe-delai-etape2" type="date" value="${escAttr(ofeIso(_v('ofe-delai',m.delai_client))||'')}" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
-        </div>`:_f('ofe-delai','Délai client',ofeIso(m.delai_client),'date'))
-      +ofeDatesHtml(m)
+      +(surOF?ofeDelaiHtml(m):_f('ofe-delai','Délai client',ofeIso(m.delai_client),'date')+ofeDatesHtml(m))
       +`<div id="ofe-fiche-info" style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">${ofeInfoFiche(m)}</div>`
       +`<div id="ofe-ecart" style="grid-column:1/-1">${ofeEcartHtml(m)}</div>`
       +`<div id="ofe-scans-produit" style="grid-column:1/-1">${ofeScansProduitHtml(m)}</div>`;
