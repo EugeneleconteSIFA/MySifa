@@ -128,7 +128,9 @@
       '<div class="mrm" role="dialog" aria-modal="true">' +
       '  <div class="mrm-tete">' +
       '    <div><h2>' + esc(o.titre || LIBELLES[famille]) + '</h2>' +
-      '      <p class="st">La désignation choisie devient le texte imprimé sur le document.</p></div>' +
+      '      <p class="st">Relie cette matière à son article MyStock : besoins, déstockage et valorisation le suivent.</p>' +
+      (o.valeur ? '      <p class="st">Sur le document : <strong>' + esc(o.valeur) + '</strong></p>' : '') +
+      '    </div>' +
       '    <button class="mrm-x" data-x aria-label="Fermer">×</button>' +
       '  </div>' +
       '  <div class="mrm-rech"><input data-q type="text" autocomplete="off" ' +
@@ -154,7 +156,9 @@
 
     function peindre() {
       if (!refs.length) {
-        liste.innerHTML = '<div class="mrm-vide">Aucune référence ne correspond. ' +
+        liste.innerHTML = '<div class="mrm-vide">' + (input.value.trim()
+          ? 'Aucune référence pour « ' + esc(input.value.trim()) + ' ». Essayez un seul mot (« 2028Y », « perdue »). '
+          : 'Aucune référence dans cette famille. ') +
           'Créez-la plutôt que de saisir du texte libre — c\'est elle qui reliera ' +
           'ce document au stock.</div>';
         return;
@@ -178,6 +182,10 @@
         var d = await api('/api/stock/matieres/referentiel?famille=' +
           encodeURIComponent(famille) + '&q=' + encodeURIComponent(input.value.trim()));
         refs = d.references || [];
+        // La référence actuelle en tête : c'est elle qu'on vient vérifier.
+        refs.sort(function (a, b) {
+          return (String(b.id) === String(o.refId)) - (String(a.id) === String(o.refId));
+        });
         vise = refs.length ? 0 : -1;
         peindre();
       } catch (e) {
@@ -269,7 +277,10 @@
     });
     document.addEventListener('keydown', auClavier, true);
 
-    input.value = (o.valeur || '').trim();
+    // La liste s'ouvre complète : le texte du document (« Permanent 2028Y - 19 »)
+    // n'est presque jamais la désignation MyStock, et chercher avec lui
+    // laissait croire qu'aucune référence n'existait (retour du 19/11/2026).
+    input.value = '';
     input.focus();
     chercher();
   }

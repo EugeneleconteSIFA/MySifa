@@ -11969,8 +11969,10 @@ def referentiel_matieres(request: Request):
         " WHERE COALESCE(actif, 1) = 1 AND categorie IN (%s)"
         % ",".join("?" * len(categories))
     )
-    if q:
-        like = "%" + q.replace("%", "") + "%"
+    # Chaque mot doit se trouver quelque part : « 2028Y permanent » retrouve
+    # « 2028Y · Adhésif thermofusible permanent ».
+    for mot in [m for m in q.replace("%", "").split() if any(c.isalnum() for c in m)][:6]:
+        like = "%" + mot + "%"
         sql += (" AND (reference LIKE ? OR designation LIKE ?"
                 "      OR COALESCE(sous_categorie,'') LIKE ?)")
         params += [like, like, like]
