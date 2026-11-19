@@ -128,7 +128,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu19"></script>
 <!-- Selecteur de pieces RVGI, partage avec le planning et MyExpe. Charge
      AVANT le coeur : la modale OF l'appelle des son premier rendu. -->
-<script src="/static/mysifa_rvgi_picker.js?v=8"></script>
+<script src="/static/mysifa_rvgi_picker.js?v=10"></script>
 <!-- Selecteur de reference matiere MyStock : c'est lui qui remplace le
      texte libre des champs carton / mandrin / palette / adhesif / support. -->
 <script src="/static/mysifa_ref_matiere.js?v=__V_LABEL__-rm2"></script>

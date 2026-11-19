@@ -239,13 +239,31 @@ _CADRES_PATH = os.path.join(BASE_DIR, "data", "of_modele_cadres.json")
 
 
 @lru_cache(maxsize=1)
-def _cadres() -> tuple:
-    """Les cadres du modèle, relevés par scripts/of_modele_ecran.py."""
+def _releve() -> dict:
+    """Cadres et libellés du modèle, relevés par scripts/of_modele_ecran.py."""
     try:
         with open(_CADRES_PATH, encoding="utf-8") as f:
-            return tuple(json.load(f).get("cadres") or ())
+            return json.load(f)
     except (OSError, ValueError):
-        return ()
+        return {}
+
+
+def _cadres() -> tuple:
+    return tuple(_releve().get("cadres") or ())
+
+
+def _borner_par_libelles(gauche: float, droite: float, haut: float, bas: float,
+                         ancre: float) -> tuple:
+    """Une case ne recouvre aucun libellé imprimé de sa ligne : elle s'arrête
+    au mot qui la précède et à celui qui la suit (« Qté totale … kg »)."""
+    for m in _releve().get("mots") or ():
+        if m["y1"] <= haut + 2 or m["y0"] >= bas - 2:
+            continue
+        if (m["x0"] + m["x1"]) / 2 < ancre:
+            gauche = max(gauche, m["x1"] + 2)
+        else:
+            droite = min(droite, m["x0"] - 2)
+    return gauche, droite
 
 
 def _recouvre(a, b) -> float:
@@ -279,6 +297,8 @@ def _case_ecran(c) -> dict:
         else:
             haut = y - h + 2
         taille_ecran = min(taille, h / 1.25)
+        gauche, droite = _borner_par_libelles(gauche, droite, haut, haut + h,
+                                              x - 2 if align == "d" else x + 2)
         return {"cle": cle, "x": round(gauche, 1), "y": round(haut, 1), "l": round(droite - gauche, 1),
                 "h": round(h, 1), "taille": round(taille_ecran, 1), "align": align, "cadre": True}
 
@@ -292,8 +312,11 @@ def _case_ecran(c) -> dict:
                      if o[0] != cle and abs(o[2] - y) < 9 and gauche_de(o) > x]
         borne = min(suivantes) - 3 if suivantes else 572.0
         l = min(borne - x, _LARGEURS_ECRAN.get(cle, _LARGEURS.get(cle, 150.0)))
-    return {"cle": cle, "x": round(gauche_de(c), 1), "y": round(y - h + 2, 1),
-            "l": round(l, 1), "h": round(h, 1), "taille": taille, "align": align, "cadre": False}
+    gauche, droite = _borner_par_libelles(gauche_de(c), gauche_de(c) + l, y - h + 2, y + 2,
+                                          x - 2 if align == "d" else x + 2)
+    return {"cle": cle, "x": round(gauche, 1), "y": round(y - h + 2, 1),
+            "l": round(max(droite - gauche, 8.0), 1), "h": round(h, 1), "taille": taille,
+            "align": align, "cadre": False}
 
 
 @lru_cache(maxsize=1)

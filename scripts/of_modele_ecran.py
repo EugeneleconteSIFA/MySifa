@@ -6,9 +6,10 @@ Produit deux fichiers que l'application lit telle quelle :
 - `data/of_modele.png` : le modèle en image, fond de la feuille corrigée à
   l'écran (fenêtre OF de MyProd, au-delà de 900 px) ;
 - `data/of_modele_cadres.json` : les cadres du modèle, relevés sur ses traits
-  noirs et sur ses cases blanches et colorées. Chaque saisie de l'écran s'y
-  cale (`of_pdf_generator.cases_du_modele`), et un cadre vide qu'aucun champ
-  n'occupe devient une case libre, imprimée telle quelle.
+  noirs et sur ses cases blanches et colorées, et la position de ses libellés.
+  Chaque saisie de l'écran se cale dans son cadre sans déborder sur un
+  libellé (`of_pdf_generator.cases_du_modele`), et un cadre vide qu'aucun
+  champ n'occupe devient une case libre, imprimée telle quelle.
 
 À relancer seulement quand le modèle PDF change :
 
@@ -103,7 +104,10 @@ def main():
     pdf = pdfplumber.open(MODELE)
     cadres = relever(pdf.pages[0])
     with open(CADRES, "w", encoding="utf-8") as f:
-        json.dump({"modele": "of_template.pdf", "cadres": cadres}, f, ensure_ascii=False, indent=0)
+        mots = [{"x0": round(m["x0"], 1), "y0": round(m["top"], 1), "x1": round(m["x1"], 1),
+                 "y1": round(m["bottom"], 1)} for m in pdf.pages[0].extract_words()]
+        json.dump({"modele": "of_template.pdf", "cadres": cadres, "mots": mots}, f,
+                  ensure_ascii=False, indent=0)
     image = pypdfium2.PdfDocument(MODELE)[0].render(scale=2.4).to_pil().convert("RGB")
     image.quantize(colors=64, dither=0).save(IMAGE, optimize=True)
     print("%d cadres relevés, image %dx%d." % (len(cadres), image.width, image.height))

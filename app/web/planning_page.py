@@ -1051,7 +1051,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_rvgi_picker.js?v=8"></script>
+<script src="/static/mysifa_rvgi_picker.js?v=10"></script>
 <script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
