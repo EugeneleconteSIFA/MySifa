@@ -1807,6 +1807,7 @@ function ofeChoisirRef(famille, colId, domId, colTxt){
     valeur: m[colTxt]||'',
     refId: m[colId]||null,
     onChoisir: function(r){
+      ofeMemoriser(m);
       ofeNoterModif(m,domId,(m._dom&&m._dom[domId]!==undefined)?m._dom[domId]:(m[colTxt]||''),r.designation,m[colId]||null);
       m[colId]=r.id;
       m[colTxt]=r.designation;
@@ -1934,6 +1935,10 @@ const OFE_SOURCES_LIBELLES = {
 };
 const OFE_CORRIGEABLES = Object.assign({},OFE_CALCULES,OFE_SOURCES);
 let _ofeFicheTimer=null, _ofeCalcTimer=null, _ofeCalcJeton=0;
+// La case où l'ADV est en train de taper : le recalcul ne la réécrit pas. Une
+// case seulement traversée (Tab) reste, elle, mise à jour.
+let _ofeEnFrappe=null;
+function ofeEnFrappe(el){ return !!el&&el===document.activeElement&&el.id===_ofeEnFrappe; }
 
 /* Correction directe sur l'OF (18/11/2026). Sous 900 px, le formulaire reste :
    une feuille A4 n'y est pas lisible. Les positions viennent du générateur
@@ -2110,6 +2115,75 @@ function ofeNoterModif(m,id,origine,actuel,refAvant){
     refAvant:deja?deja.refAvant:(refAvant===undefined?null:refAvant),
     t:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),ordre:Date.now()};
 }
+/* Annuler / Rétablir (19/11/2026) : avant chaque modification, l'état
+   complet de l'OF est mémorisé — cases, corrections, matières MyStock,
+   journal. Les flèches le restaurent tel quel, valeurs calculées comprises :
+   aucun recalcul n'est relancé, l'état restauré était déjà cohérent. Changer
+   de fiche ou de commande remet l'OF à zéro et vide cet historique. */
+const OFE_HISTO_MAX=60;
+function ofeEtat(m){
+  const dom={};
+  document.querySelectorAll('#of-edit-overlay [id^="ofe-"]').forEach(function(el){
+    if(/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) dom[el.id]=el.value;
+  });
+  const refs={};
+  OFE_REFS.forEach(function(c){ refs[c]=m[c]||null; });
+  Object.keys(OFE_REF_DE).forEach(function(c){ refs[c]=m[c]==null?null:m[c]; });
+  return {dom:dom, refs:refs, manuels:Object.assign({},m._manuels||{}),
+    journal:JSON.parse(JSON.stringify(m._journal||{})), qtePropose:m._qtePropose,
+    delaiPropose:m._delaiPropose, arrondi:m._arrondi||null};
+}
+function ofeMemoriser(m,session){
+  if(!m) return;
+  if(session&&m._sessionHisto===session) return;
+  m._sessionHisto=session||null;
+  m._annuler=m._annuler||[];
+  m._annuler.push(ofeEtat(m));
+  if(m._annuler.length>OFE_HISTO_MAX) m._annuler.shift();
+  m._refaire=[];
+  ofeMajBoutonsHisto(m);
+}
+function ofeRestaurer(m,e){
+  clearTimeout(_ofeCalcTimer); _ofeCalcJeton++;
+  m._dom=m._dom||{};
+  Object.keys(m._dom).forEach(function(k){ if(!(k in e.dom)) delete m._dom[k]; });
+  Object.assign(m._dom,e.dom);
+  Object.keys(e.refs).forEach(function(c){ m[c]=e.refs[c]; });
+  m._manuels=Object.assign({},e.manuels);
+  m._journal=JSON.parse(JSON.stringify(e.journal));
+  m._qtePropose=e.qtePropose; m._delaiPropose=e.delaiPropose; m._arrondi=e.arrondi;
+  m._qteArrondir=false; m._sessionHisto=null; m._modifie=true;
+  set({ofEditModal:m});
+  renderOfEditModal();
+}
+function ofeAnnulerDernier(){
+  const m=S.ofEditModal;
+  if(!m||!(m._annuler||[]).length) return;
+  captureSaisie('ofe-',m);
+  m._refaire=m._refaire||[];
+  m._refaire.push(ofeEtat(m));
+  ofeRestaurer(m,m._annuler.pop());
+}
+function ofeRetablir(){
+  const m=S.ofEditModal;
+  if(!m||!(m._refaire||[]).length) return;
+  captureSaisie('ofe-',m);
+  m._annuler=m._annuler||[];
+  m._annuler.push(ofeEtat(m));
+  ofeRestaurer(m,m._refaire.pop());
+}
+window.ofeAnnulerDernier=ofeAnnulerDernier;
+window.ofeRetablir=ofeRetablir;
+function ofeMajBoutonsHisto(m){
+  [['ofe-histo-annuler',(m._annuler||[]).length],['ofe-histo-retablir',(m._refaire||[]).length]].forEach(function(x){
+    const b=document.getElementById(x[0]);
+    if(!b) return;
+    b.style.opacity=x[1]?'1':'.35';
+    b.style.cursor=x[1]?'pointer':'default';
+    b.setAttribute('aria-disabled',x[1]?'false':'true');
+  });
+}
+
 function ofeActionAnnuler(m,x){
   if(OFE_CHAINE_QTE.indexOf(x.id)>=0) return m._qteCommandee?'Revenir à la commande':'Annuler';
   if(Object.values(OFE_CALCULES).indexOf(x.id)>=0) return 'Revenir au calcul';
@@ -2121,6 +2195,7 @@ function ofeActionAnnuler(m,x){
 function ofeAnnulerModif(m,id){
   const x=(m._journal||{})[id];
   if(!x) return;
+  ofeMemoriser(m);
   m._manuels=m._manuels||{}; m._dom=m._dom||{};
   const el=document.getElementById(id);
   if(OFE_CHAINE_QTE.indexOf(id)>=0){
@@ -2146,7 +2221,7 @@ function ofeAnnulerModif(m,id){
     ofePeindreCases(m); ofeRecalculer(); ofePeindreEcarts(m);
     return;
   }
-  if((m._ficheRef||{})[x.col]!==undefined){ ofeRevenirFiche(m,x.col); return; }
+  if((m._ficheRef||{})[x.col]!==undefined){ ofeRevenirFiche(m,x.col,true); return; }
   if(el) el.value=x.origine==null?'':x.origine;
   m._dom[id]=x.origine==null?'':x.origine;
   if(OFE_CORRIGEABLES[x.col]) delete m._manuels[id];
@@ -2214,9 +2289,10 @@ async function ofeActualiserEcarts(m){
   m._incoherences=p.incoherences||[];
   ofePeindreEcarts(m);
 }
-function ofeRevenirFiche(m,col){
+function ofeRevenirFiche(m,col,dejaMemorise){
   const r=m._ficheRef||{}, id=OFE_CHAMPS[col];
   if(!id||r[col]===undefined) return;
+  if(!dejaMemorise) ofeMemoriser(m);
   if(m._journal) delete m._journal[id];
   captureSaisie('ofe-',m);
   m._dom=m._dom||{};
@@ -2232,6 +2308,7 @@ function ofeRevenirFiche(m,col){
 function ofeAligner(m,i){
   const x=(m._incoherences||[])[i];
   if(!x) return;
+  ofeMemoriser(m);
   m._manuels=m._manuels||{};
   if(m._journal) delete m._journal[OFE_CALCULES[x.champ]];
   if(x.action==='completer'){
@@ -2316,6 +2393,7 @@ function ofePoserQte(m,p){
 function ofeGarderQteCommandee(){
   const m=S.ofEditModal;
   if(!m||!m._arrondi) return;
+  ofeMemoriser(m);
   const s=String(m._arrondi.commandee);
   const el=document.getElementById('ofe-qte');
   if(el) el.value=s;
@@ -2473,7 +2551,7 @@ function ofeViderOF(m){
   ['of_numero','date_creation','delai_client'].concat(avecCommande?[]:['qte_etiquettes']).forEach(c=>cols.delete(c));
   cols.forEach(function(c){ m[c]=null; });
   if(avecCommande){ m.qte_etiquettes=null; m._qtePropose=null; }
-  m._manuels={}; m._libres={}; m.cases_libres=null; m.champs_corriges=null; m._journal={}; m._origines={};
+  m._manuels={}; m._libres={}; m.cases_libres=null; m.champs_corriges=null; m._journal={}; m._origines={}; m._annuler=[]; m._refaire=[]; m._sessionHisto=null;
   m._ficheRef=null; m._incoherences=[]; m._ficheCols=[]; m._arrondi=null; m._qteArrondir=false;
   m._ficheManques=[]; m._ficheCalcules=[];
 }
@@ -2637,8 +2715,11 @@ async function ofeRecalculer(){
   else if(((m._manuels||{})['ofe-nb-levees']||(m._manuels||{})['ofe-bobines'])&&p.qte_proposee){
     // Levées ou bobines corrigées : la quantité les suit.
     const s=String(p.qte_proposee), champ=document.getElementById('ofe-qte');
-    if(champ){ if(champ.value!==s) ofeMarquerSuivi(champ); champ.value=s; }
-    m._dom['ofe-qte']=s; m.qte_etiquettes=p.qte_proposee;
+    if(champ&&!ofeEnFrappe(champ)){
+      if(champ.value!==s) ofeMarquerSuivi(champ);
+      champ.value=s;
+      m._dom['ofe-qte']=s; m.qte_etiquettes=p.qte_proposee;
+    }
   }
   m._manuels=m._manuels||{};
   Object.keys(OFE_CALCULES).forEach(function(col){
@@ -2647,6 +2728,9 @@ async function ofeRecalculer(){
     const val=(p.champs||{})[col];
     const txt=(val===undefined||val===null)?'':String(val);
     const el=document.getElementById(id);
+    // La case où l'ADV tape ne se réécrit jamais sous ses doigts (retour du
+    // 19/11/2026 : vider « 33 » pour taper 40 donnait 340).
+    if(ofeEnFrappe(el)) return;
     if(el){
       if(el.value!==''&&el.value!==txt) ofeMarquerSuivi(el);
       el.value=txt;
@@ -2889,6 +2973,7 @@ function ofeDelaiHtml(m){
 function ofeBrancherDates(overlay,m){
   overlay.querySelectorAll('[data-delai]').forEach(function(b){
     b.addEventListener('click',function(){
+      ofeMemoriser(m);
       const d=b.getAttribute('data-delai');
       const champ=document.getElementById('ofe-delai');
       if(champ) champ.value=d;
@@ -3017,6 +3102,7 @@ function ofeBrancherFiche(overlay,m){
     if(b.hasAttribute('data-annuler-modif')){ ofeAnnulerModif(m,b.getAttribute('data-annuler-modif')); return; }
     if(b.hasAttribute('data-signaler-fiche')){ ofeSignalerFicheManquante(m); return; }
     if(b.hasAttribute('data-reprendre-delai')){
+      ofeMemoriser(m);
       const d=b.getAttribute('data-reprendre-delai'), champ=document.getElementById('ofe-delai');
       if(champ) champ.value=d;
       m._dom=m._dom||{}; m._dom['ofe-delai']=d; m.delai_client=d; m._delaiPropose=d; m._modifie=true;
@@ -3039,6 +3125,16 @@ function ofeBrancherFiche(overlay,m){
   });
   overlay.addEventListener('change',function(e){
     const t=e.target;
+    // Calendrier, liste, collage : un changement sans frappe se mémorise aussi.
+    if(t&&t.id&&t.id.indexOf('ofe-')===0&&t.id!=='ofe-fiche-q'&&m._sessionHisto!==t.id&&m._etatEntree){
+      m._annuler=m._annuler||[]; m._annuler.push(m._etatEntree);
+      if(m._annuler.length>OFE_HISTO_MAX) m._annuler.shift();
+      m._refaire=[]; m._sessionHisto=t.id; ofeMajBoutonsHisto(m);
+    }
+    // Une case de calcul quittée vide reprend la valeur calculée.
+    if(t&&t.id&&Object.values(OFE_CORRIGEABLES).indexOf(t.id)>=0&&String(t.value).trim()===''){
+      setTimeout(ofeRecalculer,0);
+    }
     if(!t||!t.id||!(m._origines||{}).hasOwnProperty(t.id)) return;
     ofeNoterModif(m,t.id,m._origines[t.id],t.value);
     ofePeindreEcarts(m);
@@ -3072,7 +3168,15 @@ function ofeBrancherFiche(overlay,m){
     const id=e.target&&e.target.id;
     if(!id||ids.indexOf(id)<0) return;
     m._manuels=m._manuels||{};
-    if(String(e.target.value).trim()==='') delete m._manuels[id]; else m._manuels[id]=true;
+    // Case vidée pour être retapée : on attend la suite de la frappe. Le
+    // calcul ne la remplit qu'une fois quittée vide.
+    if(String(e.target.value).trim()===''){
+      delete m._manuels[id];
+      ofePeindreCases(m);
+      clearTimeout(_ofeCalcTimer);
+      return;
+    }
+    m._manuels[id]=true;
     ofePeindreCases(m);
     if(id==='ofe-nb-levees'||id==='ofe-bobines'){
       delete m._manuels[id==='ofe-nb-levees'?'ofe-bobines':'ofe-nb-levees'];
@@ -3439,6 +3543,7 @@ function renderOfEditModal(){
             <span class="ofe-legende"><i style="background:rgba(22,163,74,.45)"></i>Recalculé à la suite</span>
             <label for="ofe-nb-fronts" style="font-size:12px;font-weight:600;color:var(--text2)">Nb fronts</label>
             <input id="ofe-nb-fronts" type="number" min="1" value="${escAttr(String(_v('ofe-nb-fronts',m.nb_fronts)==null?'':_v('ofe-nb-fronts',m.nb_fronts)))}" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 8px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+            <button type="button" id="ofe-histo-annuler" onclick="ofeAnnulerDernier()" title="Annuler la dernière modification (Cmd/Ctrl + Z)" aria-label="Annuler la dernière modification" style="width:32px;height:28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button type="button" id="ofe-histo-retablir" onclick="ofeRetablir()" title="Rétablir (Cmd/Ctrl + Maj + Z)" aria-label="Rétablir la modification annulée" style="width:32px;height:28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
             <button type="button" id="ofe-recalc-btn" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Tout recalculer</button>
             <button type="button" onclick="ofeVoirPdf()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px">Voir le PDF</button>
           </span>
@@ -3579,10 +3684,39 @@ function renderOfEditModal(){
     // Toute modification redessine l'OF : frappe, choix d'une liste, case
     // recopiée de la fiche ou recalculée (ces dernières appellent aussi
     // ofeApercuPlusTard, car un .value posé par le code ne déclenche rien).
-    overlay.addEventListener('input',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q'){ m._modifie=true; ofePeindreEcarts(m); ofeApercuPlusTard(m); } });
+    overlay.addEventListener('input',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q'){ _ofeEnFrappe=e.target.id; m._modifie=true; ofePeindreEcarts(m); ofeApercuPlusTard(m); } });
+    overlay.addEventListener('focusout',function(e){
+      if(e.target&&e.target.id===_ofeEnFrappe) _ofeEnFrappe=null;
+      if(e.target&&e.target.id===m._sessionHisto) m._sessionHisto=null;
+    });
+    // L'état d'avant se mémorise à la première frappe dans une case : on
+    // l'a pris au moment où l'on y est entré, quand tout était à jour.
+    overlay.addEventListener('focusin',function(e){
+      const t=e.target;
+      if(t&&t.id&&t.id.indexOf('ofe-')===0&&/^(INPUT|TEXTAREA)$/.test(t.tagName)&&t.id!=='ofe-fiche-q') m._etatEntree=ofeEtat(m);
+    });
+    overlay.addEventListener('beforeinput',function(e){
+      const t=e.target;
+      if(!t||!t.id||t.id.indexOf('ofe-')!==0||t.id==='ofe-fiche-q'||m._sessionHisto===t.id) return;
+      m._annuler=m._annuler||[];
+      m._annuler.push(m._etatEntree||ofeEtat(m));
+      if(m._annuler.length>OFE_HISTO_MAX) m._annuler.shift();
+      m._refaire=[]; m._sessionHisto=t.id;
+      ofeMajBoutonsHisto(m);
+    });
+    // Cmd/Ctrl+Z hors d'une case : l'annulation de l'OF. Dans une case, le
+    // navigateur garde son annulation de frappe.
+    overlay.addEventListener('keydown',function(e){
+      if(!(e.metaKey||e.ctrlKey)||String(e.key).toLowerCase()!=='z') return;
+      if(e.target&&/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+      e.preventDefault();
+      if(e.shiftKey) ofeRetablir(); else ofeAnnulerDernier();
+    });
+    ofeMajBoutonsHisto(m);
     overlay.addEventListener('change',function(e){ if(e.target&&e.target.id!=='ofe-fiche-q') m._modifie=true; ofeApercuPlusTard(m); });
     const bRecalc=overlay.querySelector('#ofe-recalc-btn');
     if(bRecalc) bRecalc.onclick=function(){
+      ofeMemoriser(m);
       // Les quantités repartent du calcul ; fronts, laize et mandrin corrigés restent.
       Object.values(OFE_CALCULES).forEach(function(id){ if(m._manuels) delete m._manuels[id]; if(m._journal) delete m._journal[id]; });
       if(m._journal) delete m._journal['ofe-qte'];
