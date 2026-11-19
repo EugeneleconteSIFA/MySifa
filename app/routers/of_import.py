@@ -539,9 +539,9 @@ async def validate_of(
                 "SELECT * FROM of_imports WHERE id = ?", (replaced_id,)
             ).fetchone())
             # Le papier remplace tout : les corrections d'avant n'ont plus d'objet.
-            set_cols = list(OF_DATA_FIELDS) + tail_cols + ["champs_corriges"]
+            set_cols = list(OF_DATA_FIELDS) + tail_cols + ["champs_corriges", "cases_libres"]
             set_sql = ", ".join(f"{c} = ?" for c in set_cols)
-            vals = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals + [None, replaced_id]
+            vals = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals + [None, None, replaced_id]
             conn.execute(f"UPDATE of_imports SET {set_sql} WHERE id = ?", vals)
             constater_remplacement(
                 conn, "of_imports", replaced_id, avant,
@@ -656,13 +656,16 @@ async def update_of_import(of_id: int, request: Request):
     EDITABLE = frozenset(OF_DATA_FIELDS)
     # Cles techniques que la modale peut renvoyer sans qu'il faille les ecrire.
     IGNORABLES = frozenset({"id", "statut", "pdf_filename", "date_import", "imported_by",
-                            "fiche_id", "champs_corriges"})
+                            "fiche_id", "champs_corriges", "cases_libres"})
 
     updates = {k: _coerce_of_value(k, v) for k, v in body.items() if k in EDITABLE}
     ignores = sorted(k for k in body if k not in EDITABLE and k not in IGNORABLES)
     if "champs_corriges" in body:
         from app.services.of_proposition import lire_corriges
         updates["champs_corriges"] = json.dumps(lire_corriges(body.get("champs_corriges")))
+    if "cases_libres" in body:
+        from app.services.of_pdf_generator import lire_cases_libres
+        updates["cases_libres"] = json.dumps(lire_cases_libres(body.get("cases_libres")), ensure_ascii=False)
     if not updates:
         raise HTTPException(
             status_code=400,
@@ -2162,6 +2165,7 @@ async def of_apercu(request: Request):
         _appliquer_references(conn, champs, REFERENCES_OF)
         from app.services.of_proposition import libelles_de_la_fiche
         libelles_de_la_fiche(conn, champs, body.get("fiche_id"))
+    champs["cases_libres"] = body.get("cases_libres")
     try:
         from app.services.of_pdf_generator import generate_of_pdf
         pdf_bytes = generate_of_pdf(champs)
@@ -2290,6 +2294,10 @@ async def create_of(request: Request):
     corriges = lire_corriges(body.get("champs_corriges"))
     if corriges:
         champs["champs_corriges"] = json.dumps(corriges)
+    from app.services.of_pdf_generator import lire_cases_libres
+    libres = lire_cases_libres(body.get("cases_libres"))
+    if libres:
+        champs["cases_libres"] = json.dumps(libres, ensure_ascii=False)
     commandes = _lignes_commandes(body.get("commandes"))
 
     numero = (champs.get("of_numero") or "").strip() if champs.get("of_numero") else ""

@@ -261,7 +261,10 @@ supposait du US Letter : 46 points de décalage cumulés en bas de page.
 **L'OF se corrige directement à l'écran** (décision du 18/11/2026). Au-delà de
 900 px, la fenêtre pose une vraie case sur chaque valeur, aux positions de
 `_CHAMPS` (`cases_du_modele()`, `GET /api/of/modele`), sur `data/of_modele.png`.
-Refaire le modèle PDF impose de refaire cette image. Une case imprimée ajoutée à
+Les cases se calent sur les cadres du modèle (`data/of_modele_cadres.json`), et
+tout cadre vide qu'aucun champ n'occupe devient une case libre
+(`of_imports.cases_libres`, JSON), imprimée à cet endroit. Refaire le modèle PDF
+impose de relancer `scripts/of_modele_ecran.py`, qui refait l'image et les cadres. Une case imprimée ajoutée à
 `_CHAMPS` s'ajoute aussi à `OFE_FEUILLE` (`mysifa_prod_core.js`) ; le test le
 vérifie. Sous 900 px, le formulaire reste.
 

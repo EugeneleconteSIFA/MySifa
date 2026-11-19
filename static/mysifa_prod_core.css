@@ -1923,7 +1923,7 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 /* OF corrigé directement sur la feuille. La feuille reste blanche dans tous les
    thèmes : c'est le papier de l'atelier. */
 .ofe-feuille{position:relative;container-type:inline-size;box-sizing:content-box;width:calc(100% - 36px);max-width:1040px;margin:16px auto;border:2px solid #000;aspect-ratio:595.28/841.92;background:#fff center/100% 100% no-repeat}
-.ofe-case{position:absolute;box-sizing:border-box;margin:0;padding:0 2px;border:1px dashed transparent;border-radius:3px;background:transparent;color:#000;font-family:Helvetica,Arial,sans-serif;font-weight:700;line-height:1.1;outline:none;min-width:0}
+.ofe-case{position:absolute;box-sizing:border-box;margin:0;padding:0 2px;border:1px dashed rgba(8,145,178,.3);border-radius:3px;background:transparent;color:#000;font-family:Helvetica,Arial,sans-serif;font-weight:700;line-height:1.1;outline:none;min-width:0}
 .ofe-case:not([type=date]){appearance:none;-webkit-appearance:none}
 .ofe-case[type=date]{cursor:pointer}
 .ofe-case[type=number]{-moz-appearance:textfield}

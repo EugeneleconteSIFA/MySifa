@@ -584,6 +584,25 @@ ids_feuille = set(re.findall(r"'(?:ref:\w+:)?(ofe-[\w-]+)", bloc))
 hors = {"ofe-outa-forme", "ofe-outa-numero", "ofe-outa-angle", "ofe-outa-fournisseur", "ofe-nb-fronts"}
 verifier("rien de ce qui s'enregistre ne manque à la feuille", sorted(ids_payload - ids_feuille - hors), [])
 
+print("Cases calées sur les cadres du modèle")
+sys.path.insert(0, ".")
+from app.services import of_pdf_generator as gen
+mod = gen.cases_du_modele()
+case = {c["cle"]: c for c in mod["cases"]}
+verifier("le N° d'outil prend tout son cadre", case["outil_1_numero"]["x"], 131.8)
+verifier("la forme d'outil reste dans son cadre", case["outil_1_forme"]["x"] + case["outil_1_forme"]["l"] <= 127.6, True)
+verifier("les cadres vides deviennent des cases libres", len(mod["libres"]) > 60, True)
+verifier("aucune case libre ne chevauche un champ",
+         [l["cle"] for l in mod["libres"] for c in mod["cases"]
+          if gen._recouvre((l["x"], l["y"], l["x"] + l["l"], l["y"] + l["h"]),
+                           (c["x"], c["y"], c["x"] + c["l"], c["y"] + c["h"])) > 0.25], [])
+une = mod["libres"][0]["cle"]
+verifier("case libre inconnue écartée", gen.lire_cases_libres({une: "  1 200 ", "inconnue": "x"}), {une: "1 200"})
+import io, pdfplumber
+large = max(mod["libres"], key=lambda l: l["l"])["cle"]
+pdf = gen.generate_of_pdf({"of_numero": "X", "cases_libres": {large: "VITESSE90"}})
+verifier("la case libre s'imprime", "VITESSE90" in pdfplumber.open(io.BytesIO(pdf)).pages[0].extract_text(), True)
+
 print("Dates de l'OF imprimé")
 gen = open("app/services/of_pdf_generator.py", encoding="utf-8").read()
 ns = {"re": re, "Any": object}

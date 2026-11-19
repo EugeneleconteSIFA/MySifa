@@ -23,8 +23,10 @@ Dépendances : reportlab, pypdf.
 
 from __future__ import annotations
 
+import json
 import os
 import re
+from functools import lru_cache
 from io import BytesIO
 from typing import Any, Optional
 
@@ -229,37 +231,121 @@ _LARGEURS_ECRAN = {
     "qte_adhesif_g": 44.0, "qte_adhesif_kg": 40.0, "qte_au_mille": 36.0, "nb_levees": 34.0,
     "qte_etiquettes": 48.0, "qte_bobines": 48.0, "metrage": 50.0, "machine": 120.0,
     "bobinettes_completes": 70.0, "mandrin_longueur": 60.0, "nb_cartons": 50.0,
-    "nb_mandrins": 50.0, "nb_tubes": 50.0, "nb_palettes": 34.0,
+    "nb_mandrins": 50.0, "nb_tubes": 50.0, "nb_palettes": 14.0,
 }
 
 
+_CADRES_PATH = os.path.join(BASE_DIR, "data", "of_modele_cadres.json")
+
+
+@lru_cache(maxsize=1)
+def _cadres() -> tuple:
+    """Les cadres du modèle, relevés par scripts/of_modele_ecran.py."""
+    try:
+        with open(_CADRES_PATH, encoding="utf-8") as f:
+            return tuple(json.load(f).get("cadres") or ())
+    except (OSError, ValueError):
+        return ()
+
+
+def _recouvre(a, b) -> float:
+    """Part de la surface de `a` couverte par `b` ; boîtes (x0, y0, x1, y1)."""
+    l = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    h = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    aire = max((a[2] - a[0]) * (a[3] - a[1]), 0.01)
+    return l * h / aire
+
+
+def _case_ecran(c) -> dict:
+    """Une case de `_CHAMPS`, calée sur le cadre du modèle qui la contient."""
+    cle, x, y, taille, _gras, align, _f = c
+    ax, ay = (x - 3 if align == "d" else x + 3), y - taille * 0.4
+    dedans = [k for k in _cadres()
+              if k["x0"] - 0.5 <= ax <= k["x1"] + 0.5 and k["y0"] - 0.5 <= ay <= k["y1"] + 0.5
+              and k["x1"] - k["x0"] <= 360 and k["y1"] - k["y0"] <= 45]
+    h = taille * 1.55
+    if dedans:
+        # Un cadre tracé d'abord, puis une case blanche, puis un aplat : une case
+        # blanche peut n'occuper qu'une partie du cadre (N° d'outil).
+        rang = {"cadre": 0, "blanc": 1, "aplat": 2}
+        k = min(dedans, key=lambda k: (not k.get("ferme"), rang.get(k["type"], 3),
+                                       (k["x1"] - k["x0"]) * (k["y1"] - k["y0"])))
+        # Libellé dans le cadre (« Conditionnement ») : la case part de la valeur.
+        # Un cadre vide se prend en entier, même si l'impression y décale le texte.
+        gauche = k["x0"] + 1.5 if (align == "d" or k.get("vide") or k["x0"] >= x - 8) else x - 1
+        droite = k["x1"] - 1.5
+        if k["y1"] - k["y0"] <= taille * 2.4:
+            haut, h = k["y0"] + 1.5, k["y1"] - k["y0"] - 3
+        else:
+            haut = y - h + 2
+        taille_ecran = min(taille, h / 1.25)
+        return {"cle": cle, "x": round(gauche, 1), "y": round(haut, 1), "l": round(droite - gauche, 1),
+                "h": round(h, 1), "taille": round(taille_ecran, 1), "align": align, "cadre": True}
+
+    def gauche_de(o):
+        return o[1] - _LARGEURS_ECRAN.get(o[0], 72.0) if o[5] == "d" else o[1]
+
+    if align == "d":
+        l = _LARGEURS_ECRAN.get(cle, 72.0)
+    else:
+        suivantes = [gauche_de(o) for o in _CHAMPS
+                     if o[0] != cle and abs(o[2] - y) < 9 and gauche_de(o) > x]
+        borne = min(suivantes) - 3 if suivantes else 572.0
+        l = min(borne - x, _LARGEURS_ECRAN.get(cle, _LARGEURS.get(cle, 150.0)))
+    return {"cle": cle, "x": round(gauche_de(c), 1), "y": round(y - h + 2, 1),
+            "l": round(l, 1), "h": round(h, 1), "taille": taille, "align": align, "cadre": False}
+
+
+@lru_cache(maxsize=1)
 def cases_du_modele() -> dict:
     """Où poser les cases modifiables à l'écran : les positions de l'impression.
 
     L'écran et le PDF lisent les mêmes `_CHAMPS` : une case déplacée ici bouge
-    aux deux endroits. La largeur s'arrête avant la case voisine de la ligne.
+    aux deux endroits. Chaque case se cale sur le cadre du modèle qui la
+    contient. Un cadre vide qu'aucun champ n'occupe devient une case LIBRE :
+    l'ADV peut y écrire, et le texte s'imprime à cet endroit.
     """
-    def gauche(c):
-        return c[1] - _LARGEURS_ECRAN.get(c[0], 72.0) if c[5] == "d" else c[1]
-
-    cases = []
-    for c in _CHAMPS:
-        cle, x, y, taille, _gras, align, _fmt_c = c
-        h = taille * 1.55
-        if align == "d":
-            l = _LARGEURS_ECRAN.get(cle, 72.0)
-        else:
-            suivantes = [gauche(o) for o in _CHAMPS
-                         if o[0] != cle and abs(o[2] - y) < 9 and gauche(o) > x]
-            borne = min(suivantes) - 3 if suivantes else 572.0
-            l = min(borne - x, _LARGEURS_ECRAN.get(cle, _LARGEURS.get(cle, 150.0)))
-        cases.append({"cle": cle, "x": round(gauche(c), 1), "y": round(y - h + 2, 1),
-                      "l": round(l, 1), "h": round(h, 1), "taille": taille, "align": align})
+    cases = [_case_ecran(c) for c in _CHAMPS]
     zones = [{"cle": cle, "x": x, "y": round(y - taille * 1.2, 1), "l": largeur,
               "h": round(interligne * maxi + 3, 1), "taille": taille}
              for cle, x, y, largeur, taille, interligne, maxi in _ZONES]
-    return {"page": {"l": _PAGE_W, "h": _PAGE_H}, "cases": cases, "zones": zones,
+    occupe = [(c["x"], c["y"], c["x"] + c["l"], c["y"] + c["h"]) for c in cases + zones]
+    occupe.append((_BOBINETTES_X - 4, _BOBINETTES_Y[0] - 14, 572.0, _BOBINETTES_Y[-1] + 4))
+    libres = []
+    # Du plus petit au plus grand : un grand cadre qui en englobe trois petits
+    # (ligne Sheeter) ne doit pas les masquer.
+    for k in sorted(_cadres(), key=lambda k: (k["x1"] - k["x0"]) * (k["y1"] - k["y0"])):
+        if not k.get("vide") or not k.get("ferme") or k.get("type") == "aplat":
+            continue
+        box = (k["x0"] + 1.5, k["y0"] + 1.5, k["x1"] - 1.5, k["y1"] - 1.5)
+        # Les cases à cocher (« Terminé », « Galets de pression ») en font partie.
+        if box[2] - box[0] < 4 or box[3] - box[1] < 4:
+            continue
+        if any(_recouvre(box, o) > 0.25 for o in occupe):
+            continue
+        if sum(_recouvre(box, (l["x"], l["y"], l["x"] + l["l"], l["y"] + l["h"])) for l in libres) > 0.4:
+            continue
+        h = box[3] - box[1]
+        libres.append({"cle": "c%d_%d" % (round(k["x0"]), round(k["y0"])), "x": round(box[0], 1),
+                       "y": round(box[1], 1), "l": round(box[2] - box[0], 1), "h": round(h, 1),
+                       "taille": round(max(6.0, min(10.0, h / 1.3)), 1)})
+    libres.sort(key=lambda l: (l["y"], l["x"]))
+    return {"page": {"l": _PAGE_W, "h": _PAGE_H}, "cases": cases, "zones": zones, "libres": libres,
             "bobinettes": {"x": _BOBINETTES_X, "y": _BOBINETTES_Y, "taille": 10}}
+
+
+def lire_cases_libres(brut: Any) -> dict:
+    """{clé: texte} des cases libres, clés du modèle seulement, 60 caractères."""
+    if isinstance(brut, str):
+        try:
+            brut = json.loads(brut)
+        except ValueError:
+            return {}
+    if not isinstance(brut, dict):
+        return {}
+    connues = {l["cle"] for l in cases_du_modele()["libres"]}
+    return {str(k): str(v).strip()[:60] for k, v in brut.items()
+            if str(k) in connues and v is not None and str(v).strip()}
 
 
 def lignes_bobinettes(d: dict) -> list:
@@ -389,6 +475,14 @@ def generate_of_pdf(of_data: dict, template_path: Optional[str] = None) -> bytes
 
     for y, ligne in zip(_BOBINETTES_Y, _lignes_bobinettes(d)):
         _poser(_BOBINETTES_X, y, ligne, 10, True, "g")
+
+    # Cases libres : un cadre du modèle qu'aucun champ n'occupe, rempli à la main.
+    libres = lire_cases_libres(d.get("cases_libres"))
+    if libres:
+        for l in cases_du_modele()["libres"]:
+            texte = libres.get(l["cle"])
+            if texte:
+                _poser(l["x"] + 1, l["y"] + l["h"] - 1, texte, l["taille"], True, "g", l["l"] - 2)
 
     c.save()
     buf.seek(0)
