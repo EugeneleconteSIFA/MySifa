@@ -113,7 +113,7 @@ conn.executescript("""
         laize REAL, laize_optimale REAL, mandrin_dia TEXT,
         nb_etiq_bobin INTEGER, nb_bobines_carton INTEGER, cartons TEXT,
         conditionnement TEXT, palette_type TEXT, palette_nb_cartons_sol INTEGER,
-        palette_nb_cartons_hauteur INTEGER, source TEXT, date_import TEXT,
+        palette_nb_cartons_hauteur INTEGER, source TEXT, date_import TEXT, date_modif TEXT,
         valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_at TEXT,
         support_ref_id INTEGER, glassine_ref_id INTEGER, adhesif_ref_id INTEGER,
         carton_ref_id INTEGER, mandrin_ref_id INTEGER, palette_ref_id INTEGER);

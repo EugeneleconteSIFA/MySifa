@@ -265,7 +265,7 @@ def _produits(conn, dossiers: set) -> dict:
                        (SELECT ft.adhesif FROM fiches_techniques ft
                          WHERE TRIM(COALESCE(ft.ref_produit_norm,'')) != ''
                            AND TRIM(ft.ref_produit_norm) = TRIM(COALESCE(pe.ref_produit_norm,''))
-                         ORDER BY ft.id LIMIT 1) AS adhesif
+                         ORDER BY ft.date_modif DESC, ft.date_import DESC, ft.id DESC LIMIT 1) AS adhesif
                   FROM planning_entries pe
                  WHERE TRIM(pe.reference) IN ({ph}) OR TRIM(COALESCE(pe.numero_of,'')) IN ({ph})""",
             tuple(dossiers) * 2,

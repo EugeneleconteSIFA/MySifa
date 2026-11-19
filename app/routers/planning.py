@@ -1208,7 +1208,8 @@ _SQL_ENTRIES_ENRICHIES = """
                     WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
                     ELSE 2
                   END,
-                  ft2.id
+                  -- à rang égal, la plus récente (fiche_choix.recence)
+                  ft2.date_modif DESC, ft2.date_import DESC, ft2.id DESC
                 LIMIT 1
             )
             WHERE pe.machine_id = ?
@@ -2172,7 +2173,7 @@ def list_entries(machine_id: int, request: Request):
                         WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
                         ELSE 2
                       END,
-                      ft.id
+                      ft.date_modif DESC, ft.date_import DESC, ft.id DESC
                     LIMIT 1) AS ft_support,
                    (SELECT ft.adhesif FROM fiches_techniques ft
                     WHERE ft.ref_produit_norm IS NOT NULL
@@ -2183,7 +2184,7 @@ def list_entries(machine_id: int, request: Request):
                         WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
                         ELSE 2
                       END,
-                      ft.id
+                      ft.date_modif DESC, ft.date_import DESC, ft.id DESC
                     LIMIT 1) AS ft_adhesif
             FROM planning_entries pe
             WHERE pe.machine_id = ?

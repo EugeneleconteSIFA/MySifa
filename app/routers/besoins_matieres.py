@@ -220,6 +220,8 @@ _SQL_PE = """
 
 _SQL_FT = """
     SELECT id, reference, ref_produit_norm, machine,
+           -- À rang égal, la fiche la plus récente l'emporte (fiche_choix).
+           date_modif, date_import,
            COALESCE(valide, 0) AS valide, valide_par, valide_at,
            invalide_at, invalide_motif,
            support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
