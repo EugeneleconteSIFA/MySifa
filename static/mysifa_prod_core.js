@@ -2000,8 +2000,10 @@ function ofeFeuilleHtml(m){
       return '<textarea id="'+id+'" class="ofe-case" style="'+pos(c)+'">'+escHtml(val(id,c.cle))+'</textarea>';
     }
     const v=type==='date'?ofeIso(val(id,c.cle)):val(id,c.cle);
+    const cadenas=OFE_VERROUILLES.indexOf(id)<0?'':
+      '<button type="button" class="ofe-cadenas" data-cadenas="'+id+'" tabindex="-1" style="left:'+((c.x+c.l)/P.l*100)+'%;top:'+((c.y+c.h/2)/P.h*100)+'%"></button>';
     return '<input id="'+id+'" class="ofe-case" type="'+type+'"'+(type==='number'?' step="any"':'')+
-      ' autocomplete="off" value="'+escAttr(v)+'" style="'+pos(c)+(c.align==='d'?';text-align:right':'')+'">';
+      ' autocomplete="off" value="'+escAttr(v)+'" style="'+pos(c)+(c.align==='d'?';text-align:right':'')+'">'+cadenas;
   }).join('');
   const libres=(_ofeModele.libres||[]).map(function(c){
     const id='ofe-libre-'+c.cle;
@@ -2012,6 +2014,14 @@ function ofeFeuilleHtml(m){
   const bob=b.y.map((y,i)=>'<div class="ofe-bobinette" id="ofe-bob-'+i+'" style="left:'+(b.x/P.l*100)+'%;top:'+((y-b.taille)/P.h*100)+'%;font-size:'+(b.taille/P.l*100)+'cqw"></div>').join('');
   return '<div class="ofe-feuille" style="background-image:url(/api/of/modele.png)">'+cases+libres+bob+'</div>';
 }
+/* Cases qui découlent du calcul (19/11/2026) : verrouillées sur la feuille.
+   Le cadenas les ouvre pour forcer une valeur, qui reste alors signalée dans
+   « À relire » ; le refermer les rend au calcul. Étiquettes, bobines et
+   levées restent libres : ce sont trois façons de dire la quantité. */
+const OFE_VERROUILLES=['ofe-metrage','ofe-mandrins','ofe-tubes','ofe-cartons','ofe-nb-palettes','ofe-qte-adhesif-kg'];
+const OFE_SVG_CADENAS='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>';
+const OFE_SVG_OUVERT='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></svg>';
+function ofeLibre(m,id){ return !!((m._manuels||{})[id]||(m._deverrouilles||{})[id]); }
 /* Les cases corrigées se voient d'un coup d'œil. */
 function ofePeindreCases(m){
   Object.values(OFE_CORRIGEABLES).forEach(function(id){
@@ -2020,6 +2030,40 @@ function ofePeindreCases(m){
     const cible=el&&el.type==='hidden'?el.previousElementSibling:el;
     if(cible) cible.classList.toggle('ofe-case-cor',!!(m._manuels||{})[id]);
   });
+  OFE_VERROUILLES.forEach(function(id){
+    const el=document.getElementById(id);
+    if(!el||!el.classList.contains('ofe-case')) return;
+    const libre=ofeLibre(m,id);
+    el.readOnly=!libre;
+    el.classList.toggle('ofe-verrou',!libre);
+    el.title=libre?'':'Calculé. Le cadenas permet de forcer la valeur.';
+    const b=el.nextElementSibling;
+    if(b&&b.classList.contains('ofe-cadenas')){
+      b.classList.toggle('ouvert',libre);
+      b.innerHTML=libre?OFE_SVG_OUVERT:OFE_SVG_CADENAS;
+      b.title=libre?'Revenir au calcul':'Forcer la valeur';
+      b.setAttribute('aria-label',b.title);
+    }
+  });
+}
+function ofeBasculerCadenas(m,id){
+  const el=document.getElementById(id);
+  if(!m||!el) return;
+  m._deverrouilles=m._deverrouilles||{}; m._manuels=m._manuels||{};
+  if(!ofeLibre(m,id)){
+    m._deverrouilles[id]=true;
+    ofePeindreCases(m);
+    el.focus();
+    try{ el.select(); }catch(e){}
+    return;
+  }
+  delete m._deverrouilles[id];
+  if(!m._manuels[id]){ ofePeindreCases(m); return; }
+  // Valeur forcée : refermer, c'est revenir au calcul (une étape d'historique).
+  if((m._journal||{})[id]){ ofeAnnulerModif(m,id); return; }
+  ofeMemoriser(m);
+  delete m._manuels[id];
+  ofePeindreCases(m); ofeRecalculer(); ofePeindreEcarts(m);
 }
 function ofeMarquerSuivi(el){
   if(!el) return;
@@ -2152,7 +2196,7 @@ function ofeRestaurer(m,e){
   m._manuels=Object.assign({},e.manuels);
   m._journal=JSON.parse(JSON.stringify(e.journal));
   m._qtePropose=e.qtePropose; m._delaiPropose=e.delaiPropose; m._arrondi=e.arrondi;
-  m._qteArrondir=false; m._sessionHisto=null; m._modifie=true;
+  m._qteArrondir=false; m._sessionHisto=null; m._modifie=true; m._deverrouilles={};
   const overlay=document.getElementById('of-edit-overlay');
   if(!overlay||!overlay.querySelector('.ofe-feuille')){
     set({ofEditModal:m});
@@ -3186,6 +3230,17 @@ function ofeBrancherFiche(overlay,m){
       ofePeindreEcarts(m);
     });
   });
+  overlay.querySelectorAll('[data-cadenas]').forEach(function(b){
+    // Le focus reste dans la case : sinon la quitter la refermerait avant le clic.
+    b.onmousedown=function(e){ e.preventDefault(); };
+    b.onclick=function(){ ofeBasculerCadenas(m,b.getAttribute('data-cadenas')); };
+  });
+  overlay.addEventListener('focusout',function(e){
+    const id=e.target&&e.target.id;
+    if(!id||OFE_VERROUILLES.indexOf(id)<0||!(m._deverrouilles||{})[id]||(m._manuels||{})[id]) return;
+    delete m._deverrouilles[id];
+    ofePeindreCases(m);
+  });
   // Une case corrigée à la main le reste, et ce qui en dépend suit. La vider
   // la rend au calcul.
   const ids=Object.values(OFE_CORRIGEABLES);
@@ -3738,6 +3793,7 @@ function renderOfEditModal(){
       ofeMemoriser(m);
       // Les quantités repartent du calcul ; fronts, laize et mandrin corrigés restent.
       Object.values(OFE_CALCULES).forEach(function(id){ if(m._manuels) delete m._manuels[id]; if(m._journal) delete m._journal[id]; });
+      m._deverrouilles={};
       if(m._journal) delete m._journal['ofe-qte'];
       ofeRecalculer();
     };
