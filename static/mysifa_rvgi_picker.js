@@ -878,10 +878,14 @@
     // tel que lu, en retirant la pièce visée (ou tout, pour « Tout détacher »).
     async function detacher(cible) {
       var lib = cible ? cible.numero + (cible.ligne != null ? '/L' + cible.ligne : '') : '';
+      var nom = objet === 'depart' ? 'ce départ' : (objet === 'of' ? 'cet OF' : 'ce dossier');
       var q = cible
-        ? 'Détacher ' + lib + ' de ce ' + (objet === 'depart' ? 'départ' : 'dossier') + ' ?'
-        : 'Détacher toutes les pièces RVGI de ce ' + (objet === 'depart' ? 'départ' : 'dossier') + ' ?';
-      if (!confirm(q)) return;
+        ? 'Détacher ' + lib + ' de ' + nom + ' ?'
+        : 'Détacher toutes les pièces RVGI de ' + nom + ' ?';
+      var oui = typeof global.mysifaConfirm === 'function'
+        ? await global.mysifaConfirm({ title: 'Détacher la commande', message: q, confirmLabel: 'Détacher' })
+        : confirm(q);
+      if (!oui) return;
       var restes = cible ? rows.filter(function (x) { return x !== cible; }) : [];
       var lignes = restes.map(function (x) {
         return { numero: String(x.numero), ligne: x.ligne == null ? null : Number(x.ligne),
