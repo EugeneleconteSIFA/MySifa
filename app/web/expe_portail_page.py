@@ -237,6 +237,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     body.light .btn-accent{color:#fff}
     .btn-ghost{background:transparent}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+    .hint-prix{margin-top:6px;font-size:12px;color:var(--muted);line-height:1.5}
     label{display:block;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
     input,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px;font-family:inherit}
     /* iOS zoome au focus sous 16 px et ne dezoome plus : 16 px sur ecran tactile. */
@@ -299,7 +300,8 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     <div class="banner">
       <h1 id="i18n-banner-title">Vos demandes de tarif</h1>
       <p id="i18n-banner-text">
-        Pour chaque envoi, indiquez un <strong>prix HT</strong> et un <strong>délai</strong> (en jours).
+        Pour chaque envoi, indiquez un <strong>prix HT tout compris</strong> (taxe carburant,
+        surcharges et frais annexes inclus) et un <strong>délai</strong> (en jours).
         La réponse est enregistrée dès validation.
       </p>
     </div>
@@ -316,13 +318,16 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
       </div>
       <div class="row">
         <div style="flex:1;min-width:160px">
-          <label id="i18n-label-prix">Prix HT (€)</label>
+          <label id="i18n-label-prix">Prix HT tout compris (€)</label>
           <input type="number" step="0.01" id="prix">
         </div>
         <div style="width:160px">
           <label id="i18n-label-delai">Délai (jours)</label>
           <input type="number" step="1" id="delai">
         </div>
+      </div>
+      <div class="hint-prix" id="i18n-hint-prix">
+        Taxe carburant, surcharges et frais annexes (rendez-vous, hayon, sûreté…) inclus. Seule la TVA est exclue.
       </div>
       <div style="margin-top:10px">
         <label id="i18n-label-com">Commentaire (optionnel)</label>
@@ -389,6 +394,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     const bx=document.getElementById('i18n-banner-text'); if(bx) bx.innerHTML=t('bannerText');
     const tb=document.getElementById('themeBtn'); if(tb){ tb.textContent=t('theme'); tb.title=t('themeTitle'); }
     const lp=document.getElementById('i18n-label-prix'); if(lp) lp.textContent=t('labelPrice');
+    const hp=document.getElementById('i18n-hint-prix'); if(hp) hp.textContent=t('priceHint');
     const ld=document.getElementById('i18n-label-delai'); if(ld) ld.textContent=t('labelDelay');
     const lc=document.getElementById('i18n-label-com'); if(lc) lc.textContent=t('labelComment');
     const lf=document.getElementById('i18n-label-files'); if(lf) lf.textContent=t('labelFiles');

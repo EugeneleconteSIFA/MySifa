@@ -118,7 +118,7 @@ conn.execute("""CREATE TABLE maintenance_alert_acks (id INTEGER PRIMARY KEY, ale
                 machine TEXT, no_dossier TEXT, ack_at TEXT, responses TEXT, comment TEXT,
                 dismissed INTEGER DEFAULT 0, questionnaire TEXT)""")
 conn.execute("CREATE TABLE planning_entries (reference TEXT, numero_of TEXT, ref_produit TEXT, ref_produit_norm TEXT)")
-conn.execute("CREATE TABLE fiches_techniques (id INTEGER PRIMARY KEY, ref_produit_norm TEXT, adhesif TEXT)")
+conn.execute("CREATE TABLE fiches_techniques (id INTEGER PRIMARY KEY, ref_produit_norm TEXT, adhesif TEXT, date_modif TEXT, date_import TEXT)")
 conn.execute("INSERT INTO planning_entries VALUES ('D1', '', 'ETQ-A', 'ETQA')")
 conn.execute("INSERT INTO fiches_techniques (ref_produit_norm, adhesif) VALUES ('ETQA', 'Acrylique')")
 conn.execute("INSERT INTO maintenance_alerts VALUES (1, 'Inspection', ?)",

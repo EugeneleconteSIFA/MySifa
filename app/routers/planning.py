@@ -1114,6 +1114,8 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str,
         "ft_palette_type": _normalize_palette_type(e.get("_ft_palette_type")),
         "ft_conditionnement_phrase": _build_conditionnement_phrase(e),
         "ft_mandrin_dia": (e.get("_ft_mandrin_dia") or "").strip() or None,
+        # OF et fiche en désaccord : ce que l'infobulle doit signaler.
+        "fiche_ecart": _fiche_ecart_payload(e.get("_accord")),
         # Infobulle en quatre sections (16/10/2026) : ce que la fiche technique
         # et l'OF disent du dossier, chacun dans sa section. Lus par la même
         # jointure que le reste — aucune requête de plus par créneau.
@@ -1133,6 +1135,18 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str,
         # palettes ou non. Le créneau l'affiche pour que le planificateur voie
         # la fenêtre AVANT de tirer le dossier, pas au moment du refus.
         "gel": _gel_payload(gel),
+    }
+
+
+def _fiche_ecart_payload(v: Optional[dict]) -> Optional[dict]:
+    """Écart OF / fiche pour l'infobulle. `None` = les deux documents s'accordent."""
+    if not v or v.get("accord"):
+        return None
+    return {
+        "source": v.get("source"),
+        "autre_produit": bool(v.get("autre_produit")),
+        "champs": [e.get("libelle") for e in (v.get("ecarts") or [])],
+        "message": v.get("message") or "",
     }
 
 
@@ -1178,6 +1192,7 @@ _SQL_ENTRIES_ENRICHIES = """
                    ft.nb_bobines_carton          AS _ft_nb_bobines_carton,
                    ft.palette_nb_cartons_sol     AS _ft_palette_nb_cartons_sol,
                    ft.palette_nb_cartons_hauteur AS _ft_palette_nb_cartons_hauteur,
+                   ft.id                         AS _ft_id,
                    ft.support                    AS _ft_support,
                    ft.adhesif                    AS _ft_adhesif,
                    ft.palette_type               AS _ft_palette_type,
@@ -1208,7 +1223,8 @@ _SQL_ENTRIES_ENRICHIES = """
                     WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
                     ELSE 2
                   END,
-                  ft2.id
+                  -- à rang égal, la plus récente (fiche_choix.recence)
+                  ft2.date_modif DESC, ft2.date_import DESC, ft2.id DESC
                 LIMIT 1
             )
             WHERE pe.machine_id = ?
@@ -1226,7 +1242,15 @@ def _entries_enrichies(conn, machine_id: int, machine_nom: str = "") -> List[dic
         row = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
         machine_nom = (row["nom"] if row else "") or ""
     rows = conn.execute(_SQL_ENTRIES_ENRICHIES, (machine_nom, machine_id)).fetchall()
-    return [dict(r) for r in rows]
+    # L'OF et la fiche se contredisent : le plus récent fait foi à l'écran
+    # (app/services/of_fiche_accord.py). Sans cela l'infobulle affichait la
+    # matière d'une fiche périmée (9932921 : Vélin H400 au lieu de PP 95µ).
+    entries = [dict(r) for r in rows]
+    try:
+        from app.services.of_fiche_accord import appliquer_aux_dossiers
+    except ImportError:
+        return entries
+    return appliquer_aux_dossiers(conn, entries)
 
 
 def _palettes_par_entry(entries: List[dict]) -> Dict[int, Optional[int]]:
@@ -2172,7 +2196,7 @@ def list_entries(machine_id: int, request: Request):
                         WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
                         ELSE 2
                       END,
-                      ft.id
+                      ft.date_modif DESC, ft.date_import DESC, ft.id DESC
                     LIMIT 1) AS ft_support,
                    (SELECT ft.adhesif FROM fiches_techniques ft
                     WHERE ft.ref_produit_norm IS NOT NULL
@@ -2183,7 +2207,7 @@ def list_entries(machine_id: int, request: Request):
                         WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
                         ELSE 2
                       END,
-                      ft.id
+                      ft.date_modif DESC, ft.date_import DESC, ft.id DESC
                     LIMIT 1) AS ft_adhesif
             FROM planning_entries pe
             WHERE pe.machine_id = ?

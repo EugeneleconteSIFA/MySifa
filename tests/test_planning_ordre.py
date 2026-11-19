@@ -212,7 +212,8 @@ def remplir():
             id INTEGER PRIMARY KEY, reference TEXT, ref_produit_norm TEXT, machine TEXT,
             nb_bobines_carton REAL, palette_nb_cartons_sol REAL, palette_nb_cartons_hauteur REAL,
             support TEXT, adhesif TEXT, palette_type TEXT, cartons TEXT, mandrin_dia REAL,
-            nb_etiq_bobin REAL, nb_couleurs INTEGER, enroulement TEXT);
+            nb_etiq_bobin REAL, nb_couleurs INTEGER, enroulement TEXT,
+            date_modif TEXT, date_import TEXT);
         CREATE TABLE planning_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT, machine_id INTEGER, position INTEGER,
             reference TEXT, client TEXT, description TEXT, format_l REAL, format_h REAL,

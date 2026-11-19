@@ -368,6 +368,9 @@ machine, avec un autre outil et un autre nombre de fronts (constat du
 - Python : `choisir_fiche(conn, ref, machine, laize, reference)` ou
   `meilleure_fiche(candidates, …)`. Ordre : référence complète identique, puis
   machine + laize, machine, laize, fiche sans machine / « COHESIO » générique.
+  **À rang égal, la plus récente** (`recence()` : `date_modif`, `date_import`,
+  id) — jusqu'au 18/11/2026 c'était la plus petite id, donc la plus ancienne.
+  En SQL : `ORDER BY …, ft.date_modif DESC, ft.date_import DESC, ft.id DESC`.
 - SQL : `sql_cle_machine("ft.machine")` produit l'expression équivalente, en
   SQL pur (pas de fonction Python enregistrée — elle manquerait hors `get_db()`).
 
@@ -413,3 +416,31 @@ chaque passage un compte rendu `POST /api/bridge/passage` (table
 l'affiche (`GET /api/fiches-techniques/actualisation`). Tant que le script
 n'est pas redéployé sur le poste, seule la dernière fiche reçue est connue
 (création ou mise à jour via `documents_valeurs_historique`).
+
+## L'OF et la fiche se contredisent — `app/services/of_fiche_accord.py`
+
+Constat du 18/11/2026, dossier 9932921 : fiche 1341/0012 dupliquée de la
+1341/0008 (DSI, 100 x 99,6, Vélin H400) face à un OF Cohésio 1, 110 x 150,
+PP 95µ. Le contrôle ne comparait que des ids de matière (vides sur tout
+document Access) et la quantité au mille.
+
+- `comparer(of, fiche)` : machine (`cle_machine`, « COHESIO » générique
+  toléré), format (libellé, sinon `eti_laize` x `eti_longueur`, tolérance
+  `ACCORD_FORMAT_TOLERANCE_MM`, sens indifférent), matière (id si les deux en
+  ont, sinon famille du libellé : `FAMILLES_MATIERE` de `config.py` ; un
+  libellé sans famille ou à deux familles ne conclut rien), laize, quantité
+  au mille. Un champ vide d'un côté n'est pas comparé.
+- `verdict()` : **le document le plus récent fait foi**. OF : max de
+  `date_creation` et `date_import`. Fiche : max de `date_modif` et de la
+  dernière correction manuelle journalisée. À date égale, l'OF. Deux écarts
+  parmi machine / format / matière = « fiche d'un autre produit ».
+- `fiche_affichee()` : quand l'OF fait foi, ses valeurs remplacent celles de
+  la fiche **à l'affichage seulement**, sur les champs en écart. Le PDF
+  (`/api/fiches-techniques/{id}/pdf-preview?of_id=`) les marque « (OF) » et
+  porte un bandeau rouge. Décision d'Eugène : alerte + le plus récent fait
+  foi à l'écran. Besoins matières et déstockage lisent toujours la fiche en
+  base — on ne corrige jamais d'office, la fiche se répare à la source.
+
+Le planning (`/api/of/planning/{id}` → `fiche_accord`) affiche l'écart
+au-dessus des onglets OF / Fiche ; la règle de cohérence `documents.of_fiche`
+utilise la même comparaison. Test : `python3 tests/test_of_fiche_accord.py`.

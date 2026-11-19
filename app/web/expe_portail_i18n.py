@@ -6,8 +6,9 @@ PORTAIL_I18N = {
         "subtitle": "Portail transporteur — demandes de tarif SIFA",
         "bannerTitle": "Vos demandes de tarif",
         "bannerText": (
-            "Pour chaque envoi, indiquez un <strong>prix HT</strong> et un "
-            "<strong>délai</strong> (en jours). La réponse est enregistrée dès validation."
+            "Pour chaque envoi, indiquez un <strong>prix HT tout compris</strong> (taxe carburant, "
+            "surcharges et frais annexes inclus) et un <strong>délai</strong> (en jours). "
+            "La réponse est enregistrée dès validation."
         ),
         "loading": "Chargement…",
         "account": "Compte",
@@ -16,7 +17,11 @@ PORTAIL_I18N = {
         "langToEn": "English",
         "langToFr": "Français",
         "modalReply": "Répondre",
-        "labelPrice": "Prix HT (€)",
+        "labelPrice": "Prix HT tout compris (€)",
+        "priceHint": (
+            "Taxe carburant, surcharges et frais annexes (rendez-vous, hayon, sûreté…) inclus. "
+            "Seule la TVA est exclue."
+        ),
         "labelDelay": "Délai (jours)",
         "labelComment": "Commentaire (optionnel)",
         "commentPh": "Conditions, contraintes, horaires…",
@@ -93,7 +98,8 @@ PORTAIL_I18N = {
         "subtitle": "Carrier portal — SIFA quote requests",
         "bannerTitle": "Your quote requests",
         "bannerText": (
-            "For each shipment, enter a <strong>net price (excl. tax)</strong> and "
+            "For each shipment, enter an <strong>all-in price excluding VAT</strong> (fuel "
+            "surcharge, other surcharges and ancillary fees included) and a "
             "<strong>lead time</strong> (in days). Your reply is saved when you submit."
         ),
         "loading": "Loading…",
@@ -103,7 +109,11 @@ PORTAIL_I18N = {
         "langToEn": "English",
         "langToFr": "Français",
         "modalReply": "Reply",
-        "labelPrice": "Net price (€)",
+        "labelPrice": "All-in price excl. VAT (€)",
+        "priceHint": (
+            "Fuel surcharge, other surcharges and ancillary fees (appointment, tail lift, "
+            "security…) included. Only VAT is excluded."
+        ),
         "labelDelay": "Lead time (days)",
         "labelComment": "Comment (optional)",
         "commentPh": "Conditions, constraints, schedule…",

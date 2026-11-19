@@ -5,7 +5,8 @@
  * faire, le fichier ne quitte alors pas le poste :
  *   images et SVG → PNG, JPEG, WebP, AVIF, BMP, ICO, PDF (une page par image),
  *   SVG vectorisé en couleurs (imagetracerjs) ;
- *   PDF → images par page, texte (pdf.js), fusion de plusieurs PDF (pdf-lib) ;
+ *   PDF → images par page, texte (pdf.js), fusion de plusieurs PDF (pdf-lib),
+ *   PDF ou SVG vectoriel (vectorisation fine, static/mysifa_vecto.js) ;
  *   CSV / TSV → JSON.
  * Le reste part sur le serveur (POST /api/tools/convertir, app/services/conversion.py) :
  * documents, présentations, tableurs (LibreOffice), audio et vidéo (ffmpeg), GIF /
@@ -23,6 +24,8 @@
   if (window.MyToolsConvertir) return;
 
   const URL_TRACER = 'https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js';
+  // Module maison, ?v= figé : à incrémenter ici et dans l'outil Image à chaque modification.
+  const URL_VECTO = '/static/mysifa_vecto.js?v=2';
   const URL_PDFLIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
   const URL_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
   const URL_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
@@ -70,6 +73,7 @@
       { id: 'webp', lib: 'WebP', ou: 'nav', opt: ['echelle', 'qualite'] }, { id: 'ico', lib: 'Icône ICO', ou: 'nav' },
       { id: 'pdf', lib: 'PDF', ou: 'nav', opt: ['page'], groupe: true }],
     pdf: [{ id: 'png', lib: 'Images PNG (une par page)', ou: 'nav', opt: ['dpi'] }, { id: 'jpg', lib: 'Images JPEG (une par page)', ou: 'nav', opt: ['dpi'] },
+      { id: 'vecto-pdf', lib: 'PDF vectoriel', ou: 'nav', opt: ['vcouleurs'] }, { id: 'vecto-svg', lib: 'SVG vectoriel (un par page)', ou: 'nav', opt: ['vcouleurs'] },
       { id: 'txt', lib: 'Texte brut', ou: 'nav' }, { id: 'fusion', lib: 'Fusionner en un seul PDF', ou: 'nav', groupe: true, min: 2 },
       { id: 'docx', lib: 'Word (mise en page approchée)', ou: 'serveur' }, { id: 'compresser', lib: 'Compresser', ou: 'serveur', opt: ['niveau'] }],
     presentation: [{ id: 'pdf', lib: 'PDF', ou: 'serveur' }, { id: 'pptx', lib: 'PowerPoint', ou: 'serveur' }, { id: 'odp', lib: 'OpenDocument (ODP)', ou: 'serveur' },
@@ -87,7 +91,7 @@
   };
   // Famille du fichier PRODUIT par une cible : les tuiles de droite deviennent,
   // une fois un fichier déposé, « Convertir en » (Image, Image vectorielle, PDF…).
-  const DEST = { svg: 'svg', 'svg-nb': 'svg', pdf: 'pdf', fusion: 'pdf', compresser: 'pdf',
+  const DEST = { svg: 'svg', 'svg-nb': 'svg', 'vecto-svg': 'svg', 'vecto-pdf': 'pdf', pdf: 'pdf', fusion: 'pdf', compresser: 'pdf',
     docx: 'document', odt: 'document', rtf: 'document', txt: 'document', html: 'document',
     pptx: 'presentation', odp: 'presentation', xlsx: 'tableur', ods: 'tableur', csv: 'tableur', json: 'tableur',
     mp3: 'audio', wav: 'audio', ogg: 'audio', flac: 'audio', m4a: 'audio', opus: 'audio', aiff: 'audio',
@@ -99,6 +103,7 @@
     page: { lib: 'Pages', cle: 'page', choix: [['image', 'Taille de l\'image'], ['a4', 'A4']] },
     echelle: { lib: 'Taille', cle: 'echelle', choix: [['1', '×1'], ['2', '×2'], ['4', '×4']], defaut: '2' },
     detail: { lib: 'Détail', cle: 'detail', choix: [['logo', 'Logo (8 couleurs)'], ['illustration', 'Illustration (16)'], ['photo', 'Photo (32)']], defaut: 'logo' },
+    vcouleurs: { lib: 'Couleurs', cle: 'couleurs', choix: [['4', '4'], ['6', '6'], ['8', '8'], ['12', '12']], defaut: '6' },
     seuil: { lib: 'Seuil', cle: 'seuil', choix: [['35', 'Clair'], ['50', 'Moyen'], ['65', 'Foncé']], defaut: '50' },
     dpi: { lib: 'Résolution', cle: 'dpi', choix: [['72', 'Écran'], ['150', 'Normale'], ['300', 'Impression']], defaut: '150' },
     niveau: { lib: 'Compression', cle: 'niveau', choix: [['normal', 'Normale'], ['fort', 'Forte']] },
@@ -261,7 +266,28 @@
     illustration: { numberofcolors: 16, colorquantcycles: 3, pathomit: 8, ltres: 0.8, qtres: 0.8, blurradius: 1, blurdelta: 30, max: 1100 },
     photo: { numberofcolors: 32, colorquantcycles: 2, pathomit: 4, ltres: 0.5, qtres: 0.5, blurradius: 2, blurdelta: 40, max: 800 },
   };
+  // Vectorisation fine (static/mysifa_vecto.js) : palette des zones franches,
+  // agrandissement lissé, bords rendus à leur couleur dominante. Réservée aux
+  // logos et aux pages de PDF : sur une photo, 16 ou 32 couleurs la rendraient
+  // trop lente, l'ancien tracé direct reste alors en place.
+  async function vectoPret() {
+    await charger(URL_TRACER);
+    if (!window.MySifaVecto) await charger(URL_VECTO);
+    return [window.ImageTracer, window.MySifaVecto];
+  }
+  const REGLAGES_FINS = { lissage: 1, details: 8, fond: true };
+  async function tracerFin(c, couleurs) {
+    const [IT, VE] = await vectoPret();
+    const img = { data: c.getContext('2d').getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height };
+    const k = await VE.classer(img, couleurs);
+    return { IT, VE, t: VE.tracer(IT, k, REGLAGES_FINS) };
+  }
   async function vectoriser(f, o) {
+    if ((o.detail || 'logo') === 'logo') {
+      const bmp = await bitmap(f);
+      const { IT, VE, t } = await tracerFin(versCanvas(bmp, 2000, false), 8);
+      return [{ nom: base(f) + '.svg', blob: new Blob([VE.svg(IT, t, bmp.width, bmp.height)], { type: 'image/svg+xml' }) }];
+    }
     await charger(URL_TRACER);
     const d = DETAILS[o.detail] || DETAILS.logo;
     const bmp = await bitmap(f);
@@ -287,6 +313,45 @@
         blob: await enBlob(c, MIME[cible], 0.9) });
     }
     return sortie;
+  }
+  // PDF → vectoriel : chaque page rendue à 300 dpi, recadrée sur ce qui n'est
+  // pas blanc (le budget de tracé va au contenu, pas aux marges), vectorisée,
+  // puis replacée à sa position exacte sur une page de même format.
+  async function pdfVectoriel(f, cible, o, pas) {
+    const lib = await pdfjs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+    const couleurs = Number(o.couleurs) || 6, k = 300 / 72, n = doc.numPages;
+    let P = null, sortie = null, images = 0;
+    if (cible === 'vecto-pdf') { await charger(URL_PDFLIB); P = window.PDFLib; sortie = await P.PDFDocument.create(); }
+    const svgs = [];
+    for (let i = 1; i <= n; i++) {
+      pas((i - 0.9) / n);
+      const page = await doc.getPage(i), vp = page.getViewport({ scale: k }), pt = page.getViewport({ scale: 1 });
+      const ops = await page.getOperatorList();
+      images += ops.fnArray.filter(x => x === lib.OPS.paintImageXObject || x === lib.OPS.paintInlineImageXObject || x === lib.OPS.paintImageMaskXObject).length;
+      const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      const g = c.getContext('2d', { willReadFrequently: true }); g.fillStyle = 'white'; g.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: g, viewport: vp, intent: 'print' }).promise;
+      const [IT, VE] = await vectoPret();
+      const b = VE.boiteUtile({ data: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height });
+      const pg = sortie ? sortie.addPage([pt.width, pt.height]) : null;
+      if (!b) continue;
+      const r = document.createElement('canvas'); r.width = b.w; r.height = b.h;
+      r.getContext('2d', { willReadFrequently: true }).drawImage(c, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+      pas((i - 0.5) / n);
+      const { t } = await tracerFin(r, couleurs);
+      const mm = v => (v / k * 25.4 / 72).toFixed(2) + 'mm';
+      const svg = VE.svg(IT, t, mm(b.w), mm(b.h));
+      if (pg) {
+        const vb = t.td.width * t.opts.scale;
+        VE.dessinerPdf(P, pg, svg, b.x / k, pt.height - b.y / k, (b.w / k) / vb);
+      } else {
+        svgs.push({ nom: base(f) + (n > 1 ? '-page-' + String(i).padStart(String(n).length, '0') : '') + '.svg', blob: new Blob([svg], { type: 'image/svg+xml' }) });
+      }
+    }
+    if (!images) CTX.toast('Ce PDF ne contient aucune image : il est déjà vectoriel, l\'original reste plus fidèle.', 'info');
+    if (!sortie) return svgs;
+    return [{ nom: base(f) + '-vectoriel.pdf', blob: new Blob([await sortie.save()], { type: 'application/pdf' }) }];
   }
   async function pdfEnTexte(f) {
     const lib = await pdfjs();
@@ -524,7 +589,7 @@
       const csv = (await serveur([f], 'csv', {}))[0];
       return csvEnJson(new File([csv.blob], csv.nom));
     }
-    if (C.fam === 'pdf') return c.id === 'txt' ? pdfEnTexte(f) : pdfEnImages(f, c.id, o, pas);
+    if (C.fam === 'pdf') return c.id === 'txt' ? pdfEnTexte(f) : /^vecto-/.test(c.id) ? pdfVectoriel(f, c.id, o, pas) : pdfEnImages(f, c.id, o, pas);
     if (c.id === 'ico') return ico(f);
     if (c.id === 'svg') return vectoriser(f, o);
     return image(f, c.id, o);

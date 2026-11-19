@@ -121,3 +121,15 @@
 .timg-pactions .timg-btn-accent,.timg-pactions .timg-btn-accent:hover{background:var(--accent);color:white}
 .timg-pactions .timg-btn-danger,.timg-pactions .timg-btn-danger:hover{background:var(--danger);color:white}
 @media(max-width:600px){.timg-projets{grid-template-columns:1fr 1fr}.timg-pvig{height:110px}}
+/* Zoom de l'aperçu : zone défilante, barre en haut à droite du cadre */
+.timg-compare{position:relative}
+.timg-zone{width:100%;max-height:62vh;overflow:auto;text-align:center;line-height:0}
+.timg-zone .timg-damier{display:inline-block;vertical-align:top;text-align:left}
+.timg-zone.timg-zoom{cursor:grab;touch-action:none}
+.timg-zone.timg-glisse{cursor:grabbing;user-select:none}
+.timg-zone.timg-zoom .timg-damier{max-width:none}
+.timg-zone.timg-zoom .timg-damier canvas{max-width:none;max-height:none;width:100%;height:auto}
+.timg-zoombar{position:absolute;top:0;right:0;z-index:3;display:flex;align-items:center;gap:2px;padding:3px;background:var(--card);border:1px solid var(--border);border-radius:10px;line-height:1}
+.timg-zoombar button{border:0;background:transparent;color:var(--text2);font:700 12px/1 inherit;font-family:inherit;padding:6px 9px;border-radius:7px;cursor:pointer;min-width:28px}
+.timg-zoombar button:hover{background:var(--bg);color:var(--accent)}
+.timg-zoombar span{font-size:11px;font-weight:700;color:var(--muted);min-width:44px;text-align:center;font-variant-numeric:tabular-nums}

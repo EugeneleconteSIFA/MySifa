@@ -419,7 +419,9 @@ def portail_expe_carburant(request: Request, token: str, body: dict = Body(...))
     Elle s'écrit directement sur sa fiche : pas de validation intermédiaire,
     c'est lui qui fixe sa surcharge et le comparateur doit l'appliquer tout de
     suite. L'email de confirmation part vers la personne qui a envoyé la
-    dernière demande, la boîte du service en copie.
+    dernière demande, la boîte du service en copie — seulement si le taux
+    change ou si la saisie répond à une demande en cours. Un même taux
+    renvoyé par le même compte dans les dix minutes est ignoré (double envoi).
 
     Le transporteur visé est désigné par le corps de la requête, et il doit
     figurer parmi les fiches dont les contacts portent l'adresse du compte :
@@ -449,9 +451,17 @@ def portail_expe_carburant(request: Request, token: str, body: dict = Body(...))
                 detail="Taux invalide — valeur entre 0 et 100 %.",
             )
         trp = conn.execute(
-            "SELECT taxe_carburant_demande_par FROM expe_transporteurs WHERE id=?",
+            """SELECT taxe_carburant_pct, taxe_carburant_maj_le, taxe_carburant_maj_source,
+                      taxe_carburant_maj_par, taxe_carburant_demande_le, taxe_carburant_demande_par
+                 FROM expe_transporteurs WHERE id=?""",
             (int(tid),),
         ).fetchone()
+        avant = dict(trp) if trp else {}
+        if carb.doublon_recent(avant, pct, email or None, carb.now_paris_iso()):
+            # Même taux, même compte, il y a quelques secondes : déjà enregistré
+            # et déjà notifié. Le transporteur voit le même succès.
+            return {"success": True, "carburants": carb.etats_portail(conn, email)}
+        notifier = carb.faut_notifier(avant, pct)
         res = carb.enregistrer_saisie(
             conn,
             transporteur_id=int(tid),
@@ -462,6 +472,9 @@ def portail_expe_carburant(request: Request, token: str, body: dict = Body(...))
         conn.commit()
         etats = carb.etats_portail(conn, email)
         etat = next(e for e in etats if e["transporteur_id"] == tid)
+
+    if not notifier:
+        return {"success": True, "carburants": etats}
 
     try:
         to, cc = carb.destinataires_confirmation(

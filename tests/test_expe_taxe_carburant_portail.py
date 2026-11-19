@@ -226,6 +226,40 @@ h = client.get(f"/api/expe/carburant/{TID}/historique").json()["historique"]
 check("historique : plus recent en tete, manuel", (h[0]["source"], h[0]["pct_avant"], h[0]["pct"]), ("manuel", 13.5, 14.0))
 check("historique : la demande y figure", any(e["evenement"] == "demande" for e in h))
 
+# ── Portail : pas d'email sans nouvelle, pas de doublon ──
+# Taux courant : 14 (saisi depuis la fiche juste au-dessus), aucune demande
+# en cours.
+def saisir(pct):
+    return client.post(f"/api/portail/expe/{TOKEN}/carburant", json={"pct": pct})
+
+ENVOIS.clear()
+avant = nb_saisies()
+check("taux inchange sans demande : accepte", saisir(14).status_code, 200)
+check("taux inchange sans demande : date dans l'historique", nb_saisies(), avant + 1)
+check("taux inchange sans demande : aucun email", len(ENVOIS), 0)
+check("double envoi : accepte", saisir("14,00").status_code, 200)
+check("double envoi : pas de seconde ligne", nb_saisies(), avant + 1)
+check("double envoi : aucun email", len(ENVOIS), 0)
+
+with get_db() as conn:
+    # La demande arrive une minute après la saisie (horodatage à la seconde).
+    conn.execute(
+        "UPDATE expe_transporteurs SET taxe_carburant_maj_le=datetime(taxe_carburant_maj_le, '-1 minute') WHERE id=?",
+        (TID,),
+    )
+    r_carb.carb.noter_demande(conn, transporteur_id=TID, auteur=USER["email"])
+    conn.commit()
+check("reponse a une demande, meme taux : acceptee", saisir(14).status_code, 200)
+check("reponse a une demande : comptee malgre les 10 min", nb_saisies(), avant + 2)
+check("reponse a une demande : un email", len(ENVOIS), 1)
+check("reponse a une demande : sujet « confirmee (inchangee) »",
+      "confirmée" in ENVOIS[-1]["subject"] and "(inchangée)" in ENVOIS[-1]["subject"])
+
+check("changement de taux : accepte", saisir(15).status_code, 200)
+check("changement de taux : un email de plus", len(ENVOIS), 2)
+check("changement de taux : sujet « modifiee » avec l'ecart",
+      "modifiée" in ENVOIS[-1]["subject"] and "+1 pt" in ENVOIS[-1]["subject"])
+
 print()
 if ECHECS:
     print(f"{len(ECHECS)} echec(s)")

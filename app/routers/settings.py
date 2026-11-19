@@ -7716,7 +7716,7 @@ def maintenance_alert_acks_list(request: Request):
                           AND TRIM(ft2.ref_produit_norm) = TRIM(COALESCE(pe.ref_produit_norm,''))
                         ORDER BY
                           CASE WHEN ft2.machine IS NOT NULL AND TRIM(ft2.machine) != '' THEN 0 ELSE 1 END,
-                          ft2.id ASC
+                          ft2.date_modif DESC, ft2.date_import DESC, ft2.id DESC
                         LIMIT 1
                     )
                     WHERE TRIM(pe.reference) IN ({ph})

@@ -123,6 +123,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .tip-quad .tip-grid{padding-top:0;border-top:none}
 .tip-quad .tip-grid .v{font-family:inherit;font-weight:600;overflow-wrap:anywhere}
 .tip-v-fort{color:var(--accent)!important}
+.tip-v-alerte{color:var(--danger)!important;font-weight:700}
 .tip-vide{font-size:11px;color:var(--muted);font-style:italic}
 .tip-devis-pt{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;vertical-align:middle}
 .tip-devis-rouge{background:var(--danger)}
@@ -869,6 +870,15 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
 .of-tab-pane{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .of-tab-pane.hidden{display:none}
+/* Écart OF / fiche technique (app/services/of_fiche_accord.py) */
+.of-accord{margin:10px 18px 0;padding:10px 14px;border-radius:10px;font-size:12.5px;line-height:1.5;
+  background:var(--danger);color:white;flex-shrink:0}
+.of-accord-titre{font-weight:700;margin-bottom:4px}
+.of-accord-lignes{display:grid;grid-template-columns:auto 1fr 1fr;gap:2px 12px;margin-top:6px}
+.of-accord-lignes span{overflow-wrap:anywhere}
+.of-accord-lignes .tete{font-weight:700;opacity:.85}
+.of-tab-btn .of-tab-alerte{display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--danger);margin-left:6px;vertical-align:middle}
 /* ══════════════════════════════════════════════════════════════════════
    Planning — agenda vertical mobile (sous 700 px)
    ------------------------------------------------------------------
@@ -3809,6 +3819,13 @@ function infosDossierSections(s){
   const tech=[];
   if(s.laize) tech.push(L("Laize",s.laize+" mm"));
   if(s.ft_support) tech.push(L("Frontal",s.ft_support));
+  // OF et fiche en désaccord (app/services/of_fiche_accord.py) : la valeur
+  // affichée est celle du document le plus récent, et on le dit.
+  const ec=s.fiche_ecart;
+  if(ec&&ec.champs&&ec.champs.length){
+    tech.push(L(ec.autre_produit?"Fiche douteuse":"Écart OF / fiche",
+      ec.champs.join(", ").toLowerCase()+(ec.source==="of"?" · OF retenu":" · fiche retenue, vérifier l'OF"),"alerte"));
+  }
   if(s.ft_adhesif) tech.push(L("Adhésif",s.ft_adhesif));
   if(s.ft_nb_couleurs) tech.push(L("Couleurs",s.ft_nb_couleurs));
   const man=mandrinDiaTxt(s.ft_mandrin_dia);
@@ -5525,9 +5542,16 @@ async function openOfPreview(entryId){
   const ficheId = data.fiche_id || null;
   const refProduit = data.ref_produit || null;
 
+  // L'OF actif et la fiche se contredisent : bandeau au-dessus des onglets, et
+  // l'aperçu de la fiche reçoit l'OF pour que le plus récent fasse foi.
+  const accord = data.fiche_accord || null;
+  const ecartOfFiche = !!(accord && !accord.accord);
+  const accordHtml = ecartOfFiche ? renderOfFicheAccord(accord) : '';
+
   let ficheTabContent;
   if(ficheId){
-    ficheTabContent=`<iframe class="of-preview-iframe" src="/api/fiches-techniques/${ficheId}/pdf-preview"></iframe>`;
+    const ofQs = data.of_actif_id ? ('?of_id='+encodeURIComponent(data.of_actif_id)) : '';
+    ficheTabContent=`<iframe class="of-preview-iframe" src="/api/fiches-techniques/${ficheId}/pdf-preview${ofQs}"></iframe>`;
   }else{
     const msgFiche = refProduit
       ? `Aucune fiche technique trouvée pour la référence <strong style="color:var(--text)">${escHtml(refProduit)}</strong>.`
@@ -5561,7 +5585,7 @@ async function openOfPreview(entryId){
         <button class="of-tab-btn active" id="of-tab-btn-of"
           onclick="switchOfPreviewTab('of')">OF</button>
         <button class="of-tab-btn" id="of-tab-btn-fiche"
-          onclick="switchOfPreviewTab('fiche')">Fiche technique</button>
+          onclick="switchOfPreviewTab('fiche')">Fiche technique${ecartOfFiche ? '<span class="of-tab-alerte" title="Écart avec l\'OF"></span>' : ''}</button>
       </div>`
     : '';
 
@@ -5575,8 +5599,26 @@ async function openOfPreview(entryId){
       </div>
     </div>
     ${tabsBar}
+    ${accordHtml}
     <div class="of-tab-pane" id="of-tab-pane-of">${ofTabContent}</div>
     <div class="of-tab-pane hidden" id="of-tab-pane-fiche">${ficheTabContent}</div>
+  </div>`;
+}
+
+function renderOfFicheAccord(a){
+  const titre = a.autre_produit
+    ? 'Fiche technique d\'un autre produit ?'
+    : 'L\'OF et la fiche technique se contredisent';
+  const lignes = (a.ecarts||[]).map(e =>
+    `<span>${escHtml(e.libelle)}</span><span>${escHtml(e.of)}</span><span>${escHtml(e.fiche)}</span>`
+  ).join('');
+  return `<div class="of-accord" role="alert">
+    <div class="of-accord-titre">${titre}</div>
+    <div>${escHtml(a.message||'')}</div>
+    <div class="of-accord-lignes">
+      <span class="tete"></span><span class="tete">OF</span><span class="tete">Fiche</span>
+      ${lignes}
+    </div>
   </div>`;
 }
 

@@ -26,7 +26,11 @@ Parmi les fiches du même produit (`ref_produit_norm`), dans cet ordre :
      générique) ;
   4. fiche sans machine, ou machine générique (« COHESIO » sans numéro) ;
   5. le reste.
-À rang égal, la plus petite id — l'ordre historique.
+À rang égal, la plus RÉCENTE : `date_modif` (Access), puis `date_import`,
+puis la plus grande id. Jusqu'au 18/11/2026 c'était la plus petite id, donc
+la plus ancienne : 122/0023 a trois fiches Cohésio 1, et c'est celle de
+juin 2025 qui sortait plutôt que celle de juillet 2026. Règle d'Eugène : le
+document le plus récent est le plus réel.
 
 La comparaison des machines passe par `cle_machine()` : sans accent, sans
 espace, en minuscules. « Cohésio 2 », « COHESIO 2 » et « COHESIO2 » donnent
@@ -93,9 +97,20 @@ def _meme_laize(ft: dict, laize: Optional[float]) -> bool:
     return False
 
 
+def recence(ft: dict) -> tuple:
+    """Clé de récence d'une fiche — plus grand = plus récent."""
+    return (str(ft.get("date_modif") or "")[:10],
+            str(ft.get("date_import") or ""),
+            ft.get("id") or 0)
+
+
 def rang_fiche(ft: dict, machine: Any = None, laize: Any = None,
                reference: Any = None) -> tuple:
-    """Clé de tri d'une fiche candidate — plus petit = meilleur."""
+    """Rang d'une fiche candidate — plus petit = meilleur.
+
+    Le second élément ne sert qu'à l'affichage et aux tests : le départage à
+    rang égal se fait par `recence()` dans `meilleure_fiche()`.
+    """
     ref = str(reference or "").strip().lower()
     if ref and str(ft.get("reference") or "").strip().lower() == ref:
         return (0, ft.get("id") or 0)
@@ -122,7 +137,9 @@ def meilleure_fiche(candidates: Iterable[dict], machine: Any = None,
     cands = list(candidates or [])
     if not cands:
         return None
-    return min(cands, key=lambda ft: rang_fiche(ft, machine, laize, reference))
+    rangs = [(rang_fiche(ft, machine, laize, reference)[0], ft) for ft in cands]
+    meilleur = min(r for r, _ in rangs)
+    return max((ft for r, ft in rangs if r == meilleur), key=recence)
 
 
 def choisir_fiche(conn, ref_produit: Any, machine: Any = None, laize: Any = None,
@@ -147,7 +164,8 @@ def choisir_fiche(conn, ref_produit: Any, machine: Any = None, laize: Any = None
 
     cols = colonnes
     if cols.strip() != "*":
-        requis = {"id", "reference", "machine", "laize", "laize_optimale"}
+        requis = {"id", "reference", "machine", "laize", "laize_optimale",
+                  "date_modif", "date_import"}
         presentes = {c.strip() for c in cols.split(",")}
         cols = ", ".join(list(presentes | requis))
 
