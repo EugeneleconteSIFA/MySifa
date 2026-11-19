@@ -1933,6 +1933,12 @@ textarea.ofe-case{resize:none;overflow:auto}
 button.ofe-case{cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ofe-case:hover{border-color:#0891b2;background:rgba(8,145,178,.08)}
 .ofe-case:focus{border:1px solid #0891b2;background:transparent}
+.ofe-case.ofe-verrou{border-color:transparent;cursor:default}
+.ofe-case.ofe-verrou:hover,.ofe-case.ofe-verrou:focus{border:1px dashed rgba(100,116,139,.45);background:rgba(100,116,139,.08)}
+.ofe-cadenas{position:absolute;transform:translate(2px,-50%);width:15px;height:15px;padding:0;margin:0;border:1px solid rgba(100,116,139,.4);border-radius:4px;background:#fff;color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;z-index:2}
+.ofe-cadenas svg{width:10px;height:10px}
+.ofe-case:hover+.ofe-cadenas,.ofe-case:focus+.ofe-cadenas,.ofe-cadenas:hover,.ofe-cadenas.ouvert{opacity:1}
+.ofe-cadenas.ouvert{color:#0891b2;border-color:#0891b2}
 .ofe-case.ofe-case-cor{background:rgba(8,145,178,.2);border:1px solid #0891b2;color:#155e75}
 .ofe-case.ofe-case-suit{background:rgba(22,163,74,.25);border:1px solid #16a34a;transition:background .3s}
 .ofe-bobinette{position:absolute;line-height:1;color:#000;font-family:Helvetica,Arial,sans-serif;font-weight:700;white-space:nowrap;pointer-events:none}

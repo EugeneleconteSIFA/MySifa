@@ -168,6 +168,15 @@ nombre de fronts.
 cartons en hauteur de la fiche) ⌉, calculées comme les autres quantités et
 suivant des cartons corrigés.
 
+**Cases verrouillées** (19/11/2026) : sur la feuille, ce qui découle du
+calcul est en lecture seule (`OFE_VERROUILLES` : métrage, mandrins, tubes,
+cartons, palettes, adhésif en kg). L'ADV modifie les entrées : quantité
+(étiquettes, bobines OU levées, trois façons de la dire), fronts,
+conditionnement, qté au mille, laize, mandrin, adhésif. Le cadenas d'une case
+verrouillée l'ouvre pour forcer une valeur ; forcée, elle reste ouverte et
+signalée dans « À relire ». Refermer le cadenas la rend au calcul (une étape
+d'historique). Ouverte puis quittée sans saisie, elle se referme seule.
+
 Les flèches Annuler / Rétablir de la barre de l'OF (`ofeMemoriser`,
 `ofeRestaurer`) mémorisent l'état complet avant chaque geste et le restaurent
 sans recalcul. Une case en cours de frappe n'est jamais réécrite par le calcul
