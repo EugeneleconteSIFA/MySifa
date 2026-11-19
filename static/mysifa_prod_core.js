@@ -2153,8 +2153,30 @@ function ofeRestaurer(m,e){
   m._journal=JSON.parse(JSON.stringify(e.journal));
   m._qtePropose=e.qtePropose; m._delaiPropose=e.delaiPropose; m._arrondi=e.arrondi;
   m._qteArrondir=false; m._sessionHisto=null; m._modifie=true;
-  set({ofEditModal:m});
-  renderOfEditModal();
+  const overlay=document.getElementById('of-edit-overlay');
+  if(!overlay||!overlay.querySelector('.ofe-feuille')){
+    set({ofEditModal:m});
+    renderOfEditModal();
+    return;
+  }
+  // Sur la feuille, les valeurs se reposent dans les cases existantes :
+  // reconstruire la fenêtre décalait la page à chaque clic (19/11/2026).
+  Object.keys(e.dom).forEach(function(id){
+    const el=document.getElementById(id);
+    if(el&&el.value!==e.dom[id]) el.value=e.dom[id];
+  });
+  // Les matières MyStock s'affichent dans le bouton posé devant leur champ caché.
+  overlay.querySelectorAll('.ofe-feuille input[type=hidden]').forEach(function(h){
+    const b=h.previousElementSibling;
+    if(b&&b.tagName==='BUTTON') b.textContent=h.value;
+  });
+  ofePeindreCases(m);
+  ofeRepeindreDates(overlay,m);
+  const info=document.getElementById('ofe-fiche-info');
+  if(info) info.innerHTML=ofeInfoFiche(m);
+  ofePeindreEcarts(m);
+  ofeMajBoutonsHisto(m);
+  ofeApercuPlusTard(m);
 }
 function ofeAnnulerDernier(){
   const m=S.ofEditModal;
