@@ -409,6 +409,14 @@ passage n'était jamais renvoyée (1341/0012, dupliquée de 1341/0008 puis
 corrigée l'après-midi). `access_sync_fiches.py` compare désormais une
 empreinte du contenu (`sync_fiches_empreintes.json` à côté de la base).
 
+**Fraîcheur des fiches Access** (19/11/2026) : le pont
+(`scripts/access_sync_fiches.py`, poste Windows, 11 h et 17 h) envoie à
+chaque passage un compte rendu `POST /api/bridge/passage` (table
+`ponts_passages`), même sans fiche modifiée. MyProd › Fiches techniques
+l'affiche (`GET /api/fiches-techniques/actualisation`). Tant que le script
+n'est pas redéployé sur le poste, seule la dernière fiche reçue est connue
+(création ou mise à jour via `documents_valeurs_historique`).
+
 ## L'OF et la fiche se contredisent — `app/services/of_fiche_accord.py`
 
 Constat du 18/11/2026, dossier 9932921 : fiche 1341/0012 dupliquée de la

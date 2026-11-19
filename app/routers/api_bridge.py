@@ -8,6 +8,7 @@ Endpoints :
   GET  /api/bridge/of          → liste les OF importés (of:read)
   POST /api/bridge/of          → pousse un OF depuis Access (of:write)
   GET  /api/bridge/fiches      → liste les fiches techniques importées (of:read)
+  POST /api/bridge/passage     → compte rendu d'un passage de synchro (of:write)
 """
 import hashlib
 import os
@@ -395,6 +396,49 @@ def push_of(
         "id": new_id,
         "of_numero": numero,
     }
+
+
+# ── Compte rendu de passage ──────────────────────────────────────────
+#
+# Le pont des fiches n'appelle MySifa que pour une fiche modifiée : sans ce
+# compte rendu, un passage sans changement ne laissait aucune trace (19/11/2026).
+
+PONTS = ("fiches", "of")
+
+
+class PassageIn(BaseModel):
+    pont:       str
+    debut:      Optional[str] = None
+    fin:        Optional[str] = None
+    lues:       Optional[int] = None
+    envoyees:   Optional[int] = None
+    creees:     Optional[int] = None
+    maj:        Optional[int] = None
+    identiques: Optional[int] = None
+    conflits:   Optional[int] = None
+    erreurs:    Optional[int] = None
+    poste:      Optional[str] = None
+
+
+@router.post("/passage")
+def enregistrer_passage(body: PassageIn, x_api_key: Optional[str] = Header(default=None)):
+    """Un passage du pont a eu lieu, avec ou sans fiche à envoyer."""
+    _require_scope(x_api_key, "of:write")
+    if body.pont not in PONTS:
+        raise HTTPException(status_code=400, detail="Pont inconnu : " + ", ".join(PONTS) + ".")
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    court = lambda v: (str(v)[:40] if v else None)
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO ponts_passages (pont, recu_le, debut, fin, lues, envoyees, creees,
+                   maj, identiques, conflits, erreurs, poste)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (body.pont, now, court(body.debut), court(body.fin), body.lues, body.envoyees,
+             body.creees, body.maj, body.identiques, body.conflits, body.erreurs,
+             court(body.poste)),
+        )
+        conn.commit()
+    return {"ok": True, "recu_le": now}
 
 
 class FicheTechniqueIn(BaseModel):
