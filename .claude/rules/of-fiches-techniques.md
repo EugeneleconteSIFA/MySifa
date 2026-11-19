@@ -153,6 +153,10 @@ l'OF (`controler_coherence`) se montrent avant d'enregistrer mais ne bloquent pa
 Changer de fiche ou de commande remet l'OF à zéro (`ofeViderOF`) : une
 autre fiche ou une autre commande, c'est un autre OF. Une confirmation annonce
 ce qui serait perdu (corrections, cases libres, écarts).
+Le panneau « Modifications et points à relire » tient le journal des cases
+changées à la main (valeur d'avant → valeur actuelle, heure) ; chaque ligne
+s'annule : retour à la fiche, au calcul, ou à la commande pour la chaîne
+étiquettes / bobines / levées, et tout ce qui en dépend se recalcule.
 
 Un id à `None` détache la référence **sans effacer le texte** : un OF Access
 porte un libellé qu'aucune référence ne recouvre encore, et le perdre serait
