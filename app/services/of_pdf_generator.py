@@ -217,7 +217,7 @@ _LARGEURS = {
 _ZONES = [
     # Tout l'aplat jaune (x = 100 → 573) : une particularité longue (560
     # caractères pour 1341/0006) était coupée à 4 lignes.
-    ("particularites", 100.3, 344.1, 468.0, 10, 12.4, 4),
+    ("particularites", 100.3, 344.1, 468.0, 10, 12.4, 5),
     ("observations",    32.0, 692.0, 350.0,  9, 11.0, 9),
 ]
 
