@@ -12,7 +12,7 @@
  * où se lit la fiche détaillée.
  *
  * Données : textContent partout, jamais innerHTML.
- * API : MySifaRentTableau.monter(conteneur, {periode, machine, surFiltre, ouvrir})
+ * API : MySifaRentTableau.monter(conteneur, {periode, machine, grain, courbe, surFiltre, ouvrir})
  */
 (function () {
   'use strict';
@@ -29,6 +29,22 @@
   // doit pas relancer un calcul de plusieurs secondes à chaque fois.
   var cache = {};
   var enCours = {};
+  var forcer = {};
+  var relance = null;
+
+  // Pas d'axe « rond » pour au plus `n` graduations, quelle que soit l'étendue.
+  function pasNet(etendue, n) {
+    var brut = Math.max(etendue, 1e-9) / (n || 6), mag = Math.pow(10, Math.floor(Math.log10(brut)));
+    var r = brut / mag;
+    return (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag;
+  }
+  // Quantile simple : borne les axes sur le gros des dossiers, un seul
+  // dossier aberrant ne doit pas écraser tous les autres.
+  function quantile(vals, q) {
+    if (!vals.length) return null;
+    var v = vals.slice().sort(function (a, b) { return a - b; });
+    return v[Math.min(v.length - 1, Math.max(0, Math.round(q * (v.length - 1))))];
+  }
 
   function el(tag, cls, txt) {
     var e = document.createElement(tag);
@@ -100,7 +116,7 @@
     var maj = el('button', 'rt-chip rt-rafraichir', 'Recalculer');
     maj.type = 'button';
     bulle(maj, {titre: 'Recalculer', note: 'Relit saisies, déstockages et factures.'});
-    maj.addEventListener('click', function () { delete cache[cle(o)]; o.surFiltre({}); });
+    maj.addEventListener('click', function () { delete cache[cle(o)]; forcer[cle(o)] = true; o.surFiltre({}); });
     b.appendChild(maj);
     return b;
   }
@@ -127,6 +143,8 @@
     tuile('rt-warn', 'À la limite', nb(c.limite), 'La fourchette est à cheval sur un seuil : la précision des saisies ne permet pas de trancher');
     tuile('rt-bad', 'Sous un seuil', nb(c.sous_seuil), 'Marge brute ou coût horaire entièrement sous son seuil');
     tuile('', 'En attente', nb(c.attente), 'Dossiers terminés sans facture, sans déstockage ou sans 89 : pas encore jugés');
+    if (c.a_verifier) tuile('rt-bad', 'À vérifier', nb(c.a_verifier),
+      'Résultat hors norme : facture ou matière probablement rattachée au mauvais dossier. Exclus des compteurs et du nuage.');
     tuile('', 'Écart MB', d.ecart_mb_pts == null ? '—' : signe(d.ecart_mb_pts, 1) + ' pt',
       'Marge brute réelle moins marge devisée, moyenne par dossier complet');
     tuile('', '€/h médian', d.cout_horaire_median == null ? '—' : nb(d.cout_horaire_median),
@@ -150,26 +168,26 @@
     tete.appendChild(leg);
     carte.appendChild(tete);
 
-    var pts = (d.dossiers || []).filter(function (l) { return l.mb_pct && l.cout_horaire; });
+    var pts = (d.dossiers || []).filter(function (l) { return l.mb_pct && l.cout_horaire && l.etat !== 'a_verifier'; });
     var S = d.seuils || {mb_pct: 40, cout_horaire: 325};
     if (!pts.length) {
       carte.appendChild(el('div', 'rt-vide', 'Aucun dossier mesurable sur cette période.'));
       return carte;
     }
-    var xs = [S.cout_horaire], ys = [S.mb_pct];
-    pts.forEach(function (l) {
-      xs.push(l.cout_horaire.bas, l.cout_horaire.haut);
-      ys.push(l.mb_pct.bas, l.mb_pct.haut);
-      if (l.devis_cout_horaire != null) xs.push(l.devis_cout_horaire);
-      if (l.devis_mb_pct != null) ys.push(l.devis_mb_pct);
-    });
-    var x0 = Math.max(0, Math.floor(Math.min.apply(null, xs) / 100) * 100 - 100);
-    var x1 = Math.ceil(Math.max.apply(null, xs) / 100) * 100 + 100;
-    var y0 = Math.floor(Math.min.apply(null, ys) / 5) * 5 - 5;
-    var y1 = Math.ceil(Math.max.apply(null, ys) / 5) * 5 + 5;
+    // Axes calés sur le gros des dossiers (5e – 95e centile, seuils compris) ;
+    // un point au-delà est épinglé au bord, sa vraie valeur au survol.
+    var px = pts.map(function (l) { return l.cout_horaire.probable; });
+    var py = pts.map(function (l) { return l.mb_pct.probable; });
+    var xa = [S.cout_horaire, quantile(px, 0.05), quantile(px, 0.95)];
+    var ya = [S.mb_pct, quantile(py, 0.05), quantile(py, 0.95)];
+    var x0 = Math.max(0, Math.min.apply(null, xa) * 0.8), x1 = Math.max.apply(null, xa) * 1.2;
+    var y0 = Math.min.apply(null, ya) - 5, y1 = Math.max.apply(null, ya) + 5;
+    var pasX = pasNet(x1 - x0, 6), pasY = pasNet(y1 - y0, 6);
+    x0 = Math.floor(x0 / pasX) * pasX; x1 = Math.ceil(x1 / pasX) * pasX;
+    y0 = Math.floor(y0 / pasY) * pasY; y1 = Math.ceil(y1 / pasY) * pasY;
     var L = 56, R = 624, T = 16, B = 352;
-    var X = function (v) { return L + (v - x0) / (x1 - x0) * (R - L); };
-    var Y = function (v) { return B - (v - y0) / (y1 - y0) * (B - T); };
+    var X = function (v) { return L + (Math.max(x0, Math.min(x1, v)) - x0) / (x1 - x0) * (R - L); };
+    var Y = function (v) { return B - (Math.max(y0, Math.min(y1, v)) - y0) / (y1 - y0) * (B - T); };
     var s = svg('svg', {viewBox: '0 0 640 396', 'class': 'rt-nuage', role: 'img',
       'aria-label': pts.length + ' dossiers placés selon leur marge brute et leur coût horaire'});
     s.appendChild(svg('rect', {x: X(S.cout_horaire), y: T, width: R - X(S.cout_horaire),
@@ -177,18 +195,16 @@
     var tz = svg('text', {x: R - 6, y: T + 16, 'text-anchor': 'end', 'class': 'rt-zone-lib'});
     tz.textContent = 'Réussi';
     s.appendChild(tz);
-    var pasX = (x1 - x0) > 1600 ? 400 : (x1 - x0) > 800 ? 200 : 100;
-    for (var vx = Math.ceil(x0 / pasX) * pasX; vx <= x1; vx += pasX) {
+    for (var vx = x0; vx <= x1 + 1e-9; vx += pasX) {
       s.appendChild(svg('line', {x1: X(vx), x2: X(vx), y1: T, y2: B, 'class': 'rt-grille'}));
       var tx = svg('text', {x: X(vx), y: B + 16, 'text-anchor': 'middle', 'class': 'rt-axe'});
       tx.textContent = nb(vx);
       s.appendChild(tx);
     }
-    var pasY = (y1 - y0) > 40 ? 10 : 5;
-    for (var vy = Math.ceil(y0 / pasY) * pasY; vy <= y1; vy += pasY) {
+    for (var vy = y0; vy <= y1 + 1e-9; vy += pasY) {
       s.appendChild(svg('line', {x1: L, x2: R, y1: Y(vy), y2: Y(vy), 'class': 'rt-grille'}));
       var ty = svg('text', {x: L - 8, y: Y(vy) + 4, 'text-anchor': 'end', 'class': 'rt-axe'});
-      ty.textContent = vy + ' %';
+      ty.textContent = nb(vy) + ' %';
       s.appendChild(ty);
     }
     s.appendChild(svg('line', {x1: X(S.cout_horaire), x2: X(S.cout_horaire), y1: T, y2: B, 'class': 'rt-seuil'}));
@@ -230,7 +246,10 @@
         'class': 'rt-err rt-c-' + cls}));
       g.appendChild(svg('line', {x1: cx, x2: cx, y1: Y(l.mb_pct.bas), y2: Y(l.mb_pct.haut),
         'class': 'rt-err rt-c-' + cls}));
-      g.appendChild(svg('circle', {cx: cx, cy: cy, r: 5.5, 'class': 'rt-pt-svg rt-f-' + cls}));
+      var dehors = l.cout_horaire.probable > x1 || l.cout_horaire.probable < x0
+        || l.mb_pct.probable > y1 || l.mb_pct.probable < y0;
+      g.appendChild(svg('circle', {cx: cx, cy: cy, r: 5.5,
+        'class': 'rt-pt-svg rt-f-' + cls + (dehors ? ' rt-hors-axe' : '')}));
       var go = function () { o.ouvrir(l.planning_entry_id); };
       g.addEventListener('click', go);
       g.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
@@ -270,6 +289,209 @@
     return carte;
   }
 
+  // ── Dans le temps ──────────────────────────────────────────────────
+  /* Les dossiers de la période, rangés par jour, semaine (lundi) ou mois de
+     fin de production. En haut, combien de dossiers par verdict ; en bas, la
+     marge brute ou le coût horaire de la période, PONDÉRÉS (Σ MB ÷ Σ PV,
+     Σ MB ÷ Σ heures) sur les seuls dossiers complets. Les périodes vides
+     restent à leur place : un creux de production se voit. */
+  var GRAINS = [['jour', 'Jour'], ['semaine', 'Semaine'], ['mois', 'Mois']];
+  var COURBES = [['marge', 'Marge brute'], ['horaire', 'Coût horaire']];
+  var MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+  function jourUTC(iso) { var p = iso.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); }
+  function iso(dt) { return dt.toISOString().slice(0, 10); }
+  function lundi(dt) { var d = new Date(dt); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d; }
+  function numSemaine(dt) {
+    var d = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    var debut = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil(((d - debut) / 86400000 + 1) / 7);
+  }
+  function cleDe(dateIso, grain) {
+    if (grain === 'mois') return dateIso.slice(0, 7);
+    if (grain === 'semaine') return iso(lundi(jourUTC(dateIso)));
+    return dateIso;
+  }
+  function suivante(cle, grain) {
+    if (grain === 'mois') {
+      var a = +cle.slice(0, 4), m = +cle.slice(5, 7);
+      return m === 12 ? (a + 1) + '-01' : a + '-' + String(m + 1).padStart(2, '0');
+    }
+    var d = jourUTC(cle);
+    d.setUTCDate(d.getUTCDate() + (grain === 'semaine' ? 7 : 1));
+    return iso(d);
+  }
+  function libelleCourt(cle, grain) {
+    if (grain === 'mois') return MOIS[+cle.slice(5, 7) - 1];
+    if (grain === 'semaine') return 'S' + numSemaine(jourUTC(cle));
+    return cle.slice(8, 10) + '/' + cle.slice(5, 7);
+  }
+  function libelleLong(cle, grain) {
+    if (grain === 'mois') return MOIS[+cle.slice(5, 7) - 1] + ' ' + cle.slice(0, 4);
+    if (grain === 'semaine') {
+      var fin = jourUTC(cle); fin.setUTCDate(fin.getUTCDate() + 6);
+      return 'Semaine ' + numSemaine(jourUTC(cle)) + ' · ' + cle.slice(8, 10) + '/' + cle.slice(5, 7)
+        + ' – ' + iso(fin).slice(8, 10) + '/' + iso(fin).slice(5, 7);
+    }
+    return cle.slice(8, 10) + '/' + cle.slice(5, 7) + '/' + cle.slice(0, 4);
+  }
+
+  function periodes(dossiers, grain) {
+    var dates = dossiers.map(function (l) { return l.date; }).filter(Boolean).sort();
+    if (!dates.length) return [];
+    var fin = cleDe(dates[dates.length - 1], grain), cles = [], c = cleDe(dates[0], grain);
+    for (var garde = 0; garde < 2000; garde++) { cles.push(c); if (c === fin) break; c = suivante(c, grain); }
+    var parCle = {};
+    cles.forEach(function (k) {
+      parCle[k] = {cle: k, reussi: 0, limite: 0, sous_seuil: 0, attente: 0, mb: 0, pv: 0, heures: 0, complets: 0};
+    });
+    dossiers.forEach(function (l) {
+      if (!l.date) return;
+      var p = parCle[cleDe(l.date, grain)];
+      if (!p) return;
+      var g = (l.verdict || {}).global;
+      if (l.etat === 'complet' && l.mb_pct && l.cout_horaire && p[g] !== undefined) {
+        p[g] += 1;
+        p.complets += 1;
+        p.mb += Number(l.marge_brute) || 0;
+        p.pv += Number(l.prix_vente) || 0;
+        p.heures += Number(l.heures) || 0;
+      } else if (l.etat === 'provisoire') {
+        p.attente += 1;
+      }
+    });
+    return cles.map(function (k) {
+      var p = parCle[k];
+      p.mb_pct = p.pv > 0 ? p.mb / p.pv * 100 : null;
+      p.cout_horaire = p.heures > 0 ? p.mb / p.heures : null;
+      return p;
+    });
+  }
+
+  function temporel(d, o) {
+    var grain = o.grain || 'semaine', courbe = o.courbe || 'marge';
+    var carte = el('div', 'rt-carte rt-temps');
+    var tete = el('div', 'rt-carte-tete');
+    tete.appendChild(el('b', '', 'Dans le temps'));
+    var outils = el('div', 'rt-temps-outils');
+    [[GRAINS, 'grain', grain, 'Regrouper par'], [COURBES, 'courbe', courbe, 'Courbe']].forEach(function (g) {
+      var grp = el('div', 'rt-chips');
+      grp.setAttribute('role', 'group');
+      grp.setAttribute('aria-label', g[3]);
+      g[0].forEach(function (x) {
+        var c = el('button', 'rt-chip rt-chip-petit', x[1]);
+        c.type = 'button';
+        c.setAttribute('aria-pressed', String(g[2] === x[0]));
+        c.addEventListener('click', function () { var p = {}; p[g[1]] = x[0]; o.surFiltre(p); });
+        grp.appendChild(c);
+      });
+      outils.appendChild(grp);
+    });
+    tete.appendChild(outils);
+    carte.appendChild(tete);
+
+    var ps = periodes(d.dossiers || [], grain);
+    if (!ps.length) {
+      carte.appendChild(el('div', 'rt-vide', 'Aucun dossier daté sur cette période.'));
+      return carte;
+    }
+    var S = d.seuils || {mb_pct: 40, cout_horaire: 325};
+    // Dessinée pour la pleine largeur de l'onglet : un viewBox étroit étiré
+    // sur 1 200 px grossissait le texte d'autant.
+    var W = 1200, L = 56, R = 1186, T1 = 10, B1 = 130, T2 = 158, B2 = 290, H = 314;
+    var n = ps.length, pas = (R - L) / n, bw = Math.max(2, Math.min(28, pas * 0.68));
+    var X = function (i) { return L + pas * i + pas / 2; };
+    var maxN = Math.max.apply(null, ps.map(function (p) { return p.reussi + p.limite + p.sous_seuil + p.attente; }).concat([1]));
+    var Yn = function (v) { return B1 - v / maxN * (B1 - T1); };
+
+    var cleV = courbe === 'horaire' ? 'cout_horaire' : 'mb_pct';
+    var seuil = courbe === 'horaire' ? S.cout_horaire : S.mb_pct;
+    var unite = courbe === 'horaire' ? '€/h' : '%';
+    var vals = ps.map(function (p) { return p[cleV]; }).filter(function (v) { return v != null; });
+    var lo, hi;
+    if (courbe === 'horaire') {
+      lo = 0; hi = Math.ceil(Math.max.apply(null, vals.concat([seuil])) * 1.15 / 100) * 100;
+    } else {
+      lo = Math.floor(Math.min.apply(null, vals.concat([seuil])) / 5) * 5 - 5;
+      hi = Math.ceil(Math.max.apply(null, vals.concat([seuil])) / 5) * 5 + 5;
+    }
+    var Yv = function (v) { return B2 - (v - lo) / (hi - lo) * (B2 - T2); };
+
+    var s = svg('svg', {viewBox: '0 0 ' + W + ' ' + H, 'class': 'rt-temps-svg', role: 'img',
+      'aria-label': 'Dossiers par verdict et ' + (courbe === 'horaire' ? 'coût horaire' : 'marge brute')
+        + ' par ' + grain});
+    // Repères : compte de dossiers en haut, valeur de la courbe en bas.
+    [[T1, maxN], [B1, 0]].forEach(function (r) {
+      s.appendChild(svg('line', {x1: L, x2: R, y1: r[0], y2: r[0], 'class': 'rt-grille'}));
+      var t = svg('text', {x: L - 8, y: r[0] + 4, 'text-anchor': 'end', 'class': 'rt-axe'});
+      t.textContent = r[1];
+      s.appendChild(t);
+    });
+    [lo, hi].forEach(function (v) {
+      s.appendChild(svg('line', {x1: L, x2: R, y1: Yv(v), y2: Yv(v), 'class': 'rt-grille'}));
+      var t = svg('text', {x: L - 8, y: Yv(v) + 4, 'text-anchor': 'end', 'class': 'rt-axe'});
+      t.textContent = nb(v) + (courbe === 'horaire' ? '' : ' %');
+      s.appendChild(t);
+    });
+    s.appendChild(svg('line', {x1: L, x2: R, y1: Yv(seuil), y2: Yv(seuil), 'class': 'rt-seuil'}));
+    var ls = svg('text', {x: R, y: Yv(seuil) - 5, 'text-anchor': 'end', 'class': 'rt-seuil-lib'});
+    ls.textContent = nb(seuil) + ' ' + unite;
+    s.appendChild(ls);
+
+    // Barres empilées par verdict.
+    ps.forEach(function (p, i) {
+      var y = B1;
+      [['reussi', 'ok'], ['limite', 'warn'], ['sous_seuil', 'bad'], ['attente', 'neutre']].forEach(function (k) {
+        if (!p[k[0]]) return;
+        var h = p[k[0]] / maxN * (B1 - T1);
+        s.appendChild(svg('rect', {x: X(i) - bw / 2, y: y - h, width: bw, height: Math.max(1, h - 1),
+          rx: 2, 'class': 'rt-f-' + k[1] + (k[0] === 'attente' ? ' rt-provisoire' : '')}));
+        y -= h;
+      });
+    });
+
+    // Courbe : segments entre périodes voisines qui ont toutes deux une valeur.
+    var prec = null;
+    ps.forEach(function (p, i) {
+      var v = p[cleV];
+      if (v == null) { prec = null; return; }
+      if (prec) s.appendChild(svg('line', {x1: X(prec.i), y1: Yv(prec.v), x2: X(i), y2: Yv(v), 'class': 'rt-courbe'}));
+      prec = {i: i, v: v};
+    });
+    ps.forEach(function (p, i) {
+      var v = p[cleV];
+      if (v == null) return;
+      s.appendChild(svg('circle', {cx: X(i), cy: Yv(v), r: n > 60 ? 2.5 : 4,
+        'class': 'rt-pt-svg rt-f-' + (v >= seuil ? 'ok' : 'bad')}));
+    });
+
+    // Étiquettes d'axe, éclaircies pour ne jamais se chevaucher.
+    var tous = Math.max(1, Math.ceil(56 / pas));
+    ps.forEach(function (p, i) {
+      if (i % tous !== 0) return;
+      var t = svg('text', {x: X(i), y: H - 6, 'text-anchor': 'middle', 'class': 'rt-axe'});
+      t.textContent = libelleCourt(p.cle, grain);
+      s.appendChild(t);
+    });
+
+    // Une colonne de survol par période, toute la hauteur.
+    ps.forEach(function (p, i) {
+      var zone = svg('rect', {x: L + pas * i, y: T1, width: pas, height: B2 - T1, 'class': 'rt-temps-zone'});
+      var tot = p.reussi + p.limite + p.sous_seuil;
+      bulle(zone, {titre: libelleLong(p.cle, grain),
+        sous: tot ? nb(tot) + ' dossier' + (tot > 1 ? 's' : '') + ' complet' + (tot > 1 ? 's' : '') : 'Aucun dossier complet',
+        lignes: [['Réussis', p.reussi ? nb(p.reussi) : ''], ['À la limite', p.limite ? nb(p.limite) : ''],
+                 ['Sous un seuil', p.sous_seuil ? nb(p.sous_seuil) : ''], ['En attente', p.attente ? nb(p.attente) : ''],
+                 ['Marge brute', p.mb_pct != null ? nb(p.mb_pct, 1) + ' %' : ''],
+                 ['Coût horaire', p.cout_horaire != null ? nb(p.cout_horaire) + ' €/h' : ''],
+                 ['Marge dégagée', p.complets ? nb(p.mb) + ' €' : '']]});
+      s.appendChild(zone);
+    });
+    carte.appendChild(s);
+    return carte;
+  }
+
   // ── Liste des dossiers ─────────────────────────────────────────────
   function mini(f, devis, seuil, a, b, unite, dec) {
     var w = el('div', 'rt-mini');
@@ -301,7 +523,8 @@
     var lignes = (d.dossiers || []).slice();
     var rang = {sous_seuil: 0, limite: 1, reussi: 2};
     lignes.sort(function (a, b) {
-      var ca = a.etat === 'complet' ? 0 : 1, cb = b.etat === 'complet' ? 0 : 1;
+      var ordre = {a_verifier: 0, complet: 1, provisoire: 2};
+      var ca = ordre[a.etat] == null ? 3 : ordre[a.etat], cb = ordre[b.etat] == null ? 3 : ordre[b.etat];
       if (ca !== cb) return ca - cb;
       var ra = rang[(a.verdict || {}).global], rb = rang[(b.verdict || {}).global];
       ra = ra == null ? 3 : ra; rb = rb == null ? 3 : rb;
@@ -336,6 +559,10 @@
       if (l.etat === 'complet') {
         var v = VERDICT[(l.verdict || {}).global];
         r.appendChild(el('span', 'rt-tag rt-tag-' + (v ? v.cls : 'neutre'), v ? v.lib : 'Non calculable'));
+      } else if (l.etat === 'a_verifier') {
+        r.appendChild(bulle(el('span', 'rt-tag rt-tag-bad', 'À vérifier'),
+          {titre: 'Résultat hors norme', note: (l.hors_norme || []).join(', ')
+            + ' : facture ou matière probablement rattachée au mauvais dossier.'}));
       } else if (l.etat === 'provisoire') {
         var t = el('span', 'rt-tag rt-tag-neutre', 'Provisoire');
         bulle(t, {titre: 'Provisoire', note: l.manque && l.manque.length
@@ -353,11 +580,25 @@
   function dessiner(conteneur, d, o) {
     conteneur.textContent = '';
     conteneur.appendChild(barre(d, o));
+    var lec = d.lecture_devis || {};
+    if (lec.en_cours) {
+      conteneur.appendChild(bulle(el('div', 'rt-lecture',
+        'Lecture des montants de ' + nb(lec.restants) + ' devis en cours — le tableau se complète tout seul.'),
+        {note: 'Ces devis ont été importés avant la lecture des montants. Leurs dossiers apparaissent dès leur lecture.'}));
+      // Une seule relance à la fois, et seulement si l'onglet est encore là.
+      clearTimeout(relance);
+      relance = setTimeout(function () {
+        if (!conteneur.isConnected) return;
+        delete cache[cle(o)];
+        monter(conteneur, o);
+      }, 20000);
+    }
     conteneur.appendChild(compteurs(d));
     var grille = el('div', 'rt-grille-haut');
     grille.appendChild(nuage(d, o));
     grille.appendChild(causes(d));
     conteneur.appendChild(grille);
+    conteneur.appendChild(temporel(d, o));
     conteneur.appendChild(liste(d, o));
   }
 
@@ -371,7 +612,9 @@
     conteneur.appendChild(el('div', 'rt-attente', 'Calcul en cours…'));
     if (!enCours[k]) {
       var url = '/api/rentabilite/tableau-de-bord?periode=' + encodeURIComponent(o.periode || 'last30')
-        + (o.machine ? '&machine=' + encodeURIComponent(o.machine) : '');
+        + (o.machine ? '&machine=' + encodeURIComponent(o.machine) : '')
+        + (forcer[k] ? '&force=1' : '');
+      delete forcer[k];
       enCours[k] = api(url).then(function (d) { cache[k] = d; return d; })
         .finally(function () { delete enCours[k]; });
     }

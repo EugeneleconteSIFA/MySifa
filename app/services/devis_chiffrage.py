@@ -27,7 +27,7 @@ import re
 from datetime import datetime
 from typing import Any, Optional
 
-from app.services.devis_parser import _find_value, charger_feuilles
+from app.services.devis_parser import _find_value
 
 # (clé, motif du libellé, décalage de colonne, unité, libellé affiché)
 # Le décalage vaut 3 pour le métrage du bloc « CALCUL Temps et métrage », qui
@@ -79,6 +79,28 @@ def _nombre(valeur) -> Optional[float]:
     return None if v != v else v  # NaN
 
 
+def _feuille_prix(file_bytes: bytes, filename: str):
+    """La seule feuille « Prix », sans charger les autres.
+
+    `charger_feuilles` lit tout le classeur : 2,5 s sur un devis maison, dont
+    l'essentiel pour la feuille « Matière » (1 488 lignes) qui ne sert à rien
+    ici. La feuille Prix seule se lit en 0,25 s — la différence entre un
+    tableau de bord qui répond et un qui tourne sans fin.
+    """
+    import io
+    import pandas as pd
+    from app.services.devis_parser import _moteur
+    try:
+        buf = io.BytesIO(file_bytes)
+        xl = pd.ExcelFile(buf, engine=_moteur(filename))
+        nom = next((n for n in xl.sheet_names if "prix" in str(n).lower()), None)
+        if not nom:
+            return None, None, []
+        return nom, pd.read_excel(xl, sheet_name=nom, header=None), []
+    except Exception as e:
+        return None, None, [f"Impossible d'ouvrir le fichier : {e}"]
+
+
 def lire_chiffrage(file_bytes: bytes, filename: str) -> dict:
     """Lit les postes en euros d'un classeur de devis.
 
@@ -94,14 +116,12 @@ def lire_chiffrage(file_bytes: bytes, filename: str) -> dict:
         return {"valeurs": valeurs, "sources": sources,
                 "erreurs": ["Pas un classeur : chiffrage non lu."]}
 
-    feuilles, err = charger_feuilles(file_bytes, filename)
+    nom_prix, df, err = _feuille_prix(file_bytes, filename)
     erreurs.extend(err)
-    nom_prix = next((s for s in feuilles if "prix" in s.lower()), None)
-    if not nom_prix:
+    if df is None:
         erreurs.append("Feuille « Prix » introuvable : chiffrage non lu.")
         return {"valeurs": valeurs, "sources": sources, "erreurs": erreurs}
 
-    df = feuilles[nom_prix]
     for cle, motif, decalage, _unite, _libelle in POSTES:
         try:
             v, coord = _find_value(df, motif, col_offset=decalage, sheet_name=nom_prix)

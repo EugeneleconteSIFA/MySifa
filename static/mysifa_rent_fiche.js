@@ -229,7 +229,11 @@
     var tete = el('div', 'rf-tete');
     var v = VERDICT[(f.verdict || {}).global];
     tete.appendChild(el('span', 'rf-verdict rf-' + (v ? v.cls : 'neutre'), v ? v.lib : 'Verdict non calculable'));
-    if (f.etat === 'provisoire') {
+    if (f.etat === 'a_verifier') {
+      tete.appendChild(infobulle(el('span', 'rf-etat rf-etat-bad', 'À vérifier'),
+        {titre: 'Résultat hors norme', note: (f.hors_norme || []).join(', ')
+          + ' : facture ou matière probablement rattachée au mauvais dossier.'}));
+    } else if (f.etat === 'provisoire') {
       var raison = (f.manque && f.manque.length) ? 'il manque : ' + f.manque.join(', ')
         : 'marché partiellement facturé';
       tete.appendChild(infobulle(el('span', 'rf-etat', 'Provisoire'),

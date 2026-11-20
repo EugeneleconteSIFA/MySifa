@@ -223,8 +223,10 @@
     return r;
   }
 
-  function sansChiffrage(conteneur, devisId, message, o) {
+  function sansChiffrage(conteneur, devisId, message, o, d) {
     conteneur.textContent = '';
+    var al = d ? alertes(d) : null;
+    if (al) conteneur.appendChild(al);
     var w = el('div', 'rd-vide');
     w.appendChild(el('span', '', message || 'Montants du devis non lus.'));
     var b = el('button', 'btn-sec', 'Relire le classeur');
@@ -247,7 +249,7 @@
     api('/api/rentabilite/devis/' + Number(devisId) + '/chiffrage').then(function (d) {
       if (!conteneur.isConnected) return;
       if (!d || !d.chiffrage || d.chiffrage.prix_vente == null) {
-        sansChiffrage(conteneur, devisId, d && d.message, o);
+        sansChiffrage(conteneur, devisId, d && d.message, o, d);
         return;
       }
       conteneur.textContent = '';

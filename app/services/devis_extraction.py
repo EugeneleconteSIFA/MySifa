@@ -410,6 +410,25 @@ def _indicateur(indicateurs: list, libelle: str):
 _RE_QTE_NOM_FICHIER = re.compile(r"(?<!\d)\d{1,3}(?:\.\d{3}){1,4}(?!\d)")
 
 
+def multiple_exact(a: float, b: float) -> bool:
+    """`a` est-il exactement 2, 3… fois `b` ?
+
+    Un classeur calculé pour 2 160 000 ex et vendu pour 4 320 000 n'est pas
+    incohérent : le commercial a calculé une moitié (une livraison, un des
+    deux sens d'impression) et chiffré le tout. Retour d'Eugène du 20/11/2026
+    sur le devis Schisler : « exactement le double, donc ça fait sens ».
+    """
+    try:
+        a, b = float(a or 0), float(b or 0)
+    except (TypeError, ValueError):
+        return False
+    if a <= 0 or b <= 0:
+        return False
+    grand, petit = max(a, b), min(a, b)
+    k = round(grand / petit)
+    return k >= 2 and abs(grand - k * petit) < 1
+
+
 def _controles_paliers(donnees: dict, paliers: list) -> list[dict]:
     """Vérifie sur QUELLE quantité les temps du devis ont été calculés.
 
@@ -442,7 +461,7 @@ def _controles_paliers(donnees: dict, paliers: list) -> list[dict]:
             ),
         })
 
-    if qte_calc > 0 and not any(abs(q - qte_calc) < 1 for q in quantites):
+    if qte_calc > 0 and not any(abs(q - qte_calc) < 1 or multiple_exact(q, qte_calc) for q in quantites):
         alertes.append({
             "niveau": "info",
             "champs": ["qte_etiquettes"],
@@ -459,7 +478,7 @@ def _controles_paliers(donnees: dict, paliers: list) -> list[dict]:
     nom = str(donnees.get("filename") or "")
     for brut in _RE_QTE_NOM_FICHIER.findall(nom):
         val = float(brut.replace(".", ""))
-        if qte_calc > 0 and abs(val - qte_calc) < 1:
+        if qte_calc > 0 and (abs(val - qte_calc) < 1 or multiple_exact(val, qte_calc)):
             continue
         if any(abs(q - val) < 1 for q in quantites):
             alertes.append({

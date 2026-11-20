@@ -220,6 +220,8 @@
     rentSubTab: 'tableau',
     rentTdbPeriode: 'last30',
     rentTdbMachine: '',
+    rentTdbGrain: 'semaine',
+    rentTdbCourbe: 'marge',
     // Filtre de la file de travail : a_lier | comparables | tous.
     rentFiltre: 'a_lier',
     // Tri de la liste des dossiers : colonne + sens, poses par l'en-tete.
@@ -366,6 +368,8 @@
       if(rs==='tableau'){
         if(S.rentTdbPeriode&&S.rentTdbPeriode!=='last30') p.periode=S.rentTdbPeriode;
         if(S.rentTdbMachine) p.machine=S.rentTdbMachine;
+        if(S.rentTdbGrain&&S.rentTdbGrain!=='semaine') p.grain=S.rentTdbGrain;
+        if(S.rentTdbCourbe&&S.rentTdbCourbe!=='marge') p.courbe=S.rentTdbCourbe;
       }else if(rs==='dossiers'){
         if(S.rentFiltre&&S.rentFiltre!=='a_lier') p.filtre=S.rentFiltre;
         var rt=S.rentTri||{};
@@ -612,6 +616,8 @@
         S.rentTdbPeriode=u.get('periode','last30',['last30','last90','thisYear','all']);
         var tm=u.get('machine','');
         S.rentTdbMachine=(tm.length<=80&&!/[\u0000-\u001f<>]/.test(tm))?tm:'';
+        S.rentTdbGrain=u.get('grain','semaine',['jour','semaine','mois']);
+        S.rentTdbCourbe=u.get('courbe','marge',['marge','horaire']);
       }else if(S.rentSubTab==='pilotage'){
         S.rentPilotMachine=u.get('machine',null);
         S.rentPilotSemaines=Number(u.get('semaines','2',['1','2','4']));
@@ -7563,10 +7569,14 @@ function renderRentTableau(){
   window.MySifaRentTableau.monter(zone, {
     periode: S.rentTdbPeriode || 'last30',
     machine: S.rentTdbMachine || '',
+    grain: S.rentTdbGrain || 'semaine',
+    courbe: S.rentTdbCourbe || 'marge',
     surFiltre: patch => {
       const p = {};
       if(patch.periode !== undefined) p.rentTdbPeriode = patch.periode;
       if(patch.machine !== undefined) p.rentTdbMachine = patch.machine;
+      if(patch.grain !== undefined) p.rentTdbGrain = patch.grain;
+      if(patch.courbe !== undefined) p.rentTdbCourbe = patch.courbe;
       set(p);
     },
     ouvrir: async entryId => {
@@ -9403,7 +9413,9 @@ function ouvrirDevisModal(devisId){
       h('button',{className:'contact-close-btn',title:'Fermer',
         onClick:()=>fermerDevisModal()},'✕')
     ),
-    (Number(dv.a_verifier)===1 && dv.note)
+    // La nouvelle lecture (mysifa_rent_devis.js) reprend cette note dans SA
+    // liste d'alertes, dédoublonnée : ne l'afficher ici que sans elle.
+    (Number(dv.a_verifier)===1 && dv.note && !window.MySifaRentDevis)
       ? h('div',{className:'devis-alertes'},
           h('div',{className:'devis-alerte devis-alerte-avertissement'},
             iconEl('alert-triangle',13), h('span',null,' '+dv.note)))

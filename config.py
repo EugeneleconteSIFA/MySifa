@@ -1416,6 +1416,12 @@ RENT_ECART_CROISEMENT_PCT = float(os.getenv("RENT_ECART_CROISEMENT_PCT", "2"))
 # Écart toléré entre un poste lu dans un devis et le même poste recalculé par
 # le moteur. Au-delà, le devis est signalé : libellé mal lu ou formule modifiée.
 RENT_TOLERANCE_CONTROLE_PCT = float(os.getenv("RENT_TOLERANCE_CONTROLE_PCT", "1"))
+# Résultat hors de ces bornes = rattachement à vérifier (facture d'une autre
+# commande, matière d'un autre dossier), pas une rentabilité : le dossier sort
+# des compteurs et le dit, au lieu d'écraser le nuage du tableau de bord.
+RENT_PLAUSIBLE_MB_MIN = float(os.getenv("RENT_PLAUSIBLE_MB_MIN", "-30"))
+RENT_PLAUSIBLE_MB_MAX = float(os.getenv("RENT_PLAUSIBLE_MB_MAX", "90"))
+RENT_PLAUSIBLE_COUT_HORAIRE_MAX = float(os.getenv("RENT_PLAUSIBLE_COUT_HORAIRE_MAX", "5000"))
 
 # ─── MyPrint — étiquettes spécifiques ─────────────────────────────
 # Tous les rôles qui ont la tuile MyPrint créent, modifient et impriment

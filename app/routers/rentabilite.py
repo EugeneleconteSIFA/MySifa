@@ -1716,21 +1716,6 @@ def _chiffrage_complet(conn, devis_id: int) -> dict:
     devis = conn.execute("SELECT * FROM devis WHERE id=?", (devis_id,)).fetchone()
     if not devis:
         raise HTTPException(404, "Devis introuvable.")
-    ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
-    if ch is None:
-        # Devis importé avant la lecture des postes : on tente le fichier.
-        if devis_chiffrage.relire_depuis_fichier(conn, devis_id) is not None:
-            conn.commit()
-            ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
-    if ch is None:
-        return {"devis_id": devis_id, "chiffrage": None,
-                "message": "Postes en euros non lus — fichier d'origine absent ou table non migrée."}
-
-    params = rentabilite_parametres.lire(conn)
-    valeurs = ch["valeurs"]
-    calcul = calcul_devis(valeurs)
-    controles = controler_devis(valeurs, _colonne(devis, "laize") or None,
-                                params["tolerance_controle_pct"])
     socle = {c: _colonne(devis, c) for c in (
         "laize", "gache", "vitesse_theorique", "metrage_production_ml", "temps_production_mn",
         "metrage_calage_ml", "metrage_calage_impression_ml", "temps_calage_mn",
@@ -1743,6 +1728,23 @@ def _chiffrage_complet(conn, devis_id: int) -> dict:
         ).fetchall():
             if r["valeur_nombre"] is not None:
                 indicateurs[r["libelle"]] = {"valeur": r["valeur_nombre"], "source": r["source"]}
+
+    ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
+    if ch is None:
+        # Devis importé avant la lecture des postes : on tente le fichier.
+        if devis_chiffrage.relire_depuis_fichier(conn, devis_id) is not None:
+            conn.commit()
+            ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
+    if ch is None:
+        return {"devis_id": devis_id, "chiffrage": None,
+                "alertes": _alertes_lecture_devis(devis, socle, indicateurs, []),
+                "message": "Postes en euros non lus — fichier d'origine absent ou table non migrée."}
+
+    params = rentabilite_parametres.lire(conn)
+    valeurs = ch["valeurs"]
+    calcul = calcul_devis(valeurs)
+    controles = controler_devis(valeurs, _colonne(devis, "laize") or None,
+                                params["tolerance_controle_pct"])
     return {
         "socle": socle,
         "indicateurs": indicateurs,
@@ -1777,12 +1779,38 @@ def _alertes_lecture_devis(devis, socle: dict, indicateurs: dict, controles: lis
         alertes.append({"niveau": "avertissement",
                         "message": f"Laize de production {laize:g} mm inférieure à la laize mini {mini:g} mm.",
                         "detail": "Vérifier l'échenillage ou le nombre de fronts."})
+    # Contrôles posés à la lecture : les AVERTISSEMENTS seulement — les
+    # informations (« le devis chiffre trois quantités ») chargeaient l'écran
+    # sans rien demander. Une quantité de fichier qui est un multiple exact de
+    # celle des calculs n'est pas une incohérence (multiple_exact).
+    from app.services.devis_extraction import multiple_exact, _RE_QTE_NOM_FICHIER
+    qte_calc = float(socle.get("qte_etiquettes") or 0)
+    qtes_fichier = [float(b.replace(".", "")) for b in _RE_QTE_NOM_FICHIER.findall(_texte(devis, "filename", ""))]
+    quantite_coherente = any(multiple_exact(q, qte_calc) for q in qtes_fichier)
+    courts = set()
     try:
         for c in json.loads(_texte(devis, "coherence_json", "[]") or "[]"):
-            if isinstance(c, dict) and c.get("message"):
-                alertes.append({"niveau": c.get("niveau") or "avertissement", "message": str(c["message"])})
+            if not (isinstance(c, dict) and c.get("message")):
+                continue
+            if c.get("court"):
+                courts.add(str(c["court"]))
+            if (c.get("niveau") or "avertissement") != "avertissement":
+                continue
+            if quantite_coherente and "qte_etiquettes" in (c.get("champs") or []):
+                continue
+            alertes.append({"niveau": "avertissement", "message": str(c["message"])})
     except (TypeError, ValueError):
         pass
+    # Ce que la note « à vérifier » dit en plus (champ non lu, lecture en échec),
+    # sans répéter les contrôles déjà listés : la fenêtre n'affiche plus qu'une liste.
+    if int(_colonne(devis, "a_verifier")) == 1:
+        note = _texte(devis, "note", "")
+        # Les formes courtes contiennent elles-mêmes « · » : on les retire
+        # entières avant de découper la note.
+        for c in courts:
+            note = note.replace(c, "")
+        for part in [p.strip() for p in note.split(" · ") if p.strip()]:
+            alertes.append({"niveau": "avertissement", "message": part[:1].upper() + part[1:]})
     faux = [c for c in controles if not c["ok"]]
     if faux:
         alertes.append({"niveau": "avertissement",
@@ -1827,12 +1855,15 @@ def fiche_rentabilite_dossier(planning_entry_id: int, request: Request):
 
 
 @router.get("/api/rentabilite/tableau-de-bord")
-def tableau_de_bord_rentabilite(request: Request, periode: str = "last30", machine: str = ""):
-    """Dossiers terminés jugés devisé contre réel, compteurs et causes d'écart."""
+def tableau_de_bord_rentabilite(request: Request, periode: str = "last30", machine: str = "",
+                                force: int = 0):
+    """Dossiers terminés jugés devisé contre réel, compteurs et causes d'écart.
+
+    `force=1` (bouton « Recalculer ») ignore le cache des fiches."""
     require_rentabilite(request)
     from app.services.rentabilite_reel import tableau_de_bord
     with get_db() as conn:
-        return tableau_de_bord(conn, periode, (machine or "").strip()[:80])
+        return tableau_de_bord(conn, periode, (machine or "").strip()[:80], force=bool(force))
 
 
 @router.get("/api/rentabilite/parametres")

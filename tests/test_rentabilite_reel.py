@@ -257,19 +257,46 @@ e.close()
 with get_db() as conn:
     conn.execute("UPDATE planning_entries SET planned_end='2026-11-09T16:54:00' WHERE id=707")
     conn.commit()
-    t = tableau_de_bord(conn, "all")
+    t_cache = tableau_de_bord(conn, "all")
+    t = tableau_de_bord(conn, "all", force=True)
     t_machine = tableau_de_bord(conn, "all", "Autre machine")
     t_hors = tableau_de_bord(conn, "last30")  # la date du dossier dépend du jour du test
+check("cache : sans « Recalculer », la fiche gardée sert encore", t_cache["comptes"]["attente"] == 1, t_cache["comptes"])
 check("dossier facturé : complet et compté", t["comptes"]["complets"] == 1
       and sum(t["comptes"][k] for k in ("reussi", "limite", "sous_seuil")) == 1, t["comptes"])
 check("créneau sans devis absent de la liste", all(d["planning_entry_id"] != 708 for d in t["dossiers"]))
+check("dossier daté et pondérable", t["dossiers"][0]["date"] == "2026-11-09"
+      and t["dossiers"][0]["heures"] > 0 and t["dossiers"][0]["marge_brute"] is not None, t["dossiers"][0])
 check("filtre machine", t_machine["dossiers"] == [] and t["machines"] == ["Cohésio 1"])
 check("causes en points de marge", t["causes_marge"] and all("valeur" in c for c in t["causes_marge"]), t["causes_marge"])
 check("écart MB calculé", t["ecart_mb_pts"] is not None and t["cout_horaire_median"] is not None)
 with get_db() as conn:
     conn.execute("UPDATE machines SET rent_suivi_devis=0 WHERE id=1")
     conn.commit()
-    check("machine retirée du suivi : exclue", tableau_de_bord(conn, "all")["dossiers"] == [])
+    check("machine retirée du suivi : exclue", tableau_de_bord(conn, "all", force=True)["dossiers"] == [])
+
+print("6. Commandes groupées, devis partagé, résultat hors norme")
+from app.services.rentabilite_reel import devis_ramene, racines_commande  # noqa: E402
+check("commandes abrégées", racines_commande({"numero_of": "9932574-75-77-78", "reference": ""}, [])
+      == ["9932574", "9932575", "9932577", "9932578"])
+check("commandes à la barre", racines_commande({"numero_of": "9932729/730/731", "reference": ""}, [])
+      == ["9932729", "9932730", "9932731"])
+check("date et référence article ignorées", racines_commande({"numero_of": "01/10/2026 - Cdes Ref 961/0008", "reference": ""}, []) == [])
+vr = devis_ramene({"prix_vente": 20000.0, "cout_matiere": 10000.0, "metrage_total_ml": 100000.0,
+                   "temps_total_mn": 1000.0, "marge_brute": 9000.0}, 0.2, 100)
+check("devis ramené au cinquième", vr["prix_vente"] == 4000 and vr["metrage_total_ml"] == 20000, vr)
+check("calage non divisé", abs(vr["temps_total_mn"] - (100 + 900 * 0.2)) < 1e-9, vr)
+e = sqlite3.connect(erp)
+e.execute("UPDATE vte_ligne SET htn = 600")    # facture d'une autre commande : 600 € au lieu de 6 756 €
+e.commit()
+e.close()
+with get_db() as conn:
+    conn.execute("UPDATE machines SET rent_suivi_devis=1 WHERE id=1")
+    conn.commit()
+    f = fiche_rentabilite(conn, 707)
+    t = tableau_de_bord(conn, "all", force=True)
+check("résultat hors norme : à vérifier", f["etat"] == "a_verifier" and f["hors_norme"], (f["etat"], f.get("hors_norme")))
+check("hors norme : hors des compteurs", t["comptes"]["complets"] == 0 and t["comptes"]["a_verifier"] == 1, t["comptes"])
 
 import shutil                                            # noqa: E402
 shutil.rmtree(tmp, ignore_errors=True)
