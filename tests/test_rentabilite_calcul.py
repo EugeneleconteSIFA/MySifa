@@ -20,6 +20,7 @@ Lancer : python3 tests/test_rentabilite_calcul.py
 
 import contextlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -294,6 +295,38 @@ with patch("app.routers.rentabilite.get_current_user", return_value=dict(USER)):
     check("route chiffrage : 404 sur devis inconnu", rep.status_code == 404)
 with patch("app.routers.rentabilite.get_current_user", return_value={**USER, "role": "fabrication"}):
     check("route paramètres : réservée", cli.get("/api/rentabilite/parametres").status_code == 403)
+
+print("12. Quantité de fichier multiple exacte de celle des calculs")
+from app.services.devis_extraction import multiple_exact      # noqa: E402
+check("4 320 000 = 2 × 2 160 000", multiple_exact(4320000, 2160000))
+check("3 × aussi", multiple_exact(300000, 900000))
+check("1,5 × non", not multiple_exact(3000000, 2000000))
+check("égal non (pas un multiple ≥ 2)", not multiple_exact(1000, 1000))
+coh = json.dumps([{"niveau": "avertissement", "champs": ["qte_etiquettes"],
+                   "court": "Fichier : 4 320 000 ex · calculs : 2 160 000 ex",
+                   "message": "Le nom du fichier annonce 4 320 000 ex, qui est bien un palier du devis."},
+                  {"niveau": "info", "champs": ["qte_etiquettes"], "message": "La quantité des calculs ne figure dans aucun palier."}],
+                 ensure_ascii=False)
+with get_db() as conn:
+    conn.execute(
+        """INSERT INTO devis (id, filename, laize, qte_etiquettes, imported_at, a_verifier, note, coherence_json,
+               fichier_chemin) VALUES (3, '100x148 mm thermique qté 4.320.000 19-11-2026.xlsx', 530, 2160000,
+               '2026-11-20', 1, 'Fichier : 4 320 000 ex · calculs : 2 160 000 ex · non lu : Vitesse devisée', ?, ?)""",
+        (coh, chemin))
+    conn.commit()
+with patch("app.routers.rentabilite.get_current_user", return_value=dict(USER)):
+    rep = cli.get("/api/rentabilite/devis/3/chiffrage").json()
+msgs = [x["message"] for x in rep.get("alertes") or []]
+check("Schisler : aucune alerte de quantité", not any("4 320 000" in m or "calculs" in m for m in msgs), msgs)
+check("les autres raisons de la note restent, une fois", msgs.count("Non lu : Vitesse devisée") == 1, msgs)
+import importlib                                          # noqa: E402
+mig = importlib.import_module("app.core.migrations.2026_11_20_devis_quantite_multiple")
+with get_db() as conn:
+    with contextlib.redirect_stdout(io.StringIO()):
+        mig.appliquer(conn)
+    r = conn.execute("SELECT a_verifier, note, coherence_json FROM devis WHERE id=3").fetchone()
+check("migration : note réduite à l'autre raison", r["note"] == "non lu : Vitesse devisée" and r["a_verifier"] == 1, dict(r))
+check("migration : alerte de quantité retirée", "4 320 000" not in r["coherence_json"], r["coherence_json"])
 
 import shutil                                            # noqa: E402
 shutil.rmtree(dossier, ignore_errors=True)

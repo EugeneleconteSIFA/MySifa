@@ -199,3 +199,15 @@
 .rd-valeurs { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
 .rd-valeurs > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text2); }
 .rd-valeurs[open] > summary { margin-bottom: 10px; }
+
+/* Tableau de bord › Dans le temps */
+.rt-temps { margin-bottom: 14px; }
+.rt-temps-outils { display: flex; flex-wrap: wrap; gap: 10px; }
+.rt-chip-petit { font-size: 12px; padding: 4px 10px; }
+.rt-temps-svg { width: 100%; height: auto; display: block; }
+.rt-courbe { stroke: var(--accent); stroke-width: 2; fill: none; }
+.rt-temps-zone { fill: transparent; pointer-events: all; }
+.rt-temps-zone:hover { fill: var(--accent-bg); }
+.rt-hors-axe { stroke: var(--text); stroke-width: 2; stroke-dasharray: 2 2; }
+.rt-lecture { font-size: 13px; color: var(--text2); background: var(--accent-bg); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+.rf-etat-bad { color: var(--danger); border-color: var(--danger); background: var(--danger-bg); }
