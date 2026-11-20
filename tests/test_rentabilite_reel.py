@@ -295,6 +295,10 @@ check("dossier daté et pondérable", t["dossiers"][0]["date"] == "2026-11-09"
 check("filtre machine", t_machine["dossiers"] == [] and t["machines"] == ["Cohésio 1"])
 check("causes en points de marge", t["causes_marge"] and all("valeur" in c for c in t["causes_marge"]), t["causes_marge"])
 check("écart MB calculé", t["ecart_mb_pts"] is not None and t["cout_horaire_median"] is not None)
+d1 = t["dossiers"][0]
+check("marge pondérée = MB ÷ PV des complets", t["mb_pct_pondere"] is not None
+      and abs(t["mb_pct_pondere"] - d1["marge_brute"] / d1["prix_vente"] * 100) < 0.01, (t["mb_pct_pondere"], d1["marge_brute"], d1["prix_vente"]))
+check("devisé pondéré et €/h médian devisé", t["devis_mb_pct_pondere"] is not None and t["devis_cout_horaire_median"] is not None)
 with get_db() as conn:
     conn.execute("UPDATE machines SET rent_suivi_devis=0 WHERE id=1")
     conn.commit()

@@ -739,6 +739,13 @@ def resume_fiche(f: dict, date_fin: Optional[str] = None) -> dict:
     }
 
 
+def _mediane(v: list[float]) -> Optional[float]:
+    if not v:
+        return None
+    k = len(v) // 2
+    return v[k] if len(v) % 2 else (v[k - 1] + v[k]) / 2
+
+
 def _causes(lignes: list[dict], cle: str, en_points: bool) -> list[dict]:
     """Moyenne par cause des marches de cascade, sur les dossiers retenus.
 
@@ -878,6 +885,14 @@ def tableau_de_bord(conn, periode: str = PERIODE_DEFAUT, machine: str = "", forc
         if g in comptes:
             comptes[g] += 1
     ecarts = [l["mb_pct"]["probable"] - l["devis_mb_pct"] for l in complets if l["devis_mb_pct"] is not None]
+    # Marge de la période PONDÉRÉE (Σ MB ÷ Σ PV) : le dossier de 80 000 € pèse
+    # plus que celui de 2 000 €. Le devisé se pondère de la même façon.
+    pv_tot = sum(_f(l.get("prix_vente")) for l in complets)
+    mb_tot = sum(_f(l.get("marge_brute")) for l in complets)
+    avec_devis = [l for l in complets if l["devis_mb_pct"] is not None and _f(l.get("devis_prix_vente")) > 0]
+    pv_dv = sum(_f(l["devis_prix_vente"]) for l in avec_devis)
+    mb_dv = sum(_f(l["devis_mb_pct"]) * _f(l["devis_prix_vente"]) / 100.0 for l in avec_devis)
+    ehs_dv = sorted(_f(l["devis_cout_horaire"]) for l in complets if l.get("devis_cout_horaire") is not None)
     ehs = sorted(l["cout_horaire"]["probable"] for l in complets)
     mediane = None
     if ehs:
@@ -895,6 +910,9 @@ def tableau_de_bord(conn, periode: str = PERIODE_DEFAUT, machine: str = "", forc
                     "erreurs": erreurs},
         "ecart_mb_pts": round(sum(ecarts) / len(ecarts), 2) if ecarts else None,
         "cout_horaire_median": round(mediane, 1) if mediane is not None else None,
+        "mb_pct_pondere": round(mb_tot / pv_tot * 100.0, 2) if pv_tot > 0 else None,
+        "devis_mb_pct_pondere": round(mb_dv / pv_dv * 100.0, 2) if pv_dv > 0 else None,
+        "devis_cout_horaire_median": round(_mediane(ehs_dv), 1) if ehs_dv else None,
         "causes_marge": _causes(complets, "cascade_marge", True),
         "causes_cout_horaire": _causes(complets, "cascade_cout_horaire", False),
         "dossiers": lignes,

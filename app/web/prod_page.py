@@ -148,10 +148,10 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/mysifa_confirm.js?v=4"></script>
 <!-- Fiche rentabilite d'un dossier, devise contre reel (Pilotage de Rentabilite) -->
-<link rel="stylesheet" href="/static/mysifa_rent_fiche.css?v=6">
+<link rel="stylesheet" href="/static/mysifa_rent_fiche.css?v=7">
 <script src="/static/mysifa_rent_fiche.js?v=5"></script>
 <!-- Rentabilite > Tableau de bord (nuage MB x cout horaire, causes, liste) -->
-<script src="/static/mysifa_rent_tableau.js?v=5"></script>
+<script src="/static/mysifa_rent_tableau.js?v=6"></script>
 <!-- Rentabilite > lecture d'un devis : resultat, chaine du classeur, sensibilite -->
 <script src="/static/mysifa_rent_devis.js?v=3"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent29-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit4-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp53"></script>

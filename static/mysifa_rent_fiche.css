@@ -211,3 +211,15 @@
 .rt-hors-axe { stroke: var(--text); stroke-width: 2; stroke-dasharray: 2 2; }
 .rt-lecture { font-size: 13px; color: var(--text2); background: var(--accent-bg); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
 .rf-etat-bad { color: var(--danger); border-color: var(--danger); background: var(--danger-bg); }
+
+/* Les deux chiffres de la période : marge pondérée, coût horaire médian. */
+.rt-kpis-forts { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.rt-kpi-fort { padding: 16px 18px; }
+.rt-kpi-fort .rt-kpi-v { font-size: 40px; line-height: 1.1; }
+.rt-kpi-ligne { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.rt-kpi-u { font-size: 18px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.rt-kpi-fort.rt-ok .rt-kpi-v { color: var(--success); }
+.rt-kpi-fort.rt-bad .rt-kpi-v { color: var(--danger); }
+.rt-kpi-ecart { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rt-ecart-ok { color: var(--success); }
+.rt-ecart-bad { color: var(--danger); }
