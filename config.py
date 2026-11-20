@@ -1391,6 +1391,32 @@ DEVIS_TOLERANCE_COHERENCE = float(os.getenv("DEVIS_TOLERANCE_COHERENCE", "0.05")
 # qui a produit un chiffre, des mois après.
 DEVIS_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "devis")
 
+# ─── Rentabilité — devisé contre réel ─────────────────────────────
+# Valeurs PAR DÉFAUT : la migration `rentabilite_parametres` les pose dans
+# `rent_parametres`, d'où elles se modifient dans l'écran (arbitrage d'Eugène
+# du 20/11/2026 : 325 €/h par défaut, ajustable). Le code lit la table via
+# `app/services/rentabilite_parametres.py`, jamais ces constantes en direct.
+#
+# Un dossier est réussi quand sa marge brute ET son coût horaire (marge brute
+# par heure machine, cellule « Cout Horaire » du classeur) passent les deux
+# seuils sur TOUTE leur fourchette.
+RENT_SEUIL_MB_PCT = float(os.getenv("RENT_SEUIL_MB_PCT", "40"))
+RENT_SEUIL_COUT_HORAIRE = float(os.getenv("RENT_SEUIL_COUT_HORAIRE", "325"))
+# Fourchettes des valeurs réelles, selon la précision de leur source. Arbitrées
+# le 20/11/2026 : métrage et matière au total compteur ou au déstockage, donc
+# fiables à 1 % ; la durée totale à 3 % ; l'erreur de temps se concentre au
+# passage calage → production, d'où une fourchette dédiée en minutes.
+RENT_FOURCHETTE_DUREE_PCT = float(os.getenv("RENT_FOURCHETTE_DUREE_PCT", "3"))
+RENT_FOURCHETTE_FRONTIERE_MN = float(os.getenv("RENT_FOURCHETTE_FRONTIERE_MN", "20"))
+RENT_FOURCHETTE_METRAGE_PCT = float(os.getenv("RENT_FOURCHETTE_METRAGE_PCT", "1"))
+RENT_FOURCHETTE_MATIERE_PCT = float(os.getenv("RENT_FOURCHETTE_MATIERE_PCT", "1"))
+# Au-delà de cet écart entre la surface du compteur et celle de MyStock, ce
+# n'est plus de l'imprécision mais une erreur de saisie.
+RENT_ECART_CROISEMENT_PCT = float(os.getenv("RENT_ECART_CROISEMENT_PCT", "2"))
+# Écart toléré entre un poste lu dans un devis et le même poste recalculé par
+# le moteur. Au-delà, le devis est signalé : libellé mal lu ou formule modifiée.
+RENT_TOLERANCE_CONTROLE_PCT = float(os.getenv("RENT_TOLERANCE_CONTROLE_PCT", "1"))
+
 # ─── MyPrint — étiquettes spécifiques ─────────────────────────────
 # Tous les rôles qui ont la tuile MyPrint créent, modifient et impriment
 # (arbitrage d'Eugène du 14/10/2026). La file des demandes de nouveau format

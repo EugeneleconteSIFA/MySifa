@@ -536,6 +536,7 @@ OBJETS = {
 # Bloc → d'où se reconstituerait sa courbe : l'historique est déjà en base,
 # on ne le relève pas.
 RECONSTITUABLES = {
+    "prod.rentabilite.verdicts": "recalculable : chaque fiche se refait depuis devis, saisies, MyStock et factures",
     "prod.ensemble.quantites": "série par jour en base (by_day de /api/dashboard/production)",
     "prod.ensemble.temps": "série par jour en base (by_day de /api/dashboard/production)",
     "prod.ensemble.sanity": "recalculable sur les saisies datées de MyProd",

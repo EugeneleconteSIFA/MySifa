@@ -38,7 +38,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from config import ROLES_ERP
+from config import ROLES_ERP, ROLES_ADMIN
 from app.services import blocs_registre as reg
 from app.services import boutons_flottants as bf
 from app.services.auth_service import (
@@ -59,7 +59,7 @@ def _now() -> str:
 
 # Applications ouvertes par rôle et non par le contrôle d'accès des applis :
 # l'indicateur suit la même règle que la page et son API.
-_ACCES_PAR_ROLE = {"erp": ROLES_ERP}
+_ACCES_PAR_ROLE = {"erp": ROLES_ERP, "rentabilite": ROLES_ADMIN}
 
 
 def _bloc_accessible(user: dict, bloc: reg.Bloc) -> bool:
