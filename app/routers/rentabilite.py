@@ -1855,7 +1855,7 @@ def fiche_rentabilite_dossier(planning_entry_id: int, request: Request):
 
 
 @router.get("/api/rentabilite/tableau-de-bord")
-def tableau_de_bord_rentabilite(request: Request, periode: str = "last30", machine: str = "",
+def tableau_de_bord_rentabilite(request: Request, periode: str = "ouvres7", machine: str = "",
                                 force: int = 0):
     """Dossiers terminés jugés devisé contre réel, compteurs et causes d'écart.
 

@@ -11,7 +11,9 @@ Ce que le test garde :
 - la valorisation MyStock d'un dossier (bobines × laize × mètres × €/m²,
   adhésif au kilo, mandrins et cartons à la palette, retours déduits) ;
 - le prix de vente lu sur la facture RVGI, par numéro de commande et article ;
-- le dossier « complet » quand il est produit, déstocké et facturé ;
+- le dossier « complet » quand il est produit, déstocké et facturé, et
+  seulement si rien ne fait douter du résultat : sinon « à vérifier » ;
+- la fenêtre « 7 derniers jours ouvrés » lue dans le calendrier du planning ;
 - le croisement compteur / MyStock qui SIGNALE l'écart réel de ce dossier
   (29 395 m au compteur, 23 885 m déstockés après relecture) ;
 - un créneau sans devis, ou sans montants lus, rend un état explicite.
@@ -184,7 +186,17 @@ check("autre dossier exclu", conso[31]["quantite"] < 2.5)
 print("2. Fiche du dossier 9932862")
 with get_db() as conn:
     f = fiche_rentabilite(conn, 707)
-check("dossier complet : produit, déstocké, facturé", f["etat"] == "complet" and not f["manque"], (f["etat"], f.get("manque")))
+check("compteur et MyStock qui divergent : à vérifier, pas complet",
+      f["etat"] == "a_verifier" and not f["manque"] and not f["hors_norme"]
+      and any("Compteur et MyStock" in r for r in f["raisons"]), (f["etat"], f.get("raisons")))
+from app.services import rentabilite_parametres          # noqa: E402
+with get_db() as conn:
+    # Tolérance élargie : le même dossier, sans doute, redevient complet.
+    rentabilite_parametres.ecrire(conn, "ecart_croisement_pct", 25, "test")
+    conn.commit()
+    f = fiche_rentabilite(conn, 707)
+check("dossier complet : produit, déstocké, facturé, sans doute", f["etat"] == "complet" and not f["manque"]
+      and not f["raisons"], (f["etat"], f.get("manque"), f.get("raisons")))
 check("racine de commande", f["racine"] == "9932862")
 pv = next(p for p in f["parametres"] if p["parametre"] == "Prix de vente")
 check("PV = facture RVGI 6 756 € (corbeille exclue)", pv["reel"] == 6756 and pv["source"].startswith("facture RVGI"), pv)
@@ -192,7 +204,8 @@ laize = next(p for p in f["parametres"] if p["parametre"] == "Laize")
 check("laize réelle 470 mm lue sur les bobines", laize["reel"] == 470 and not laize["modifie"], laize)
 met = next(p for p in f["parametres"] if p["parametre"] == "Métrage")
 check("métrage compteur 29 395 m", met["reel"] == 29395, met)
-check("écart compteur / MyStock signalé", any("Compteur et MyStock" in a["message"] for a in f["alertes"]), f["alertes"])
+check("écart compteur / MyStock dans la fourchette retenue", f["parametres"] and any(
+      p["parametre"] == "Surface consommée" and "compteur et MyStock" in p["source"] for p in f["parametres"]), f["parametres"])
 emb = next(p for p in f["parametres"] if p["parametre"] == "Emballage")
 check("emballage mesuré dans MyStock : 119 €", emb["reel"] == 119 and emb["source"] == "sorties MyStock", emb)
 tr = next(p for p in f["parametres"] if p["parametre"] == "Transport")
@@ -246,6 +259,18 @@ from app.services.rentabilite_reel import bornes_periode, tableau_de_bord  # noq
 check("période 30 jours", bornes_periode("last30", date(2026, 11, 20)) == ("2026-10-22", "2026-11-20"))
 check("période année", bornes_periode("thisYear", date(2026, 11, 20)) == ("2026-01-01", "2026-11-20"))
 check("période tout", bornes_periode("all") == (None, None))
+from app.services.rentabilite_reel import debut_jours_ouvres  # noqa: E402
+with get_db() as conn:
+    # Vendredi 20/11/2026 : 7 jours ouvrés = du jeudi 12 au vendredi 20.
+    check("7 jours ouvrés : week-end sauté", debut_jours_ouvres(conn, 7, date(2026, 11, 20)) == date(2026, 11, 12))
+    conn.execute("INSERT INTO planning_holidays (machine_id, date, is_off) SELECT id, '2026-11-16', 1 FROM machines")
+    conn.commit()
+    # 16/11 off pour toutes les machines, 11/11 férié au calendrier : on remonte au 10.
+    check("7 jours ouvrés : jours off de toutes les machines sautés",
+          debut_jours_ouvres(conn, 7, date(2026, 11, 20)) == date(2026, 11, 10))
+    check("période 7 jours ouvrés par défaut", bornes_periode("ouvres7", date(2026, 11, 20), conn) == ("2026-11-10", "2026-11-20"))
+    conn.execute("DELETE FROM planning_holidays WHERE date='2026-11-16'")
+    conn.commit()
 with get_db() as conn:
     t = tableau_de_bord(conn, "all")
 check("dossier non facturé : en attente, hors compteurs",
