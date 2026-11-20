@@ -730,6 +730,36 @@ ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_AD
 # périmètre ne donne aucun droit d'écriture sur RVGI.
 ROLES_ERP = ROLES_ADMIN | {ROLE_EXPEDITION}
 
+# ADV (/adv) : le tableau de bord du carnet de commandes, côté administration
+# des ventes. Le tableau est ouvert à l'administration et à la direction ;
+# l'onglet Prépa l'est aussi à la logistique et à l'expédition, qui y passent
+# une préparation à « en cours » puis « prête ».
+ROLES_ADV = set(ROLES_ADMIN)
+ROLES_ADV_PREPA = ROLES_ADV | {ROLE_LOGISTIQUE, ROLE_EXPEDITION}
+
+# Les cinq étapes de la chaîne d'une ligne de commande, dans l'ordre où elles
+# se franchissent, et les quatre états qu'une étape peut prendre.
+ADV_ETAPES = (
+    ("bat", "BAT"),
+    ("prod", "Prod"),
+    ("stock", "Stock"),
+    ("prepa", "Prépa"),
+    ("depart", "Départ prévu"),
+)
+ADV_ETATS = (
+    ("oui", "Oui"),
+    ("en_cours", "En cours"),
+    ("non", "Non"),
+    ("sans_objet", "Sans objet"),
+)
+ADV_PREPA_STATUTS = (
+    ("a_preparer", "À préparer"),
+    ("en_cours", "En cours"),
+    ("prete", "Prête"),
+)
+# L'onglet Prépa montre ce qui part dans les N prochains jours, retards compris.
+ADV_PREPA_HORIZON_JOURS = int(os.getenv("ADV_PREPA_HORIZON_JOURS", "21"))
+
 # Nouvel ERP (remplaçant de RVGI), servi sur son propre sous-domaine par le
 # middleware `router_hote_erp` de main.py : une requête dont le Host figure dans
 # ERP2_HOSTS est servie sous ERP2_PREFIXE. En construction, sans données réelles :

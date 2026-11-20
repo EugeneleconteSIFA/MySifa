@@ -1393,7 +1393,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js"></script>
+<script src="/static/mysifa_cmdk.js?v=2"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_poste_bobine.js?v=1"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.1"></script>

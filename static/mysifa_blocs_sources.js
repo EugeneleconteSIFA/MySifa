@@ -454,6 +454,27 @@
         });
       });
     },
+    // ADV (/adv) : mêmes compteurs que les tuiles de static/mysifa_adv.js.
+    "adv.commandes.kpis": function (ctx) {
+      return ctx.json("/api/adv/commandes").then(function (d) {
+        var k = d.compteurs || null;
+        return erpCompte({
+          lignes: k && k.carnet.lignes, commandes: k && k.carnet.commandes,
+          retard: k && k.retard.lignes, semaine: k && k.semaine.lignes, pretes: k && k.pretes.lignes
+        });
+      });
+    },
+    "adv.prepa.kpis": function (ctx) {
+      return ctx.json("/api/adv/prepa").then(function (d) {
+        var g = {};
+        (d.groupes || []).forEach(function (x) { g[x.cle] = x.lignes; });
+        if (!d.groupes) return erpCompte({});
+        return erpCompte({
+          preparable: g.preparable || 0, "en-cours": g.en_cours || 0, partiel: g.partiel || 0,
+          attente: g.attente || 0, pretes: g.pretes || 0
+        });
+      });
+    },
     "erp.direction.kpis": function (ctx) {
       return ctx.json("/api/erp/tdb/direction").then(function (d) {
         return erpEuros({

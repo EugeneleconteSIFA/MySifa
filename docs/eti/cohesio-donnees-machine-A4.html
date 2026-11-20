@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Cohésio · données machine</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  :root{
+    --ink:#0f172a; --ink2:#334155; --mute:#64748b; --line:#e2e8f0;
+    --accent:#0891b2; --accent-bg:#ecfeff;
+    --r:#0891b2; --rbg:#ecfeff;
+    --a:#d97706; --abg:#fffbeb;
+    --m:#7c3aed; --mbg:#f5f3ff;
+    --ok:#059669; --okbg:#ecfdf5;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#94a3b8;font-family:"Segoe UI",-apple-system,system-ui,Arial,sans-serif;
+    color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;height:296mm;background:#fff;margin:0 auto;padding:14mm 15mm 8mm;overflow:hidden;
+    display:flex;flex-direction:column;gap:6mm}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:2.8mm}
+  .brand{font-size:10pt;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:24pt;font-weight:800;letter-spacing:-.4px;margin-top:1.5mm;line-height:1.1}
+  .sub{font-size:10pt;color:var(--mute);margin-top:1.6mm;line-height:1.4}
+  .sub b{color:var(--ink2)}
+
+  .obj{display:grid;grid-template-columns:repeat(3,1fr);gap:2.5mm}
+  .o{border-radius:2.2mm;padding:3.5mm 4mm;font-size:10pt;line-height:1.35;color:var(--ink2)}
+  .o b{display:flex;align-items:center;gap:2mm;font-size:11pt;margin-bottom:.8mm}
+  .o.r{background:var(--rbg)} .o.r b{color:var(--r)}
+  .o.a{background:var(--abg)} .o.a b{color:var(--a)}
+  .o.m{background:var(--mbg)} .o.m b{color:var(--m)}
+
+  .k{display:inline-flex;align-items:center;justify-content:center;width:5.4mm;height:5.4mm;
+    border-radius:1.2mm;font-size:8.5pt;font-weight:800;color:#fff;flex-shrink:0}
+  .k.r{background:var(--r)} .k.a{background:var(--a)} .k.m{background:var(--m)}
+  .k.off{background:transparent;border:1px solid var(--line)}
+
+  h2{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--ink2);
+    margin-bottom:1.4mm;display:flex;justify-content:space-between;align-items:baseline}
+  h2 span{text-transform:none;letter-spacing:0;font-weight:600;color:var(--mute);font-size:7.6pt}
+
+  table{width:100%;border-collapse:collapse;font-size:11.5pt}
+  th{text-align:left;font-size:8.5pt;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+    color:var(--mute);padding:1.2mm 1.5mm;border-bottom:1.5px solid var(--ink)}
+  td{padding:2.6mm 1.5mm;border-bottom:1px dotted var(--line);vertical-align:middle;line-height:1.3}
+  tr.grp td{background:#f8fafc;font-size:8.5pt;font-weight:800;text-transform:uppercase;
+    letter-spacing:.7px;color:var(--ink2);border-bottom:1px solid var(--line);padding:1mm 1.5mm}
+  td.n{width:6mm;font-weight:800;color:var(--mute)}
+  td.d{width:72mm;font-weight:700}
+  td.d small{display:block;font-weight:500;color:var(--mute);font-size:7.3pt}
+  td.t{width:18mm;white-space:nowrap}
+  td.t .k{margin-right:.6mm}
+  td.w{color:var(--ink2)}
+  td.w b{color:var(--ink)}
+  tr.new td.d strong::after{content:"nouveau";margin-left:1.6mm;font-size:6.4pt;font-weight:800;
+    text-transform:uppercase;letter-spacing:.5px;color:var(--m);border:1px solid var(--m);
+    border-radius:1mm;padding:0 1mm;vertical-align:1px}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:2.5mm}
+  .box{border:1px solid var(--line);border-radius:2.5mm;padding:3.5mm 4.5mm}
+  .box.ok{border-color:var(--ok);background:var(--okbg)}
+  .box .bt{font-size:9pt;font-weight:800;text-transform:uppercase;letter-spacing:.7px;margin-bottom:1.2mm}
+  .box.ok .bt{color:var(--ok)}
+  .box p,.box li{font-size:10.5pt;color:var(--ink2);line-height:1.38}
+  .box ul{list-style:none}
+  .box li{padding:.45mm 0 .45mm 3mm;position:relative}
+  .box li::before{content:"·";position:absolute;left:0;font-weight:800;color:var(--ink)}
+  .box b{color:var(--ink)}
+
+  footer{margin-top:auto;padding-top:2mm;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;font-size:9pt;color:var(--mute)}
+
+  @media print{ body{background:#fff} .page{margin:0;box-shadow:none} }
+  @media screen{ .page{box-shadow:0 4px 24px rgba(0,0,0,.25);margin:14px auto} }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="brand">SIFA · demande à ETI Converting</div>
+    <h1>Cohésio · 14 données machine</h1>
+    <p class="sub">Lecture seule · Cohésio 1 et 2 · novembre 2026</p>
+  </header>
+
+  <div class="obj">
+    <div class="o r"><b><span class="k r">R</span>Rentabilité</b>Calage, vitesse, production</div>
+    <div class="o a"><b><span class="k a">A</span>Arrêts</b>Cause et contexte</div>
+    <div class="o m"><b><span class="k m">M</span>Maintenance</b>Prévenir la panne</div>
+  </div>
+
+  <table>
+    <thead><tr><th></th><th>Donnée</th><th>Pour</th><th>Apporte</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="4">Événements et compteurs</td></tr>
+      <tr><td class="n">1</td><td class="d">État machine</td><td class="t"><span class="k r">R</span><span class="k a">A</span></td><td class="w">Temps de calage et de production</td></tr>
+      <tr><td class="n">2</td><td class="d">Code alarme</td><td class="t"><span class="k a">A</span><span class="k m">M</span></td><td class="w">Cause de l’arrêt</td></tr>
+      <tr><td class="n">3</td><td class="d">Arrêt d’urgence (zone)</td><td class="t"><span class="k a">A</span></td><td class="w">Origine de l’arrêt</td></tr>
+      <tr><td class="n">4</td><td class="d">Compteur de métrage</td><td class="t"><span class="k r">R</span></td><td class="w">Métrage produit et de calage</td></tr>
+      <tr><td class="n">5</td><td class="d">Raccord bobine mère</td><td class="t"><span class="k a">A</span></td><td class="w">Casses après raccord</td></tr>
+      <tr><td class="n">6</td><td class="d">Cycle turret</td><td class="t"><span class="k r">R</span><span class="k m">M</span></td><td class="w">Production, usure</td></tr>
+      <tr class="grp"><td colspan="4">Valeurs continues · consigne et mesure</td></tr>
+      <tr><td class="n">7</td><td class="d">Vitesse de ligne</td><td class="t"><span class="k r">R</span><span class="k a">A</span></td><td class="w">Calage, vitesse de croisière</td></tr>
+      <tr><td class="n">8</td><td class="d">Tension dérouleur</td><td class="t"><span class="k a">A</span><span class="k m">M</span></td><td class="w">Casses bande</td></tr>
+      <tr><td class="n">9</td><td class="d">Tension échenillage</td><td class="t"><span class="k a">A</span><span class="k m">M</span></td><td class="w">Casses échenillage</td></tr>
+      <tr><td class="n">10</td><td class="d">Tension rembobineur</td><td class="t"><span class="k a">A</span><span class="k m">M</span></td><td class="w">Bobinage, turret</td></tr>
+      <tr><td class="n">11</td><td class="d">Température enduction et fondoir</td><td class="t"><span class="k a">A</span><span class="k m">M</span></td><td class="w">Bulles de colle, résistance</td></tr>
+      <tr><td class="n">12</td><td class="d">Débit pompe de colle</td><td class="t"><span class="k a">A</span></td><td class="w">Surdosage</td></tr>
+      <tr><td class="n">13</td><td class="d">Courant des moteurs</td><td class="t"><span class="k m">M</span></td><td class="w">Usure mécanique</td></tr>
+      <tr><td class="n">14</td><td class="d">Compteurs d’usage</td><td class="t"><span class="k m">M</span></td><td class="w">Entretien selon l’usage</td></tr>
+    </tbody>
+  </table>
+
+  <div class="two">
+    <div class="box ok">
+      <div class="bt">Calculé par MySifa</div>
+      <ul>
+        <li>Calage = sous la vitesse de croisière</li>
+        <li>60 s avant chaque arrêt, relevé à la seconde</li>
+        <li>Alertes de dérive</li>
+      </ul>
+    </div>
+    <div class="box">
+      <div class="bt">À fournir par ETI</div>
+      <ul>
+        <li>Modèle automates et variateurs</li>
+        <li>Adresse des 14 variables</li>
+        <li>Liste des codes alarme</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer><span>SIFA · Roubaix</span><span>Contact : Eugène Leconte</span></footer>
+</div>
+</body>
+</html>
