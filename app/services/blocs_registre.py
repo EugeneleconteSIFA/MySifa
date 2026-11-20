@@ -294,6 +294,15 @@ BLOCS: dict[str, Bloc] = {
         appli="prod", libelle="Synthèse par jour", url="/prod?page=production",
         type="tableau", valeurs=(("lignes", "Jours"),), acces="prod",
     ),
+    # ── MyProd › Rentabilité › Tableau de bord (static/mysifa_rent_tableau.js) ──
+    # Ouvert par rôle (ROLES_ADMIN), comme la page et son API.
+    "prod.rentabilite.verdicts": Bloc(
+        appli="prod", libelle="Rentabilité des dossiers", url="/prod?page=rentabilite",
+        type="chiffre",
+        valeurs=(("reussis", "Réussis"), ("limite", "À la limite"),
+                 ("sous-seuil", "Sous un seuil"), ("attente", "En attente")),
+        acces="rentabilite",
+    ),
     # ── MyExpé › Pilotage (app/web/expe_pilotage_assets.py) ──
     "expe.pilotage.resume": Bloc(
         appli="expe", libelle="Pilotage des expéditions", url="/expe#pilotage",
