@@ -458,6 +458,29 @@ def r_erp_achats(objet, f):
         "retard": (o.get("retard") or {}).get("commandes"), "receptions": (d.get("receptions") or {}).get("lignes")})
 
 
+def r_adv_commandes(objet, f):
+    # adv.commandes.kpis — même décompte que la page (static/mysifa_adv.js)
+    from app.routers import adv
+    k = (adv.commandes(_requete()) or {}).get("compteurs") or {}
+    if not k:
+        return {}
+    return {"lignes": k["carnet"]["lignes"], "commandes": k["carnet"]["commandes"],
+            "retard": k["retard"]["lignes"], "semaine": k["semaine"]["lignes"],
+            "pretes": k["pretes"]["lignes"]}
+
+
+def r_adv_prepa(objet, f):
+    # adv.prepa.kpis — une valeur par groupe de l'onglet Prépa
+    from app.routers import adv
+    d = adv.prepa(_requete(), None) or {}
+    g = {x["cle"]: x["lignes"] for x in d.get("groupes") or []}
+    if not g:
+        return {}
+    return {"preparable": g.get("preparable", 0), "en-cours": g.get("en_cours", 0),
+            "partiel": g.get("partiel", 0), "attente": g.get("attente", 0),
+            "pretes": g.get("pretes", 0)}
+
+
 RELEVEURS = {
     "stock.dashboard.reappro": r_stock_reappro,
     "stock.dashboard.kpis": r_stock_kpis,
@@ -484,6 +507,8 @@ RELEVEURS = {
     "compta.rh.contrats": r_contrats,
     "prod.of.a-traiter": r_of,
     "erp.adv.kpis": r_erp_adv,
+    "adv.commandes.kpis": r_adv_commandes,
+    "adv.prepa.kpis": r_adv_prepa,
     "erp.direction.kpis": r_erp_direction,
     "erp.achats.kpis": r_erp_achats,
 }

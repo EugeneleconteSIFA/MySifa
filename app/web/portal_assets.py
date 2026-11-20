@@ -1930,6 +1930,23 @@ function renderPortal(){
     )});
   }
 
+  // ADV : carnet de commandes (ROLES_ADV) et onglet Prépa, ouvert aussi à la
+  // logistique et à l'expédition (ROLES_ADV_PREPA, config.py).
+  if(isSuper || ['direction','administration','administration_ventes','administration_technique','logistique','expedition'].includes(urole)){
+    const id='adv';
+    const prepaSeule=!isSuper && ['logistique','expedition'].includes(urole);
+    tileSpecs.push({id,el:h('div',{
+      className:'portal-app',
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href=prepaSeule?'/adv?onglet=prepa':'/adv';}
+    },
+      h('div',{className:'portal-app-icon'},iconEl('clipboard',28)),
+      h('div',{className:'portal-app-name'},'ADV'),
+      h('div',{className:'portal-app-desc'},prepaSeule?'Préparations à faire':'Carnet de commandes & préparations')
+    )});
+  }
+
   // Messagerie: icône dans le coin (sous Paramètres) pour le super admin
 
   if(isCompta){

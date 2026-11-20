@@ -74,6 +74,7 @@ APPLIS: tuple[Appli, ...] = (
     Appli("rh_coffre", "Coffre RH", ("/rh/coffre",)),
     Appli("coffre", "Coffres", ("/coffre",)),
     Appli("erp", "ERP RVGI", ("/erp",)),
+    Appli("adv", "ADV", ("/adv",)),
     Appli("reunions", "Réunions", ("/reunions",)),
     Appli("notes", "Mes notes", ("/note",)),
     Appli("taches", "Tâches", ("/taches",)),
