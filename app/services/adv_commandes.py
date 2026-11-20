@@ -357,6 +357,9 @@ def _etape_prod(l, dossiers) -> Dict[str, Any]:
     if l["origine"] == tdb.ORIG_SOUS_TRAITANCE:
         return _etape("sans_objet", "Sous-traitance")
     if not dossiers:
+        # Rien à fabriquer : le stock MyStock attribué couvre la ligne.
+        if l.get("a_fabriquer", 1) <= 0:
+            return _etape("sans_objet", "Couvert par le stock MyStock, rien à fabriquer")
         return _etape("non", "Aucun dossier au planning")
     statuts = [d.get("statut") for d in dossiers]
     if all(s == "termine" for s in statuts):
@@ -581,6 +584,8 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "maj_par": (p or {}).get("maj_par"),
         }
         st = l["stock"]
+        # Ce qu'il reste à produire une fois le stock MyStock attribué servi.
+        l["a_fabriquer"] = max(l["reste"] - st["alloue"], 0.0)
         etapes = {
             "bat": _etape_bat(l, bats, deja),
             "prod": _etape_prod(l, ds),
