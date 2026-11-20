@@ -231,8 +231,11 @@
     tete.appendChild(el('span', 'rf-verdict rf-' + (v ? v.cls : 'neutre'), v ? v.lib : 'Verdict non calculable'));
     if (f.etat === 'a_verifier') {
       tete.appendChild(infobulle(el('span', 'rf-etat rf-etat-bad', 'À vérifier'),
-        {titre: 'Résultat hors norme', note: (f.hors_norme || []).join(', ')
-          + ' : facture ou matière probablement rattachée au mauvais dossier.'}));
+        (f.hors_norme && f.hors_norme.length)
+          ? {titre: 'Résultat hors norme', note: f.hors_norme.join(', ')
+            + ' : facture ou matière probablement rattachée au mauvais dossier.'}
+          : {titre: 'Résultat incertain', note: (f.raisons || []).join(' ')
+            + ' Exclu du tableau de bord tant que ce n\'est pas corrigé.'}));
     } else if (f.etat === 'provisoire') {
       var raison = (f.manque && f.manque.length) ? 'il manque : ' + f.manque.join(', ')
         : 'marché partiellement facturé';

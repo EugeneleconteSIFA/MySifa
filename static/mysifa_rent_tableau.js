@@ -18,7 +18,7 @@
   'use strict';
 
   var SVGNS = 'http://www.w3.org/2000/svg';
-  var PERIODES = [['last30', '30 jours'], ['last90', '90 jours'], ['thisYear', 'Cette année'], ['all', 'Tout']];
+  var PERIODES = [['ouvres7', '7 jours ouvrés'], ['last30', '30 jours'], ['last90', '90 jours'], ['thisYear', 'Cette année'], ['all', 'Tout']];
   var VERDICT = {
     reussi: {lib: 'Réussi', cls: 'ok'},
     limite: {lib: 'À la limite', cls: 'warn'},
@@ -79,7 +79,7 @@
     if (F && F.infobulle) F.infobulle(cible, texte); else if (cible) cible.title = typeof texte === 'string' ? texte : (texte.titre || '');
     return cible;
   }
-  function cle(o) { return (o.periode || 'last30') + '|' + (o.machine || ''); }
+  function cle(o) { return (o.periode || 'ouvres7') + '|' + (o.machine || ''); }
   function position(f, seuil) {
     if (!f) return 'neutre';
     return f.bas >= seuil ? 'ok' : (f.haut < seuil ? 'bad' : 'warn');
@@ -94,7 +94,7 @@
     PERIODES.forEach(function (p) {
       var c = el('button', 'rt-chip', p[1]);
       c.type = 'button';
-      c.setAttribute('aria-pressed', String((o.periode || 'last30') === p[0]));
+      c.setAttribute('aria-pressed', String((o.periode || 'ouvres7') === p[0]));
       c.addEventListener('click', function () { o.surFiltre({periode: p[0]}); });
       gp.appendChild(c);
     });
@@ -144,7 +144,7 @@
     tuile('rt-bad', 'Sous un seuil', nb(c.sous_seuil), 'Marge brute ou coût horaire entièrement sous son seuil');
     tuile('', 'En attente', nb(c.attente), 'Dossiers terminés sans facture, sans déstockage ou sans 89 : pas encore jugés');
     if (c.a_verifier) tuile('rt-bad', 'À vérifier', nb(c.a_verifier),
-      'Résultat hors norme : facture ou matière probablement rattachée au mauvais dossier. Exclus des compteurs et du nuage.');
+      'Résultat hors norme ou incertain (compteur et MyStock qui divergent, matière sans prix, temps absent). Exclus des compteurs et du nuage.');
     tuile('', 'Écart MB', d.ecart_mb_pts == null ? '—' : signe(d.ecart_mb_pts, 1) + ' pt',
       'Marge brute réelle moins marge devisée, moyenne par dossier complet');
     tuile('', '€/h médian', d.cout_horaire_median == null ? '—' : nb(d.cout_horaire_median),
@@ -158,7 +158,7 @@
     var tete = el('div', 'rt-carte-tete');
     tete.appendChild(el('b', '', 'Marge brute et coût horaire par dossier'));
     var leg = el('div', 'rt-legende');
-    [['ok', 'Réussi'], ['warn', 'À la limite'], ['bad', 'Sous un seuil'], ['devis', 'Devis'], ['prov', 'Provisoire']]
+    [['ok', 'Réussi'], ['warn', 'À la limite'], ['bad', 'Sous un seuil'], ['devis', 'Devis']]
       .forEach(function (x) {
         var s = el('span', 'rt-leg');
         s.appendChild(el('i', 'rt-pt rt-pt-' + x[0]));
@@ -168,10 +168,13 @@
     tete.appendChild(leg);
     carte.appendChild(tete);
 
-    var pts = (d.dossiers || []).filter(function (l) { return l.mb_pct && l.cout_horaire && l.etat !== 'a_verifier'; });
+    // Seuls les dossiers COMPLETS : produits, déstockés, facturés, sans
+    // avertissement. Un provisoire ou un résultat douteux brouillerait le
+    // nuage ; ils restent dans la liste, avec ce qui leur manque.
+    var pts = (d.dossiers || []).filter(function (l) { return l.mb_pct && l.cout_horaire && l.etat === 'complet'; });
     var S = d.seuils || {mb_pct: 40, cout_horaire: 325};
     if (!pts.length) {
-      carte.appendChild(el('div', 'rt-vide', 'Aucun dossier mesurable sur cette période.'));
+      carte.appendChild(el('div', 'rt-vide', 'Aucun dossier complet sur cette période.'));
       return carte;
     }
     // Axes calés sur le gros des dossiers (5e – 95e centile, seuils compris) ;
@@ -226,13 +229,13 @@
     pts.forEach(function (l) {
       var v = (l.verdict || {}).global, cls = (VERDICT[v] || {cls: 'neutre'}).cls;
       var cx = X(l.cout_horaire.probable), cy = Y(l.mb_pct.probable);
-      var g = svg('g', {'class': 'rt-point' + (l.etat !== 'complet' ? ' rt-provisoire' : ''), tabindex: '0',
+      var g = svg('g', {'class': 'rt-point', tabindex: '0',
         role: 'button', 'aria-label': (l.client || '') + ' ' + (l.reference || '')});
       var vd = VERDICT[v];
       bulle(g, {titre: l.client || '(client non renseigné)',
         sous: [l.reference, l.machine].filter(Boolean).join(' · '),
-        etat: l.etat !== 'complet' ? 'Provisoire' : (vd ? vd.lib : ''),
-        ton: l.etat !== 'complet' ? 'inconnu' : ({ok: 'vert', warn: 'orange', bad: 'rouge'}[cls] || 'inconnu'),
+        etat: vd ? vd.lib : '',
+        ton: {ok: 'vert', warn: 'orange', bad: 'rouge'}[cls] || 'inconnu',
         lignes: [['Marge brute', nb(l.mb_pct.bas, 1) + ' – ' + nb(l.mb_pct.haut, 1) + ' %'],
                  ['Marge devisée', l.devis_mb_pct != null ? nb(l.devis_mb_pct, 1) + ' %' : ''],
                  ['Coût horaire', nb(l.cout_horaire.bas) + ' – ' + nb(l.cout_horaire.haut) + ' €/h'],
@@ -341,7 +344,16 @@
     var dates = dossiers.map(function (l) { return l.date; }).filter(Boolean).sort();
     if (!dates.length) return [];
     var fin = cleDe(dates[dates.length - 1], grain), cles = [], c = cleDe(dates[0], grain);
-    for (var garde = 0; garde < 2000; garde++) { cles.push(c); if (c === fin) break; c = suivante(c, grain); }
+    var dates_vues = {};
+    dates.forEach(function (x) { dates_vues[x] = true; });
+    for (var garde = 0; garde < 2000; garde++) {
+      // Jour par jour, un samedi ou un dimanche sans dossier n'est pas un
+      // creux de production : il ne prend pas de colonne.
+      var we = grain === 'jour' && [0, 6].indexOf(jourUTC(c).getUTCDay()) >= 0 && !dates_vues[c];
+      if (!we) cles.push(c);
+      if (c === fin) break;
+      c = suivante(c, grain);
+    }
     var parCle = {};
     cles.forEach(function (k) {
       parCle[k] = {cle: k, reussi: 0, limite: 0, sous_seuil: 0, attente: 0, mb: 0, pv: 0, heures: 0, complets: 0};
@@ -370,7 +382,7 @@
   }
 
   function temporel(d, o) {
-    var grain = o.grain || 'semaine', courbe = o.courbe || 'marge';
+    var grain = o.grain || 'jour', courbe = o.courbe || 'marge';
     var carte = el('div', 'rt-carte rt-temps');
     var tete = el('div', 'rt-carte-tete');
     tete.appendChild(el('b', '', 'Dans le temps'));
@@ -561,8 +573,10 @@
         r.appendChild(el('span', 'rt-tag rt-tag-' + (v ? v.cls : 'neutre'), v ? v.lib : 'Non calculable'));
       } else if (l.etat === 'a_verifier') {
         r.appendChild(bulle(el('span', 'rt-tag rt-tag-bad', 'À vérifier'),
-          {titre: 'Résultat hors norme', note: (l.hors_norme || []).join(', ')
-            + ' : facture ou matière probablement rattachée au mauvais dossier.'}));
+          (l.hors_norme && l.hors_norme.length)
+            ? {titre: 'Résultat hors norme', note: l.hors_norme.join(', ')
+              + ' : facture ou matière probablement rattachée au mauvais dossier.'}
+            : {titre: 'Résultat incertain', note: (l.raisons || []).join(' ')}));
       } else if (l.etat === 'provisoire') {
         var t = el('span', 'rt-tag rt-tag-neutre', 'Provisoire');
         bulle(t, {titre: 'Provisoire', note: l.manque && l.manque.length
@@ -611,7 +625,7 @@
     conteneur.appendChild(barre(null, o));
     conteneur.appendChild(el('div', 'rt-attente', 'Calcul en cours…'));
     if (!enCours[k]) {
-      var url = '/api/rentabilite/tableau-de-bord?periode=' + encodeURIComponent(o.periode || 'last30')
+      var url = '/api/rentabilite/tableau-de-bord?periode=' + encodeURIComponent(o.periode || 'ouvres7')
         + (o.machine ? '&machine=' + encodeURIComponent(o.machine) : '')
         + (forcer[k] ? '&force=1' : '');
       delete forcer[k];

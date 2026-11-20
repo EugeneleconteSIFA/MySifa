@@ -526,6 +526,21 @@ def fiche_rentabilite(conn, planning_entry_id: int, relire: bool = True) -> dict
                            "message": "Résultat hors norme (" + ", ".join(hors_norme) + ") : vérifier la facture "
                                       "et la matière rattachées à ce dossier."})
 
+    # Un dossier n'est COMPLET que si l'on est sûr de son résultat : aucun
+    # avertissement (compteur et MyStock qui divergent, matière sans prix,
+    # temps absent, résultat hors norme). Sinon il est « à vérifier » : listé,
+    # jamais compté ni placé sur le nuage. Un provisoire reste provisoire,
+    # il n'est de toute façon pas encore jugé.
+    raisons = [a["message"] for a in alertes if a.get("niveau") == "avertissement"]
+    if hors_norme:
+        etat = "a_verifier"
+    elif provisoire:
+        etat = "provisoire"
+    elif raisons:
+        etat = "a_verifier"
+    else:
+        etat = "complet"
+
     lignes = [
         _ligne("Laize", laize_d, laize_r, "mm", "exacte", "bobines sorties MyStock" if laize_r else "non mesurée"),
         _ligne("Prix matière", prix_m2_retenu(v), prix_m2_r, "€/m²", "exact", source_matiere, 4),
@@ -557,8 +572,9 @@ def fiche_rentabilite(conn, planning_entry_id: int, relire: bool = True) -> dict
 
     return {
         **tete,
-        "etat": "a_verifier" if hors_norme else ("provisoire" if provisoire else "complet"),
+        "etat": etat,
         "hors_norme": hors_norme,
+        "raisons": raisons,
         "ramene": round(k, 4),
         "manque": manque,
         "marche": marche,
@@ -614,13 +630,74 @@ def _ligne(nom, devis, reel, unite, fourchette, source, decimales=0) -> dict:
 # Tableau de bord
 # ══════════════════════════════════════════════════════════════════
 
-PERIODES = ("last30", "last90", "thisYear", "all")
+PERIODES = ("ouvres7", "last30", "last90", "thisYear", "all")
+PERIODE_DEFAUT = "ouvres7"
+JOURS_OUVRES_RECENTS = 7
 
 
-def bornes_periode(periode: str, aujourd_hui=None) -> tuple[Optional[str], Optional[str]]:
+def jour_ouvre(d, machines, off, explicite, samedis) -> bool:
+    """L'usine est ouverte ce jour-là si AU MOINS UNE machine tourne.
+
+    Mêmes règles que le planning (`list_day_work`) et que la normalisation
+    des besoins matières : dimanche fermé ; samedi ouvert seulement sur
+    exception explicite ou `planning_config.samedi_travaille` ; lundi à
+    vendredi ouverts sauf jour off (`planning_holidays`) ou exception à 0.
+    """
+    cle = d.isoformat()
+    ex = explicite.get(cle, {})
+    if d.weekday() == 6:
+        return False
+    if d.weekday() == 5:
+        an, sem, _ = d.isocalendar()
+        cfg = samedis.get(f"{an}-W{sem:02d}", set())
+        return any(ex.get(m, 1 if m in cfg else 0) == 1 and m not in off.get(cle, ()) for m in machines)
+    return any(ex.get(m, 1) == 1 and m not in off.get(cle, ()) for m in machines)
+
+
+def debut_jours_ouvres(conn, n: int, aujourd_hui=None):
+    """Premier jour de la fenêtre des `n` derniers jours ouvrés, aujourd'hui compris.
+
+    Calendrier lu dans le planning (jours off, exceptions, samedis travaillés).
+    Sur une base sans machine ni calendrier, les jours de semaine comptent.
+    """
+    from datetime import date, timedelta
+    j = aujourd_hui or date.today()
+    plancher = j - timedelta(days=n * 3 + 21)
+    machines, off, explicite, samedis = [0], {}, {}, {}
+    try:
+        ids = [int(r[0]) for r in conn.execute("SELECT id FROM machines").fetchall()]
+        if ids:
+            machines = ids
+        for r in conn.execute("SELECT machine_id, date FROM planning_holidays "
+                              "WHERE COALESCE(is_off,1)=1 AND date BETWEEN ? AND ?",
+                              (plancher.isoformat(), j.isoformat())).fetchall():
+            off.setdefault(str(r[1])[:10], set()).add(int(r[0]))
+        for r in conn.execute("SELECT machine_id, date, is_worked FROM planning_day_worked "
+                              "WHERE date BETWEEN ? AND ?", (plancher.isoformat(), j.isoformat())).fetchall():
+            explicite.setdefault(str(r[1])[:10], {})[int(r[0])] = int(r[2] or 0)
+        for r in conn.execute("SELECT machine_id, semaine, samedi_travaille FROM planning_config").fetchall():
+            if int(r[2] or 0) == 1:
+                samedis.setdefault(str(r[1]), set()).add(int(r[0]))
+    except Exception:
+        pass
+    d, vus = j, 0
+    while d >= plancher:
+        if jour_ouvre(d, machines, off, explicite, samedis):
+            vus += 1
+            if vus >= n:
+                return d
+        d -= timedelta(days=1)
+    return plancher
+
+
+def bornes_periode(periode: str, aujourd_hui=None, conn=None) -> tuple[Optional[str], Optional[str]]:
     """`(du, au)` en AAAA-MM-JJ ; `(None, None)` pour « tout »."""
     from datetime import date, timedelta
     j = aujourd_hui or date.today()
+    if periode == "ouvres7":
+        if conn is None:
+            return (j - timedelta(days=9)).isoformat(), j.isoformat()
+        return debut_jours_ouvres(conn, JOURS_OUVRES_RECENTS, j).isoformat(), j.isoformat()
     if periode == "last90":
         return (j - timedelta(days=89)).isoformat(), j.isoformat()
     if periode == "thisYear":
@@ -658,6 +735,7 @@ def resume_fiche(f: dict, date_fin: Optional[str] = None) -> dict:
         "cascade_cout_horaire": f.get("cascade_cout_horaire") or [],
         "alertes": len(f.get("alertes") or []),
         "hors_norme": f.get("hors_norme") or [],
+        "raisons": f.get("raisons") or [],
     }
 
 
@@ -737,7 +815,7 @@ def _relire_en_fond(devis_ids: list[int]) -> None:
     threading.Thread(target=travail, name="rentabilite-relecture-devis", daemon=True).start()
 
 
-def tableau_de_bord(conn, periode: str = "last30", machine: str = "", force: bool = False) -> dict:
+def tableau_de_bord(conn, periode: str = PERIODE_DEFAUT, machine: str = "", force: bool = False) -> dict:
     """Les dossiers terminés et rattachés à un devis validé, jugés un par un.
 
     Les compteurs, l'écart moyen et les causes ne portent que sur les dossiers
@@ -746,8 +824,8 @@ def tableau_de_bord(conn, periode: str = "last30", machine: str = "", force: boo
     exclues, comme dans le Pilotage.
     """
     if periode not in PERIODES:
-        periode = "last30"
-    du, au = bornes_periode(periode)
+        periode = PERIODE_DEFAUT
+    du, au = bornes_periode(periode, conn=conn)
     params = rentabilite_parametres.lire(conn)
     sql = """SELECT e.id, m.nom AS machine,
                     substr(COALESCE(e.planned_end, e.updated_at), 1, 10) AS date_fin

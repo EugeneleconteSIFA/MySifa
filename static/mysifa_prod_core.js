@@ -218,9 +218,9 @@
     // Sous-onglet actif de Rentabilite. Defaut « dossiers » : le travail
     // principal de la page est de relier les devis, pas de lire des chiffres.
     rentSubTab: 'tableau',
-    rentTdbPeriode: 'last30',
+    rentTdbPeriode: 'ouvres7',
     rentTdbMachine: '',
-    rentTdbGrain: 'semaine',
+    rentTdbGrain: 'jour',
     rentTdbCourbe: 'marge',
     // Filtre de la file de travail : a_lier | comparables | tous.
     rentFiltre: 'a_lier',
@@ -366,9 +366,9 @@
     if(S.page==='rentabilite'){
       var rs=S.rentSubTab||'tableau';
       if(rs==='tableau'){
-        if(S.rentTdbPeriode&&S.rentTdbPeriode!=='last30') p.periode=S.rentTdbPeriode;
+        if(S.rentTdbPeriode&&S.rentTdbPeriode!=='ouvres7') p.periode=S.rentTdbPeriode;
         if(S.rentTdbMachine) p.machine=S.rentTdbMachine;
-        if(S.rentTdbGrain&&S.rentTdbGrain!=='semaine') p.grain=S.rentTdbGrain;
+        if(S.rentTdbGrain&&S.rentTdbGrain!=='jour') p.grain=S.rentTdbGrain;
         if(S.rentTdbCourbe&&S.rentTdbCourbe!=='marge') p.courbe=S.rentTdbCourbe;
       }else if(rs==='dossiers'){
         if(S.rentFiltre&&S.rentFiltre!=='a_lier') p.filtre=S.rentFiltre;
@@ -613,10 +613,10 @@
       // liste Dossiers (notification « à venir sans devis ») y mène encore.
       if(!u.a('sous')&&(u.a('filtre')||u.a('entree'))) S.rentSubTab='dossiers';
       if(S.rentSubTab==='tableau'){
-        S.rentTdbPeriode=u.get('periode','last30',['last30','last90','thisYear','all']);
+        S.rentTdbPeriode=u.get('periode','ouvres7',['ouvres7','last30','last90','thisYear','all']);
         var tm=u.get('machine','');
         S.rentTdbMachine=(tm.length<=80&&!/[\u0000-\u001f<>]/.test(tm))?tm:'';
-        S.rentTdbGrain=u.get('grain','semaine',['jour','semaine','mois']);
+        S.rentTdbGrain=u.get('grain','jour',['jour','semaine','mois']);
         S.rentTdbCourbe=u.get('courbe','marge',['marge','horaire']);
       }else if(S.rentSubTab==='pilotage'){
         S.rentPilotMachine=u.get('machine',null);
@@ -7567,9 +7567,9 @@ function renderRentTableau(){
     return zone;
   }
   window.MySifaRentTableau.monter(zone, {
-    periode: S.rentTdbPeriode || 'last30',
+    periode: S.rentTdbPeriode || 'ouvres7',
     machine: S.rentTdbMachine || '',
-    grain: S.rentTdbGrain || 'semaine',
+    grain: S.rentTdbGrain || 'jour',
     courbe: S.rentTdbCourbe || 'marge',
     surFiltre: patch => {
       const p = {};
