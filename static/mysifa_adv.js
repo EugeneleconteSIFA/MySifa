@@ -23,7 +23,7 @@
 
   var ONGLETS = DROITS.adv ? ['commandes', 'prepa'] : ['prepa'];
   var FILTRES = ['tous', 'retard', 'semaine', 'pretes'].concat(ETAPES.map(function (e) { return 'etape_' + e.cle; }));
-  var TRIS = ['commande', 'client', 'article', 'reste', 'expedition', 'livraison', 'fin_prod'];
+  var TRIS = ['commande', 'client', 'article', 'qte', 'stock', 'a_fabriquer', 'expedition', 'livraison', 'fin_prod'];
   var HORIZONS = [7, 14, 21, 30];
   var GROUPES = ['tous', 'preparable', 'en_cours', 'partiel', 'attente', 'pretes'];
 
@@ -34,6 +34,8 @@
     sens: 'asc',
     q: '',
     ligne: null,                 // clé « numero-ligne » de la fiche ouverte
+    reglages: null,              // 'mise_en_forme' : fenêtre des règles de couleur
+    mef: [],                     // règles de mise en forme (communes au service)
     horizon: BOOT.horizon || 21,
     groupe: 'tous',
     carnet: null,
@@ -160,6 +162,8 @@
     if (g || complet) S.groupe = g || 'tous';
     var l = u.get('ligne', null);
     S.ligne = (l && /^\d{1,12}-\d{1,4}$/.test(l)) ? l : null;
+    S.reglages = (DROITS.adv && S.onglet === 'commandes' && !S.ligne)
+      ? u.get('reglages', null, ['mise_en_forme']) : null;
   }
   function ecrireUrl() {
     var p = {};
@@ -173,7 +177,8 @@
       if (S.groupe !== 'tous') p.groupe = S.groupe;
     }
     if (S.ligne) p.ligne = S.ligne;
-    MySifaUrl.ecrire(p, {navigation: S.onglet + (S.ligne ? ':fiche' : '')});
+    else if (S.reglages) p.reglages = S.reglages;
+    MySifaUrl.ecrire(p, {navigation: S.onglet + (S.ligne ? ':fiche' : S.reglages ? ':reglages' : '')});
   }
 
   /* ── Données ────────────────────────────────────────────────── */
@@ -181,7 +186,10 @@
   async function charger() {
     S.erreur = null;
     try {
-      if (S.onglet === 'commandes') S.carnet = await api('/api/adv/commandes');
+      if (S.onglet === 'commandes') {
+        S.carnet = await api('/api/adv/commandes');
+        S.mef = S.carnet.mises_en_forme || [];
+      }
       else S.prepa = await api('/api/adv/prepa?horizon=' + encodeURIComponent(S.horizon));
     } catch (e) {
       S.erreur = e.message || String(e);
@@ -244,7 +252,8 @@
     compteursNav();
     ecrireUrl();
     if (S.ligne && !modalOuverte()) ouvrirFiche(S.ligne, true);
-    if (!S.ligne && modalOuverte()) fermerFiche(true);
+    else if (S.reglages && !modalOuverte()) ouvrirReglages(true);
+    if (!S.ligne && !S.reglages && modalOuverte()) fermerFiche(true);
   }
 
   function compteursNav() {
@@ -314,7 +323,9 @@
       case 'commande': return l.numero + '-' + String(l.ligne).padStart(4, '0');
       case 'client': return norm(l.client);
       case 'article': return l.article;
-      case 'reste': return l.reste;
+      case 'qte': return l.qte;
+      case 'stock': return l.stock ? l.stock.alloue : 0;
+      case 'a_fabriquer': return l.a_fabriquer;
       case 'livraison': return l.livraison;
       case 'fin_prod': return l.fin_prod;
       default: return l.expedition;
@@ -339,7 +350,11 @@
     var tete = h('div', {className: 'adv-tete'},
       h('div', {}, h('h1', {text: 'Carnet de commandes'}),
         h('div', {className: 'adv-maj', text: 'Lignes à traiter dans RVGI · stock MyStock · actualisé à ' + new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})})),
-      h('button', {type: 'button', className: 'btn', onClick: async function () { await charger(); render(); toast('Carnet actualisé.'); }}, 'Actualiser'));
+      h('div', {className: 'adv-tete-actions'},
+        h('button', {type: 'button', className: 'btn adv-btn-icone', 'aria-label': 'Mise en forme conditionnelle',
+          'data-tip': tip('btn-mef', 'Mise en forme conditionnelle', S.mef.length ? S.mef.length + ' règle(s) actives' : 'Aucune règle'),
+          html: ICONE_REGLAGES, onClick: function () { ouvrirReglages(); }}),
+        h('button', {type: 'button', className: 'btn', onClick: async function () { await charger(); render(); toast('Carnet actualisé.'); }}, 'Actualiser')));
     c.appendChild(tete);
     if (avertissements(c, d)) return;
     var k = d.compteurs || {carnet: {lignes: 0, commandes: 0}, retard: {lignes: 0, commandes: 0},
@@ -402,18 +417,25 @@
     };
     var thead = h('thead', {}, h('tr', {},
       th('Commande', 'commande'), th('Client', 'client'), th('Article', 'article'),
-      th('Reste', 'reste', 'num'), th('Expédition', 'expedition'), th('Livraison', 'livraison'), th('Fin de prod', 'fin_prod'),
+      th('Commandé', 'qte', 'num'), th('En stock', 'stock', 'num'), th('À fabriquer', 'a_fabriquer', 'num'),
+      th('Expédition', 'expedition'), th('Livraison', 'livraison'), th('Fin de prod', 'fin_prod'),
       ETAPES.map(function (e, i) { return th(e.label, null, 'etape' + (i === 0 ? ' sep' : '')); })));
     var tbody = h('tbody');
     lignes.forEach(function (l) {
       var finTard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
       var finTxt = l.fin_prod ? dateFr(l.fin_prod) : '';
-      tbody.appendChild(h('tr', {onClick: function () { ouvrirFiche(l.cle); }},
+      var tr = h('tr', {onClick: function () { ouvrirFiche(l.cle); }},
         h('td', {className: 'adv-mono'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne})),
         h('td', {className: 'client', text: l.client}),
         h('td', {className: 'des', 'data-tip': tip(l.cle + '|des', l.article, l.designation, libOrigine(l.origine) + (l.ref_client ? ' · réf. client ' + l.ref_client : ''))},
           h('div', {className: 'adv-mono', text: l.article}), h('div', {className: 'des-l', text: l.designation})),
-        h('td', {className: 'num'}, fN(l.reste), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + unite(l)}) : null),
+        h('td', {className: 'num'}, fN(l.qte), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + unite(l)}) : null),
+        h('td', {className: 'num' + (l.stock && l.stock.alloue ? '' : ' adv-muet'),
+          'data-tip': tip(l.cle + '|stock', 'Stock MyStock attribué à la ligne',
+            fN(l.stock ? l.stock.alloue : 0) + ' sur ' + fN(l.stock ? l.stock.total : 0) + ' en stock pour cet article',
+            l.livre ? 'Déjà livré : ' + fN(l.livre) + ' · reste à livrer ' + fN(l.reste) : 'Les lignes les plus urgentes sont servies d’abord.')},
+          l.stock && l.stock.alloue ? fN(l.stock.alloue) : '—'),
+        h('td', {className: 'num' + (l.a_fabriquer > 0 ? ' adv-fort' : ' adv-muet')}, l.a_fabriquer > 0 ? fN(l.a_fabriquer) : '—'),
         h('td', {className: l.retard ? 'adv-date-retard' : '', text: dateFr(l.expedition) || '—'}),
         h('td', {text: dateFr(l.livraison) || '—'}),
         h('td', {className: finTard ? 'adv-date-tard' : (l.fin_prod ? '' : 'adv-muet'),
@@ -421,7 +443,14 @@
             dateLongue(l.fin_prod) + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : ''),
             finTard ? 'Après la date d’expédition' : null) : null,
           text: finTxt || '—'}),
-        ETAPES.map(function (e, i) { return h('td', {className: 'etape' + (i === 0 ? ' sep' : '')}, pastille(l, e.cle)); })));
+        ETAPES.map(function (e, i) { return h('td', {className: 'etape' + (i === 0 ? ' sep' : '')}, pastille(l, e.cle)); }));
+      if (S.mef.length) {
+        COLS_MEF.forEach(function (col, i) {
+          var ton = tonCellule(l, col);
+          if (ton) tr.children[i].classList.add('mef', 'mef-' + ton);
+        });
+      }
+      tbody.appendChild(tr);
     });
     var wrap = h('div', {className: 'adv-table-wrap'}, h('table', {className: 'adv-table'}, thead, tbody));
     hote.appendChild(wrap);
@@ -461,42 +490,50 @@
     return [b('Démarrer', 'en_cours', 'btn-accent'), b('Prête', 'prete')];
   }
 
+  // Une préparation = une ligne de deux étages au plus : qui, combien, où,
+  // quand, et les boutons. Le détail (dates complètes, auteur, FIFO) est au
+  // survol ou dans la fiche.
   function cartePrepa(l, rang) {
     var st = l.stock || {};
     var u = unite(l) ? ' ' + unite(l) : '';
-    var badges = [];
-    if (l.retard) badges.push(h('span', {className: 'adv-badge danger', text: 'En retard'}));
-    badges.push(h('span', {className: 'adv-badge', text: 'Expédition ' + (dateLongue(l.expedition) || 'non datée')}));
-    if (l.departs && l.departs.length) {
-      var dp = l.departs[0];
-      badges.push(h('span', {className: 'adv-badge ok', text: 'Enlèvement ' + dateLongue(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '')}));
-    }
-    if (l.prepa.statut !== 'a_preparer' && l.prepa.maj_par) {
-      badges.push(h('span', {className: 'adv-badge', text: (LIB_PREPA[l.prepa.statut] || '') + ' · ' + l.prepa.maj_par + ' ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)}));
-    }
-    var qte;
+    var qte, qteSous = null;
     if (l.groupe === 'attente') {
-      qte = h('div', {className: 'c-qte'}, 'À produire : ' + fN(l.reste) + u,
-        l.fin_prod ? h('span', {className: 'adv-muet', text: ' · fin de prod ' + dateLongue(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '')}) : h('span', {className: 'adv-muet', text: ' · ' + l.etapes.prod.detail.toLowerCase()}));
+      qte = 'À produire : ' + fN(l.reste) + u;
+      qteSous = l.fin_prod
+        ? h('div', {className: 'c-sous', text: 'Fin de prod ' + dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '')})
+        : h('div', {className: 'c-sous', text: l.etapes.prod.detail});
     } else {
-      qte = h('div', {className: 'c-qte'}, 'À préparer : ' + fN(l.reste) + u,
-        st.alloue < l.reste ? h('span', {className: 'adv-date-tard', text: ' · ' + fN(st.alloue) + u + ' en stock'}) : null);
+      qte = fN(l.reste) + u;
+      if (st.alloue < l.reste) qteSous = h('div', {className: 'c-sous adv-date-tard', text: fN(st.alloue) + u + ' en stock'});
     }
-    var empl = null;
+    var empl;
     if (st.emplacements && st.emplacements.length && l.groupe !== 'attente') {
       empl = h('div', {className: 'adv-empl'}, st.emplacements.map(function (e) {
         return h('span', {'data-tip': tip(l.cle + '|lot' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + fN(e.quantite) + u, e.date_entree ? 'Entré le ' + dateLongue(e.date_entree) + ' (FIFO)' : null)},
           h('b', {text: e.emplacement}), ' · ' + fN(e.quantite));
       }));
+    } else {
+      empl = h('div', {className: 'adv-empl adv-muet', text: '—'});
     }
-    return h('div', {className: 'adv-carte' + (l.retard ? ' retard' : ''), onClick: function () { ouvrirFiche(l.cle); }, style: 'cursor:pointer'},
+    var dp = l.departs && l.departs.length ? l.departs[0] : null;
+    var quandSous = null;
+    if (l.prepa.statut !== 'a_preparer' && l.prepa.maj_par) {
+      quandSous = h('div', {className: 'c-sous', text: l.prepa.maj_par + ' · ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)});
+    } else if (dp) {
+      quandSous = h('div', {className: 'c-sous adv-ok', text: 'Enlèv. ' + dateFr(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '')});
+    }
+    var quand = h('div', {className: 'c-quand', 'data-tip': tip(l.cle + '|quand', 'Expédition ' + (dateLongue(l.expedition) || 'non datée'),
+        l.retard ? 'En retard' : null,
+        dp ? 'Enlèvement ' + dateLongue(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '') + (dp.parti_le ? ' · parti' : '') : null)},
+      h('div', {className: l.retard ? 'adv-date-retard' : '', text: l.expedition ? dateFr(l.expedition) : 'Non datée'}), quandSous);
+    return h('div', {className: 'adv-carte' + (l.retard ? ' retard' : ''), onClick: function () { ouvrirFiche(l.cle); }},
       h('div', {className: 'adv-rang', text: String(rang)}),
-      h('div', {},
+      h('div', {className: 'c-id'},
         h('div', {className: 'c-haut'}, h('span', {className: 'c-client', text: l.client}),
           h('span', {className: 'adv-mono adv-muet', text: l.numero + ' · ' + l.ligne + ' · ' + l.article})),
-        h('div', {className: 'c-des', text: l.designation}),
-        qte, empl,
-        h('div', {className: 'adv-empl'}, badges)),
+        h('div', {className: 'c-des', text: l.designation})),
+      h('div', {className: 'c-qte'}, h('div', {text: qte}), qteSous),
+      empl, quand,
       h('div', {className: 'adv-actions'}, boutonsPrepa(l)));
   }
 
@@ -547,6 +584,239 @@
     });
   }
 
+  /* ── Mise en forme conditionnelle ───────────────────────────── */
+
+  var REF = BOOT.mef || {colonnes: [], operateurs: {}, cibles: [], tons: [], max: 40};
+  var TYPE_COL = {}, LIB_COL = {};
+  REF.colonnes.forEach(function (c) { TYPE_COL[c.cle] = c.type; LIB_COL[c.cle] = c.label; });
+  // Ordre des cellules d'une ligne du carnet, colonne par colonne.
+  var COLS_MEF = ['commande', 'client', 'article', 'qte', 'stock', 'a_fabriquer', 'expedition', 'livraison', 'fin_prod']
+    .concat(ETAPES.map(function (e) { return 'etape_' + e.cle; }));
+  var ICONE_REGLAGES = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>';
+
+  function aujourdhuiPlus(n) {
+    var d = new Date();
+    d.setDate(d.getDate() + (parseInt(n, 10) || 0));
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // La valeur d'une cellule, telle qu'on la compare (nombre, date AAAA-MM-JJ, texte, état).
+  function valeurMef(l, col) {
+    switch (col) {
+      case 'commande': return l.numero;
+      case 'client': return l.client;
+      case 'article': return l.article;
+      case 'qte': return l.qte;
+      case 'stock': return l.stock ? l.stock.alloue : 0;
+      case 'a_fabriquer': return l.a_fabriquer;
+      case 'expedition': return l.expedition;
+      case 'livraison': return l.livraison;
+      case 'fin_prod': return l.fin_prod ? String(l.fin_prod).slice(0, 10) : null;
+      default:
+        if (col.indexOf('etape_') === 0) { var e = l.etapes[col.slice(6)]; return e ? e.valeur : null; }
+        return null;
+    }
+  }
+  function vide(v) { return v === null || v === undefined || v === ''; }
+  function regleVraie(rg, l) {
+    var typ = TYPE_COL[rg.colonne];
+    var v = valeurMef(l, rg.colonne);
+    if (rg.operateur === 'vide') return vide(v);
+    if (rg.operateur === 'non_vide') return !vide(v);
+    if (vide(v)) return false;
+    var c;
+    if (rg.cible === 'colonne') c = valeurMef(l, rg.valeur);
+    else if (rg.cible === 'aujourdhui') c = aujourdhuiPlus(rg.valeur);
+    else c = rg.valeur;
+    if (vide(c)) return false;
+    if (typ === 'nombre') {
+      v = Number(v); c = Number(String(c).replace(',', '.').replace(/[\s ]/g, ''));
+      if (isNaN(v) || isNaN(c)) return false;
+    }
+    if (typ === 'texte') {
+      v = norm(v); c = norm(c);
+      if (rg.operateur === 'contient') return v.indexOf(c) !== -1;
+      if (rg.operateur === 'commence') return v.indexOf(c) === 0;
+      return v === c;
+    }
+    switch (rg.operateur) {
+      case 'gt': return v > c;
+      case 'ge': return v >= c;
+      case 'lt': return v < c;
+      case 'le': return v <= c;
+      case 'eq': return v === c || v == c;
+      case 'ne': return v !== c;
+      default: return false;
+    }
+  }
+  // La première règle qui s'applique à la cellule l'emporte.
+  function tonCellule(l, col, regles) {
+    var rs = regles || S.mef;
+    for (var i = 0; i < rs.length; i++) {
+      if (rs[i].colonne === col && regleVraie(rs[i], l)) return rs[i].ton;
+    }
+    return null;
+  }
+  function libRegle(rg) {
+    var typ = TYPE_COL[rg.colonne];
+    var op = (REF.operateurs[typ] || []).find(function (o) { return o.cle === rg.operateur; });
+    var txt = (LIB_COL[rg.colonne] || rg.colonne) + ' ' + (op ? op.label : rg.operateur);
+    if (rg.operateur === 'vide' || rg.operateur === 'non_vide') return txt;
+    if (rg.cible === 'colonne') return txt + ' ' + (LIB_COL[rg.valeur] || rg.valeur);
+    if (rg.cible === 'aujourdhui') {
+      var n = parseInt(rg.valeur, 10) || 0;
+      return txt + ' aujourd’hui' + (n ? (n > 0 ? ' + ' : ' − ') + Math.abs(n) + ' j' : '');
+    }
+    if (typ === 'etat') return txt + ' ' + (ETATS[rg.valeur] || rg.valeur);
+    if (typ === 'date') return txt + ' ' + dateLongue(rg.valeur);
+    return txt + ' ' + rg.valeur;
+  }
+
+  function regleParDefaut() {
+    return {colonne: 'a_fabriquer', operateur: 'gt', cible: 'valeur', valeur: '0', ton: 'warn'};
+  }
+  function ciblesPour(typ) {
+    if (typ === 'nombre') return ['valeur', 'colonne'];
+    if (typ === 'date') return ['valeur', 'aujourdhui', 'colonne'];
+    return ['valeur'];
+  }
+  function valeurParDefaut(typ, cible) {
+    if (cible === 'aujourdhui') return '0';
+    if (cible === 'colonne') return '';
+    if (typ === 'nombre') return '0';
+    if (typ === 'date') return aujourdhuiPlus(0);
+    if (typ === 'etat') return 'non';
+    return '';
+  }
+
+  function ouvrirReglages(sansAdresse) {
+    if (!DROITS.adv) return;
+    var m = document.getElementById('mroot');
+    m.textContent = '';
+    S.ligne = null;
+    S.reglages = 'mise_en_forme';
+    if (!sansAdresse) ecrireUrl();
+    // Copie de travail : rien n'est appliqué au carnet avant « Enregistrer ».
+    var E = S.mef.map(function (r) {
+      return {colonne: r.colonne, operateur: r.operateur, cible: r.cible || 'valeur', valeur: r.valeur || '', ton: r.ton};
+    });
+    var liste = h('div', {className: 'mef-liste'});
+    var pied = h('div', {className: 'mef-compte adv-muet'});
+    var lignes = (S.carnet && S.carnet.lignes) || [];
+
+    function nbCellules(rg) {
+      var n = 0;
+      lignes.forEach(function (l) { if (tonCellule(l, rg.colonne, [rg]) ) n++; });
+      return n;
+    }
+    function select(options, valeur, onChange, label) {
+      var el = h('select', {'aria-label': label});
+      options.forEach(function (o) {
+        var opt = h('option', {value: o.cle}, o.label);
+        if (o.cle === valeur) opt.selected = true;
+        el.appendChild(opt);
+      });
+      el.addEventListener('change', function () { onChange(el.value); });
+      return el;
+    }
+    function dessiner() {
+      liste.textContent = '';
+      if (!E.length) {
+        liste.appendChild(h('div', {className: 'adv-vide', text: 'Aucune règle. Exemple : « À fabriquer > 0 » en orange, « Fin de prod après Expédition » en rouge.'}));
+      }
+      E.forEach(function (rg, i) {
+        var typ = TYPE_COL[rg.colonne];
+        var sansCible = rg.operateur === 'vide' || rg.operateur === 'non_vide';
+        var compte = h('span', {className: 'mef-n adv-muet'});
+        function majCompte() { compte.textContent = nbCellules(rg) + ' cell.'; }
+        var colSel = select(REF.colonnes, rg.colonne, function (v) {
+          rg.colonne = v;
+          var t = TYPE_COL[v];
+          rg.operateur = (REF.operateurs[t] || [])[0].cle;
+          rg.cible = 'valeur';
+          rg.valeur = valeurParDefaut(t, 'valeur');
+          dessiner();
+        }, 'Colonne');
+        var opSel = select(REF.operateurs[typ] || [], rg.operateur, function (v) { rg.operateur = v; dessiner(); }, 'Condition');
+        var zoneValeur = h('div', {className: 'mef-valeur'});
+        if (!sansCible) {
+          var cibles = ciblesPour(typ);
+          if (cibles.length > 1) {
+            zoneValeur.appendChild(select(REF.cibles.filter(function (c) { return cibles.indexOf(c.cle) !== -1; }), rg.cible, function (v) {
+              rg.cible = v; rg.valeur = valeurParDefaut(typ, v); dessiner();
+            }, 'Comparer à'));
+          }
+          var champ;
+          if (rg.cible === 'colonne') {
+            var autres = REF.colonnes.filter(function (c) { return c.type === typ && c.cle !== rg.colonne; });
+            if (!rg.valeur && autres.length) rg.valeur = autres[0].cle;
+            champ = select(autres, rg.valeur, function (v) { rg.valeur = v; majCompte(); }, 'Colonne de comparaison');
+          } else if (typ === 'etat') {
+            champ = select(Object.keys(ETATS).map(function (k) { return {cle: k, label: ETATS[k]}; }), rg.valeur, function (v) { rg.valeur = v; majCompte(); }, 'État');
+          } else {
+            var type = rg.cible === 'aujourdhui' ? 'number' : (typ === 'nombre' ? 'number' : (typ === 'date' ? 'date' : 'text'));
+            champ = h('input', {type: type, value: rg.valeur, 'aria-label': 'Valeur',
+              placeholder: rg.cible === 'aujourdhui' ? '± jours' : (typ === 'texte' ? 'Texte' : '')});
+            champ.addEventListener('input', function () { rg.valeur = champ.value; majCompte(); });
+          }
+          zoneValeur.appendChild(champ);
+          if (rg.cible === 'aujourdhui') zoneValeur.appendChild(h('span', {className: 'adv-muet', text: 'jours'}));
+        }
+        var tons = h('div', {className: 'mef-tons', role: 'radiogroup', 'aria-label': 'Couleur'});
+        REF.tons.forEach(function (t) {
+          tons.appendChild(h('button', {type: 'button', className: 'mef-ton mef-' + t.cle + (rg.ton === t.cle ? ' actif' : ''),
+            role: 'radio', 'aria-checked': rg.ton === t.cle ? 'true' : 'false', 'aria-label': t.label,
+            'data-tip': tip('mef-ton|' + i + '|' + t.cle, t.label),
+            onClick: function () { rg.ton = t.cle; dessiner(); }}));
+        });
+        var bouger = function (d) {
+          return function () {
+            var j = i + d;
+            if (j < 0 || j >= E.length) return;
+            var x = E[i]; E[i] = E[j]; E[j] = x;
+            dessiner();
+          };
+        };
+        liste.appendChild(h('div', {className: 'mef-regle'},
+          h('span', {className: 'mef-rang', text: String(i + 1)}),
+          colSel, opSel, zoneValeur, tons, compte,
+          h('div', {className: 'mef-ordre'},
+            h('button', {type: 'button', className: 'btn btn-petit', 'aria-label': 'Monter', disabled: i === 0, onClick: bouger(-1)}, '↑'),
+            h('button', {type: 'button', className: 'btn btn-petit', 'aria-label': 'Descendre', disabled: i === E.length - 1, onClick: bouger(1)}, '↓'),
+            h('button', {type: 'button', className: 'btn btn-petit', 'aria-label': 'Supprimer la règle',
+              onClick: function () { E.splice(i, 1); dessiner(); }}, '×'))));
+        majCompte();
+      });
+      pied.textContent = E.length + ' / ' + REF.max + ' règles · la première qui s’applique à une cellule l’emporte';
+      ajout.disabled = E.length >= REF.max;
+    }
+    var ajout = h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { E.push(regleParDefaut()); dessiner(); }}, '+ Ajouter une règle');
+    var enregistrer = h('button', {type: 'button', className: 'btn btn-accent', onClick: async function () {
+      enregistrer.disabled = true;
+      try {
+        var res = await api('/api/adv/mises-en-forme', {method: 'PUT', body: {regles: E}});
+        S.mef = res.regles || [];
+        if (S.carnet) S.carnet.mises_en_forme = S.mef;
+        fermerFiche();
+        render();
+        toast('Mise en forme enregistrée.');
+      } catch (e) {
+        toast(e.message, 'danger');
+        enregistrer.disabled = false;
+      }
+    }}, 'Enregistrer');
+    var modal = h('div', {className: 'adv-modal adv-modal-large', role: 'dialog', 'aria-modal': 'true'},
+      h('h3', {text: 'Mise en forme conditionnelle'}),
+      h('div', {className: 'm-sous', text: 'Colore une cellule du carnet quand sa valeur remplit la condition. Règles communes à tout le service.'}),
+      liste,
+      h('div', {className: 'mef-bas'}, ajout, pied),
+      h('div', {className: 'm-pied'},
+        h('button', {type: 'button', className: 'btn', onClick: function () { fermerFiche(); }}, 'Annuler'),
+        enregistrer));
+    var voile = h('div', {className: 'adv-voile', onClick: function (ev) { if (ev.target === voile) fermerFiche(); }}, modal);
+    m.appendChild(voile);
+    dessiner();
+  }
+
   /* ── Fiche d'une ligne ──────────────────────────────────────── */
 
   function fermerFiche(sansAdresse) {
@@ -555,6 +825,7 @@
     cacherTip();
     if (sansAdresse === true) return;
     S.ligne = null;
+    S.reglages = null;
     ecrireUrl();
   }
 
@@ -581,6 +852,7 @@
     }
     var m = document.getElementById('mroot');
     m.textContent = '';
+    S.reglages = null;
     if (!sansAdresse) { S.ligne = cle; ecrireUrl(); }
     else S.ligne = cle;
     var st = l.stock || {};
@@ -656,7 +928,8 @@
       h('div', {className: 'm-sous', text: l.article + ' · ' + l.designation}),
       h('h4', {text: 'Commande'}),
       h('div', {className: 'adv-grille'},
-        g('Reste à livrer', fN(l.reste) + u), g('Commandé', fN(l.qte)), g('Déjà livré', fN(l.livre)),
+        g('Commandé', fN(l.qte) + u), g('Déjà livré', fN(l.livre)), g('Reste à livrer', fN(l.reste)),
+        g('En stock (attribué)', fN(st.alloue || 0)), g('À fabriquer', fN(l.a_fabriquer || 0)),
         g('Besoin RVGI (qtep)', fN(l.besoin_rvgi)), g('Origine', libOrigine(l.origine)),
         g('Expédition', dateLongue(l.expedition)), g('Livraison', dateLongue(l.livraison)),
         g('Fin de prod', l.fin_prod ? dateLongue(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '') + (l.fin_prod_reelle ? ' (saisie)' : ' (prévue)') : ''),
@@ -690,7 +963,8 @@
     var avant = S.onglet, hz = S.horizon;
     lireUrl(true);
     if (S.onglet !== avant || !donnees() || (S.onglet === 'prepa' && hz !== S.horizon)) { await charger(); }
-    if (!S.ligne) fermerFiche(true);
+    if (!S.ligne && !S.reglages) fermerFiche(true);
+    else if (modalOuverte()) fermerFiche(true);   // render() rouvrira la bonne
     render();
   });
 

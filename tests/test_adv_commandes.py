@@ -175,6 +175,8 @@ check("B : reste = qte − BL vivants, pas qtep", (B["reste"], B["besoin_rvgi"])
 check("B : 200 en stock sur 400", (B["stock"]["alloue"], B["etapes"]["stock"]["valeur"]), (200.0, "en_cours"))
 check("le lot en carton ne sert pas une ligne en étiquettes", A["stock"]["total"], 1200.0)
 check("C : rien en stock", C["etapes"]["stock"]["valeur"], "non")
+check("à fabriquer = reste à livrer − stock attribué", (A["a_fabriquer"], B["a_fabriquer"], C["a_fabriquer"]),
+      (0.0, 200.0, 50.0))
 
 print("\nBAT")
 check("BAT validé (référence « 100/1 » normalisée)", A["etapes"]["bat"]["valeur"], "oui")
@@ -225,6 +227,44 @@ miroir.ERP_MIRROR_DB = os.path.join(dossier, "absent.db")
 d = adv.construire()
 print("\nMiroir absent")
 check("présent = False, aucune ligne", (d["present"], d["lignes"]), (False, []))
+
+# ── 5. Règles de mise en forme ───────────────────────────────────────────────
+from app.services import adv_mise_en_forme as mef  # noqa: E402
+print("\nMise en forme : validation")
+ok_regles = mef.valider([
+    {"colonne": "a_fabriquer", "operateur": "gt", "cible": "valeur", "valeur": "0", "ton": "warn"},
+    {"colonne": "fin_prod", "operateur": "gt", "cible": "colonne", "valeur": "expedition", "ton": "danger"},
+    {"colonne": "expedition", "operateur": "lt", "cible": "aujourdhui", "valeur": "", "ton": "danger"},
+    {"colonne": "etape_bat", "operateur": "eq", "cible": "valeur", "valeur": "non", "ton": "danger"},
+    {"colonne": "client", "operateur": "vide", "cible": "colonne", "valeur": "x", "ton": "neutre"},
+])
+check("règles valides acceptées et normalisées",
+      [(r["cible"], r["valeur"]) for r in ok_regles],
+      [("valeur", "0"), ("colonne", "expedition"), ("aujourdhui", "0"), ("valeur", "non"), ("valeur", "")])
+
+
+def refusee(regle):
+    try:
+        mef.valider([regle])
+    except mef.RegleInvalide:
+        return True
+    return False
+
+
+check("colonne inconnue refusée", refusee({"colonne": "x; DROP", "operateur": "gt", "valeur": "0", "ton": "warn"}), True)
+check("opérateur d'un autre type refusé", refusee({"colonne": "qte", "operateur": "contient", "valeur": "1", "ton": "warn"}), True)
+check("nombre attendu", refusee({"colonne": "qte", "operateur": "gt", "valeur": "abc", "ton": "warn"}), True)
+check("colonne de comparaison d'un autre type refusée",
+      refusee({"colonne": "qte", "operateur": "gt", "cible": "colonne", "valeur": "expedition", "ton": "warn"}), True)
+check("« aujourd'hui » réservé aux dates",
+      refusee({"colonne": "qte", "operateur": "gt", "cible": "aujourdhui", "valeur": "1", "ton": "warn"}), True)
+check("couleur hors thème refusée", refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "#ff0000"}), True)
+try:
+    mef.valider([dict(ok_regles[0]) for _ in range(mef.ADV_MEF_MAX_REGLES + 1)])
+    trop = False
+except mef.RegleInvalide:
+    trop = True
+check("plafond de règles", trop, True)
 
 print()
 if ko:

@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.services import adv_commandes as adv
+from app.services import adv_mise_en_forme as mef
 from app.services.audit_service import log_action
 from services.auth_service import effective_role, get_current_user
 from config import ADV_ETATS, ADV_PREPA_STATUTS, ROLES_ADV, ROLES_ADV_PREPA
@@ -63,6 +64,9 @@ def commandes(request: Request):
     _exiger(request, ROLES_ADV)
     data = _servir(adv.construire)
     data["droits"] = {"adv": True, "prepa": True}
+    # Les règles de couleur voyagent avec le carnet : une requête, pas deux.
+    with get_db() as conn:
+        data["mises_en_forme"] = mef.lister(conn)
     return data
 
 
@@ -146,3 +150,35 @@ def forcer(numero: str, ligne: int, etape: str, body: ForcageIn, request: Reques
                        "apres": {"valeur": valeur, "note": note} if valeur else None},
                request=request)
     return {"ok": True}
+
+
+# ── Mise en forme conditionnelle du carnet ───────────────────────────────────
+
+@router.get("/api/adv/mises-en-forme")
+def mises_en_forme(request: Request):
+    _exiger(request, ROLES_ADV)
+    with get_db() as conn:
+        return {"regles": mef.lister(conn), "referentiel": mef.referentiel()}
+
+
+class MisesEnFormeIn(BaseModel):
+    regles: list
+
+
+@router.put("/api/adv/mises-en-forme")
+def enregistrer_mises_en_forme(body: MisesEnFormeIn, request: Request):
+    """Remplace le jeu de règles commun au service."""
+    user = _exiger(request, ROLES_ADV)
+    try:
+        regles = mef.valider(body.regles)
+    except mef.RegleInvalide as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    with get_db() as conn:
+        avant = mef.lister(conn)
+        apres = mef.enregistrer(conn, regles, adv.maintenant(), _nom(user))
+    log_action(user=user, action="UPDATE", module="adv",
+               objet="Mise en forme du carnet · %d règle(s)" % len(apres),
+               detail={"avant": [{k: r[k] for k in ("colonne", "operateur", "cible", "valeur", "ton")} for r in avant],
+                       "apres": regles},
+               request=request)
+    return {"regles": apres}

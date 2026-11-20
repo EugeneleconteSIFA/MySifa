@@ -760,6 +760,38 @@ ADV_PREPA_STATUTS = (
 # L'onglet Prépa montre ce qui part dans les N prochains jours, retards compris.
 ADV_PREPA_HORIZON_JOURS = int(os.getenv("ADV_PREPA_HORIZON_JOURS", "21"))
 
+# Mise en forme conditionnelle du carnet ADV (règles en base, table
+# adv_mises_en_forme). Ce qui peut être coloré, comment on compare, et avec
+# quelles couleurs — les tons du thème, jamais une couleur en dur.
+# (clé, libellé, type) ; les étapes de la chaîne s'ajoutent en « etape_<clé> ».
+ADV_MEF_COLONNES = (
+    ("commande", "Commande", "texte"),
+    ("client", "Client", "texte"),
+    ("article", "Article", "texte"),
+    ("qte", "Commandé", "nombre"),
+    ("stock", "En stock", "nombre"),
+    ("a_fabriquer", "À fabriquer", "nombre"),
+    ("expedition", "Expédition", "date"),
+    ("livraison", "Livraison", "date"),
+    ("fin_prod", "Fin de prod", "date"),
+) + tuple(("etape_" + k, v, "etat") for k, v in ADV_ETAPES)
+ADV_MEF_OPERATEURS = {
+    "nombre": (("gt", ">"), ("ge", "≥"), ("lt", "<"), ("le", "≤"), ("eq", "="), ("ne", "≠"),
+               ("vide", "est vide"), ("non_vide", "n'est pas vide")),
+    "date": (("lt", "avant le"), ("le", "au plus tard le"), ("gt", "après le"), ("ge", "à partir du"),
+             ("eq", "le"), ("vide", "est vide"), ("non_vide", "n'est pas vide")),
+    "texte": (("contient", "contient"), ("eq", "est"), ("commence", "commence par"),
+              ("vide", "est vide"), ("non_vide", "n'est pas vide")),
+    "etat": (("eq", "est"), ("ne", "n'est pas")),
+}
+# À quoi on compare : une valeur saisie, une autre colonne du même type, ou —
+# pour une date — aujourd'hui décalé de N jours.
+ADV_MEF_CIBLES = (("valeur", "une valeur"), ("colonne", "une autre colonne"),
+                  ("aujourdhui", "aujourd'hui ± jours"))
+ADV_MEF_TONS = (("danger", "Rouge"), ("warn", "Orange"), ("ok", "Vert"),
+                ("accent", "Bleu"), ("neutre", "Gris"))
+ADV_MEF_MAX_REGLES = 40
+
 # Nouvel ERP (remplaçant de RVGI), servi sur son propre sous-domaine par le
 # middleware `router_hote_erp` de main.py : une requête dont le Host figure dans
 # ERP2_HOSTS est servie sous ERP2_PREFIXE. En construction, sans données réelles :
