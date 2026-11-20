@@ -121,34 +121,45 @@
     return b;
   }
 
-  // ── Compteurs (bloc capturable) ────────────────────────────────────
+  // ── Les deux chiffres de la période (bloc capturable) ──────────────
+  /* Marge brute PONDÉRÉE et coût horaire MÉDIAN des dossiers complets, chacun
+     coloré selon son seuil, avec l'écart au devisé. Le détail (seuil, devisé,
+     nombre de dossiers) est en infobulle. Les comptes de verdicts restent
+     portés par le bloc pour les widgets d'accueil déjà posés. */
   function compteurs(d) {
     var c = d.comptes || {};
-    var row = el('div', 'rt-kpis');
+    var S = d.seuils || {};
+    var row = el('div', 'rt-kpis rt-kpis-forts');
     row.setAttribute('data-bloc', 'prod.rentabilite.verdicts');
+    row.setAttribute('data-bloc-valeur-marge', d.mb_pct_pondere == null ? '' : String(Math.round(d.mb_pct_pondere * 10) / 10));
+    row.setAttribute('data-bloc-valeur-cout-horaire', d.cout_horaire_median == null ? '' : String(Math.round(d.cout_horaire_median)));
     row.setAttribute('data-bloc-valeur-reussis', String(c.reussi || 0));
     row.setAttribute('data-bloc-valeur-limite', String(c.limite || 0));
     row.setAttribute('data-bloc-valeur-sous-seuil', String(c.sous_seuil || 0));
     row.setAttribute('data-bloc-valeur-attente', String(c.attente || 0));
-    function tuile(cls, k, v, s) {
-      var t = el('div', 'rt-kpi ' + cls);
+    function tuile(k, v, unite, seuil, devis, dec, uniteEcart, note) {
+      var etat = v == null ? '' : (v >= seuil ? 'rt-ok' : 'rt-bad');
+      var t = el('div', 'rt-kpi rt-kpi-fort ' + etat);
       t.appendChild(el('span', 'rt-kpi-k', k));
-      t.appendChild(el('span', 'rt-kpi-v', v));
-      bulle(t, {titre: k, note: s});
+      var ligne = el('div', 'rt-kpi-ligne');
+      var val = el('span', 'rt-kpi-v', v == null ? '—' : nb(v, dec));
+      if (v != null) val.appendChild(el('small', 'rt-kpi-u', unite));
+      ligne.appendChild(val);
+      if (v != null && devis != null) {
+        var e = v - devis;
+        ligne.appendChild(el('span', 'rt-kpi-ecart ' + (e >= 0 ? 'rt-ecart-ok' : 'rt-ecart-bad'),
+          signe(e, dec) + ' ' + uniteEcart + ' vs devis'));
+      }
+      t.appendChild(ligne);
+      bulle(t, {titre: k, note: note,
+        lignes: [['Seuil', nb(seuil) + ' ' + unite], ['Devisé', devis != null ? nb(devis, dec) + ' ' + unite : ''],
+                 ['Dossiers complets', nb(c.complets)]]});
       row.appendChild(t);
     }
-    var S = d.seuils || {};
-    tuile('rt-ok', 'Réussis', nb(c.reussi), 'Sur ' + nb(c.complets) + ' dossiers complets : MB ≥ '
-      + nb(S.mb_pct) + ' % et coût horaire ≥ ' + nb(S.cout_horaire) + ' €/h sur toute la fourchette');
-    tuile('rt-warn', 'À la limite', nb(c.limite), 'La fourchette est à cheval sur un seuil : la précision des saisies ne permet pas de trancher');
-    tuile('rt-bad', 'Sous un seuil', nb(c.sous_seuil), 'Marge brute ou coût horaire entièrement sous son seuil');
-    tuile('', 'En attente', nb(c.attente), 'Dossiers terminés sans facture, sans déstockage ou sans 89 : pas encore jugés');
-    if (c.a_verifier) tuile('rt-bad', 'À vérifier', nb(c.a_verifier),
-      'Résultat hors norme ou incertain (compteur et MyStock qui divergent, matière sans prix, temps absent). Exclus des compteurs et du nuage.');
-    tuile('', 'Écart MB', d.ecart_mb_pts == null ? '—' : signe(d.ecart_mb_pts, 1) + ' pt',
-      'Marge brute réelle moins marge devisée, moyenne par dossier complet');
-    tuile('', '€/h médian', d.cout_horaire_median == null ? '—' : nb(d.cout_horaire_median),
-      'Coût horaire réel médian des dossiers complets · seuil ' + nb(S.cout_horaire) + ' €/h');
+    tuile('Marge brute', d.mb_pct_pondere, '%', S.mb_pct, d.devis_mb_pct_pondere, 1, 'pt',
+      'Somme des marges ÷ somme des prix de vente des dossiers complets : un gros dossier pèse plus.');
+    tuile('Coût horaire médian', d.cout_horaire_median, '€/h', S.cout_horaire, d.devis_cout_horaire_median, 0, '€/h',
+      'Marge brute par heure machine du dossier complet du milieu.');
     return row;
   }
 

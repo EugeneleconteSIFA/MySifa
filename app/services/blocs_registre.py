@@ -300,7 +300,10 @@ BLOCS: dict[str, Bloc] = {
     "prod.rentabilite.verdicts": Bloc(
         appli="prod", libelle="Rentabilité des dossiers", url="/prod?page=rentabilite",
         type="chiffre",
-        valeurs=(("reussis", "Réussis"), ("limite", "À la limite"),
+        # Clé conservée (widgets déjà posés) ; les comptes de verdicts restent
+        # lus sur le bloc même s'ils ne sont plus affichés en tuiles.
+        valeurs=(("marge", "Marge brute %"), ("cout-horaire", "Coût horaire médian €/h"),
+                 ("reussis", "Réussis"), ("limite", "À la limite"),
                  ("sous-seuil", "Sous un seuil"), ("attente", "En attente")),
         acces="rentabilite",
     ),
