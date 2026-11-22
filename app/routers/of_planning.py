@@ -331,6 +331,7 @@ def _relier(conn, request, user, qui, maintenant, of, entry_id, champs):
     if not d:
         raise HTTPException(404, "Dossier introuvable.")
     d = dict(d)
+    verifier_reutilisable(conn, [of["id"]], entry_id)
     _promote_of_link(conn, entry_id, of["id"], qui)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)")}
     sets: Dict[str, Any] = {}
@@ -514,7 +515,17 @@ def _ofs_suggeres(conn, d: Dict[str, Any], limite: int = 8) -> List[Dict[str, An
         "  JOIN planning_entries pe ON pe.id = l.planning_entry_id WHERE l.of_import_id = o.id) AS dossiers "
         "FROM of_imports o WHERE o.id IN (%s)" % ph, list(raisons)).fetchall()
     ordre = {"Même numéro": 0, "Même commande": 1, "Même produit": 2}
-    out = [dict(r, raison=raisons[int(r["id"])]) for r in rows]
+    etats = etat_des_of(conn, [int(r["id"]) for r in rows], d)
+    out = []
+    for r in rows:
+        o = dict(r, raison=raisons[int(r["id"])], _etat=etats.get(int(r["id"])))
+        e = o["_etat"] or {}
+        # « Même produit » ne dit rien d'une production : seul un OF libre et
+        # récent (préparé, pas encore planifié) mérite d'être proposé.
+        if o["raison"] == "Même produit" and not (
+                e.get("etat") == "libre" and e.get("age_jours") is not None and e["age_jours"] <= JOURS_RECENT):
+            continue
+        out.append(o)
     # Le plus sûr d'abord ; à rang égal, le plus récent.
     out.sort(key=lambda o: (ordre[o["raison"]], -_horodatage(o.get("date_import"))))
     return out[:limite]
@@ -558,13 +569,8 @@ def of_depuis_dossier(entry_id: int, request: Request):
                     "client": d.get("client")},
         "commandes": commandes,
         "fiche": ({"id": fiche["id"], "reference": fiche.get("reference")} if fiche else None),
-        "suggestions": [{
-            "id": o["id"], "of_numero": o.get("of_numero"), "reference": o.get("reference"),
-            "machine": o.get("machine"), "delai": _jour(_date_iso(o.get("delai_client"))) or o.get("delai_client"),
-            "qte": o.get("qte_etiquettes"), "cree_le": _jour(o.get("date_import")),
-            "par": ("le pont Access" if o.get("imported_by") == "access_bridge" else o.get("imported_by")),
-            "dossiers": o.get("dossiers"), "raison": o["raison"],
-        } for o in suggestions],
+        "suggestions": [dict(_ligne_of(o, o.get("_etat"), o["raison"]), dossiers=o.get("dossiers"))
+                        for o in suggestions],
     }
 
 
@@ -652,3 +658,156 @@ async def of_suppression_apercu(request: Request):
             "SELECT id, of_numero FROM of_imports WHERE id IN (%s)" % ",".join("?" * len(ids)), ids)} if ids else {}
     return {"ofs": [{"id": i, "of_numero": nums.get(i), "dossiers": touches.get(i, [])}
                     for i in ids if touches.get(i)]}
+
+
+# ── Un OF déjà produit ne se réutilise pas ───────────────────────────────
+#
+# Retour du 22/11/2026 : le sélecteur proposait, au nom du « même produit »,
+# des OF d'octobre 2025 et d'avril 2026 pour un dossier de septembre. Mais
+# un OF sert légitimement plusieurs passes d'une même production : 9931710
+# (4 dossiers, Cohésio 1 puis 2), 9932304 (DSI puis Repiquage). Ces passes
+# portent la MÊME référence de dossier et naissent avant la fin de la
+# précédente. Le cas fautif, lui : 1153/0005 - 01/04/26, produit fin juin,
+# relié en novembre au dossier « Stock 1153/0005 ».
+#
+# Un OF est donc « déjà produit » pour un dossier quand il a un scan d'OF
+# terminé, ou quand tous ses dossiers sont terminés depuis plus de
+# `JOURS_PRODUIT` jours sous une autre référence.
+
+JOURS_PRODUIT = 14       # fin de la dernière passe au-delà : l'OF est clos
+JOURS_RECENT = 30        # « même produit » : un OF libre et récent seulement
+JOURS_ANCIEN = 90        # libre mais plus vieux : sûrement produit hors MySifa
+
+
+def _norm_ref(v: Any) -> str:
+    return " ".join(str(v or "").lower().split())
+
+
+def _jours_depuis(iso: Any) -> Optional[float]:
+    s = str(iso or "")[:19]
+    if not s:
+        return None
+    try:
+        return (datetime.now() - datetime.fromisoformat(s)).total_seconds() / 86400
+    except ValueError:
+        return None
+
+
+def etat_des_of(conn, ids: List[int], cible: Optional[Dict[str, Any]] = None) -> Dict[int, Dict[str, Any]]:
+    """L'état de réutilisation de chaque OF vu depuis le dossier `cible`.
+
+    `etat` : libre, deja (relié à ce dossier), passe (même référence que ce
+    dossier), en_cours, recent, ancien, produit. `selectionnable` est faux
+    seulement pour `produit` et `deja`. `note` dit pourquoi, en clair.
+    """
+    if not ids:
+        return {}
+    ph = ",".join("?" * len(ids))
+    ofs = {int(r["id"]): dict(r) for r in conn.execute(
+        f"SELECT id, of_numero, date_creation, date_import FROM of_imports WHERE id IN ({ph})", ids)}
+    liens: Dict[int, List[Dict[str, Any]]] = {}
+    for r in conn.execute(
+            f"""SELECT x.of_id, pe.id, pe.reference, pe.statut, pe.planned_end, pe.updated_at,
+                       (SELECT MAX(pd.date_operation) FROM production_data pd
+                         WHERE pd.no_dossier = pe.reference AND pd.operation_code = '89'
+                           AND COALESCE(pd.est_annule, 0) = 0) AS fin_reelle
+                  FROM (SELECT of_import_id AS of_id, planning_entry_id AS pe_id FROM planning_of_links
+                         WHERE of_import_id IN ({ph})
+                        UNION SELECT of_import_id, id FROM planning_entries WHERE of_import_id IN ({ph})) x
+                  JOIN planning_entries pe ON pe.id = x.pe_id""", list(ids) * 2):
+        liens.setdefault(int(r["of_id"]), []).append(dict(r))
+    scans = set()
+    try:
+        for r in conn.execute(
+                f"""SELECT o.id FROM of_imports o WHERE o.id IN ({ph}) AND EXISTS (
+                      SELECT 1 FROM produit_documents d WHERE d.of_import_id = o.id
+                         OR (TRIM(COALESCE(o.of_numero,'')) <> ''
+                             AND LOWER(TRIM(COALESCE(d.of_numero,''))) = LOWER(TRIM(o.of_numero))))""", ids):
+            scans.add(int(r["id"]))
+    except Exception:
+        pass
+    cible_id = int(cible["id"]) if cible and cible.get("id") else None
+    cible_ref = _norm_ref((cible or {}).get("reference"))
+    out: Dict[int, Dict[str, Any]] = {}
+    for of_id in ids:
+        of = ofs.get(of_id)
+        if not of:
+            continue
+        ds = liens.get(of_id, [])
+        autres = [d for d in ds if int(d["id"]) != cible_id]
+        cree = _date_iso(of.get("date_creation")) or str(of.get("date_import") or "")[:10]
+        age = _jours_depuis(cree)
+        def dossier_txt(d):
+            return "%s (%s)" % (d.get("reference") or "#%s" % d["id"],
+                                {"attente": "en attente", "en_cours": "en cours", "termine": "terminé"}.get(d.get("statut"), d.get("statut") or ""))
+        etat, note = "libre", None
+        if cible_id and any(int(d["id"]) == cible_id for d in ds):
+            etat, note = "deja", "déjà relié à ce dossier"
+        elif of_id in scans:
+            etat, note = "produit", "déjà produit (scan de l'OF terminé) : créez un nouvel OF"
+        elif autres and cible_ref and any(_norm_ref(d.get("reference")) == cible_ref for d in autres):
+            etat, note = "passe", "même dossier sur une autre passe : ce dossier sera une passe de plus"
+        elif any(d.get("statut") in ("attente", "en_cours") for d in autres):
+            d = next(d for d in autres if d.get("statut") in ("attente", "en_cours"))
+            etat, note = "en_cours", "déjà sur le dossier %s : ce dossier sera une passe de plus" % dossier_txt(d)
+        elif autres:
+            fins = [d.get("fin_reelle") or d.get("planned_end") or d.get("updated_at") for d in autres]
+            fin = max((f for f in fins if f), default=None)
+            jours = _jours_depuis(fin)
+            dernier = max(autres, key=lambda d: str(d.get("fin_reelle") or d.get("planned_end") or ""))
+            if jours is not None and jours <= JOURS_PRODUIT:
+                etat, note = "recent", "dernière passe (dossier %s) terminée le %s : ce dossier sera une passe de plus" % (
+                    dernier.get("reference"), _jour(fin))
+            else:
+                etat, note = "produit", "déjà produit (dossier %s terminé%s) : créez un nouvel OF" % (
+                    dernier.get("reference"), (" le " + _jour(fin)) if fin else "")
+        elif age is not None and age > JOURS_ANCIEN:
+            etat, note = "ancien", "OF du %s jamais planifié : probablement produit hors MySifa" % _jour(cree)
+        out[of_id] = {"etat": etat, "selectionnable": etat not in ("produit", "deja"), "note": note,
+                      "age_jours": age}
+    return out
+
+
+def verifier_reutilisable(conn, of_ids: List[int], entry_id: int) -> None:
+    """Refuse de relier à `entry_id` un OF déjà produit (409). Les passes du
+    même dossier et un OF encore en production restent permises."""
+    r = conn.execute("SELECT id, reference FROM planning_entries WHERE id=?", (entry_id,)).fetchone()
+    if not r:
+        return
+    etats = etat_des_of(conn, [int(i) for i in of_ids], dict(r))
+    bloques = [(i, e) for i, e in etats.items() if e["etat"] == "produit"]
+    if bloques:
+        nums = {int(x["id"]): x["of_numero"] for x in conn.execute(
+            "SELECT id, of_numero FROM of_imports WHERE id IN (%s)" % ",".join("?" * len(bloques)),
+            [i for i, _ in bloques])}
+        raise HTTPException(409, "OF %s %s." % (nums.get(bloques[0][0]) or bloques[0][0], bloques[0][1]["note"]))
+
+
+@router.get("/api/of/planning/dossier/{entry_id}/recherche")
+def of_recherche_pour_dossier(entry_id: int, request: Request):
+    """La recherche d'OF du panneau d'un dossier, avec l'état de chacun vu
+    depuis ce dossier (libre, déjà produit…)."""
+    _require_of_access(request)
+    q = (request.query_params.get("q") or "").strip()
+    if not q:
+        return {"items": []}
+    like = "%" + q + "%"
+    with get_db() as conn:
+        d = conn.execute("SELECT id, reference FROM planning_entries WHERE id=?", (entry_id,)).fetchone()
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, of_numero, reference, machine, delai_client, qte_etiquettes, date_import, imported_by "
+            "FROM of_imports WHERE LOWER(COALESCE(of_numero,'')) LIKE LOWER(?) "
+            "OR LOWER(COALESCE(reference,'')) LIKE LOWER(?) OR LOWER(COALESCE(machine,'')) LIKE LOWER(?) "
+            "ORDER BY date_import DESC, id DESC LIMIT 20", (like, like, like))]
+        etats = etat_des_of(conn, [r["id"] for r in rows], dict(d) if d else None)
+    return {"items": [_ligne_of(r, etats.get(r["id"]), None) for r in rows]}
+
+
+def _ligne_of(o: Dict[str, Any], etat: Optional[Dict[str, Any]], raison: Optional[str]) -> Dict[str, Any]:
+    return {"id": o["id"], "of_numero": o.get("of_numero"), "reference": o.get("reference"),
+            "machine": o.get("machine"),
+            "delai": _jour(_date_iso(o.get("delai_client"))) or o.get("delai_client"),
+            "qte": o.get("qte_etiquettes"), "cree_le": _jour(o.get("date_import")),
+            "par": ("le pont Access" if o.get("imported_by") == "access_bridge" else o.get("imported_by")),
+            "raison": raison, "etat": (etat or {}).get("etat", "libre"),
+            "selectionnable": (etat or {}).get("selectionnable", True), "note": (etat or {}).get("note")}

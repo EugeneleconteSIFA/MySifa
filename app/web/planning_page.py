@@ -5712,6 +5712,7 @@ function renderPlanningOfPaneInner(){
     const dep = st.depuis || {};
     const dos = dep.dossier || {};
     const sugg = dep.suggestions || [];
+    const nSugg = sugg.filter(o => o.selectionnable !== false).length;
     const muted = 'font-size:12px;color:var(--muted)';
     const detail = [dos.ref_produit ? 'produit '+escHtml(dos.ref_produit) : '', dos.machine ? escHtml(dos.machine) : '',
       dos.date_livraison ? 'livraison '+escHtml(_ofpJour(dos.date_livraison)) : ''].filter(Boolean).join(' · ');
@@ -5732,7 +5733,7 @@ function renderPlanningOfPaneInner(){
           desc:descCreer})}
         ${carte({onclick:'togglePlanningOfPicker()', on:!!st.pickerOpen, titre:'Relier un OF existant',
           icon:svg('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
-          desc: st.depuis ? (sugg.length ? sugg.length+' OF correspond'+(sugg.length>1?'ent':'')+' à ce dossier' : 'Chercher parmi tous les OF') : 'Recherche des correspondances…'})}
+          desc: st.depuis ? (nSugg ? nSugg+' OF correspond'+(nSugg>1?'ent':'')+' à ce dossier' : 'Chercher un OF par son numéro') : 'Recherche des correspondances…'})}
         ${carte({onclick:`openOfImportFromPlanning(${st.entryId})`, on:false, titre:'Importer un PDF',
           icon:svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'),
           desc:'Un OF reçu ou scanné en PDF'})}
@@ -5823,22 +5824,23 @@ function planningOfCreer(entryId){
 }
 /* Une ligne d'OF du sélecteur : toute la ligne se clique (comme le choix
    des commandes RVGI), aucune case à cocher. */
-function _ofpLigne(o, st, linkedIds){
-  const deja = linkedIds.has(o.id);
-  const sel = st.pickerSel && st.pickerSel.has(o.id);
-  const ailleurs = o.dossiers && !deja ? 'Relié à '+escHtml(o.dossiers) : '';
+function _ofpLigne(o, st){
+  // L'état vient du serveur (etat_des_of) : un OF déjà produit ou déjà relié
+  // ici se voit mais ne se choisit pas (22/11/2026).
+  const choisissable = o.selectionnable !== false;
+  const sel = choisissable && st.pickerSel && st.pickerSel.has(o.id);
+  const ton = o.etat==='produit' ? 'var(--danger)' : (o.etat==='deja' ? 'var(--muted)' : 'var(--warn)');
   const infos = [o.reference?escHtml(o.reference):'', o.machine?escHtml(o.machine):'', o.delai?'délai '+escHtml(o.delai):'', _ofpQte(o.qte)].filter(Boolean).join(' · ');
   const cree = o.cree_le ? 'créé le '+escHtml(o.cree_le)+(o.par?' par '+escHtml(o.par):'') : '';
-  return `<div role="option" tabindex="${deja?-1:0}" aria-selected="${sel?'true':'false'}" ${deja?'':`onclick="planningOfPickerBasculer(${o.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();planningOfPickerBasculer(${o.id})}"`}
+  return `<div role="option" tabindex="${choisissable?0:-1}" aria-selected="${sel?'true':'false'}" aria-disabled="${choisissable?'false':'true'}" ${choisissable?`onclick="planningOfPickerBasculer(${o.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();planningOfPickerBasculer(${o.id})}"`:''}
       style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 12px;margin-bottom:6px;border-radius:8px;
              border:1px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent-bg)':'var(--card)'};
-             box-shadow:${sel?'inset 3px 0 0 var(--accent)':'none'};cursor:${deja?'default':'pointer'};opacity:${deja?'.55':'1'}">
+             box-shadow:${sel?'inset 3px 0 0 var(--accent)':'none'};cursor:${choisissable?'pointer':'not-allowed'};opacity:${choisissable?'1':'.6'}">
       <div style="min-width:0">
         <div style="font-size:13px;font-weight:700;color:${sel?'var(--accent)':'var(--text)'}">${escHtml(o.of_numero||'OF #'+o.id)}
-          ${o.raison?`<span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${escHtml(o.raison)}</span>`:''}
-          ${deja?`<span style="margin-left:6px;font-size:11px;font-weight:600;color:var(--muted)">déjà relié</span>`:''}</div>
+          ${o.raison?`<span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${escHtml(o.raison)}</span>`:''}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere">${infos||'—'}</div>
-        ${ailleurs?`<div style="font-size:12px;color:var(--warn);margin-top:2px">${ailleurs}</div>`:''}
+        ${o.note?`<div style="font-size:12px;color:${ton};margin-top:2px;font-weight:600">${escHtml(o.note)}</div>`:''}
       </div>
       <div style="font-size:11px;color:var(--muted);white-space:nowrap;text-align:right">${cree}</div>
     </div>`;
@@ -5847,24 +5849,19 @@ function renderPlanningOfPickerHtml(){
   const st = window._ofPlanningState;
   if(!st) return '';
   st.pickerSel = st.pickerSel || new Set();
-  const linkedIds = new Set((st.ofs||[]).map(o => o.id));
   const sugg = ((st.depuis||{}).suggestions)||[];
   const cherche = (st.pickerSearch||'').trim();
-  // Sans recherche : les correspondances du dossier, puis les plus récents.
+  // Sans recherche : les seules correspondances du dossier. Plus de liste
+  // d'« OF récents » sans rapport, qui invitait à l'erreur (22/11/2026).
   let lignes = '', titre = '';
+  const vide = t => `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">${t}</div>`;
   if(st.pickerLoading){
-    lignes = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">Recherche…</div>';
+    lignes = vide('Recherche…');
   }else{
-    const vus = new Set();
-    const liste = [];
-    if(!cherche) sugg.forEach(o => { vus.add(o.id); liste.push(o); });
-    (st.pickerResults||[]).forEach(c => { if(!vus.has(c.id)) liste.push({
-      id:c.id, of_numero:c.of_numero, reference:c.reference, machine:c.machine,
-      delai:c.delai_client?_ofpJour(c.delai_client):'', qte:c.qte_etiquettes,
-      cree_le:_ofpJour((c.date_import||'').slice(0,10)), par:c.imported_by==='access_bridge'?'le pont Access':c.imported_by }); });
-    titre = cherche ? 'Résultats' : (sugg.length ? 'Correspondances, puis OF récents' : 'OF récents');
-    lignes = liste.length ? liste.map(o => _ofpLigne(o, st, linkedIds)).join('')
-      : `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">Aucun OF pour « ${escHtml(cherche)} »</div>`;
+    const liste = cherche ? (st.pickerResults||[]) : sugg;
+    titre = cherche ? 'Résultats' : 'Correspondances';
+    lignes = liste.length ? liste.map(o => _ofpLigne(o, st)).join('')
+      : vide(cherche ? `Aucun OF pour « ${escHtml(cherche)} »` : "Aucun OF ne correspond à ce dossier : créez-le, ou cherchez par numéro.");
   }
   const n = st.pickerSel.size;
   return `<div style="border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px;width:100%;box-sizing:border-box;text-align:left">
@@ -5933,10 +5930,12 @@ function onPlanningOfPickerSearchInput(value){
 
 async function searchOfsForPlanningPicker(term){
   const st = window._ofPlanningState; if(!st) return;
+  // Sans terme : rien à chercher, le sélecteur montre les correspondances.
+  if(!(term||'').trim()){ st.pickerResults = []; st.pickerLoading = false; _rerenderPlanningOfPane(); return; }
   st.pickerLoading = true; _rerenderPlanningOfPane();
   try{
-    const q = encodeURIComponent(term||'');
-    const r = await fetch('/api/of/search?limit=20'+(q?'&q='+q:''), {credentials:'include'});
+    // La recherche dit, OF par OF, s'il peut servir à CE dossier.
+    const r = await fetch('/api/of/planning/dossier/'+encodeURIComponent(st.entryId)+'/recherche?q='+encodeURIComponent(term), {credentials:'include'});
     const data = await r.json();
     st.pickerResults = Array.isArray(data && data.items) ? data.items : [];
   }catch(e){

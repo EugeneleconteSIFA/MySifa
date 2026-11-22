@@ -2043,6 +2043,9 @@ async def admin_add_planning_of_links(request: Request):
         pe = conn.execute("SELECT id FROM planning_entries WHERE id=?", (planning_id,)).fetchone()
         if not pe:
             raise HTTPException(status_code=404, detail="Planning introuvable.")
+        # Un OF déjà produit ne se réutilise pas (22/11/2026).
+        from app.routers.of_planning import verifier_reutilisable
+        verifier_reutilisable(conn, of_ids, planning_id)
         # Récupère la position max actuelle pour append à la fin
         cur_max = conn.execute(
             "SELECT COALESCE(MAX(position), -1) FROM planning_of_links WHERE planning_entry_id=?",
