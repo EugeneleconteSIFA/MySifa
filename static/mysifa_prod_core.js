@@ -2950,15 +2950,26 @@ async function ofeControler(m){
   const refEl=document.getElementById('ofe-reference');
   const ref=refEl?refEl.value:(m.reference||'');
   const l=(m._commandes||[]).map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
-  if(!m._fiche||!l.length){ m._controle=null; ofePeindreEcart(m); return; }
+  if(!m._fiche||!l.length){
+    const avant=ofePlanContestee(m);
+    m._controle=null; ofePeindreEcart(m);
+    if(avant&&m._planChoix&&!m._planChoix.manuel&&m._planChoix.action==='relier'){ ofePlanDefauts(m); ofePlanPeindre(m); }
+    return;
+  }
   let r=null;
   try{
     r=await api('/api/of/controle?fiche_id='+encodeURIComponent(m._fiche.id)+
       '&reference='+encodeURIComponent(ref||'')+'&c='+encodeURIComponent(JSON.stringify(l)));
   }catch(e){ return; }
   if(S.ofEditModal!==m) return;
+  const avant=ofePlanContestee(m);
   m._controle=r;
   ofePeindreEcart(m);
+  // Le verdict change ce que l'étape 4 coche d'office, tant que l'ADV n'y a
+  // pas touché.
+  if(ofePlanContestee(m)!==avant&&m._planChoix&&!m._planChoix.manuel&&m._planChoix.action==='relier'){
+    ofePlanDefauts(m); ofePlanPeindre(m);
+  }
 }
 
 function ofeEcartHtml(m){
@@ -3473,15 +3484,25 @@ async function ofePlanCharger(m){
     }
     m._planChoix=ancien;
   }else if(ds.length){
-    const d=ds[0];
-    // Nouvel OF : les valeurs de l'OF vont au dossier. OF déjà relié : rien
-    // n'est reporté sans case cochée.
-    m._planChoix={action:'relier',entry_id:d.id,
-      champs:d.deja_relie?[]:(d.ecarts||[]).filter(e=>e.modifiable).map(e=>e.champ)};
+    ofePlanDefauts(m);
   }else{
     m._planChoix={action:'creer',machine_id:r.machine_proposee||((r.machines||[])[0]||{}).id||null,place:'a_placer'};
   }
   ofePlanPeindre(m);
+}
+/* Fiche contestée : elle ne correspond pas aux commandes cochées (cadre rouge
+   de l'étape 2). Ses valeurs ne partent alors vers le dossier que cochées à
+   la main (retour du 22/11/2026, dossier 9932911 : laize et format d'une
+   autre fiche cochés d'office). */
+function ofePlanContestee(m){ return !!(m&&m._controle&&m._controle.ok===false); }
+/* Choix par défaut sur le premier dossier proposé. Nouvel OF dont la fiche
+   concorde : ses valeurs vont au dossier. OF déjà relié ou fiche contestée :
+   rien n'est reporté sans case cochée. */
+function ofePlanDefauts(m){
+  const d=((m._plan||{}).dossiers||[])[0];
+  if(!d) return;
+  m._planChoix={action:'relier',entry_id:d.id,
+    champs:(d.deja_relie||ofePlanContestee(m))?[]:(d.ecarts||[]).filter(e=>e.modifiable).map(e=>e.champ)};
 }
 function ofePlanHtml(m){
   const r=m._plan;
@@ -3528,6 +3549,7 @@ function ofePlanHtml(m){
     }
     if(coche&&(d.ecarts||[]).length){
       h+='<div style="margin:0 0 6px 26px;display:flex;flex-direction:column;gap:4px">';
+      if(ofePlanContestee(m)&&!d.deja_relie) h+='<div style="font-size:12px;color:var(--warn);font-weight:600">La fiche ne correspond pas à la commande : rien n\'est reporté par défaut. Vérifiez chaque valeur avant de la cocher.</div>';
       h+='<div style="'+muted+'">'+(d.deja_relie?'Mettre aussi à jour le dossier :':'Reporter sur le dossier :')+'</div>';
       d.ecarts.forEach(function(e){
         const on=(c.champs||[]).indexOf(e.champ)>=0;

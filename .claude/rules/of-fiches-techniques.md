@@ -467,7 +467,9 @@ dossier terminé sur la même commande est une production passée). Il rend les
 écarts que l'OF reporterait : numéro d'OF, référence produit, délai, laize,
 format. Jamais la machine ni la place. Un délai imposé ne bouge pas ; un
 dossier en cours ou terminé est relié, jamais modifié. Nouvel OF : écarts
-cochés par défaut ; OF déjà relié : rien sans case cochée.
+cochés par défaut ; OF déjà relié : rien sans case cochée. Fiche contestée
+(elle ne correspond pas aux commandes, `m._controle.ok === false`) : rien
+n'est coché d'office non plus, et l'étape le dit (`ofePlanContestee`).
 
 `POST /api/of/{id}/planning` part APRÈS l'enregistrement de l'OF : une erreur
 de planning ne le bloque jamais. `relier` passe par `_promote_of_link` et pose
