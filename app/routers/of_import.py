@@ -635,13 +635,45 @@ def list_of_imports(request: Request):
                 LIMIT ? OFFSET ?""",
             params_rows,
         ).fetchall()
+        dossiers = _dossiers_des_of(conn, [int(r["id"]) for r in rows])
 
     return {
         "total":  total,
         "offset": offset,
         "limit":  limit,
-        "rows":   [{**_row_dict(r), "lie": bool(r["lie"]), "termine": bool(r["termine"])} for r in rows],
+        "rows":   [{**_row_dict(r), "lie": bool(r["lie"]), "termine": bool(r["termine"]),
+                    "dossier": dossiers.get(int(r["id"]))} for r in rows],
     }
+
+
+def _dossiers_des_of(conn, ids: list) -> dict:
+    """Le dossier de planning de chaque OF, pour la colonne « Dossier » de la
+    liste (22/11/2026) : l'OF dit où il en est. Le lien en tête de
+    `planning_of_links` d'abord, sinon la colonne `of_import_id`."""
+    if not ids:
+        return {}
+    ph = ",".join("?" * len(ids))
+    out: dict = {}
+    try:
+        lignes = conn.execute(
+            f"""SELECT x.of_id, pe.id, pe.reference, pe.statut, pe.a_placer, pe.machine_id,
+                       m.nom AS machine
+                  FROM (SELECT l.of_import_id AS of_id, l.planning_entry_id AS pe_id, l.position AS rang
+                          FROM planning_of_links l WHERE l.of_import_id IN ({ph})
+                        UNION ALL
+                        SELECT p.of_import_id, p.id, 999 FROM planning_entries p WHERE p.of_import_id IN ({ph})) x
+                  JOIN planning_entries pe ON pe.id = x.pe_id
+                  LEFT JOIN machines m ON m.id = pe.machine_id
+                 ORDER BY x.rang, pe.id DESC""",
+            list(ids) + list(ids)).fetchall()
+    except Exception:
+        return {}
+    for r in lignes:
+        out.setdefault(int(r["of_id"]), {
+            "id": r["id"], "reference": r["reference"], "statut": r["statut"],
+            "a_placer": bool(int(r["a_placer"] or 0)), "machine_id": r["machine_id"],
+            "machine": r["machine"]})
+    return out
 
 
 @router.patch("/api/of/{of_id}")

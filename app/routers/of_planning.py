@@ -366,12 +366,26 @@ def _relier(conn, request, user, qui, maintenant, of, entry_id, champs):
     if any(e["champ"] == "date_livraison" for e in ecrits):
         _invalider_plans(conn, d["machine_id"])
     conn.commit()
+    ecrits_ch = {e["champ"] for e in ecrits}
+    # Ce que l'OF aurait changé et qui ne l'a pas été : case décochée,
+    # délai imposé, dossier en cours. `d` est le dossier d'AVANT l'écriture.
+    gardes = [{"libelle": e["libelle"], "valeur": e["avant"], "propose": e["apres"],
+               "motif": e["motif"] or "non reporté"}
+              for e in ecarts(d, vals) if e["champ"] not in ecrits_ch]
+    bilan = _bilan_dossier(conn, entry_id)
+    numero_of = of.get("of_numero") or "#%s" % of["id"]
+    # Lisible dans « Historique des modifications » de la machine : la ligne
+    # porte machine_id, le geste et les valeurs avant → après.
     log_action(user=user, action="UPDATE", module="planning",
-               objet="Dossier %s · OF %s" % (d.get("reference") or entry_id, of.get("of_numero") or of["id"]),
-               detail={"relie_of": of["id"], "champs": {e["champ"]: [e["avant"], e["apres"]] for e in ecrits}},
+               objet="Dossier %s · %s" % (d.get("reference") or entry_id, bilan.get("machine") or ""),
+               detail={"machine_id": d["machine_id"], "geste": "Relié à l'OF %s" % numero_of,
+                       "avant": {e["libelle"]: e["avant"] for e in ecrits},
+                       "apres": {e["libelle"]: e["apres"] for e in ecrits}},
                request=request)
     n = len(ecrits)
-    return {"ok": True, "entry_id": entry_id, "machine_id": d["machine_id"],
+    return {"ok": True, "action": "relier", "entry_id": entry_id, "machine_id": d["machine_id"],
+            "dossier": bilan, "ecrits": [{"libelle": e["libelle"], "avant": e["avant"], "apres": e["apres"]} for e in ecrits],
+            "gardes": gardes,
             "message": "OF relié au dossier %s%s." % (
                 d.get("reference") or entry_id,
                 (", %d valeur%s mise%s à jour" % (n, "s" if n > 1 else "", "s" if n > 1 else "")) if n else "")}
@@ -421,12 +435,37 @@ def _creer(conn, request, user, qui, maintenant, of, machine_id, place):
             pass
     _invalider_plans(conn, mac["id"])
     conn.commit()
+    bilan = _bilan_dossier(conn, entry_id)
     log_action(user=user, action="CREATE", module="planning",
                objet="Dossier %s · %s" % (reference, mac["nom"]),
-               detail={"depuis_of": of["id"], "a_placer": place == "a_placer"}, request=request)
-    return {"ok": True, "entry_id": entry_id, "machine_id": mac["id"],
+               detail={"machine_id": mac["id"],
+                       "geste": "Ajouté depuis l'OF %s" % (of.get("of_numero") or "#%s" % of["id"]),
+                       "Place": "À placer" if place == "a_placer" else "En fin de file"},
+               request=request)
+    return {"ok": True, "action": "creer", "entry_id": entry_id, "machine_id": mac["id"],
+            "dossier": bilan, "ecrits": [], "gardes": [],
             "message": "Dossier %s ajouté au planning %s%s." % (
                 reference, mac["nom"], " (à placer)" if place == "a_placer" else ", en fin de file")}
+
+
+def _bilan_dossier(conn, entry_id: int) -> Dict[str, Any]:
+    """Le dossier tel qu'il est APRÈS le geste, pour le récapitulatif."""
+    r = conn.execute(
+        "SELECT pe.*, m.nom AS machine_nom FROM planning_entries pe "
+        "LEFT JOIN machines m ON m.id = pe.machine_id WHERE pe.id=?", (entry_id,)).fetchone()
+    if not r:
+        return {}
+    d = dict(r)
+    rang = None
+    if d.get("statut") == "attente" and not int(d.get("a_placer") or 0):
+        rang = conn.execute(
+            "SELECT COUNT(*) FROM planning_entries WHERE machine_id=? AND statut='attente' "
+            "AND COALESCE(a_placer,0)=0 AND position <= ?", (d["machine_id"], d["position"])).fetchone()[0]
+    return {"id": d["id"], "reference": d.get("reference"), "machine_id": d.get("machine_id"),
+            "machine": d.get("machine_nom"), "statut": d.get("statut"),
+            "a_placer": bool(int(d.get("a_placer") or 0)), "rang": rang,
+            "date_livraison": _jour(d.get("date_livraison")) or None,
+            "debut": _heure(d.get("planned_start")) or None}
 
 
 def _invalider_plans(conn, machine_id) -> None:
