@@ -1565,6 +1565,12 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
                     if any(_of_token_present(t, r["of_numero"]) for t in tokens)]
 
         # ── Étape 3 : aucun token → rapprochement par référence produit ──────
+        # Jamais un match certain (22/11/2026) : le même produit ne dit rien
+        # d'une production. Seul, ce rapprochement reliait sans prévenir
+        # « Stock 1153/0005 » (novembre) à un OF produit fin juin, et un
+        # dossier de décembre à « 9932167 + stock » de juin. Les candidats
+        # partent dans « Mappings à valider », sans les OF déjà produits ni
+        # les OF anciens jamais planifiés (of_planning.etat_des_of).
         if not rows and not tokens and ref_produit_norm and normalize_ref_produit is not None:
             by_ref = c.execute(
                 f"""SELECT {_OF_SELECT_COLS} FROM of_imports
@@ -1572,6 +1578,19 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
             ).fetchall()
             rows = [r for r in by_ref
                     if normalize_ref_produit(r["reference"]) == ref_produit_norm]
+            if rows:
+                try:
+                    from app.routers.of_planning import etat_des_of
+                    etats = etat_des_of(c, [int(r["id"]) for r in rows], None)
+                    rows = [r for r in rows
+                            if (etats.get(int(r["id"])) or {}).get("etat") not in ("produit", "ancien")]
+                except Exception:
+                    pass
+            rows = sorted(rows, key=lambda r: (
+                0 if (r["pdf_filename"] or "").strip() else 1,
+                -(int(r["id"]) if r["id"] is not None else 0),
+            ))
+            return (None, [dict(r) for r in rows])
 
         if not rows:
             return (None, [])

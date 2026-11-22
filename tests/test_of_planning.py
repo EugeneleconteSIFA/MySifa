@@ -198,6 +198,27 @@ class TestPlanningDepuisOF(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 409)
             op.verifier_reutilisable(conn, [20, 23, 24, 25], 1)   # aucun refus
 
+    def test_rapprochement_par_produit_jamais_automatique(self):
+        """Un dossier « Stock 1153/0005 » ne se relie plus tout seul à l'OF du
+        même produit : candidats à valider seulement, sans OF ancien."""
+        from app.routers.of_import import _lookup_of_candidates
+        from datetime import datetime, timedelta
+        recent = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+        with get_db() as conn:
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, date_creation, date_import) "
+                         "VALUES (40, '1153/0005 - 01/04/26', '1153/0005', '2026-04-01', '2026-06-02T09:00:00')")
+            conn.commit()
+            certain, cands = _lookup_of_candidates("Stock 1153/0005", "1153/0005", conn=conn)
+            self.assertIsNone(certain)
+            self.assertEqual(cands, [])            # OF ancien jamais planifié : écarté
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, date_creation, date_import) "
+                         "VALUES (41, 'Stock 1153/0005 bis', '1153/0005', ?, ?)",
+                         (recent, datetime.now().strftime("%Y-%m-%dT%H:%M:%S")))
+            conn.commit()
+            certain, cands = _lookup_of_candidates("Stock 1153/0005", "1153/0005", conn=conn)
+            self.assertIsNone(certain)             # jamais certain par le produit seul
+            self.assertEqual([c["id"] for c in cands], [41])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
