@@ -566,3 +566,89 @@ def of_depuis_dossier(entry_id: int, request: Request):
             "dossiers": o.get("dossiers"), "raison": o["raison"],
         } for o in suggestions],
     }
+
+
+# ── Supprimer un OF relié à un dossier ────────────────────────────────────
+#
+# Constat du 22/11/2026 : supprimer un OF effaçait la ligne et rien d'autre.
+# La base n'applique pas ON DELETE CASCADE (PRAGMA foreign_keys désactivé) :
+# le dossier gardait un lien vers un OF disparu, perdait sa quantité au
+# planning et son chiffrage dans Besoins matières, sans que personne n'ait été
+# prévenu ni que le geste soit tracé.
+
+def dossiers_des_of(conn, ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+    """Les dossiers reliés à chaque OF, avec l'OF qui prendrait le relais."""
+    if not ids:
+        return {}
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"""SELECT DISTINCT x.of_id, pe.id, pe.reference, pe.statut, pe.a_placer, pe.machine_id,
+                   m.nom AS machine
+              FROM (SELECT of_import_id AS of_id, planning_entry_id AS pe_id FROM planning_of_links
+                     WHERE of_import_id IN ({ph})
+                    UNION SELECT of_import_id, id FROM planning_entries WHERE of_import_id IN ({ph})) x
+              JOIN planning_entries pe ON pe.id = x.pe_id
+              LEFT JOIN machines m ON m.id = pe.machine_id""", list(ids) * 2).fetchall()
+    out: Dict[int, List[Dict[str, Any]]] = {}
+    for r in rows:
+        relais = conn.execute(
+            f"""SELECT o.of_numero FROM planning_of_links l JOIN of_imports o ON o.id = l.of_import_id
+                 WHERE l.planning_entry_id = ? AND l.of_import_id NOT IN ({ph})
+                 ORDER BY l.position, l.id LIMIT 1""", [r["id"]] + list(ids)).fetchone()
+        out.setdefault(int(r["of_id"]), []).append({
+            "id": r["id"], "reference": r["reference"], "statut": r["statut"],
+            "a_placer": bool(int(r["a_placer"] or 0)), "machine_id": r["machine_id"],
+            "machine": r["machine"], "relais": relais["of_numero"] if relais else None})
+    return out
+
+
+def detacher_of(conn, ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+    """Retire les liens des OF `ids` avant leur suppression. Le dossier prend
+    son OF suivant s'il en a un, sinon il repasse sans OF (« Dossiers sans
+    OF »). Les scans gardent leur numéro, perdent l'id. Ne committe pas."""
+    if not ids:
+        return {}
+    touches = dossiers_des_of(conn, ids)
+    ph = ",".join("?" * len(ids))
+    # Le trigger trg_planning_of_links_after_delete recalcule of_import_id
+    # sur le lien restant, ou NULL s'il n'y en a plus.
+    conn.execute(f"DELETE FROM planning_of_links WHERE of_import_id IN ({ph})", ids)
+    conn.execute(f"UPDATE planning_entries SET of_import_id = NULL WHERE of_import_id IN ({ph})", ids)
+    for sql in (f"UPDATE produit_documents SET of_import_id = NULL WHERE of_import_id IN ({ph})",
+                f"DELETE FROM rvgi_rattachements WHERE objet = 'of' AND objet_id IN ({ph})"):
+        try:
+            conn.execute(sql, ids)
+        except Exception:
+            pass   # base ancienne sans la table
+    return touches
+
+
+def journaliser_suppression(user, request, of_numeros: Dict[int, str],
+                            touches: Dict[int, List[Dict[str, Any]]]) -> None:
+    """Une ligne par OF (journal), une par dossier touché (historique de sa
+    machine au planning)."""
+    for of_id, numero in of_numeros.items():
+        ds = touches.get(of_id) or []
+        log_action(user=user, action="DELETE", module="of", objet="OF %s" % numero,
+                   detail={"dossiers": [d["reference"] for d in ds]}, request=request)
+        for d in ds:
+            log_action(user=user, action="UPDATE", module="planning",
+                       objet="Dossier %s · %s" % (d["reference"], d.get("machine") or ""),
+                       detail={"machine_id": d["machine_id"], "geste": "OF %s supprimé" % numero,
+                               "OF actif": d["relais"] or "aucun, dossier sans OF"},
+                       request=request)
+
+
+@router.post("/api/of/suppression/apercu")
+async def of_suppression_apercu(request: Request):
+    """Ce que la suppression de ces OF changerait au planning, pour la
+    confirmation. Lecture seule."""
+    _require_of_access(request)
+    body = await request.json()
+    ids = [int(i) for i in (body.get("ids") or []) if str(i).isdigit()][:500]
+    with get_db() as conn:
+        touches = dossiers_des_of(conn, ids)
+        nums = {int(r["id"]): r["of_numero"] for r in conn.execute(
+            "SELECT id, of_numero FROM of_imports WHERE id IN (%s)" % ",".join("?" * len(ids)), ids)} if ids else {}
+    return {"ofs": [{"id": i, "of_numero": nums.get(i), "dossiers": touches.get(i, [])}
+                    for i in ids if touches.get(i)]}

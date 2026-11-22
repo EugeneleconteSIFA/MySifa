@@ -4689,17 +4689,41 @@ async function prodConfirmerTexte(texte, opts){
   return prodConfirmer(o);
 }
 
+/* Supprimer un OF relié à un dossier (22/11/2026) : la confirmation nomme
+   les dossiers touchés et dit ce qu'ils deviennent. Le serveur retire les
+   liens avant l'OF et trace le geste dans l'historique du planning. */
+async function ofImpactSuppression(ids){
+  let r=null;
+  try{ r=await api('/api/of/suppression/apercu',{method:'POST',body:JSON.stringify({ids:ids})}); }
+  catch(e){ return ''; }
+  const lignes=[];
+  ((r&&r.ofs)||[]).forEach(function(o){
+    (o.dossiers||[]).forEach(function(d){
+      const etat=d.statut==='en_cours'?'en cours':d.statut==='termine'?'terminé':d.a_placer?'à placer':'en attente';
+      lignes.push('OF '+(o.of_numero||'#'+o.id)+' → dossier '+(d.reference||'#'+d.id)+' ('+[d.machine,etat].filter(Boolean).join(', ')+') : '+
+        (d.relais?'l\'OF '+d.relais+' prend le relais.':'il repassera sans OF et perdra sa quantité au planning.'));
+    });
+  });
+  return lignes.length?lignes.join('\n'):'';
+}
+function ofBilanSuppression(res){
+  const ds=(res&&res.dossiers)||[];
+  if(!ds.length) return '';
+  const sans=ds.filter(d=>!d.relais).length;
+  return ' '+ds.length+' dossier'+(ds.length>1?'s':'')+' détaché'+(ds.length>1?'s':'')+(sans?', dont '+sans+' désormais sans OF':'')+'.';
+}
 async function ofDeleteImport(id){
   const row=(S.ofImports||[]).find(r=>r.id===id)||{};
+  const impact=await ofImpactSuppression([id]);
   if(!(await prodConfirmer({
     title:'Supprimer l\'OF',
     message:'Supprimer l\'OF '+(row.of_numero||('#'+id))+' ?',
-    detail:'Il disparaît de la liste, de son dossier relié et des besoins matières. Cette action est définitive.',
+    detail:(impact?impact+'\n\n':'Aucun dossier de planning n\'est relié à cet OF.\n\n')+'Cette action est définitive.',
     confirmLabel:'Supprimer', danger:true,
   }))) return;
   try{
-    await api('/api/of/'+id,{method:'DELETE'});
-    toast('Import supprimé.');
+    const res=await api('/api/of/'+id,{method:'DELETE'});
+    toast('OF '+(row.of_numero||('#'+id))+' supprimé.'+ofBilanSuppression(res));
     await loadOfImports();
     render();
   }catch(e){
@@ -4791,15 +4815,16 @@ function renderOfTab(){
           style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
           onClick:async()=>{
             const n=S.ofSelected.size;
+            const impact=await ofImpactSuppression([...S.ofSelected]);
             if(!(await prodConfirmer({
               title:'Supprimer des OF',
               message:`Supprimer ${n} OF sélectionné${n>1?'s':''} ?`,
-              detail:'Cette action est définitive.',
+              detail:(impact?impact+'\n\n':'Aucun de ces OF n\'est relié à un dossier de planning.\n\n')+'Cette action est définitive.',
               confirmLabel:'Supprimer', danger:true,
             }))) return;
             try{
-              await api('/api/of/bulk',{method:'DELETE',body:JSON.stringify({ids:[...S.ofSelected]})});
-              toast(`${n} OF${n>1?'s':''} supprimé${n>1?'s':''}.`);
+              const res=await api('/api/of/bulk',{method:'DELETE',body:JSON.stringify({ids:[...S.ofSelected]})});
+              toast(`${n} OF supprimé${n>1?'s':''}.`+ofBilanSuppression(res));
               set({ofSelected:new Set()});
               await loadOfImports();
               render();

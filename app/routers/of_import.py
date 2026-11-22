@@ -1008,24 +1008,36 @@ async def bulk_delete_of(request: Request):
     if not ids:
         raise HTTPException(status_code=400, detail="Liste d'ids vide.")
     placeholders = ",".join("?" * len(ids))
+    from app.routers.of_planning import detacher_of, journaliser_suppression
     with get_db() as conn:
+        nums = {int(r["id"]): r["of_numero"] or "#%s" % r["id"] for r in conn.execute(
+            f"SELECT id, of_numero FROM of_imports WHERE id IN ({placeholders})", ids)}
+        touches = detacher_of(conn, ids)
         conn.execute(f"DELETE FROM of_imports WHERE id IN ({placeholders})", ids)
         conn.commit()
     _invalidate_pending_count_cache()
-    return {"deleted": len(ids), "ids": ids}
+    journaliser_suppression(get_current_user(request), request, nums, touches)
+    return {"deleted": len(ids), "ids": ids,
+            "dossiers": [d for ds in touches.values() for d in ds]}
 
 
 @router.delete("/api/of/{of_id}")
 def delete_of_import(request: Request, of_id: int):
     require_superadmin(request)
     with get_db() as conn:
-        row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
+        row = conn.execute("SELECT id, of_numero FROM of_imports WHERE id=?", (of_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="OF introuvable.")
+        # Les liens d'abord : sans cascade en base, le dossier pointerait un
+        # OF disparu (22/11/2026).
+        from app.routers.of_planning import detacher_of, journaliser_suppression
+        touches = detacher_of(conn, [of_id])
         conn.execute("DELETE FROM of_imports WHERE id=?", (of_id,))
         conn.commit()
     _invalidate_pending_count_cache()
-    return {"ok": True}
+    journaliser_suppression(get_current_user(request), request,
+                            {of_id: row["of_numero"] or "#%s" % of_id}, touches)
+    return {"ok": True, "dossiers": touches.get(of_id, [])}
 
 
 # ══════════════════════════════════════════════════
