@@ -2451,6 +2451,39 @@ function ofeAligner(m,i){
   ofePeindreCases(m);
   ofeRecalculer();
 }
+/* Aucune fiche pour l'article de la commande : l'ADV le signale d'un clic,
+   une tâche part dans le gestionnaire avec de quoi analyser (19/11/2026).
+   Effacée par erreur le même jour, remise le 22/11/2026 : le bouton
+   « Signaler » appelait une fonction absente et ne faisait plus rien. */
+async function ofeSignalerFicheManquante(m){
+  const r=m._cmdInfo||{};
+  if(!r.article) return;
+  let commentaire='';
+  if(typeof window.mysifaConfirm==='function'){
+    const v=await window.mysifaConfirm({
+      title:'Signaler la fiche manquante',
+      message:'Une tâche sera créée pour l\'article '+r.article+', avec la commande, la quantité et le délai.',
+      detail:'Elle part dans le gestionnaire de tâches, assignée aux administrateurs.',
+      confirmLabel:'Signaler',
+      saisie:{label:'Commentaire (facultatif)',placeholder:'Ex. : fiche à dupliquer d\'un produit voisin, nouveau code article du client…'},
+    });
+    if(v===false) return;
+    commentaire=typeof v==='string'?v:'';
+  }
+  const lignes=((m._commandes&&m._commandes.length)?m._commandes:(r.lignes||[]))
+    .map(x=>({numero:x.numero,ligne:x.ligne,qte:x.qte}));
+  try{
+    const res=await api('/api/of/signaler-fiche-manquante',{method:'POST',
+      body:JSON.stringify({article:r.article,commandes:lignes,commentaire:commentaire})});
+    m._ficheSignalee=true;
+    toast(res.deja?'Déjà signalé : une tâche est ouverte pour cet article.':'Signalement envoyé au gestionnaire de tâches.');
+    const info=document.getElementById('ofe-fiche-info');
+    if(info) info.innerHTML=ofeInfoFiche(m);
+  }catch(e){
+    toast(e.message||'Signalement impossible.','error');
+  }
+}
+
 async function ofeVoirPdf(){
   const m=S.ofEditModal;
   if(!m) return;
