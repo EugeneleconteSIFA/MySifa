@@ -64,6 +64,7 @@ from app.routers.encres import router as encres_router
 from app.routers.traca import router as traca_api_router
 from app.routers.fsc_negoce import router as fsc_negoce_router
 from app.routers.of_import import router as of_import_router
+from app.routers.of_planning import router as of_planning_router
 from app.routers.produits_memoire import router as produits_memoire_router
 from app.web.fabrication_page import router as fabrication_page_router
 from app.routers.planning_rh import router as planning_rh_api_router
@@ -941,6 +942,8 @@ app.include_router(fabrication_api_router)
 app.include_router(traca_api_router)
 app.include_router(fsc_negoce_router)
 app.include_router(of_import_router, prefix="")
+# Étape « Planning » de la fenêtre OF : relier ou créer le dossier (22/11/2026).
+app.include_router(of_planning_router)
 # Memoire produit : fiche par reference (series passees, scans d'OF termines,
 # savoirs d'atelier). L'import ne suffit pas — sans include_router les routes
 # /api/produits/* repondent 404 sans aucune trace serveur.

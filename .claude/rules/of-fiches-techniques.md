@@ -454,3 +454,25 @@ document Access) et la quantité au mille.
 Le planning (`/api/of/planning/{id}` → `fiche_accord`) affiche l'écart
 au-dessus des onglets OF / Fiche ; la règle de cohérence `documents.of_fiche`
 utilise la même comparaison. Test : `python3 tests/test_of_fiche_accord.py`.
+
+## Du nouvel OF au planning — `app/routers/of_planning.py`
+
+Demande d'Eugène (22/11/2026) : « ajouter / modifier un dossier de prod au
+planning à partir d'une création d'OF ». La fenêtre OF porte une étape
+« 4 · Planning » (`ofePlanHtml`, ids en `ofp-` pour rester hors de l'historique
+de l'OF). `POST /api/of/planning/candidats` cherche le dossier, le plus sûr
+d'abord : déjà relié à l'OF, même numéro d'OF ou de dossier, mêmes lignes de
+commande RVGI ; aux deux derniers rangs, seulement en attente ou en cours (un
+dossier terminé sur la même commande est une production passée). Il rend les
+écarts que l'OF reporterait : numéro d'OF, référence produit, délai, laize,
+format. Jamais la machine ni la place. Un délai imposé ne bouge pas ; un
+dossier en cours ou terminé est relié, jamais modifié. Nouvel OF : écarts
+cochés par défaut ; OF déjà relié : rien sans case cochée.
+
+`POST /api/of/{id}/planning` part APRÈS l'enregistrement de l'OF : une erreur
+de planning ne le bloque jamais. `relier` passe par `_promote_of_link` et pose
+`of_link_user_managed` ; `creer` reprend `of_dossier_prefill`, « à placer » par
+défaut (ou en fin de file), durée 8 h comme l'ajout manuel. Réservé aux rôles
+du planning (`is_admin`) : les autres voient l'étape en lecture seule. La
+recherche n'entre pas dans le journal (`SKIP_PREFIXES`), le geste si.
+Test : `python3 tests/test_of_planning.py`.
