@@ -3400,6 +3400,166 @@ function ofeLirePayload(m){
   };
 }
 
+/* Étape « 4 · Planning » de la fenêtre OF (22/11/2026, demande d'Eugène).
+   Le serveur cherche le dossier qui correspond à l'OF (déjà relié, même
+   numéro, mêmes lignes de commande) et dit ce que l'OF y changerait. L'écran
+   propose : relier et reporter les valeurs cochées, créer un dossier « à
+   placer », ou ne rien faire. Le geste part APRÈS l'enregistrement de l'OF :
+   une erreur de planning ne bloque jamais l'OF. */
+let _ofePlanTimer=null, _ofePlanJeton=0;
+function ofePlanCle(m){
+  const p=ofeLirePayload(m);
+  return JSON.stringify([m.id||null,p.of_numero,p.reference,p.delai_client,p.laize,p.format,p.machine,
+    (m._fiche&&m._fiche.id)||null,(m._commandes||[]).map(l=>l.numero+'/'+(l.ligne||''))]);
+}
+function ofePlanChargerPlusTard(m,delai){
+  clearTimeout(_ofePlanTimer);
+  _ofePlanTimer=setTimeout(function(){ ofePlanCharger(m); }, delai==null?500:delai);
+}
+async function ofePlanCharger(m){
+  if(!m||S.ofEditModal!==m||!document.getElementById('ofp-planning')) return;
+  if(!m.id&&!m._fiche){ m._plan=null; ofePlanPeindre(m); return; }
+  const cle=ofePlanCle(m);
+  if(cle===m._planCle&&m._plan) return;
+  m._planCle=cle;
+  const jeton=++_ofePlanJeton;
+  const p=ofeLirePayload(m);
+  let r=null;
+  try{
+    r=await api('/api/of/planning/candidats',{method:'POST',body:JSON.stringify({
+      of_id:m.id||null, of_numero:p.of_numero, reference:p.reference, delai_client:p.delai_client,
+      laize:p.laize, format:p.format, machine:p.machine,
+      machine_fiche:(m._fiche&&m._fiche.machine)||null, commandes:m._commandes||[]})});
+  }catch(e){ if(jeton===_ofePlanJeton){ m._plan={erreur:e.message||'Recherche impossible.'}; ofePlanPeindre(m); } return; }
+  if(jeton!==_ofePlanJeton||S.ofEditModal!==m) return;
+  const ancien=m._planChoix||null;
+  m._plan=r;
+  const ds=r.dossiers||[];
+  // Le choix fait par l'ADV reste tant que son dossier est encore proposé.
+  if(ancien&&ancien.manuel&&(ancien.action!=='relier'||ds.some(d=>d.id===ancien.entry_id))){
+    if(ancien.action==='relier'){
+      const d=ds.find(x=>x.id===ancien.entry_id);
+      const possibles=(d.ecarts||[]).filter(e=>e.modifiable).map(e=>e.champ);
+      ancien.champs=(ancien.champs||[]).filter(c=>possibles.indexOf(c)>=0);
+    }
+    m._planChoix=ancien;
+  }else if(ds.length){
+    const d=ds[0];
+    // Nouvel OF : les valeurs de l'OF vont au dossier. OF déjà relié : rien
+    // n'est reporté sans case cochée.
+    m._planChoix={action:'relier',entry_id:d.id,
+      champs:d.deja_relie?[]:(d.ecarts||[]).filter(e=>e.modifiable).map(e=>e.champ)};
+  }else{
+    m._planChoix={action:'creer',machine_id:r.machine_proposee||((r.machines||[])[0]||{}).id||null,place:'a_placer'};
+  }
+  ofePlanPeindre(m);
+}
+function ofePlanHtml(m){
+  const r=m._plan;
+  const muted='font-size:12px;color:var(--muted)';
+  if(!m.id&&!m._fiche) return '<div style="'+muted+'">Choisissez la fiche : le dossier se propose ensuite.</div>';
+  if(!r) return '<div style="'+muted+'">Recherche du dossier…</div>';
+  if(r.erreur) return '<div style="font-size:12px;color:var(--warn)">'+escHtml(r.erreur)+'</div>';
+  const c=m._planChoix||{};
+  const ds=r.dossiers||[];
+  const etatDossier=function(d){
+    if(d.statut==='en_cours') return 'en cours';
+    if(d.statut==='termine') return 'terminé';
+    if(d.a_placer) return 'à placer';
+    return d.rang?(d.rang===1?'1er dans la file':d.rang+'e dans la file'):'en attente';
+  };
+  const ligne='display:flex;align-items:flex-start;gap:8px;padding:7px 0;cursor:pointer;font-size:13px;color:var(--text)';
+  const radio=function(val,coche,dis){ return '<input type="radio" name="ofe-plan-choix" value="'+escAttr(val)+'"'+(coche?' checked':'')+(dis?' disabled':'')+' style="margin-top:2px;accent-color:var(--accent)">'; };
+  const lecture=!r.peut_planifier;
+  let h='';
+  if(lecture) h+='<div style="'+muted+';margin-bottom:6px">Le planning est réservé à la direction et à l\'administration : cette étape est en lecture seule.</div>';
+  ds.forEach(function(d){
+    const coche=c.action==='relier'&&c.entry_id===d.id;
+    h+='<label style="'+ligne+'">'+radio('relier:'+d.id,coche,lecture)+'<span><strong>'+(d.deja_relie?'Dossier relié ':'Relier au dossier ')+escHtml(d.reference||'')+'</strong>'+
+      ' <span style="color:var(--text2)">· '+escHtml(d.machine||'')+' · '+escHtml(etatDossier(d))+(d.date_livraison?' · livraison '+escHtml(d.date_livraison):'')+'</span>'+
+      '<br><span style="'+muted+'">'+escHtml(d.raison)+(d.of_relie?' · actuellement relié à l\'OF '+escHtml(d.of_relie):'')+'</span></span></label>';
+    if(coche&&(d.ecarts||[]).length){
+      h+='<div style="margin:0 0 6px 26px;display:flex;flex-direction:column;gap:4px">';
+      h+='<div style="'+muted+'">'+(d.deja_relie?'Mettre aussi à jour le dossier :':'Reporter sur le dossier :')+'</div>';
+      d.ecarts.forEach(function(e){
+        const on=(c.champs||[]).indexOf(e.champ)>=0;
+        h+='<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:'+(e.modifiable?'var(--text)':'var(--muted)')+';cursor:'+(e.modifiable&&!lecture?'pointer':'default')+'">'+
+          '<input type="checkbox" data-plan-champ="'+escAttr(e.champ)+'"'+(on?' checked':'')+(e.modifiable&&!lecture?'':' disabled')+' style="accent-color:var(--accent)">'+
+          '<span style="min-width:120px">'+escHtml(e.libelle)+'</span><span style="color:var(--muted)">'+escHtml(e.avant)+'</span> → <strong>'+escHtml(e.apres)+'</strong>'+
+          (e.motif?'<span style="'+muted+'">· '+escHtml(e.motif)+'</span>':'')+'</label>';
+      });
+      h+='</div>';
+    }
+  });
+  const creer=c.action==='creer';
+  h+='<label style="'+ligne+'">'+radio('creer',creer,lecture)+'<span><strong>'+(ds.length?'Ajouter un autre dossier':'Ajouter au planning')+'</strong></span></label>';
+  if(creer){
+    const sel='padding:6px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px';
+    h+='<div style="margin:0 0 6px 26px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+      '<select id="ofp-machine" style="'+sel+'"'+(lecture?' disabled':'')+'>'+(r.machines||[]).map(function(x){
+        return '<option value="'+escAttr(x.id)+'"'+(String(x.id)===String(c.machine_id)?' selected':'')+'>'+escHtml(x.nom)+'</option>'; }).join('')+'</select>'+
+      '<select id="ofp-place" style="'+sel+'"'+(lecture?' disabled':'')+'>'+
+        '<option value="a_placer"'+(c.place!=='fin'?' selected':'')+'>À placer</option>'+
+        '<option value="fin"'+(c.place==='fin'?' selected':'')+'>En fin de file</option></select>'+
+      '<span style="'+muted+'">Durée de 8 h par défaut, à ajuster au planning.</span></div>';
+  }
+  h+='<label style="'+ligne+'">'+radio('aucune',c.action==='aucune',lecture)+'<span>Ne pas planifier maintenant</span></label>';
+  return h;
+}
+function ofePlanPeindre(m){
+  const z=document.getElementById('ofp-planning');
+  if(z) z.innerHTML=ofePlanHtml(m);
+}
+function ofePlanBrancher(overlay,m){
+  const z=overlay.querySelector('#ofp-planning');
+  if(!z) return;
+  z.addEventListener('change',function(e){
+    const t=e.target, c=m._planChoix||{};
+    if(t.name==='ofe-plan-choix'){
+      const v=t.value;
+      if(v.indexOf('relier:')===0){
+        const id=Number(v.slice(7)), d=((m._plan||{}).dossiers||[]).find(x=>x.id===id)||{};
+        m._planChoix={action:'relier',entry_id:id,manuel:true,
+          champs:d.deja_relie?[]:(d.ecarts||[]).filter(x=>x.modifiable).map(x=>x.champ)};
+      }else if(v==='creer'){
+        m._planChoix={action:'creer',manuel:true,machine_id:(m._plan||{}).machine_proposee||(((m._plan||{}).machines||[])[0]||{}).id||null,place:'a_placer'};
+      }else m._planChoix={action:'aucune',manuel:true};
+      ofePlanPeindre(m);
+    }else if(t.hasAttribute&&t.hasAttribute('data-plan-champ')){
+      const ch=t.getAttribute('data-plan-champ');
+      c.champs=(c.champs||[]).filter(x=>x!==ch);
+      if(t.checked) c.champs.push(ch);
+      c.manuel=true;
+    }else if(t.id==='ofp-machine'){ c.machine_id=Number(t.value); c.manuel=true; }
+    else if(t.id==='ofp-place'){ c.place=t.value; c.manuel=true; }
+    e.stopPropagation();
+  });
+  // Numéro, délai, laize, format, machine : le dossier proposé et ses écarts en dépendent.
+  overlay.addEventListener('change',function(e){
+    const id=e.target&&e.target.id;
+    if(['ofe-numero','ofe-delai','ofe-delai-etape2','ofe-laize','ofe-format','ofe-machine','ofe-reference'].indexOf(id)>=0) ofePlanChargerPlusTard(m);
+  });
+  ofePlanChargerPlusTard(m,m._plan?600:150);
+}
+/* Après l'enregistrement de l'OF : le geste choisi, jamais bloquant. */
+async function ofePlanAppliquer(m,ofId){
+  const c=m._planChoix;
+  if(!c||!ofId||!(m._plan&&m._plan.peut_planifier)) return;
+  let corps=null;
+  if(c.action==='creer'){
+    corps={action:'creer',machine_id:c.machine_id,place:c.place||'a_placer'};
+  }else if(c.action==='relier'){
+    const d=((m._plan||{}).dossiers||[]).find(x=>x.id===c.entry_id);
+    if(d&&d.deja_relie&&!(c.champs||[]).length) return;
+    corps={action:'relier',entry_id:c.entry_id,champs:c.champs||[]};
+  }else return;
+  try{
+    const r=await api('/api/of/'+ofId+'/planning',{method:'POST',body:JSON.stringify(corps)});
+    toast(r&&r.message?r.message:'Planning mis à jour.');
+  }catch(e){
+    toast('OF enregistré. Planning non mis à jour : '+(e.message||'erreur')+' Le bouton calendrier de la liste permet de reprendre.','error');
+  }
+}
 async function saveOfEdit(){
   const m=S.ofEditModal;
   if(!m) return;
@@ -3408,6 +3568,7 @@ async function saveOfEdit(){
     if(m.id){
       await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
       toast('OF mis à jour.');
+      await ofePlanAppliquer(m,m.id);
     }else{
       if(!m._fiche){ toast('Choisissez la fiche technique de l\'OF.','error'); return; }
       await ofeControler(m);
@@ -3428,6 +3589,7 @@ async function saveOfEdit(){
       if(motif) payload.forcer_motif=motif;
       const res=await api('/api/of',{method:'POST',body:JSON.stringify(payload)});
       toast('OF '+(res&&res.of_numero?res.of_numero:'')+' créé.');
+      await ofePlanAppliquer(m,res&&res.id);
     }
     closeOfEditModal();
     await loadOfImports();
@@ -3761,6 +3923,7 @@ function renderOfEditModal(){
         _ta('ofe-particularites','Particularités',m.particularites,3)
         +_ta('ofe-observations','Observations',m.observations,4),false)}
       </div>`}
+      ${_sec('4 · Planning','<div id="ofp-planning" style="grid-column:1/-1">'+ofePlanHtml(m)+'</div>',true)}
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding:12px 0 18px;border-top:1px solid var(--border);flex-wrap:wrap;position:sticky;bottom:-18px;background:var(--card);z-index:2">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${m.id?`<button id="ofe-dossier-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Créer directement un dossier de prod</button>`:''}<button type="button" id="ofe-ecarts-pied" style="display:none;padding:7px 11px;border-radius:8px;border:1px solid var(--warn);background:transparent;color:var(--warn);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700"></button></div>
         <div style="display:flex;gap:10px">
@@ -3788,6 +3951,7 @@ function renderOfEditModal(){
   if(bDossier) bDossier.onclick=()=>ofCreerDossierProd(m);
   {
     ofeBrancherFiche(overlay,m);
+    ofePlanBrancher(overlay,m);
     // Toute modification redessine l'OF : frappe, choix d'une liste, case
     // recopiée de la fiche ou recalculée (ces dernières appellent aussi
     // ofeApercuPlusTard, car un .value posé par le code ne déclenche rien).
@@ -17598,17 +17762,18 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
       {
         icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`,
         title: 'Créer un OF',
-        body: `Un OF part d'une <strong>commande</strong> et d'une <strong>fiche technique</strong>. MySifa remplit l'OF à partir des deux, calcule les quantités, et vous laisse corriger ce qui doit l'être avant de créer. Le bouton <span class="mguide-tag">Créer un OF</span> ouvre la fenêtre en trois blocs.`,
+        body: `Un OF part d'une <strong>commande</strong> et d'une <strong>fiche technique</strong>. MySifa remplit l'OF à partir des deux, calcule les quantités, et vous laisse corriger ce qui doit l'être avant de créer. Le bouton <span class="mguide-tag">Créer un OF</span> ouvre la fenêtre en quatre blocs.`,
         illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
           <text x="8" y="20" font-size="11" fill="var(--text)" font-weight="800">Ordres de fabrication</text>
           <rect x="236" y="7" width="96" height="22" rx="6" fill="var(--accent)"/><text x="284" y="22" font-size="9.5" fill="#fff" font-weight="700" text-anchor="middle">Créer un OF</text>
           <g font-size="8.5">
-            <rect x="8" y="40" width="324" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="18" y="52" fill="var(--muted)" font-weight="700">1 · COMMANDES</text><text x="18" y="64" fill="var(--text2)">Les lignes de commande à produire</text>
-            <rect x="8" y="76" width="324" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="18" y="88" fill="var(--muted)" font-weight="700">2 · FICHE ET DÉLAI</text><text x="18" y="100" fill="var(--text2)">La fiche technique et la date de livraison</text>
-            <rect x="8" y="112" width="324" height="30" rx="7" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="18" y="124" fill="var(--accent)" font-weight="700">3 · OF</text><text x="18" y="136" fill="var(--text2)">L'OF tel qu'il sera imprimé, à relire et corriger</text>
+            <rect x="8" y="36" width="324" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="18" y="51" fill="var(--muted)" font-weight="700">1 · COMMANDES</text><text x="120" y="51" fill="var(--text2)">Les lignes de commande à produire</text>
+            <rect x="8" y="64" width="324" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="18" y="79" fill="var(--muted)" font-weight="700">2 · FICHE ET DÉLAI</text><text x="120" y="79" fill="var(--text2)">La fiche technique et la livraison</text>
+            <rect x="8" y="92" width="324" height="24" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="18" y="107" fill="var(--accent)" font-weight="700">3 · OF</text><text x="120" y="107" fill="var(--text2)">L'OF tel qu'il sera imprimé</text>
+            <rect x="8" y="120" width="324" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="18" y="135" fill="var(--muted)" font-weight="700">4 · PLANNING</text><text x="120" y="135" fill="var(--text2)">Relier ou créer le dossier de prod</text>
           </g>
         </svg>`,
-        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire</div><ul class="mguide-svc-list"><li>Choisir la ou les lignes de commande du produit.</li><li>Vérifier la fiche technique proposée et le délai.</li><li>Relire l'OF, corriger les paramètres si besoin, puis cliquer <strong>Créer</strong>.</li></ul></div></div>`
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire</div><ul class="mguide-svc-list"><li>Choisir la ou les lignes de commande du produit.</li><li>Vérifier la fiche technique proposée et le délai.</li><li>Relire l'OF, corriger les paramètres si besoin.</li><li>Relier l'OF à son dossier de prod, ou en ajouter un au planning, puis cliquer <strong>Créer</strong>.</li></ul></div></div>`
       },
       {
         title: 'Choisir les commandes',
@@ -17679,7 +17844,7 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
       },
       {
         title: 'Vérifier et créer',
-        body: `<span class="mguide-tag">Voir le PDF</span> montre l'OF exactement tel que l'atelier le recevra. <span class="mguide-tag">Créer</span> l'enregistre : il rejoint la liste des OF, prêt à imprimer. Changer de commande ou de fiche remet l'OF à zéro, après confirmation si des corrections seraient perdues.`,
+        body: `<span class="mguide-tag">Voir le PDF</span> montre l'OF exactement tel que l'atelier le recevra. <span class="mguide-tag">Créer</span> l'enregistre, puis relie ou ajoute son dossier au planning selon le choix du bloc 4 (« à placer » par défaut). Changer de commande ou de fiche remet l'OF à zéro, après confirmation.`,
         illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
           <rect x="8" y="8" width="324" height="96" rx="8" fill="var(--card)" stroke="var(--border)"/>
           <text x="18" y="26" font-size="9" fill="var(--muted)" font-weight="700">3 · OF</text>

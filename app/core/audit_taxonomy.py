@@ -386,6 +386,10 @@ SKIP_PREFIXES: tuple[str, ...] = (
     # Aperçu de l'OF en cours de saisie, rappelé à chaque frappe : rien n'est
     # enregistré, la création elle-même est journalisée.
     "/api/of/apercu",
+    # Recherche du dossier de planning d'un OF en cours de saisie : lecture
+    # seule, rappelée à chaque changement de l'OF. Le geste qui suit
+    # (relier, créer) est journalisé par of_planning.py.
+    "/api/of/planning/candidats",
     "/api/tools/etiquettes/impression/apercu",
     "/api/perf",
     "/api/notifications/vu",
