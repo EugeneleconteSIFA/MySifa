@@ -439,7 +439,11 @@
       ouvrir:function(v){ if(v==='ecarts') openReglagesEcarts(); },
       fermer:function(){ fermerReglagesEcarts(true); }},
     of:{page:'of',
-      ouvrir:function(id){ if(/^[0-9]+$/.test(id)) openOfEditModal({id:Number(id)}); },
+      ouvrir:function(id){
+        if(/^[0-9]+$/.test(id)) openOfEditModal({id:Number(id)});
+        // « Créer l'OF » depuis un dossier du planning (22/11/2026).
+        else if(/^dossier-[0-9]+$/.test(id)) openOfDepuisDossier(Number(id.slice(8)));
+      },
       fermer:function(){ if(S.ofEditModal) closeOfEditModal(); }},
     fiche:{page:'fiches',
       ouvrir:function(id){ var f=(S.fiches||[]).filter(function(x){return String(x.id)===String(id);})[0]; if(f) openFicheEditModal(f); },
@@ -1617,6 +1621,31 @@ function openOfCreateModal(){
   ofeChoisirCommandes(m,true);
 }
 window.openOfCreateModal = openOfCreateModal;
+
+/* Nouvel OF prérempli depuis un dossier du planning (22/11/2026). Le panneau
+   OF d'un dossier sans OF y envoie par l'adresse `?page=of&of=dossier-<id>`.
+   Le numéro et le délai du dossier sont posés comme tapés : les commandes ne
+   les réécrivent pas. Les commandes du dossier remplissent la quantité ; la
+   fiche est celle du produit pour sa machine. L'étape 4 retrouve ensuite le
+   dossier et propose de le relier. */
+async function openOfDepuisDossier(entryId){
+  let r=null;
+  try{ r=await api('/api/of/planning/dossier/'+encodeURIComponent(entryId)); }
+  catch(e){ toast(e.message||'Dossier introuvable.','error'); return; }
+  const d=new Date();
+  const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const dos=r.dossier||{};
+  const m={_commandes:(r.commandes||[]).map(l=>({numero:l.numero,ligne:l.ligne,qte:l.qte})),date_creation:iso,_dom:{}};
+  if(dos.numero_of){ m.of_numero=dos.numero_of; m._dom['ofe-numero']=dos.numero_of; }
+  if(dos.date_livraison){ m.delai_client=dos.date_livraison; m._dom['ofe-delai']=dos.date_livraison; }
+  await openOfEditModal(m);
+  const ouvert=S.ofEditModal;
+  if(!ouvert) return;
+  if(ouvert._commandes.length) await ofeDepuisCommandes(ouvert);
+  if(S.ofEditModal===ouvert&&!ouvert._fiche&&r.fiche&&r.fiche.id) await ofeChoisirFiche(r.fiche.id);
+  if(S.ofEditModal===ouvert&&!ouvert._fiche) toast('Choisissez la fiche technique de l\'OF.','info');
+}
+window.openOfDepuisDossier = openOfDepuisDossier;
 
 /* Colonne de `of_imports` -> champ de la modale OF. Même rôle que
    FCE_CHAMPS pour la fiche technique. Les `*_ref_id` n'y sont pas : ils ne

@@ -5704,49 +5704,46 @@ function renderPlanningOfPaneInner(){
   const isAdmin = (typeof IS_OF_ADMIN !== 'undefined' && IS_OF_ADMIN);
   const ofs = st.ofs || [];
 
-  // Si pas d'OF du tout : empty state avec boutons admin
+  // Pas d'OF : trois gestes, le plus courant en tête (refonte du 22/11/2026).
+  // Créer l'OF ouvre « Nouvel OF » dans MyProd, prérempli depuis ce dossier ;
+  // relier propose d'abord les OF qui lui correspondent.
   if(ofs.length === 0){
-    const importBtn = isAdmin
-      ?`<button type="button" onclick="openOfImportFromPlanning(${st.entryId})"
-           style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
-                  border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-                  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
-           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-             <polyline points="17 8 12 3 7 8"/>
-             <line x1="12" y1="3" x2="12" y2="15"/>
-           </svg>
-           Importer un OF PDF
-         </button>`
-      :'';
-    const searchBtn = isAdmin
-      ?`<button type="button" onclick="togglePlanningOfPicker()"
-           style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;
-                  border:1.5px solid var(--border);background:var(--bg);color:var(--text);
-                  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
-           Chercher un OF existant
-         </button>`
-      :'';
-    const pickerHtml = st.pickerOpen ? renderPlanningOfPickerHtml() : '';
-    return `<div class="of-empty-state">
-      <div class="of-empty-state-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="9" y1="13" x2="15" y2="13"/>
-        </svg>
+    if(!st.depuis && !st.depuisCharge) planningOfChargerDepuis();
+    const dep = st.depuis || {};
+    const dos = dep.dossier || {};
+    const sugg = dep.suggestions || [];
+    const muted = 'font-size:12px;color:var(--muted)';
+    const detail = [dos.ref_produit ? 'produit '+escHtml(dos.ref_produit) : '', dos.machine ? escHtml(dos.machine) : '',
+      dos.date_livraison ? 'livraison '+escHtml(_ofpJour(dos.date_livraison)) : ''].filter(Boolean).join(' · ');
+    const carte = (opts) => `<button type="button" onclick="${opts.onclick}" ${opts.dis?'disabled':''}
+        style="display:flex;gap:12px;align-items:flex-start;text-align:left;padding:14px;border-radius:10px;
+               border:1px solid ${opts.on?'var(--accent)':'var(--border)'};background:${opts.on?'var(--accent-bg)':'var(--bg)'};
+               color:var(--text);cursor:${opts.dis?'default':'pointer'};font-family:inherit;opacity:${opts.dis?'.55':'1'};min-width:0">
+        <span style="flex-shrink:0;color:${opts.on?'var(--accent)':'var(--text2)'};margin-top:1px">${opts.icon}</span>
+        <span style="min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:${opts.on?'var(--accent)':'var(--text)'}">${opts.titre}</span>
+        <span style="display:block;${muted};margin-top:3px;overflow-wrap:anywhere">${opts.desc}</span></span></button>`;
+    const svg = (p) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const descCreer = dep.fiche
+      ? 'Fiche '+escHtml(dep.fiche.reference||'')+((dep.commandes||[]).length?' · commande '+escHtml(dep.commandes.map(c=>c.numero+(c.ligne?'/L'+c.ligne:'')).join(', ')):'')
+      : 'Prérempli depuis ce dossier, dans MyProd';
+    const actions = isAdmin ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;width:100%">
+        ${carte({onclick:`planningOfCreer(${st.entryId})`, on:true, titre:"Créer l'OF",
+          icon:svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/>'),
+          desc:descCreer})}
+        ${carte({onclick:'togglePlanningOfPicker()', on:!!st.pickerOpen, titre:'Relier un OF existant',
+          icon:svg('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
+          desc: st.depuis ? (sugg.length ? sugg.length+' OF correspond'+(sugg.length>1?'ent':'')+' à ce dossier' : 'Chercher parmi tous les OF') : 'Recherche des correspondances…'})}
+        ${carte({onclick:`openOfImportFromPlanning(${st.entryId})`, on:false, titre:'Importer un PDF',
+          icon:svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'),
+          desc:'Un OF reçu ou scanné en PDF'})}
+      </div>` : `<div style="${muted}">Le rattachement d'un OF est réservé à l'administration.</div>`;
+    return `<div style="display:flex;flex-direction:column;gap:16px;padding:22px 24px;max-width:880px;margin:0 auto;width:100%;box-sizing:border-box">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--text)">Aucun OF relié à ce dossier</div>
+        <div style="${muted};margin-top:4px">Numéro attendu : <strong style="color:var(--text)">${escHtml(st.entry_numero_of||'non renseigné')}</strong>${detail?' · '+detail:''}</div>
       </div>
-      <div class="of-empty-state-msg">
-        Aucun OF relié à ce dossier de production.<br>
-        <span style="font-size:12px;color:var(--muted)">
-          Le numéro d'OF attendu est
-          <strong style="color:var(--text)">${escHtml(st.entry_numero_of||'non renseigné')}</strong>.
-        </span>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${importBtn}${searchBtn}</div>
-      ${pickerHtml}
+      ${actions}
+      ${st.pickerOpen ? renderPlanningOfPickerHtml() : ''}
     </div>`;
   }
 
@@ -5794,49 +5791,109 @@ function renderPlanningOfPaneInner(){
   </div>`;
 }
 
+function _ofpJour(iso){
+  const s = String(iso||'');
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4) : s;
+}
+function _ofpQte(q){
+  const n = Number(q);
+  return (q==null || q==='' || !isFinite(n)) ? '' : n.toLocaleString('fr-FR')+' étiq.';
+}
+/* Préremplissage et correspondances du dossier, une fois par ouverture. */
+async function planningOfChargerDepuis(){
+  const st = window._ofPlanningState; if(!st) return;
+  st.depuisCharge = true;
+  try{
+    const r = await fetch('/api/of/planning/dossier/'+encodeURIComponent(st.entryId), {credentials:'include'});
+    if(r.ok) st.depuis = await r.json();
+  }catch(e){}
+  if(window._ofPlanningState === st) _rerenderPlanningOfPane();
+}
+/* « Créer l'OF » : MyProd dans un nouvel onglet, sur ce dossier. Au retour
+   sur cet onglet, le panneau se recharge pour montrer l'OF relié. */
+function planningOfCreer(entryId){
+  window.open('/prod?page=of&of=dossier-'+encodeURIComponent(entryId), '_blank', 'noopener');
+  if(!window._ofpRetourBranche){
+    window._ofpRetourBranche = true;
+    window.addEventListener('focus', function(){
+      const st = window._ofPlanningState;
+      if(st && !(st.ofs||[]).length) refreshPlanningOfData().catch(function(){});
+    });
+  }
+}
+/* Une ligne d'OF du sélecteur : toute la ligne se clique (comme le choix
+   des commandes RVGI), aucune case à cocher. */
+function _ofpLigne(o, st, linkedIds){
+  const deja = linkedIds.has(o.id);
+  const sel = st.pickerSel && st.pickerSel.has(o.id);
+  const ailleurs = o.dossiers && !deja ? 'Relié à '+escHtml(o.dossiers) : '';
+  const infos = [o.reference?escHtml(o.reference):'', o.machine?escHtml(o.machine):'', o.delai?'délai '+escHtml(o.delai):'', _ofpQte(o.qte)].filter(Boolean).join(' · ');
+  const cree = o.cree_le ? 'créé le '+escHtml(o.cree_le)+(o.par?' par '+escHtml(o.par):'') : '';
+  return `<div role="option" tabindex="${deja?-1:0}" aria-selected="${sel?'true':'false'}" ${deja?'':`onclick="planningOfPickerBasculer(${o.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();planningOfPickerBasculer(${o.id})}"`}
+      style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 12px;margin-bottom:6px;border-radius:8px;
+             border:1px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent-bg)':'var(--card)'};
+             box-shadow:${sel?'inset 3px 0 0 var(--accent)':'none'};cursor:${deja?'default':'pointer'};opacity:${deja?'.55':'1'}">
+      <div style="min-width:0">
+        <div style="font-size:13px;font-weight:700;color:${sel?'var(--accent)':'var(--text)'}">${escHtml(o.of_numero||'OF #'+o.id)}
+          ${o.raison?`<span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${escHtml(o.raison)}</span>`:''}
+          ${deja?`<span style="margin-left:6px;font-size:11px;font-weight:600;color:var(--muted)">déjà relié</span>`:''}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere">${infos||'—'}</div>
+        ${ailleurs?`<div style="font-size:12px;color:var(--warn);margin-top:2px">${ailleurs}</div>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap;text-align:right">${cree}</div>
+    </div>`;
+}
 function renderPlanningOfPickerHtml(){
   const st = window._ofPlanningState;
   if(!st) return '';
-  const results = st.pickerResults || [];
-  let resultsHtml;
+  st.pickerSel = st.pickerSel || new Set();
+  const linkedIds = new Set((st.ofs||[]).map(o => o.id));
+  const sugg = ((st.depuis||{}).suggestions)||[];
+  const cherche = (st.pickerSearch||'').trim();
+  // Sans recherche : les correspondances du dossier, puis les plus récents.
+  let lignes = '', titre = '';
   if(st.pickerLoading){
-    resultsHtml = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">Recherche…</div>';
-  }else if(results.length === 0){
-    resultsHtml = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">Aucun résultat</div>';
+    lignes = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">Recherche…</div>';
   }else{
-    const linkedIds = new Set((st.ofs||[]).map(o => o.id));
-    resultsHtml = results.map(c => {
-      const already = linkedIds.has(c.id);
-      const dateImp = (c.date_import||'').slice(0,10) || '—';
-      const disabledAttr = already ? 'disabled' : '';
-      const opacityStyle = already ? 'opacity:.5;cursor:not-allowed' : 'cursor:pointer';
-      const labelSuffix = already ? ' <em style="color:var(--muted);font-style:normal">(déjà lié)</em>' : '';
-      return `<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--border);
-               border-radius:6px;margin-bottom:4px;background:var(--bg);${opacityStyle}">
-        <input type="checkbox" data-of-picker="1" value="${c.id}" ${disabledAttr}
-               style="margin:0;flex-shrink:0">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;color:var(--text);font-size:12px">${escHtml(c.of_numero||'—')}${labelSuffix}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:1px">
-            Réf : ${escHtml(c.reference||'—')}${c.machine?' · '+escHtml(c.machine):''} · importé ${dateImp}
-          </div>
-        </div>
-      </label>`;
-    }).join('');
+    const vus = new Set();
+    const liste = [];
+    if(!cherche) sugg.forEach(o => { vus.add(o.id); liste.push(o); });
+    (st.pickerResults||[]).forEach(c => { if(!vus.has(c.id)) liste.push({
+      id:c.id, of_numero:c.of_numero, reference:c.reference, machine:c.machine,
+      delai:c.delai_client?_ofpJour(c.delai_client):'', qte:c.qte_etiquettes,
+      cree_le:_ofpJour((c.date_import||'').slice(0,10)), par:c.imported_by==='access_bridge'?'le pont Access':c.imported_by }); });
+    titre = cherche ? 'Résultats' : (sugg.length ? 'Correspondances, puis OF récents' : 'OF récents');
+    lignes = liste.length ? liste.map(o => _ofpLigne(o, st, linkedIds)).join('')
+      : `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">Aucun OF pour « ${escHtml(cherche)} »</div>`;
   }
-  return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg)">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <input id="planning-of-picker-search" type="text" value="${escAttr(st.pickerSearch||'')}"
-        placeholder="Rechercher par OF n°, référence, machine…"
-        oninput="onPlanningOfPickerSearchInput(this.value)"
-        style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;
-               padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit;outline:none">
-      <button type="button" onclick="submitAttachOfsToPlanning()"
-        style="padding:7px 14px;border-radius:6px;border:none;background:var(--accent);color:#fff;
-               cursor:pointer;font-size:12px;font-weight:700">Attacher</button>
+  const n = st.pickerSel.size;
+  return `<div style="border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px;width:100%;box-sizing:border-box;text-align:left">
+    <input id="planning-of-picker-search" type="text" value="${escAttr(st.pickerSearch||'')}"
+      placeholder="Chercher un OF (numéro, référence produit, machine)"
+      oninput="onPlanningOfPickerSearchInput(this.value)"
+      onkeydown="if(event.key==='Escape'){this.value='';onPlanningOfPickerSearchInput('')}"
+      style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;
+             padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:12px 2px 6px">${titre}</div>
+    <div role="listbox" aria-multiselectable="true" style="max-height:300px;overflow-y:auto">${lignes}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted)">${n ? n+' OF sélectionné'+(n>1?'s':'') : 'Cliquez sur un OF pour le choisir'}</span>
+      <span style="display:flex;gap:8px">
+        <button type="button" onclick="togglePlanningOfPicker()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;font-family:inherit">Fermer</button>
+        <button type="button" onclick="submitAttachOfsToPlanning()" ${n?'':'disabled'} style="padding:8px 14px;border-radius:8px;border:none;background:var(--accent);color:white;cursor:${n?'pointer':'default'};opacity:${n?'1':'.5'};font-size:13px;font-weight:700;font-family:inherit">Relier au dossier</button>
+      </span>
     </div>
-    <div style="max-height:200px;overflow-y:auto">${resultsHtml}</div>
   </div>`;
+}
+function planningOfPickerBasculer(id){
+  const st = window._ofPlanningState; if(!st) return;
+  st.pickerSel = st.pickerSel || new Set();
+  if(st.pickerSel.has(id)) st.pickerSel.delete(id); else st.pickerSel.add(id);
+  const liste = document.querySelector('#of-tab-pane-of [role="listbox"]');
+  const haut = liste ? liste.scrollTop : 0;
+  _rerenderPlanningOfPane();
+  const l2 = document.querySelector('#of-tab-pane-of [role="listbox"]');
+  if(l2) l2.scrollTop = haut;
 }
 
 function _rerenderPlanningOfPane(){
@@ -5857,6 +5914,8 @@ function switchPlanningOfSubtab(ofId){
 function togglePlanningOfPicker(){
   const st = window._ofPlanningState; if(!st) return;
   st.pickerOpen = !st.pickerOpen;
+  // Les correspondances du dossier se chargent aussi depuis « + OF ».
+  if(st.pickerOpen && !st.depuis && !st.depuisCharge) planningOfChargerDepuis();
   if(st.pickerOpen && (st.pickerResults||[]).length === 0){
     searchOfsForPlanningPicker('');
     return;
@@ -5893,9 +5952,8 @@ async function searchOfsForPlanningPicker(term){
 
 async function submitAttachOfsToPlanning(){
   const st = window._ofPlanningState; if(!st) return;
-  const boxes = document.querySelectorAll('[data-of-picker="1"]:checked');
-  const ofIds = Array.from(boxes).map(b => parseInt(b.value, 10)).filter(x => !isNaN(x));
-  if(!ofIds.length){ alert('Coche au moins un OF.'); return; }
+  const ofIds = Array.from(st.pickerSel || []).filter(x => !isNaN(x));
+  if(!ofIds.length){ showToast('Choisissez au moins un OF.','info'); return; }
   try{
     const r = await fetch('/api/admin/planning-of-links', {
       method: 'POST',
@@ -5904,10 +5962,12 @@ async function submitAttachOfsToPlanning(){
       body: JSON.stringify({planning_id: st.entryId, of_ids: ofIds}),
     });
     if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.detail||'Erreur'); }
+    st.pickerSel = new Set();
     // Re-fetch data complète pour avoir la nouvelle liste
     await refreshPlanningOfData();
+    showToast(ofIds.length>1 ? ofIds.length+' OF reliés au dossier.' : 'OF relié au dossier.');
   }catch(e){
-    alert((e && e.message) || 'Erreur enregistrement');
+    showToast((e && e.message) || 'Erreur enregistrement','danger');
   }
 }
 
