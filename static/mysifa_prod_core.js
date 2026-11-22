@@ -3602,11 +3602,72 @@ async function ofePlanAppliquer(m,ofId){
     corps={action:'relier',entry_id:c.entry_id,champs:c.champs||[]};
   }else return;
   try{
-    const r=await api('/api/of/'+ofId+'/planning',{method:'POST',body:JSON.stringify(corps)});
-    toast(r&&r.message?r.message:'Planning mis à jour.');
+    return {r:await api('/api/of/'+ofId+'/planning',{method:'POST',body:JSON.stringify(corps)})};
   }catch(e){
-    toast('OF enregistré. Planning non mis à jour : '+(e.message||'erreur')+' Le bouton calendrier de la liste permet de reprendre.','error');
+    return {erreur:e.message||'erreur inconnue'};
   }
+}
+/* Récapitulatif après l'enregistrement (retour du 22/11/2026 : un toast de
+   quelques secondes ne disait ni quel dossier, ni quelles valeurs). La
+   fenêtre reste ouverte sur ce qui a été fait, avec de quoi aller voir. */
+function ofeRecapHtml(m,info){
+  const muted='font-size:12px;color:var(--muted)';
+  const bouton=(lib,attrs,plein)=>'<button type="button" '+attrs+' style="padding:9px 16px;border-radius:8px;border:'+(plein?'none':'1px solid var(--border)')+';background:'+(plein?'var(--accent)':'var(--bg)')+';color:'+(plein?'white':'var(--text)')+';cursor:pointer;font-family:inherit;font-size:13px;font-weight:'+(plein?'700':'600')+'">'+lib+'</button>';
+  const etat=function(d){
+    if(!d) return '';
+    if(d.statut==='en_cours') return 'en cours';
+    if(d.statut==='termine') return 'terminé';
+    if(d.a_placer) return 'à placer';
+    return d.rang?(d.rang===1?'1er dans la file':d.rang+'e dans la file'):'en attente';
+  };
+  let plan='', dossier=null;
+  const p=info.plan;
+  if(p&&p.erreur){
+    plan='<div style="font-size:13px;color:var(--warn)">Planning non mis à jour : '+escHtml(p.erreur)+'</div>'+
+      '<div style="'+muted+';margin-top:4px">L\'OF est enregistré. Le bouton calendrier de la liste des OF permet de reprendre.</div>';
+  }else if(p&&p.r){
+    const r=p.r; dossier=r.dossier||null;
+    const titre=r.action==='creer'?'Dossier ajouté au planning':'Relié au dossier';
+    plan='<div style="font-size:14px;font-weight:700;color:var(--text)">'+titre+' '+escHtml((dossier&&dossier.reference)||'')+'</div>'+
+      (dossier?'<div style="'+muted+';margin-top:3px">'+escHtml([dossier.machine,etat(dossier),dossier.debut?'prévu le '+dossier.debut:'',dossier.date_livraison?'livraison '+dossier.date_livraison:''].filter(Boolean).join(' · '))+'</div>':'');
+    const ligne=(lib,val,note,ton)=>'<div style="display:grid;grid-template-columns:140px 1fr auto;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--border);font-size:13px">'+
+      '<span style="color:var(--text2)">'+escHtml(lib)+'</span><span style="color:var(--text)">'+val+'</span><span style="font-size:12px;color:'+ton+'">'+escHtml(note)+'</span></div>';
+    const lignes=(r.ecrits||[]).map(e=>ligne(e.libelle,'<span style="color:var(--muted)">'+escHtml(e.avant)+'</span> → <strong>'+escHtml(e.apres)+'</strong>','mis à jour','var(--success)'))
+      .concat((r.gardes||[]).map(g=>ligne(g.libelle,'<strong>'+escHtml(g.valeur)+'</strong> <span style="color:var(--muted)">(l\'OF dit '+escHtml(g.propose)+')</span>','gardé · '+g.motif,'var(--muted)')));
+    if(r.action==='creer') lignes.push(ligne('Durée','8 h','à ajuster au planning','var(--muted)'));
+    if(lignes.length) plan+='<div style="margin-top:10px">'+lignes.join('')+'</div>';
+    else if(r.action==='relier') plan+='<div style="'+muted+';margin-top:8px">Aucune valeur du dossier modifiée.</div>';
+  }else{
+    const d=((m._plan||{}).dossiers||[]).find(x=>x.deja_relie);
+    if(d){
+      dossier={id:d.id,machine_id:d.machine_id,reference:d.reference};
+      plan='<div style="font-size:14px;font-weight:700;color:var(--text)">Dossier '+escHtml(d.reference||'')+' inchangé</div>'+
+        '<div style="'+muted+';margin-top:3px">'+escHtml([d.machine,etat(d)].filter(Boolean).join(' · '))+'</div>';
+    }else{
+      plan='<div style="font-size:14px;font-weight:700;color:var(--warn)">Pas encore au planning</div>'+
+        '<div style="'+muted+';margin-top:3px">Aucun dossier n\'est relié à cet OF. Le bouton calendrier de la liste permet de le planifier.</div>';
+    }
+  }
+  const lienPlanning=dossier&&dossier.id?'<a href="/planning?machine='+encodeURIComponent(dossier.machine_id)+'&dossier='+encodeURIComponent(dossier.id)+'" target="_blank" rel="noopener" style="padding:9px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:13px;font-weight:700;text-decoration:none">Ouvrir au planning ↗</a>':'';
+  return '<div style="max-width:660px;margin:6px auto 4px;padding:4px">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><span style="display:inline-flex;width:28px;height:28px;border-radius:50%;align-items:center;justify-content:center;background:var(--success);color:white">'+
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'+
+      '<span style="font-size:16px;font-weight:700;color:var(--text)">OF '+escHtml(info.numero||'')+' '+(info.creation?'créé':'mis à jour')+'</span></div>'+
+    '<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Planning</div>'+
+    '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'+plan+'</div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px">'+lienPlanning+
+      bouton('Voir l\'OF','onclick="window.open(\'/api/of/'+encodeURIComponent(info.ofId)+'/pdf-preview\',\'_blank\')"',false)+
+      bouton('Fermer','id="ofe-recap-fermer"',true)+'</div></div>';
+}
+function ofeAfficherRecap(m,info){
+  const overlay=document.getElementById('of-edit-overlay');
+  const carte=overlay&&overlay.firstElementChild;
+  if(!carte){ closeOfEditModal(); render(); return; }
+  m._recap=true;
+  carte.innerHTML=ofeRecapHtml(m,info);
+  carte.scrollTop=0;
+  const f=document.getElementById('ofe-recap-fermer');
+  if(f){ f.onclick=function(){ closeOfEditModal(); render(); }; requestAnimationFrame(()=>f.focus()); }
 }
 async function saveOfEdit(){
   const m=S.ofEditModal;
@@ -3615,8 +3676,11 @@ async function saveOfEdit(){
   try{
     if(m.id){
       await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
-      toast('OF mis à jour.');
-      await ofePlanAppliquer(m,m.id);
+      const plan=await ofePlanAppliquer(m,m.id);
+      if(!plan){ toast('OF mis à jour.'); closeOfEditModal(); await loadOfImports(); render(); return; }
+      await loadOfImports();
+      ofeAfficherRecap(m,{creation:false,ofId:m.id,numero:payload.of_numero||m.of_numero,plan:plan});
+      return;
     }else{
       if(!m._fiche){ toast('Choisissez la fiche technique de l\'OF.','error'); return; }
       await ofeControler(m);
@@ -3636,8 +3700,10 @@ async function saveOfEdit(){
       if(payload.commandes.length&&m._numeroPropose&&(payload.of_numero||'')===m._numeroPropose) payload.of_numero=null;
       if(motif) payload.forcer_motif=motif;
       const res=await api('/api/of',{method:'POST',body:JSON.stringify(payload)});
-      toast('OF '+(res&&res.of_numero?res.of_numero:'')+' créé.');
-      await ofePlanAppliquer(m,res&&res.id);
+      const plan=await ofePlanAppliquer(m,res&&res.id);
+      await loadOfImports();
+      ofeAfficherRecap(m,{creation:true,ofId:res&&res.id,numero:res&&res.of_numero,plan:plan});
+      return;
     }
     closeOfEditModal();
     await loadOfImports();
@@ -4657,6 +4723,20 @@ function renderPaginationBar(page, total, pageSize, onPrev, onNext){
   );
 }
 
+/* Colonne « Dossier » de la liste des OF (22/11/2026) : où en est l'OF au
+   planning. Un clic ouvre le dossier dans un nouvel onglet. */
+function ofCelluleDossier(row){
+  const d=row.dossier;
+  if(!d) return h('td',null,h('span',{style:{fontSize:'12px',color:'var(--warn)',fontWeight:'600'}},'Non planifié'));
+  const etat=d.statut==='en_cours'?['En cours','var(--accent)']:d.statut==='termine'?['Terminé','var(--success)']
+    :d.a_placer?['À placer','var(--warn)']:['En attente','var(--text2)'];
+  return h('td',null,
+    h('a',{href:'/planning?machine='+encodeURIComponent(d.machine_id)+'&dossier='+encodeURIComponent(d.id),target:'_blank',rel:'noopener',
+      title:'Ouvrir le dossier au planning',style:{textDecoration:'none',color:'var(--text)',display:'block',minWidth:'0'}},
+      h('div',{style:{fontSize:'13px',fontWeight:'600',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},d.reference||'#'+d.id),
+      h('div',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap'}},
+        (d.machine?d.machine+' · ':''),h('span',{style:{color:etat[1],fontWeight:'600'}},etat[0]))));
+}
 function renderOfTab(){
   const PAGE_SIZE=50;
   const total=S.ofTotal||0;
@@ -4804,6 +4884,7 @@ function renderOfTab(){
       ),
       h('td',null,escHtml(row.reference||'—')),
       h('td',null,escHtml(row.machine||'—')),
+      ofCelluleDossier(row),
       h('td',null,escHtml(row.delai_client||'—')),
       h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
       h('td',null,escHtml(dateCrea)),
@@ -4813,7 +4894,7 @@ function renderOfTab(){
   });
 
   const empty=h('tr',null,
-    h('td',{colSpan:'8',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
       S.ofImportsLoading?'Chargement…':(S.ofSearch?`Aucun résultat pour « ${escHtml(S.ofSearch)} »`:'Aucun OF importé')
     )
   );
@@ -4838,7 +4919,7 @@ function renderOfTab(){
               }
             })
           ),
-          h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),
+          h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),h('th',null,'Dossier'),
           h('th',null,'Délai client'),h('th',null,'Qté étiquettes'),h('th',null,'Date création'),
           h('th',{className:'th-actions'},'Actions')
         )),

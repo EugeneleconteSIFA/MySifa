@@ -128,6 +128,23 @@ class TestPlanningDepuisOF(unittest.TestCase):
         self.assertIn(11, ids)                 # même produit ensuite
         self.assertNotIn(12, ids)              # un autre produit jamais
 
+    def test_historique_de_la_machine_montre_le_geste(self):
+        from app.services import planning_historique as ph
+        with get_db() as conn:
+            of = dict(conn.execute("SELECT * FROM of_imports WHERE id=10").fetchone())
+            conn.execute("DELETE FROM audit_logs WHERE module='planning'")
+            conn.commit()
+            r = op._relier(conn, None, {"nom": "Essai"}, "Essai", "2026-11-22T10:00:00", of, 1, ["date_livraison"])
+            res = ph.lister(conn, machine_id=self.machine, jours=None)
+        self.assertEqual([e["libelle"] for e in r["ecrits"]], ["Délai"])
+        self.assertEqual([g["libelle"] for g in r["gardes"]], ["Laize"])
+        self.assertTrue(r["dossier"]["machine"])
+        lignes = res.get("lignes") or res.get("items") or res.get("rows") or []
+        self.assertTrue(lignes, "la ligne doit apparaître dans l'historique de la machine")
+        l0 = lignes[0]
+        self.assertEqual(l0.get("geste"), "Relié à l'OF 9932501/L1")
+        self.assertIn({"champ": "Délai", "avant": "05/10/2026", "apres": "02/10/2026"}, l0.get("lignes"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

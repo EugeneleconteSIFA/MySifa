@@ -1908,12 +1908,14 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 /* 340px laissait un vide à droite des boutons pendant que « Délai client »,
    « Qté étiquettes » et les dates se coupaient. Ajusté au contenu réel, et
    un en-tête trop long passe à la ligne au lieu d'être tronqué. */
-.prod-liste-of th:nth-child(2){width:19%}
-.prod-liste-of th:nth-child(3){width:15%}
-.prod-liste-of th:nth-child(4){width:10%}
-.prod-liste-of th:nth-child(5){width:12%}
-.prod-liste-of th:nth-child(6){width:12%}
-.prod-liste-of th:nth-child(7){width:12%}
+/* 22/11/2026 : colonne « Dossier » (5e), où en est l'OF au planning. */
+.prod-liste-of th:nth-child(2){width:16%}
+.prod-liste-of th:nth-child(3){width:13%}
+.prod-liste-of th:nth-child(4){width:9%}
+.prod-liste-of th:nth-child(5){width:14%}
+.prod-liste-of th:nth-child(6){width:10%}
+.prod-liste-of th:nth-child(7){width:10%}
+.prod-liste-of th:nth-child(8){width:10%}
 .table-std.table-actions-wide.prod-liste-of th{white-space:normal;text-overflow:clip;line-height:1.3}
 @media (max-width:900px){
   .table-std.table-actions-wide.prod-liste-of th.th-actions,
