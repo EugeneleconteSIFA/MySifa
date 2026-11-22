@@ -435,3 +435,95 @@ def _invalider_plans(conn, machine_id) -> None:
         _invalidate_attente_plans(conn, machine_id)
     except Exception:
         pass
+
+
+# ── Depuis le dossier : créer son OF, ou relier un OF existant ────────────
+#
+# Le panneau OF d'un dossier sans OF (planning) proposait « Importer un PDF »
+# et une recherche brute dans tous les OF (retour du 22/11/2026 : « ni
+# esthétique, ni pratique »). Il propose désormais de CRÉER l'OF dans MySifa,
+# prérempli depuis le dossier, et met en tête les OF qui lui correspondent.
+
+def _ofs_suggeres(conn, d: Dict[str, Any], limite: int = 8) -> List[Dict[str, Any]]:
+    """Les OF qui ressemblent à ce dossier : même numéro, mêmes lignes de
+    commande, même produit. Les plus récents d'abord, jamais plus de `limite`."""
+    raisons: Dict[int, str] = {}
+    num = str(d.get("numero_of") or d.get("reference") or "").strip()
+    if num:
+        for r in conn.execute("SELECT id FROM of_imports WHERE LOWER(TRIM(COALESCE(of_numero,'')))=LOWER(?)", (num,)):
+            raisons.setdefault(int(r["id"]), "Même numéro")
+    for l in ratt.lister(conn, "dossier", int(d["id"]), piece="commande"):
+        for r in conn.execute(
+                "SELECT objet_id AS id FROM rvgi_rattachements WHERE objet='of' AND piece='commande' "
+                "AND numero=? AND (? IS NULL OR ligne IS NULL OR ligne=?)",
+                (l["numero"], l.get("ligne"), l.get("ligne"))):
+            raisons.setdefault(int(r["id"]), "Même commande")
+    cle = _cle_produit(d.get("ref_produit"))
+    if cle:
+        for r in conn.execute(
+                "SELECT id FROM of_imports WHERE LOWER(TRIM(COALESCE(reference,''))) = LOWER(?) "
+                "OR LOWER(COALESCE(reference,'')) LIKE LOWER(?) ORDER BY date_import DESC, id DESC LIMIT 20",
+                (cle, cle + " - %")):
+            raisons.setdefault(int(r["id"]), "Même produit")
+    if not raisons:
+        return []
+    ph = ",".join("?" * len(raisons))
+    rows = conn.execute(
+        "SELECT o.id, o.of_numero, o.reference, o.machine, o.delai_client, o.qte_etiquettes, "
+        "o.date_import, o.imported_by, "
+        "(SELECT GROUP_CONCAT(pe.reference, ', ') FROM planning_of_links l "
+        "  JOIN planning_entries pe ON pe.id = l.planning_entry_id WHERE l.of_import_id = o.id) AS dossiers "
+        "FROM of_imports o WHERE o.id IN (%s)" % ph, list(raisons)).fetchall()
+    ordre = {"Même numéro": 0, "Même commande": 1, "Même produit": 2}
+    out = [dict(r, raison=raisons[int(r["id"])]) for r in rows]
+    # Le plus sûr d'abord ; à rang égal, le plus récent.
+    out.sort(key=lambda o: (ordre[o["raison"]], -_horodatage(o.get("date_import"))))
+    return out[:limite]
+
+
+def _horodatage(iso: Any) -> float:
+    try:
+        return datetime.fromisoformat(str(iso)[:19]).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
+@router.get("/api/of/planning/dossier/{entry_id}")
+def of_depuis_dossier(entry_id: int, request: Request):
+    """Ce qu'il faut pour ouvrir « Nouvel OF » sur ce dossier, et les OF
+    qui lui correspondent déjà."""
+    _require_of_access(request)
+    from app.services.fiche_choix import choisir_fiche
+    with get_db() as conn:
+        r = conn.execute(
+            "SELECT pe.*, m.nom AS machine_nom FROM planning_entries pe "
+            "LEFT JOIN machines m ON m.id = pe.machine_id WHERE pe.id=?", (entry_id,)).fetchone()
+        if not r:
+            raise HTTPException(404, "Dossier introuvable.")
+        d = dict(r)
+        commandes = [{"numero": l["numero"], "ligne": l.get("ligne"), "qte": l.get("qte")}
+                     for l in ratt.lister(conn, "dossier", entry_id, piece="commande")]
+        fiche = None
+        if d.get("ref_produit"):
+            try:
+                fiche = choisir_fiche(conn, d["ref_produit"], d.get("machine_nom"), d.get("laize"),
+                                      colonnes="id, reference, machine")
+            except Exception:
+                fiche = None
+        suggestions = _ofs_suggeres(conn, d)
+    return {
+        "dossier": {"id": d["id"], "reference": d.get("reference"),
+                    "numero_of": (d.get("numero_of") or d.get("reference") or "").strip() or None,
+                    "ref_produit": d.get("ref_produit"), "machine": d.get("machine_nom"),
+                    "date_livraison": str(d.get("date_livraison") or "")[:10] or None,
+                    "client": d.get("client")},
+        "commandes": commandes,
+        "fiche": ({"id": fiche["id"], "reference": fiche.get("reference")} if fiche else None),
+        "suggestions": [{
+            "id": o["id"], "of_numero": o.get("of_numero"), "reference": o.get("reference"),
+            "machine": o.get("machine"), "delai": _jour(_date_iso(o.get("delai_client"))) or o.get("delai_client"),
+            "qte": o.get("qte_etiquettes"), "cree_le": _jour(o.get("date_import")),
+            "par": ("le pont Access" if o.get("imported_by") == "access_bridge" else o.get("imported_by")),
+            "dossiers": o.get("dossiers"), "raison": o["raison"],
+        } for o in suggestions],
+    }

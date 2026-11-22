@@ -476,3 +476,13 @@ défaut (ou en fin de file), durée 8 h comme l'ajout manuel. Réservé aux rôl
 du planning (`is_admin`) : les autres voient l'étape en lecture seule. La
 recherche n'entre pas dans le journal (`SKIP_PREFIXES`), le geste si.
 Test : `python3 tests/test_of_planning.py`.
+
+**Panneau OF d'un dossier sans OF, au planning** (refonte du 22/11/2026) :
+trois actions — « Créer l'OF » (MyProd dans un nouvel onglet,
+`/prod?page=of&of=dossier-<id>` → `openOfDepuisDossier` : numéro et délai du
+dossier posés comme tapés, commandes du dossier, fiche par `choisir_fiche`),
+« Relier un OF existant » (correspondances d'abord : même numéro, même
+commande, même produit — `GET /api/of/planning/dossier/{id}`), « Importer un
+PDF ». Le sélecteur se clique à la ligne, sans case à cocher, et dit à quel
+dossier un OF est déjà relié. Au retour sur l'onglet du planning, le panneau
+se recharge.

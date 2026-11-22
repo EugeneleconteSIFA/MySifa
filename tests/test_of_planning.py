@@ -113,6 +113,21 @@ class TestPlanningDepuisOF(unittest.TestCase):
         self.assertEqual(ds[0]["id"], 3)
         self.assertEqual(ds[0]["_raison"], "Relié à cet OF")
 
+    def test_suggestions_depuis_le_dossier(self):
+        with get_db() as conn:
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, date_import) "
+                         "VALUES (11, 'AUTRE', '890/0017 - COHESIO1', '2026-11-01T10:00:00')")
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, date_import) "
+                         "VALUES (12, 'SANS RAPPORT', '1315/0004', '2026-11-20T10:00:00')")
+            conn.commit()
+            d = dict(conn.execute("SELECT * FROM planning_entries WHERE id=1").fetchone())
+            s = op._ofs_suggeres(conn, d)
+        ids = [o["id"] for o in s]
+        self.assertEqual(ids[0], 10)           # même numéro d'abord
+        self.assertEqual(s[0]["raison"], "Même numéro")
+        self.assertIn(11, ids)                 # même produit ensuite
+        self.assertNotIn(12, ids)              # un autre produit jamais
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
