@@ -145,6 +145,27 @@ class TestPlanningDepuisOF(unittest.TestCase):
         self.assertEqual(l0.get("geste"), "Relié à l'OF 9932501/L1")
         self.assertIn({"champ": "Délai", "avant": "05/10/2026", "apres": "02/10/2026"}, l0.get("lignes"))
 
+    def test_supprimer_un_of_detache_proprement_le_dossier(self):
+        with get_db() as conn:
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference) VALUES (11, 'RELAIS', '890/0017')")
+            of10 = dict(conn.execute("SELECT * FROM of_imports WHERE id=10").fetchone())
+            op._relier(conn, None, {"nom": "Essai"}, "Essai", "2026-11-22T10:00:00", of10, 1, [])
+            conn.execute("INSERT INTO planning_of_links (planning_entry_id, of_import_id, position) VALUES (1, 11, 1)")
+            conn.commit()
+            avant = op.dossiers_des_of(conn, [10])
+            self.assertEqual(avant[10][0]["relais"], "RELAIS")
+            # 1. L'OF actif part : le suivant prend le relais.
+            op.detacher_of(conn, [10])
+            conn.execute("DELETE FROM of_imports WHERE id=10")
+            conn.commit()
+            self.assertEqual(conn.execute("SELECT of_import_id FROM planning_entries WHERE id=1").fetchone()[0], 11)
+            # 2. Le dernier part : le dossier repasse sans OF, sans lien orphelin.
+            op.detacher_of(conn, [11])
+            conn.execute("DELETE FROM of_imports WHERE id=11")
+            conn.commit()
+            self.assertIsNone(conn.execute("SELECT of_import_id FROM planning_entries WHERE id=1").fetchone()[0])
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM planning_of_links WHERE planning_entry_id=1").fetchone()[0], 0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

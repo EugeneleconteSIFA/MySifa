@@ -390,6 +390,8 @@ SKIP_PREFIXES: tuple[str, ...] = (
     # seule, rappelée à chaque changement de l'OF. Le geste qui suit
     # (relier, créer) est journalisé par of_planning.py.
     "/api/of/planning/candidats",
+    # Aperçu de ce qu'une suppression d'OF changerait au planning : lecture.
+    "/api/of/suppression/apercu",
     "/api/tools/etiquettes/impression/apercu",
     "/api/perf",
     "/api/notifications/vu",

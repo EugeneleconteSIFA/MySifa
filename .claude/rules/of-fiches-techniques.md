@@ -486,3 +486,12 @@ commande, même produit — `GET /api/of/planning/dossier/{id}`), « Importer un
 PDF ». Le sélecteur se clique à la ligne, sans case à cocher, et dit à quel
 dossier un OF est déjà relié. Au retour sur l'onglet du planning, le panneau
 se recharge.
+
+**Supprimer un OF relié** (22/11/2026) : la base n'applique pas `ON DELETE
+CASCADE` (`PRAGMA foreign_keys` désactivé). `DELETE /api/of/{id}` et
+`/api/of/bulk` passent donc par `of_planning.detacher_of()` AVANT d'effacer :
+liens retirés (le trigger met l'OF suivant en tête, sinon `of_import_id` =
+NULL), scans gardés sans id, rattachements de commande de l'OF retirés. La
+confirmation nomme les dossiers touchés (`POST /api/of/suppression/apercu`),
+et chaque dossier reçoit une ligne dans l'historique de sa machine
+(« OF X supprimé », OF actif ou « aucun, dossier sans OF »).
