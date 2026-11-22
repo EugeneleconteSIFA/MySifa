@@ -37,6 +37,7 @@ MODULE_LABELS: dict[str, str] = {
     "ao": "MyAO",
     "arret_seuils": "Seuils d'arrêt",
     "auth": "Authentification",
+    "adv": "ADV · carnet de commandes",
     "bat": "BAT étiquette",
     "besoins": "Besoins matières",
     "bridge": "Passerelle API",
@@ -184,6 +185,7 @@ DEFAULT_ACTION_COLOR = "var(--text2)"
 # du plus long au plus court, donc `/api/stock/besoins-matieres` l'emporte
 # toujours sur `/api/stock`.
 PATH_MODULES: dict[str, str] = {
+    "/api/adv": "adv",
     "/api/ai": "ai",
     "/api/alerts": "alerts",
     "/api/ao": "ao",

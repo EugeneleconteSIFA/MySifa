@@ -87,6 +87,7 @@ APPLIS: dict[str, Appli] = {
     "maintenance": Appli("Maintenance", "maintenance", "c1"),
     "stock": Appli("MyStock", "stock", "c2"),
     "erp": Appli("ERP", "erp", "c2"),
+    "adv": Appli("ADV", "planning", "c2"),
     "ao": Appli("MyAO", "ao", "c2"),
     "compta": Appli("MyCompta", "compta", "c2"),
     "expe": Appli("MyExpé", "expe", "c3"),
@@ -294,6 +295,18 @@ BLOCS: dict[str, Bloc] = {
         appli="prod", libelle="Synthèse par jour", url="/prod?page=production",
         type="tableau", valeurs=(("lignes", "Jours"),), acces="prod",
     ),
+    # ── MyProd › Rentabilité › Tableau de bord (static/mysifa_rent_tableau.js) ──
+    # Ouvert par rôle (ROLES_ADMIN), comme la page et son API.
+    "prod.rentabilite.verdicts": Bloc(
+        appli="prod", libelle="Rentabilité des dossiers", url="/prod?page=rentabilite",
+        type="chiffre",
+        # Clé conservée (widgets déjà posés) ; les comptes de verdicts restent
+        # lus sur le bloc même s'ils ne sont plus affichés en tuiles.
+        valeurs=(("marge", "Marge brute %"), ("cout-horaire", "Coût horaire médian €/h"),
+                 ("reussis", "Réussis"), ("limite", "À la limite"),
+                 ("sous-seuil", "Sous un seuil"), ("attente", "En attente")),
+        acces="rentabilite",
+    ),
     # ── MyExpé › Pilotage (app/web/expe_pilotage_assets.py) ──
     "expe.pilotage.resume": Bloc(
         appli="expe", libelle="Pilotage des expéditions", url="/expe#pilotage",
@@ -464,6 +477,24 @@ BLOCS: dict[str, Bloc] = {
                  ("retard", "Commandes en retard"), ("a-facturer", "BL à facturer"),
                  ("sans-dossier", "Commandes sans dossier de prod")),
         acces="erp",
+    ),
+    "adv.commandes.kpis": Bloc(
+        appli="adv", libelle="ADV — carnet de commandes", url="/adv",
+        type="chiffre",
+        historique=(("lignes", "="), ("commandes", "="), ("retard", "-"), ("semaine", "="), ("pretes", "+")),
+        valeurs=(("lignes", "Lignes à traiter"), ("commandes", "Commandes à traiter"),
+                 ("retard", "Lignes en retard"), ("semaine", "À expédier sous 7 jours"),
+                 ("pretes", "Lignes prêtes à partir")),
+        acces="adv",
+    ),
+    "adv.prepa.kpis": Bloc(
+        appli="adv", libelle="ADV — préparations", url="/adv?onglet=prepa",
+        type="chiffre",
+        historique=(("preparable", "-"), ("en-cours", "="), ("partiel", "-"), ("attente", "="), ("pretes", "=")),
+        valeurs=(("preparable", "À préparer"), ("en-cours", "Prépas en cours"),
+                 ("partiel", "Stock partiel"), ("attente", "Attente de prod"),
+                 ("pretes", "Prêtes à partir")),
+        acces="adv_prepa",
     ),
     "erp.direction.kpis": Bloc(
         appli="erp", libelle="TDB Direction — chiffres du mois", url="/erp#/tdb_direction",

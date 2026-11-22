@@ -76,7 +76,10 @@ def _reel_depuis_saisies(conn, no_dossiers: list[str]) -> dict:
     Les temps suivent le même chemin, pour la même raison.
     """
     vide = {"metrage_ml": 0.0, "qte_etiquettes": 0.0, "temps_calage_mn": 0.0,
-            "temps_production_mn": 0.0, "temps_arret_mn": 0.0}
+            "temps_production_mn": 0.0, "temps_arret_mn": 0.0,
+            # Occupation machine du dossier (sessions 01 → 89, nettoyage et
+            # temps hors catégorie compris) : la base du coût horaire.
+            "temps_nettoyage_mn": 0.0, "duree_totale_mn": 0.0}
     if not no_dossiers:
         return dict(vide)
 
@@ -99,6 +102,8 @@ def _reel_depuis_saisies(conn, no_dossiers: list[str]) -> dict:
         total["temps_calage_mn"] += float(t.get("calage_min") or 0)
         total["temps_production_mn"] += float(t.get("production_min") or 0)
         total["temps_arret_mn"] += float(t.get("arret_min") or 0)
+        total["temps_nettoyage_mn"] += float(t.get("nettoyage_min") or 0)
+        total["duree_totale_mn"] += float(t.get("duree_totale_min") or 0)
     return total
 
 
@@ -1224,6 +1229,14 @@ async def create_devis(request: Request):
             )
 
         _remplacer_indicateurs(conn, devis_id, body.get("indicateurs") or [], now)
+        # Les postes en euros se relisent dans le fichier conservé à la
+        # lecture : l'écran de validation n'a pas à les transporter. Jamais
+        # bloquant — un devis sans chiffrage reste un devis.
+        try:
+            from app.services import devis_chiffrage
+            devis_chiffrage.relire_depuis_fichier(conn, devis_id)
+        except Exception:
+            pass
         conn.commit()
         # Un devis de plus peut trancher un dossier resté sans proposition.
         # Jamais au prix de l'enregistrement : le devis est déjà en base.
@@ -1681,6 +1694,8 @@ def _enregistrer_devis_agent(contents: bytes, filename: str, content_type: str,
             )
 
         _remplacer_indicateurs(conn, devis_id, resultat.get("indicateurs") or [], now)
+        from app.services import devis_chiffrage
+        devis_chiffrage.lire_et_enregistrer(conn, devis_id, contents, filename)
         conn.commit()
 
     return {
@@ -1690,6 +1705,192 @@ def _enregistrer_devis_agent(contents: bytes, filename: str, content_type: str,
         "statut": "a_verifier" if a_verifier else "lu",
         "message": (motif if a_verifier else "lu sans réserve"),
     }
+
+
+# ── Chiffrage d'un devis et paramètres de rentabilité ─────────────
+def _chiffrage_complet(conn, devis_id: int) -> dict:
+    """Postes lus, calcul du moteur et contrôle contre le classeur."""
+    from app.services import devis_chiffrage, rentabilite_parametres
+    from app.services.rentabilite_calcul import calcul_devis, controler_devis, sensibilite
+
+    devis = conn.execute("SELECT * FROM devis WHERE id=?", (devis_id,)).fetchone()
+    if not devis:
+        raise HTTPException(404, "Devis introuvable.")
+    socle = {c: _colonne(devis, c) for c in (
+        "laize", "gache", "vitesse_theorique", "metrage_production_ml", "temps_production_mn",
+        "metrage_calage_ml", "metrage_calage_impression_ml", "temps_calage_mn",
+        "temps_calage_impression_mn", "qte_etiquettes", "format_h", "format_v", "nb_couleurs")}
+    indicateurs = {}
+    if _table_existe(conn, "devis_indicateurs"):
+        for r in conn.execute(
+            "SELECT libelle, valeur_nombre, source FROM devis_indicateurs WHERE devis_id=?",
+            (devis_id,),
+        ).fetchall():
+            if r["valeur_nombre"] is not None:
+                indicateurs[r["libelle"]] = {"valeur": r["valeur_nombre"], "source": r["source"]}
+
+    ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
+    if ch is None:
+        # Devis importé avant la lecture des postes : on tente le fichier.
+        if devis_chiffrage.relire_depuis_fichier(conn, devis_id) is not None:
+            conn.commit()
+            ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
+    if ch is None:
+        return {"devis_id": devis_id, "chiffrage": None,
+                "alertes": _alertes_lecture_devis(devis, socle, indicateurs, []),
+                "message": "Postes en euros non lus — fichier d'origine absent ou table non migrée."}
+
+    params = rentabilite_parametres.lire(conn)
+    valeurs = ch["valeurs"]
+    calcul = calcul_devis(valeurs)
+    controles = controler_devis(valeurs, _colonne(devis, "laize") or None,
+                                params["tolerance_controle_pct"])
+    return {
+        "socle": socle,
+        "indicateurs": indicateurs,
+        "alertes": _alertes_lecture_devis(devis, socle, indicateurs, controles),
+        "sensibilite": sensibilite(valeurs, socle, params["seuil_mb_pct"], params["seuil_cout_horaire"]),
+        "devis_id": devis_id,
+        "chiffrage": valeurs,
+        "sources": ch["sources"],
+        "libelles": {k: {"libelle": l, "unite": u}
+                     for k, (l, u) in devis_chiffrage.LIBELLES.items()},
+        "lu_at": ch["lu_at"],
+        "calcul": calcul,
+        "controles": controles,
+        "controle_ok": all(c["ok"] for c in controles) if controles else None,
+        "seuils": {"mb_pct": params["seuil_mb_pct"],
+                   "cout_horaire": params["seuil_cout_horaire"]},
+    }
+
+
+def _alertes_lecture_devis(devis, socle: dict, indicateurs: dict, controles: list) -> list[dict]:
+    """Ce qui doit sauter aux yeux en ouvrant un devis, avant tout chiffre.
+
+    Trois sources : les incohérences du classeur lui-même (laize de production
+    sous la laize mini), les contrôles de cohérence posés à la lecture
+    (quantité du nom de fichier contre celle des calculs…), et les montants que
+    le moteur ne retrouve pas (libellé mal lu ou formule modifiée).
+    """
+    alertes: list[dict] = []
+    laize = float(socle.get("laize") or 0)
+    mini = float((indicateurs.get("Laize mini") or {}).get("valeur") or 0)
+    if laize and mini and laize + 0.01 < mini:
+        alertes.append({"niveau": "avertissement",
+                        "message": f"Laize de production {laize:g} mm inférieure à la laize mini {mini:g} mm.",
+                        "detail": "Vérifier l'échenillage ou le nombre de fronts."})
+    # Contrôles posés à la lecture : les AVERTISSEMENTS seulement — les
+    # informations (« le devis chiffre trois quantités ») chargeaient l'écran
+    # sans rien demander. Une quantité de fichier qui est un multiple exact de
+    # celle des calculs n'est pas une incohérence (multiple_exact).
+    from app.services.devis_extraction import multiple_exact, _RE_QTE_NOM_FICHIER
+    qte_calc = float(socle.get("qte_etiquettes") or 0)
+    qtes_fichier = [float(b.replace(".", "")) for b in _RE_QTE_NOM_FICHIER.findall(_texte(devis, "filename", ""))]
+    quantite_coherente = any(multiple_exact(q, qte_calc) for q in qtes_fichier)
+    courts = set()
+    try:
+        for c in json.loads(_texte(devis, "coherence_json", "[]") or "[]"):
+            if not (isinstance(c, dict) and c.get("message")):
+                continue
+            if c.get("court"):
+                courts.add(str(c["court"]))
+            if (c.get("niveau") or "avertissement") != "avertissement":
+                continue
+            if quantite_coherente and "qte_etiquettes" in (c.get("champs") or []):
+                continue
+            alertes.append({"niveau": "avertissement", "message": str(c["message"])})
+    except (TypeError, ValueError):
+        pass
+    # Ce que la note « à vérifier » dit en plus (champ non lu, lecture en échec),
+    # sans répéter les contrôles déjà listés : la fenêtre n'affiche plus qu'une liste.
+    if int(_colonne(devis, "a_verifier")) == 1:
+        note = _texte(devis, "note", "")
+        # Les formes courtes contiennent elles-mêmes « · » : on les retire
+        # entières avant de découper la note.
+        for c in courts:
+            note = note.replace(c, "")
+        for part in [p.strip() for p in note.split(" · ") if p.strip()]:
+            alertes.append({"niveau": "avertissement", "message": part[:1].upper() + part[1:]})
+    faux = [c for c in controles if not c["ok"]]
+    if faux:
+        alertes.append({"niveau": "avertissement",
+                        "message": "Montants du classeur non retrouvés par le calcul : "
+                                   + ", ".join(c["controle"].split(" =")[0].lower() for c in faux) + ".",
+                        "detail": "Libellé mal lu ou formule modifiée dans ce classeur."})
+    return alertes
+
+
+@router.get("/api/rentabilite/devis/{devis_id}/chiffrage")
+def get_devis_chiffrage(devis_id: int, request: Request):
+    require_rentabilite(request)
+    with get_db() as conn:
+        return _chiffrage_complet(conn, devis_id)
+
+
+@router.post("/api/rentabilite/devis/{devis_id}/chiffrage/relire")
+def relire_devis_chiffrage(devis_id: int, request: Request):
+    """Relit les postes en euros dans le classeur conservé."""
+    require_rentabilite(request)
+    from app.services import devis_chiffrage
+    with get_db() as conn:
+        if devis_chiffrage.relire_depuis_fichier(conn, devis_id) is None:
+            raise HTTPException(404, "Fichier d'origine du devis introuvable — relecture impossible.")
+        conn.commit()
+        return _chiffrage_complet(conn, devis_id)
+
+
+@router.get("/api/rentabilite/planning/{planning_entry_id}/fiche")
+def fiche_rentabilite_dossier(planning_entry_id: int, request: Request):
+    """Fiche rentabilité d'un dossier : devisé contre réel, en fourchettes.
+
+    Le calcul vit dans `app/services/rentabilite_reel.py` ; cette route ne fait
+    que l'exposer."""
+    require_rentabilite(request)
+    from app.services.rentabilite_reel import fiche_rentabilite
+    with get_db() as conn:
+        try:
+            return fiche_rentabilite(conn, planning_entry_id)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+
+
+@router.get("/api/rentabilite/tableau-de-bord")
+def tableau_de_bord_rentabilite(request: Request, periode: str = "ouvres7", machine: str = "",
+                                force: int = 0):
+    """Dossiers terminés jugés devisé contre réel, compteurs et causes d'écart.
+
+    `force=1` (bouton « Recalculer ») ignore le cache des fiches."""
+    require_rentabilite(request)
+    from app.services.rentabilite_reel import tableau_de_bord
+    with get_db() as conn:
+        return tableau_de_bord(conn, periode, (machine or "").strip()[:80], force=bool(force))
+
+
+@router.get("/api/rentabilite/parametres")
+def get_rent_parametres(request: Request):
+    require_rentabilite(request)
+    from app.services import rentabilite_parametres
+    with get_db() as conn:
+        return {"parametres": rentabilite_parametres.decrire(conn)}
+
+
+@router.put("/api/rentabilite/parametres")
+async def put_rent_parametres(request: Request):
+    """Modifie un ou plusieurs paramètres : `{"seuil_cout_horaire": 340, ...}`."""
+    user = require_rentabilite(request)
+    from app.services import rentabilite_parametres
+    body = await request.json()
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(400, "Aucun paramètre transmis.")
+    with get_db() as conn:
+        try:
+            for cle, valeur in body.items():
+                rentabilite_parametres.ecrire(conn, cle, valeur, user.get("email") or "")
+        except ValueError as e:
+            conn.rollback()
+            raise HTTPException(400, str(e))
+        conn.commit()
+        return {"success": True, "parametres": rentabilite_parametres.decrire(conn)}
 
 
 @router.post("/api/bridge/devis")

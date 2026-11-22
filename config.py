@@ -730,6 +730,68 @@ ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_AD
 # périmètre ne donne aucun droit d'écriture sur RVGI.
 ROLES_ERP = ROLES_ADMIN | {ROLE_EXPEDITION}
 
+# ADV (/adv) : le tableau de bord du carnet de commandes, côté administration
+# des ventes. Le tableau est ouvert à l'administration et à la direction ;
+# l'onglet Prépa l'est aussi à la logistique et à l'expédition, qui y passent
+# une préparation à « en cours » puis « prête ».
+ROLES_ADV = set(ROLES_ADMIN)
+ROLES_ADV_PREPA = ROLES_ADV | {ROLE_LOGISTIQUE, ROLE_EXPEDITION}
+
+# Les cinq étapes de la chaîne d'une ligne de commande, dans l'ordre où elles
+# se franchissent, et les quatre états qu'une étape peut prendre.
+ADV_ETAPES = (
+    ("bat", "BAT"),
+    ("prod", "Prod"),
+    ("stock", "Stock"),
+    ("prepa", "Prépa"),
+    ("depart", "Départ prévu"),
+)
+ADV_ETATS = (
+    ("oui", "Oui"),
+    ("en_cours", "En cours"),
+    ("non", "Non"),
+    ("sans_objet", "Sans objet"),
+)
+ADV_PREPA_STATUTS = (
+    ("a_preparer", "À préparer"),
+    ("en_cours", "En cours"),
+    ("prete", "Prête"),
+)
+# L'onglet Prépa montre ce qui part dans les N prochains jours, retards compris.
+ADV_PREPA_HORIZON_JOURS = int(os.getenv("ADV_PREPA_HORIZON_JOURS", "21"))
+
+# Mise en forme conditionnelle du carnet ADV (règles en base, table
+# adv_mises_en_forme). Ce qui peut être coloré, comment on compare, et avec
+# quelles couleurs — les tons du thème, jamais une couleur en dur.
+# (clé, libellé, type) ; les étapes de la chaîne s'ajoutent en « etape_<clé> ».
+ADV_MEF_COLONNES = (
+    ("commande", "Commande", "texte"),
+    ("client", "Client", "texte"),
+    ("article", "Article", "texte"),
+    ("qte", "Commandé", "nombre"),
+    ("stock", "En stock", "nombre"),
+    ("a_fabriquer", "À fabriquer", "nombre"),
+    ("expedition", "Expédition", "date"),
+    ("livraison", "Livraison", "date"),
+    ("fin_prod", "Fin de prod", "date"),
+) + tuple(("etape_" + k, v, "etat") for k, v in ADV_ETAPES)
+ADV_MEF_OPERATEURS = {
+    "nombre": (("gt", ">"), ("ge", "≥"), ("lt", "<"), ("le", "≤"), ("eq", "="), ("ne", "≠"),
+               ("vide", "est vide"), ("non_vide", "n'est pas vide")),
+    "date": (("lt", "avant le"), ("le", "au plus tard le"), ("gt", "après le"), ("ge", "à partir du"),
+             ("eq", "le"), ("vide", "est vide"), ("non_vide", "n'est pas vide")),
+    "texte": (("contient", "contient"), ("eq", "est"), ("commence", "commence par"),
+              ("vide", "est vide"), ("non_vide", "n'est pas vide")),
+    "etat": (("eq", "est"), ("ne", "n'est pas")),
+}
+# À quoi on compare : une valeur saisie, une autre colonne du même type, ou —
+# pour une date — aujourd'hui décalé de N jours.
+ADV_MEF_CIBLES = (("valeur", "une valeur"), ("colonne", "une autre colonne"),
+                  ("aujourdhui", "aujourd'hui ± jours"))
+ADV_MEF_TONS = (("danger", "Rouge"), ("warn", "Orange"), ("ok", "Vert"),
+                ("accent", "Bleu"), ("neutre", "Gris"))
+ADV_MEF_MAX_REGLES = 40
+
 # Nouvel ERP (remplaçant de RVGI), servi sur son propre sous-domaine par le
 # middleware `router_hote_erp` de main.py : une requête dont le Host figure dans
 # ERP2_HOSTS est servie sous ERP2_PREFIXE. En construction, sans données réelles :
@@ -1390,6 +1452,38 @@ DEVIS_TOLERANCE_COHERENCE = float(os.getenv("DEVIS_TOLERANCE_COHERENCE", "0.05")
 # Devis d'origine conservés pour l'audit : on doit pouvoir rouvrir le fichier
 # qui a produit un chiffre, des mois après.
 DEVIS_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "devis")
+
+# ─── Rentabilité — devisé contre réel ─────────────────────────────
+# Valeurs PAR DÉFAUT : la migration `rentabilite_parametres` les pose dans
+# `rent_parametres`, d'où elles se modifient dans l'écran (arbitrage d'Eugène
+# du 20/11/2026 : 325 €/h par défaut, ajustable). Le code lit la table via
+# `app/services/rentabilite_parametres.py`, jamais ces constantes en direct.
+#
+# Un dossier est réussi quand sa marge brute ET son coût horaire (marge brute
+# par heure machine, cellule « Cout Horaire » du classeur) passent les deux
+# seuils sur TOUTE leur fourchette.
+RENT_SEUIL_MB_PCT = float(os.getenv("RENT_SEUIL_MB_PCT", "40"))
+RENT_SEUIL_COUT_HORAIRE = float(os.getenv("RENT_SEUIL_COUT_HORAIRE", "325"))
+# Fourchettes des valeurs réelles, selon la précision de leur source. Arbitrées
+# le 20/11/2026 : métrage et matière au total compteur ou au déstockage, donc
+# fiables à 1 % ; la durée totale à 3 % ; l'erreur de temps se concentre au
+# passage calage → production, d'où une fourchette dédiée en minutes.
+RENT_FOURCHETTE_DUREE_PCT = float(os.getenv("RENT_FOURCHETTE_DUREE_PCT", "3"))
+RENT_FOURCHETTE_FRONTIERE_MN = float(os.getenv("RENT_FOURCHETTE_FRONTIERE_MN", "20"))
+RENT_FOURCHETTE_METRAGE_PCT = float(os.getenv("RENT_FOURCHETTE_METRAGE_PCT", "1"))
+RENT_FOURCHETTE_MATIERE_PCT = float(os.getenv("RENT_FOURCHETTE_MATIERE_PCT", "1"))
+# Au-delà de cet écart entre la surface du compteur et celle de MyStock, ce
+# n'est plus de l'imprécision mais une erreur de saisie.
+RENT_ECART_CROISEMENT_PCT = float(os.getenv("RENT_ECART_CROISEMENT_PCT", "2"))
+# Écart toléré entre un poste lu dans un devis et le même poste recalculé par
+# le moteur. Au-delà, le devis est signalé : libellé mal lu ou formule modifiée.
+RENT_TOLERANCE_CONTROLE_PCT = float(os.getenv("RENT_TOLERANCE_CONTROLE_PCT", "1"))
+# Résultat hors de ces bornes = rattachement à vérifier (facture d'une autre
+# commande, matière d'un autre dossier), pas une rentabilité : le dossier sort
+# des compteurs et le dit, au lieu d'écraser le nuage du tableau de bord.
+RENT_PLAUSIBLE_MB_MIN = float(os.getenv("RENT_PLAUSIBLE_MB_MIN", "-30"))
+RENT_PLAUSIBLE_MB_MAX = float(os.getenv("RENT_PLAUSIBLE_MB_MAX", "90"))
+RENT_PLAUSIBLE_COUT_HORAIRE_MAX = float(os.getenv("RENT_PLAUSIBLE_COUT_HORAIRE_MAX", "5000"))
 
 # ─── MyPrint — étiquettes spécifiques ─────────────────────────────
 # Tous les rôles qui ont la tuile MyPrint créent, modifient et impriment

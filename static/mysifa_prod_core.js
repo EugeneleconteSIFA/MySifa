@@ -217,7 +217,11 @@
     rentLinksById: {},
     // Sous-onglet actif de Rentabilite. Defaut « dossiers » : le travail
     // principal de la page est de relier les devis, pas de lire des chiffres.
-    rentSubTab: 'dossiers',
+    rentSubTab: 'tableau',
+    rentTdbPeriode: 'ouvres7',
+    rentTdbMachine: '',
+    rentTdbGrain: 'jour',
+    rentTdbCourbe: 'marge',
     // Filtre de la file de travail : a_lier | comparables | tous.
     rentFiltre: 'a_lier',
     // Tri de la liste des dossiers : colonne + sens, poses par l'en-tete.
@@ -286,7 +290,7 @@
     of:['of','pending','sansof'],
     fiches:['liste','orphelines'],
     traceabilite:['dossiers','traceur'],
-    rentabilite:['dossiers','pilotage','devis'],
+    rentabilite:['tableau','dossiers','pilotage','devis'],
     scans:['scannes','rattacher']
   };
   var _SOUS_CHAMP={production:'subPage',of:'ofSubTab',fiches:'fichesSubTab',traceabilite:'tracaSubTab',rentabilite:'rentSubTab',scans:'scansSous'};
@@ -360,8 +364,13 @@
       }
     }
     if(S.page==='rentabilite'){
-      var rs=S.rentSubTab||'dossiers';
-      if(rs==='dossiers'){
+      var rs=S.rentSubTab||'tableau';
+      if(rs==='tableau'){
+        if(S.rentTdbPeriode&&S.rentTdbPeriode!=='ouvres7') p.periode=S.rentTdbPeriode;
+        if(S.rentTdbMachine) p.machine=S.rentTdbMachine;
+        if(S.rentTdbGrain&&S.rentTdbGrain!=='jour') p.grain=S.rentTdbGrain;
+        if(S.rentTdbCourbe&&S.rentTdbCourbe!=='marge') p.courbe=S.rentTdbCourbe;
+      }else if(rs==='dossiers'){
         if(S.rentFiltre&&S.rentFiltre!=='a_lier') p.filtre=S.rentFiltre;
         var rt=S.rentTri||{};
         if(rt.champ&&!(rt.champ==='debut'&&rt.sens==='desc')){ p.tri=rt.champ; p.sens=rt.sens||'asc'; }
@@ -599,7 +608,17 @@
       if(!S._tracDossierUrl){ S.traceabiliteDossier=undefined; S.tracDossierRef=null; }
     }
     if(page==='rentabilite'){
-      if(S.rentSubTab==='pilotage'){
+      // Le Tableau de bord est devenu l'onglet par défaut le 20/11/2026. Une
+      // adresse ancienne sans `sous` mais avec un filtre ou une entrée de la
+      // liste Dossiers (notification « à venir sans devis ») y mène encore.
+      if(!u.a('sous')&&(u.a('filtre')||u.a('entree'))) S.rentSubTab='dossiers';
+      if(S.rentSubTab==='tableau'){
+        S.rentTdbPeriode=u.get('periode','ouvres7',['ouvres7','last30','last90','thisYear','all']);
+        var tm=u.get('machine','');
+        S.rentTdbMachine=(tm.length<=80&&!/[\u0000-\u001f<>]/.test(tm))?tm:'';
+        S.rentTdbGrain=u.get('grain','jour',['jour','semaine','mois']);
+        S.rentTdbCourbe=u.get('courbe','marge',['marge','horaire']);
+      }else if(S.rentSubTab==='pilotage'){
         S.rentPilotMachine=u.get('machine',null);
         S.rentPilotSemaines=Number(u.get('semaines','2',['1','2','4']));
         var sem=u.get('semaine',null);
@@ -7672,12 +7691,13 @@ function renderRentabilite(){
   // la liste derrière inviterait à cliquer ailleurs et à perdre la lecture.
   if(S.devisPreview) return renderDevisForm(S.devisPreview);
 
-  const sub = S.rentSubTab || 'dossiers';
+  const sub = S.rentSubTab || 'tableau';
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Rentabilité'},
     ...[
-      {key:'dossiers', label:'Dossiers', icon:'layers'},
+      {key:'tableau',  label:'Tableau de bord', icon:'bar-chart-2'},
       {key:'pilotage', label:'Pilotage', icon:'trending-up'},
       {key:'devis',    label:'Devis',    icon:'file'},
+      {key:'dossiers', label:'Dossiers', icon:'layers'},
     ].map(t=>h('button',{
       type:'button', role:'tab',
       'aria-selected': sub===t.key ? 'true' : 'false',
@@ -7691,10 +7711,44 @@ function renderRentabilite(){
         : null))
   );
 
-  const contenu = sub==='pilotage' ? renderRentPilotage()
+  const contenu = sub==='tableau'  ? renderRentTableau()
+                : sub==='pilotage' ? renderRentPilotage()
                 : sub==='devis'    ? renderRentDevis()
                 :                    renderRentDossiers();
   return h('div',null, subNav, contenu);
+}
+
+// ── Sous-onglet Tableau de bord ──────────────────────────────────
+/* Dessin et calcul hors de ce fichier (mysifa_rent_tableau.js, service
+   rentabilite_reel.py). Le module garde ses données entre deux render() :
+   reconstruire l'onglet ne relance pas le calcul. Les filtres vivent dans S
+   (et donc dans l'adresse) ; un clic sur un dossier ouvre sa fenêtre du
+   Pilotage, où se lit la fiche détaillée. */
+function renderRentTableau(){
+  const zone = h('div',{className:'rent-tableau'});
+  if(!window.MySifaRentTableau){
+    zone.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},'Tableau de bord indisponible — recharger la page.'));
+    return zone;
+  }
+  window.MySifaRentTableau.monter(zone, {
+    periode: S.rentTdbPeriode || 'ouvres7',
+    machine: S.rentTdbMachine || '',
+    grain: S.rentTdbGrain || 'jour',
+    courbe: S.rentTdbCourbe || 'marge',
+    surFiltre: patch => {
+      const p = {};
+      if(patch.periode !== undefined) p.rentTdbPeriode = patch.periode;
+      if(patch.machine !== undefined) p.rentTdbMachine = patch.machine;
+      if(patch.grain !== undefined) p.rentTdbGrain = patch.grain;
+      if(patch.courbe !== undefined) p.rentTdbCourbe = patch.courbe;
+      set(p);
+    },
+    ouvrir: async entryId => {
+      if(!S.rentLinksCharges) await loadRentLinks();
+      ouvrirRattachementModal(Number(entryId));
+    },
+  });
+  return zone;
 }
 
 // ── Sous-onglet Pilotage ─────────────────────────────────────────
@@ -8388,6 +8442,14 @@ async function ouvrirRattachementModal(entryId, file){
   corps.appendChild(h('div',{className:'form-section-title'},'Devis'));
   corps.appendChild(selecteur);
   if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
+  // Rattachement validé : la fiche rentabilité (devisé contre réel, en
+  // fourchettes) se lit sous le devis. Calcul serveur, dessin dans
+  // mysifa_rent_fiche.js — la fenêtre garde son adresse `rattachement`.
+  if(etat === 'vert' && window.MySifaRentFiche){
+    const zoneFiche = h('div',{className:'rent-fiche-zone'});
+    corps.appendChild(zoneFiche);
+    window.MySifaRentFiche.monter(zoneFiche, entryId);
+  }
   corps.appendChild(h('div',{className:'rent-lier-pied'},
     precedentId !== undefined
       ? h('button',{type:'button',className:'btn-sec',title:'Dossier précédent',
@@ -9488,6 +9550,19 @@ function ouvrirDevisModal(devisId){
     : h('div',{className:'card-empty'},
         'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.');
 
+  /* Le résultat d'abord (mysifa_rent_devis.js) : prix de vente, marge,
+     coût horaire, chaîne du classeur, sensibilité. Les valeurs lues case par
+     case restent dessous, repliées — dépliées d'office quand les montants du
+     devis n'ont pas pu être lus, puisqu'elles sont alors tout ce qu'on a. */
+  const lecture = h('div',{className:'rd-zone'});
+  const valeursLues = h('details',{className:'rd-valeurs'},
+    h('summary',null,'Valeurs lues dans le classeur'), corps);
+  if(window.MySifaRentDevis){
+    window.MySifaRentDevis.monter(lecture, dv.id, {surSansChiffrage:()=>{ valeursLues.open = true; }});
+  }else{
+    valeursLues.open = true;
+  }
+
   /* Valider = « je l'ai relu, c'est juste ». Un devis ramassé par l'agent
      n'est jamais validé tant que personne ne l'a ouvert ; un devis saisi ou
      corrigé à l'écran l'est d'office. */
@@ -9502,12 +9577,14 @@ function ouvrirDevisModal(devisId){
       h('button',{className:'contact-close-btn',title:'Fermer',
         onClick:()=>fermerDevisModal()},'✕')
     ),
-    (Number(dv.a_verifier)===1 && dv.note)
+    // La nouvelle lecture (mysifa_rent_devis.js) reprend cette note dans SA
+    // liste d'alertes, dédoublonnée : ne l'afficher ici que sans elle.
+    (Number(dv.a_verifier)===1 && dv.note && !window.MySifaRentDevis)
       ? h('div',{className:'devis-alertes'},
           h('div',{className:'devis-alerte devis-alerte-avertissement'},
             iconEl('alert-triangle',13), h('span',null,' '+dv.note)))
       : null,
-    h('div',{className:'contact-modal-body'}, corps),
+    h('div',{className:'contact-modal-body'}, lecture, valeursLues),
     h('div',{className:'devis-modal-actions'},
       dejaValide
         ? h('span',{className:'devis-modal-valide'},

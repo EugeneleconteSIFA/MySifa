@@ -1206,7 +1206,7 @@ async function submitPdfDelete(){
 </script>
 <script>window.__MYSIFA_APP__='bat';</script>
 <script src="/static/mysifa_dock.js?v=5"></script>
-<script src="/static/mysifa_cmdk.js"></script>
+<script src="/static/mysifa_cmdk.js?v=2"></script>
 <script>
 if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
   window.MySifaDock.bootPageWidgets();
