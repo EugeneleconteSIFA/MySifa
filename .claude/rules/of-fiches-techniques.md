@@ -515,3 +515,12 @@ libre de moins de 30 jours), puis la recherche
 (`/api/of/planning/dossier/{id}/recherche`), avec l'état de chaque OF.
 Cas existant au 22/11/2026 : OF 1153/0005 - 01/04/26 (produit jusqu'au
 29/06) relié au dossier « Stock 1153/0005 » en attente.
+
+**Le même produit ne relie plus d'office** (22/11/2026). L'étape 3 de
+`_lookup_of_candidates` (dossier sans numéro d'OF : « Stock … », « Marché
+… ») rendait un match « certain » dès qu'un seul OF portait le même produit,
+et `/api/of/planning/{id}` le persistait (`created_by = 'auto_lookup'`) à la
+simple ouverture du panneau, quelle que soit la date. Elle ne rend plus que
+des candidats (« Mappings à valider »), sans les OF `produit` ni `ancien`.
+Liens posés ainsi et encore à produire au 22/11/2026 : « Stock 1153/0005 » ↔
+1153/0005 - 01/04/26, « Marché 779 » (DSI) ↔ « Solde marché 662+703 » (2025).

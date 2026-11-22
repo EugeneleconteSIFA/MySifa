@@ -43,8 +43,11 @@ CASES = [
   ("9932249",                          "623/0021",  "Cohésio 2", ("certain",2),  "exact — cas nominal"),
   ("9932376-377",                      "91/0003",   "Cohésio 2", ("certain",8),  "plage : clé normalisée départage 9932376 / 9932376-377"),
   ("9932163 Reliquat 2",               "938/0038",  "Cohésio 1", ("certain",4),  "suffixe Reliquat — token isolé, piège 19932163 écarté"),
-  ("1068/0001 - Reliquat 2 - Marché 745","1068/0001","Cohésio 1",("certain",6),  "aucun numéro d'OF — rattrapé par référence produit"),
-  ("Marché 761",                       "986/0005",  "DSI",       ("certain",7),  "libellé marché — rattrapé par référence produit"),
+  # Depuis le 22/11/2026, le seul produit ne rattache plus d'office : il
+  # propose (« Mappings à valider »). Il reliait « Stock 1153/0005 » à un OF
+  # produit fin juin, « Marché 779 » à un OF de 2025.
+  ("1068/0001 - Reliquat 2 - Marché 745","1068/0001","Cohésio 1",("ambigu",1),  "aucun numéro d'OF — référence produit : proposé, pas relié"),
+  ("Marché 761",                       "986/0005",  "DSI",       ("ambigu",1),  "libellé marché — référence produit : proposé, pas relié"),
   ("OF 9932249",                       "623/0021",  "Cohésio 2", ("certain",2),  "préfixe OF"),
   ("9932900",                          "777/0001",  "Cohésio 2", ("certain",9),  "égalité stricte prioritaire sur tout le reste"),
   ("9932900 bis",                      "777/0001",  "Cohésio 2", ("certain",10), "2 candidats — départagés par la machine"),
