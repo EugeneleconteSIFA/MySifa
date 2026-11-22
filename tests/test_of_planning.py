@@ -166,6 +166,38 @@ class TestPlanningDepuisOF(unittest.TestCase):
             self.assertIsNone(conn.execute("SELECT of_import_id FROM planning_entries WHERE id=1").fetchone()[0])
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM planning_of_links WHERE planning_entry_id=1").fetchone()[0], 0)
 
+    def test_etat_des_of_et_reutilisation(self):
+        from datetime import datetime, timedelta
+        from fastapi import HTTPException
+        vieux = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%S")
+        hier = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+        il_y_a_200j = (datetime.now() - timedelta(days=200)).strftime("%Y-%m-%d")
+        with get_db() as conn:
+            m = self.machine
+            for oid, num, cree in ((20, 'LIBRE', None), (21, 'ANCIEN', il_y_a_200j), (22, 'PRODUIT', None),
+                                   (23, 'PASSE', None), (24, 'ENCOURS', None), (25, 'RECENT', None)):
+                conn.execute("INSERT INTO of_imports (id, of_numero, date_creation, date_import) VALUES (?,?,?,?)",
+                             (oid, num, cree, datetime.now().strftime("%Y-%m-%dT%H:%M:%S")))
+            # Dossiers déjà passés : un autre produit terminé il y a 60 jours, la
+            # même référence que la cible, un en attente, un terminé hier.
+            for eid, ref, statut, fin, of_id in ((30, 'AUTRE', 'termine', vieux, 22), (31, '9932501/L1', 'termine', vieux, 23),
+                                                 (32, 'AILLEURS', 'attente', None, 24), (33, 'HIER', 'termine', hier, 25)):
+                conn.execute("INSERT INTO planning_entries (id, machine_id, position, reference, statut, planned_end, duree_heures, created_at, updated_at) "
+                             "VALUES (?,?,?,?,?,?,8,'2026-01-01','2026-01-01')", (eid, m, eid, ref, statut, fin))
+                conn.execute("INSERT INTO planning_of_links (planning_entry_id, of_import_id, position) VALUES (?,?,0)", (eid, of_id))
+            conn.commit()
+            cible = {"id": 1, "reference": "9932501/L1"}
+            e = op.etat_des_of(conn, [20, 21, 22, 23, 24, 25], cible)
+            self.assertEqual({k: v["etat"] for k, v in e.items()},
+                             {20: "libre", 21: "ancien", 22: "produit", 23: "passe", 24: "en_cours", 25: "recent"})
+            self.assertFalse(e[22]["selectionnable"])
+            self.assertIn("créez un nouvel OF", e[22]["note"])
+            self.assertTrue(all(e[i]["selectionnable"] for i in (20, 21, 23, 24, 25)))
+            with self.assertRaises(HTTPException) as ctx:
+                op.verifier_reutilisable(conn, [22], 1)
+            self.assertEqual(ctx.exception.status_code, 409)
+            op.verifier_reutilisable(conn, [20, 23, 24, 25], 1)   # aucun refus
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

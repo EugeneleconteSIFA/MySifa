@@ -1770,6 +1770,9 @@ async def rattacher_of(planning_id: int, request: Request):
         ).fetchone()
         if not oi:
             raise HTTPException(404, "OF introuvable.")
+        # Un OF déjà produit ne se réutilise pas (22/11/2026).
+        from app.routers.of_planning import verifier_reutilisable
+        verifier_reutilisable(conn, [of_id], planning_id)
         _promote_of_link(conn, planning_id, of_id, qui)
         # Rattachement décidé par un humain : l'auto-link ne doit plus le défaire.
         try:

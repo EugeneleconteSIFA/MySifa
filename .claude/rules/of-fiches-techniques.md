@@ -497,3 +497,21 @@ NULL), scans gardés sans id, rattachements de commande de l'OF retirés. La
 confirmation nomme les dossiers touchés (`POST /api/of/suppression/apercu`),
 et chaque dossier reçoit une ligne dans l'historique de sa machine
 (« OF X supprimé », OF actif ou « aucun, dossier sans OF »).
+
+**Un OF déjà produit ne se réutilise pas** (22/11/2026, `of_planning.etat_des_of`).
+Un OF sert légitimement plusieurs passes d'une même production (9931710 :
+4 dossiers ; 9932304 : DSI puis Repiquage) : elles portent la même référence
+de dossier et naissent avant la fin de la précédente. Vu depuis un dossier,
+un OF est `deja` (relié ici), `passe` (même référence), `en_cours` (sur un
+dossier en attente ou en cours), `recent` (dernière passe terminée depuis
+moins de `JOURS_PRODUIT` = 14 j, fin réelle = opération 89), `produit` (scan
+d'OF terminé, ou tous ses dossiers terminés depuis plus de 14 j sous une autre
+référence), `ancien` (jamais planifié, créé il y a plus de 90 j) ou `libre`.
+`produit` est refusé (409) par `verifier_reutilisable` sur les trois chemins
+de rattachement : panneau du planning (`/api/admin/planning-of-links`),
+étape 4 de l'OF, Besoins matières. Le sélecteur du planning ne montre plus
+d'« OF récents » : ses correspondances (« même produit » seulement pour un OF
+libre de moins de 30 jours), puis la recherche
+(`/api/of/planning/dossier/{id}/recherche`), avec l'état de chaque OF.
+Cas existant au 22/11/2026 : OF 1153/0005 - 01/04/26 (produit jusqu'au
+29/06) relié au dossier « Stock 1153/0005 » en attente.
