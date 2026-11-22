@@ -205,9 +205,35 @@ def candidats(conn, of_id: Optional[int], numero: Optional[str],
     return out
 
 
+def _heure(iso: Any) -> str:
+    s = str(iso or "")
+    return ("%s à %s" % (_jour(s), s[11:16])) if len(s) >= 16 else _jour(s)
+
+
+def _apercu(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Ce qu'on regarde d'un dossier avant d'y relier un OF (retour du
+    22/11/2026 : « c'est assez compliqué de se projeter sinon »)."""
+    fmt = _format_dossier(d)
+    duree = _nombre(d.get("duree_heures"))
+    return {
+        "client": (d.get("client") or "").strip() or None,
+        "produit": (d.get("ref_produit") or "").strip() or None,
+        "description": (d.get("description") or "").strip() or None,
+        "debut": _heure(d.get("planned_start")) or None,
+        "fin": _heure(d.get("planned_end")) or None,
+        "duree": ("%s h" % _txt_nombre(duree)) if duree else None,
+        "laize": _txt_nombre(_nombre(d.get("laize"))) or None,
+        "format": _affiche("format", fmt) if fmt else None,
+        "commandes": (d.get("dos_rvgi") or "").strip() or None,
+        "commentaire": ((d.get("commentaire") or "").strip()[:240]) or None,
+        "cree": "%s%s" % (_jour(d.get("created_at")), (" par " + d["created_by"]) if d.get("created_by") else ""),
+    }
+
+
 def _public(d: Dict[str, Any], vals: Dict[str, Any], of_id: Optional[int]) -> Dict[str, Any]:
     relie_ailleurs = bool(d.get("of_import_id")) and of_id and int(d["of_import_id"]) != int(of_id)
     return {
+        "apercu": _apercu(d),
         "id": d["id"], "reference": d.get("reference"), "machine_id": d.get("machine_id"),
         "machine": d.get("machine_nom"), "statut": d.get("statut"),
         "a_placer": bool(int(d.get("a_placer") or 0)), "rang": d.get("_rang"),
@@ -252,7 +278,20 @@ async def of_planning_candidats(request: Request):
             commandes = [l for l in ratt.lister(conn, "of", of_id) if l["piece"] == "commande"]
         machines = _machines(conn)
         dossiers = candidats(conn, of_id, vals["numero_of"], commandes)
+        # Un numéro tapé déjà porté par un autre OF sera refusé à la création :
+        # le dire avant le clic, avec de quoi ouvrir l'OF existant.
+        meme_numero = None
+        if vals["numero_of"]:
+            r = conn.execute(
+                "SELECT id, of_numero, date_import, imported_by FROM of_imports "
+                "WHERE LOWER(TRIM(of_numero)) = LOWER(?) AND id != ? ORDER BY id DESC LIMIT 1",
+                (vals["numero_of"], of_id or 0)).fetchone()
+            if r:
+                meme_numero = {"id": r["id"], "numero": r["of_numero"], "le": _jour(r["date_import"]),
+                               "par": r["imported_by"] if r["imported_by"] not in (None, "access_bridge") else
+                               ("le pont Access" if r["imported_by"] == "access_bridge" else None)}
     return {
+        "of_meme_numero": meme_numero,
         "dossiers": [_public(d, vals, of_id) for d in dossiers[:5]],
         "machines": machines,
         "machine_proposee": _machine_proposee(machines, body.get("machine"), body.get("machine_fiche")),

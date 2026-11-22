@@ -3472,12 +3472,31 @@ function ofePlanHtml(m){
   const radio=function(val,coche,dis){ return '<input type="radio" name="ofe-plan-choix" value="'+escAttr(val)+'"'+(coche?' checked':'')+(dis?' disabled':'')+' style="margin-top:2px;accent-color:var(--accent)">'; };
   const lecture=!r.peut_planifier;
   let h='';
+  // Numéro tapé déjà porté par un autre OF : la création sera refusée.
+  const dbl=r.of_meme_numero, p0=ofeLirePayload(m);
+  if(dbl&&!m.id&&!(m._numeroPropose&&(p0.of_numero||'')===m._numeroPropose)){
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;padding:9px 12px;border:1px solid var(--warn);border-radius:8px;font-size:13px;color:var(--warn)">'+
+      '<span>Un OF porte déjà le numéro <strong>'+escHtml(dbl.numero)+'</strong>'+(dbl.le?' (créé le '+escHtml(dbl.le)+(dbl.par?' par '+escHtml(dbl.par):'')+')':'')+'. Créer sera refusé : changez le numéro ou ouvrez cet OF.</span>'+
+      '<a href="/prod?page=of&of='+encodeURIComponent(dbl.id)+'" target="_blank" rel="noopener" style="color:var(--warn);font-weight:700;white-space:nowrap">Ouvrir l\'OF ↗</a></div>';
+  }
   if(lecture) h+='<div style="'+muted+';margin-bottom:6px">Le planning est réservé à la direction et à l\'administration : cette étape est en lecture seule.</div>';
   ds.forEach(function(d){
     const coche=c.action==='relier'&&c.entry_id===d.id;
     h+='<label style="'+ligne+'">'+radio('relier:'+d.id,coche,lecture)+'<span><strong>'+(d.deja_relie?'Dossier relié ':'Relier au dossier ')+escHtml(d.reference||'')+'</strong>'+
       ' <span style="color:var(--text2)">· '+escHtml(d.machine||'')+' · '+escHtml(etatDossier(d))+(d.date_livraison?' · livraison '+escHtml(d.date_livraison):'')+'</span>'+
       '<br><span style="'+muted+'">'+escHtml(d.raison)+(d.of_relie?' · actuellement relié à l\'OF '+escHtml(d.of_relie):'')+'</span></span></label>';
+    if(coche&&d.apercu){
+      const a=d.apercu, cellules=[
+        ['Client',a.client],['Produit',a.produit],['Désignation',a.description],
+        ['Prévu',a.debut?(a.debut+(a.fin?' → '+a.fin:'')):(d.a_placer?'à placer, pas encore daté':null)],
+        ['Durée',a.duree],['Laize',a.laize],['Format',a.format],['Commandes',a.commandes],
+        ['OF relié',d.of_relie||(d.deja_relie?'cet OF':'aucun')],['Créé',a.cree],['Commentaire',a.commentaire],
+      ].filter(x=>x[1]);
+      h+='<div style="margin:2px 0 8px 26px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 18px">'+
+        cellules.map(x=>'<div style="font-size:12px;min-width:0"><div style="color:var(--muted)">'+escHtml(x[0])+'</div><div style="color:var(--text);overflow-wrap:anywhere">'+escHtml(String(x[1]))+'</div></div>').join('')+
+        '</div><a href="/planning?machine='+encodeURIComponent(d.machine_id)+'&dossier='+encodeURIComponent(d.id)+'" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent)">Ouvrir le dossier au planning ↗</a></div>';
+    }
     if(coche&&(d.ecarts||[]).length){
       h+='<div style="margin:0 0 6px 26px;display:flex;flex-direction:column;gap:4px">';
       h+='<div style="'+muted+'">'+(d.deja_relie?'Mettre aussi à jour le dossier :':'Reporter sur le dossier :')+'</div>';
