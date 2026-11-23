@@ -166,8 +166,14 @@ def cycle(conn, fin_id: int) -> dict:
     }
 
 
-def candidats(conn, fin: dict) -> list:
-    """Les autres dossiers de la même commande au planning de la même machine."""
+def dossiers_commande(conn, fin: dict) -> list:
+    """Les dossiers de la commande au planning de la machine, celui du cycle compris.
+
+    Pour chacun : quantité de l'OF, quantité déjà déclarée par d'autres fins de
+    production, et le reste. C'est ce reste qu'on pré-remplit : sur 9932856 - L8,
+    Tony avait déclaré 540 000 le 19/11 au soir, l'OF en demande 783 000, la
+    reprise du 20/11 au matin en a donc fait 243 000 si L8 est soldé.
+    """
     ref = fin["no_dossier"].strip()
     cle = cle_commande(ref)
     pe_cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
@@ -188,18 +194,30 @@ def candidats(conn, fin: dict) -> list:
     for r in lignes:
         r = dict(r)
         nd = r["reference"]
-        if nd == ref or nd in vus or cle_commande(nd) != cle:
+        if nd in vus or cle_commande(nd) != cle:
             continue
         vus.add(nd)
-        nb = conn.execute(
-            """SELECT COUNT(*) FROM production_data
+        nb, deja = conn.execute(
+            """SELECT COUNT(*),
+                      SUM(CASE WHEN operation_code = '89' AND id <> ? THEN quantite_traitee END)
+                 FROM production_data
                 WHERE trim(no_dossier) = ? AND COALESCE(est_annule, 0) = 0""",
-            (nd,),
-        ).fetchone()[0]
+            (fin["id"], nd),
+        ).fetchone()
+        deja = float(deja or 0)
+        qte_of = _num(r["qte_of"])
         out.append({"no_dossier": nd, "client": r["client"], "statut": r["statut"],
-                    "ref_produit": r["ref_produit"], "qte_of": r["qte_of"], "nb_saisies": nb})
+                    "ref_produit": r["ref_produit"], "qte_of": qte_of, "nb_saisies": nb,
+                    "deja": deja,
+                    "reste": max(qte_of - deja, 0) if qte_of else None})
     out.sort(key=lambda d: d["no_dossier"])
     return out
+
+
+def candidats(conn, fin: dict) -> list:
+    """Les autres dossiers de la même commande au planning de la même machine."""
+    ref = fin["no_dossier"].strip()
+    return [d for d in dossiers_commande(conn, fin) if d["no_dossier"] != ref]
 
 
 def _lire_parts(parts, cy: dict, autorises: set) -> list:
@@ -269,6 +287,8 @@ def apercu(conn, fin_id: int) -> dict:
     cy = cycle(conn, fin_id)
     duree = (cy["fin_dt"] - cy["debut"]).total_seconds()
     c0, c1 = cy["compteur_debut"], cy["compteur_fin"]
+    tous = dossiers_commande(conn, cy["fin"])
+    lui = next((d for d in tous if d["no_dossier"] == cy["no_dossier"]), {})
     return {
         "no_dossier": cy["no_dossier"], "machine": cy["machine"],
         "commande": cle_commande(cy["no_dossier"]),
@@ -276,7 +296,8 @@ def apercu(conn, fin_id: int) -> dict:
         "minutes": round(duree / 60, 1),
         "metres": (c1 - c0) if c0 is not None else None,
         "quantite_saisie": _num(cy["fin"].get("quantite_traitee")),
-        "candidats": candidats(conn, cy["fin"]),
+        "qte_of": lui.get("qte_of"), "deja": lui.get("deja") or 0, "reste": lui.get("reste"),
+        "candidats": [d for d in tous if d["no_dossier"] != cy["no_dossier"]],
     }
 
 

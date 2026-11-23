@@ -76,7 +76,10 @@
     const fermer = () => { const o = document.getElementById(ID); if (o) o.remove(); };
 
     // La liste des dossiers, dans l'ordre de passage. Le premier est celui du cycle.
-    const parts = [{ no_dossier: ap.no_dossier, quantite: ap.quantite_saisie || '' }];
+    // Pré-rempli avec le reste de l'OF (OF − quantités déjà déclarées ailleurs) :
+    // la reprise d'un dossier ne refait que ce qui manquait.
+    const parts = [{ no_dossier: ap.no_dossier, quantite: ap.quantite_saisie || ap.reste || '',
+      info: { qte_of: ap.qte_of, deja: ap.deja, reste: ap.reste } }];
 
     const lignes = el('tbody');
     const ajouts = el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } });
@@ -93,7 +96,9 @@
           : el('button', { className: 'contact-close-btn', title: 'Retirer ce dossier',
               onClick: () => { parts.splice(i, 1); dessinerLignes(); dessinerAjouts(); planifier(); } }, '×');
         return el('tr', null,
-          el('td', { style: { ...cellule, fontWeight: '600' } }, p.no_dossier),
+          el('td', { style: cellule },
+            el('div', { style: { fontWeight: '600' } }, p.no_dossier),
+            reperes(p.info)),
           el('td', { style: { ...cellule, textAlign: 'right' } }, inp),
           el('td', { style: { ...cellule, textAlign: 'right', width: '80px' } }, retirer));
       }));
@@ -118,15 +123,24 @@
           style: { background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)',
             borderRadius: '10px', padding: '6px 10px', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' },
           onClick: () => {
-            parts.push({ no_dossier: c.no_dossier, quantite: c.qte_of || '' });
+            parts.push({ no_dossier: c.no_dossier, quantite: (c.reste != null ? c.reste : c.qte_of) || '', info: c });
             dessinerLignes(); dessinerAjouts(); planifier();
           } },
           '+ ' + c.no_dossier,
-          c.qte_of ? el('span', { style: { color: 'var(--muted)', marginLeft: '6px' } }, 'OF ' + nombre(c.qte_of)) : null);
+          c.qte_of ? el('span', { style: { color: 'var(--muted)', marginLeft: '6px' } },
+            'OF ' + nombre(c.qte_of) + (c.deja ? ' · déjà ' + nombre(c.deja) : '')) : null);
         b.addEventListener('mouseenter', () => { b.style.background = 'var(--card)'; });
         b.addEventListener('mouseleave', () => { b.style.background = 'var(--bg)'; });
         return b;
       }));
+    }
+
+    // « OF 783 000 · déjà 540 000 · reste 243 000 » sous le nom du dossier.
+    function reperes(info) {
+      if (!info || !info.qte_of) return null;
+      const t = 'OF ' + nombre(info.qte_of)
+        + (info.deja ? ' · déjà ' + nombre(info.deja) + ' · reste ' + nombre(info.reste) : '');
+      return el('div', { style: { color: 'var(--muted)', fontSize: '11px', marginTop: '2px' } }, t);
     }
 
     function corps() {
