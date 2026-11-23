@@ -5840,7 +5840,7 @@ function _ofpLigne(o, st){
         <div style="font-size:13px;font-weight:700;color:${sel?'var(--accent)':'var(--text)'}">${escHtml(o.of_numero||'OF #'+o.id)}
           ${o.raison?`<span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${escHtml(o.raison)}</span>`:''}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere">${infos||'—'}</div>
-        ${o.note?`<div style="font-size:12px;color:${ton};margin-top:2px;font-weight:600">${escHtml(o.note)}</div>`:''}
+        ${o.note?'<div style="font-size:12px;color:'+ton+';margin-top:2px;font-weight:600">'+escHtml(o.note)+'</div>':''}
       </div>
       <div style="font-size:11px;color:var(--muted);white-space:nowrap;text-align:right">${cree}</div>
     </div>`;
