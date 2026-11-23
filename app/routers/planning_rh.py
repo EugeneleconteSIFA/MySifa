@@ -645,9 +645,11 @@ def get_conges(
         q = """SELECT c.id, c.user_id, u.nom AS user_nom, u.role AS user_role,
                       c.date_debut, c.date_fin, c.nb_jours,
                       c.type_conge, c.note, c.statut,
-                      c.created_by, c.created_at
+                      c.created_by, c.created_at,
+                      c.fermeture_id, f.libelle AS fermeture_libelle
                FROM rh_conges c
-               JOIN users u ON u.id = c.user_id"""
+               JOIN users u ON u.id = c.user_id
+               LEFT JOIN rh_fermetures f ON f.id = c.fermeture_id"""
         params: list = []
         conds: list = []
         if user_id:
@@ -797,11 +799,19 @@ def delete_conge(conge_id: int, request: Request):
     editor = _require_conge_edit(request)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id FROM rh_conges WHERE id = ?", (conge_id,)
+            "SELECT id, user_id, fermeture_id FROM rh_conges WHERE id = ?", (conge_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Congé introuvable")
         conn.execute("DELETE FROM rh_conges WHERE id = ?", (conge_id,))
+        # Congé d'une fermeture collective : l'employé en est retiré, une
+        # nouvelle application de la fermeture ne le rajoutera pas.
+        if row["fermeture_id"]:
+            conn.execute(
+                """INSERT OR IGNORE INTO rh_fermetures_exclus (fermeture_id, user_id, cree_par)
+                   VALUES (?, ?, ?)""",
+                (row["fermeture_id"], row["user_id"], editor.get("email")),
+            )
         conn.commit()
     log_action(
         user=editor,
