@@ -376,6 +376,34 @@ body.light .rh-table tr:hover td{background:rgba(0,0,0,.02)}
 .rh-dm-absents{margin-top:4px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
 .rh-dm-absents.depasse{color:var(--danger);font-weight:600}
 .rh-dm-recues{border-color:var(--accent)}
+/* Fermetures collectives (static/planning_rh_fermetures.js) */
+.rh-fm-box{max-width:820px}
+.rh-fm-ligne{cursor:pointer}
+.rh-fm-ligne:hover td{background:var(--accent-bg)}
+.rh-fm-grid3{display:grid;grid-template-columns:2fr 2fr 1fr;gap:12px}
+.rh-fm-resume{display:flex;flex-wrap:wrap;gap:6px;color:var(--text2);font-size:13px}
+.rh-fm-mini{color:var(--muted);font-size:11px;font-weight:400}
+.rh-fm-pers-hdr{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:8px 0;font-size:12px;font-weight:600;color:var(--text2)}
+.rh-fm-pers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 12px;
+  max-height:260px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.rh-fm-pers{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:3px 0}
+.rh-fm-pers input{width:auto}
+.rh-fm-pers.off{opacity:.55;cursor:default}
+.rh-fm-sel,.rh-fm-nb{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);
+  padding:5px 8px;font-size:12px}
+.rh-fm-nb{width:70px}
+.rh-fm-alerte{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  padding:10px 12px;margin-bottom:12px;border:1px solid var(--warn);border-radius:10px;font-size:12px;color:var(--text2)}
+.rh-fm-box .rh-badge{white-space:nowrap}
+.rh-badge.rh-fm-couvert{background:var(--accent-bg);color:var(--success)}
+.rh-badge.rh-fm-deja_absent{background:var(--accent-bg);color:var(--muted)}
+.rh-badge.rh-fm-a_ajouter{background:var(--accent-bg);color:var(--warn)}
+.rh-badge.rh-fm-exclu{background:var(--accent-bg);color:var(--muted)}
+.rh-fm-lien{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--accent);
+  font-size:11px;padding:2px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.rh-fm-lien:hover{border-color:var(--accent)}
+@media(max-width:600px){.rh-fm-grid3{grid-template-columns:1fr}}
 /* Outils du responsable (static/planning_rh_outils.js) */
 .rh-pub{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:var(--accent-bg)}
 .rh-pub.brouillon{color:var(--muted)}
@@ -759,10 +787,12 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/planning_rh_url.js?v=3"></script>
+<script src="/static/planning_rh_url.js?v=4"></script>
 <script src="/static/planning_rh_impression.js?v=1"></script>
 <!-- Demandes des employés et motifs d'absence (onglet Demandes). -->
 <script src="/static/planning_rh_demandes.js?v=4"></script>
+<!-- Fermetures collectives (fermeture annuelle, pont) : un congé posé à chacun. -->
+<script src="/static/planning_rh_fermetures.js?v=1"></script>
 <!-- Outils du responsable (génération, publication, notes, équité) et vue employé. -->
 <script src="/static/planning_rh_outils.js?v=3"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
@@ -2302,9 +2332,14 @@ function buildCongesTab(){
   soldesSection.innerHTML=`
     <div class="rh-section-hdr">
       <span class="rh-section-title">${icon('users',13)} Soldes congés ${S.annee}${S.view==='rh'?' · Tous les services':''}</span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap">
+      ${S.canEditRH?`<button class="rh-icon-btn" onclick="prhOuvrirFermetures()">
+        ${icon('calendar',12)} Fermetures collectives
+      </button>`:''}
       ${S.isEditor?`<button class="rh-icon-btn" onclick="openSoldeModal(null)">
         ${icon('edit',12)} Modifier un solde
       </button>`:''}
+      </span>
     </div>
   `;
   const soldeTable=document.createElement('table'); soldeTable.className='rh-table';
@@ -2421,7 +2456,9 @@ function buildCongesTab(){
         <td>${fmtDateFull(c.date_fin)}</td>
         <td><strong>${c.nb_jours}j</strong></td>
         <td><span class="rh-badge ${c.type_conge.toLowerCase()}">${TYPE_CONGE_LABELS[c.type_conge]||c.type_conge}</span></td>
-        <td style="color:var(--muted);font-size:12px">${escHtml(c.note)||'—'}</td>
+        <td style="color:var(--muted);font-size:12px">${c.fermeture_id&&S.canEditRH
+          ?`<button class="rh-fm-lien" onclick="prhFmOuvrir(${Number(c.fermeture_id)})" title="Ouvrir la fermeture collective">${icon('calendar',11)} ${escHtml(c.fermeture_libelle||c.note||'Fermeture')}</button>`
+          :(escHtml(c.note)||'—')}</td>
         <td><span class="rh-badge ${c.statut}">${STATUT_CONGE_LABELS[c.statut]||c.statut}</span></td>
         ${S.isEditor?`<td style="white-space:nowrap">
           <button class="rh-act-btn ico" onclick="editConge(${c.id})" title="Modifier" aria-label="Modifier le congé">${icon('edit',13)}</button>
@@ -2928,10 +2965,11 @@ function renderModals(){
   }else if(S.modal==='my_maint_detail'){
     const m=buildMyMaintDetailModal();
     mr.innerHTML=''; if(m)mr.appendChild(m);
-  }else if(['demande','refus','motifs','seuils','generer','publication','note'].includes(S.modal)){
+  }else if(['demande','refus','motifs','seuils','generer','publication','note','fermetures'].includes(S.modal)){
     // Saisies libres relues depuis l'état : reconstruire ne perd rien.
     const fab={demande:buildDemandeModal,refus:buildRefusModal,motifs:buildMotifsModal,seuils:buildSeuilsModal,
-      generer:buildGenererModal,publication:buildPublicationModal,note:buildNoteModal}[S.modal];
+      generer:buildGenererModal,publication:buildPublicationModal,note:buildNoteModal,
+      fermetures:buildFermeturesModal}[S.modal];
     const m=fab();
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else{

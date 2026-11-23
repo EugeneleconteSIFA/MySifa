@@ -23,6 +23,10 @@
  * fenêtres `publication=ouverte`, `seuils=ouverts`, `note=<id>` (modification
  * d'une note existante). Hors adresse : l'assistant de génération et la
  * création d'une note (gestes en cours).
+ *
+ * Fermetures collectives (23/11/2026, static/planning_rh_fermetures.js) :
+ * fenêtre `fermetures=ouvertes` (liste), `fermeture=<id>` (détail par employé),
+ * `fermeture=<id>-modifier` (modification). Hors adresse : la création.
  */
 let _prhUrlPrete = false;
 let _prhDefauts = null;              // horizons par défaut du compte, relevés au démarrage
@@ -46,6 +50,11 @@ function _prhModale() {
   if (S.modal === 'machine_config' && S.machineConfigSelected) return { cle: 'config_machine', id: S.machineConfigSelected };
   if (S.modal === 'my_maint_detail' && S.myMaintDetail && S.myMaintDetail.id != null) return { cle: 'maintenance', id: S.myMaintDetail.id };
   if (S.modal === 'motifs') return { cle: 'motifs', id: 'ouverts' };
+  if (S.modal === 'fermetures' && S.fm) {
+    if (S.fm.detail && S.fm.detail.id) return { cle: 'fermeture', id: S.fm.detail.id + (S.fm.form && S.fm.form.id ? '-modifier' : '') };
+    if (!S.fm.form) return { cle: 'fermetures', id: 'ouvertes' };
+    return null;   // création en cours : pas d'adresse
+  }
   if (S.modal === 'seuils') return { cle: 'seuils', id: 'ouverts' };
   if (S.modal === 'publication') return { cle: 'publication', id: 'ouverte' };
   if (S.modal === 'note' && S.out && S.out.note && S.out.note.id) return { cle: 'note', id: S.out.note.id };
@@ -145,6 +154,8 @@ const _PRH_REOUVRIR = {
   publication: v => { if (S.isEditor && typeof prhOuvrirPublication === 'function') prhOuvrirPublication(); },
   note: v => { if (S.isEditor && typeof prhOuvrirNote === 'function' && /^[0-9]+$/.test(v)) return prhOuvrirNote(Number(v)); },
   motifs: v => { if (typeof prhPeutValider === 'function' && prhPeutValider()) prhOuvrirMotifs(); },
+  fermetures: v => { if (typeof prhOuvrirFermetures === 'function') return prhOuvrirFermetures(); },
+  fermeture: v => { const m = /^([0-9]+)(-modifier)?$/.exec(v); if (m && typeof prhFmOuvrir === 'function') return prhFmOuvrir(Number(m[1]), !!m[2]); },
   modifier_conge: v => { if ((S.conges || []).some(c => String(c.id) === v)) editConge(isNaN(Number(v)) ? v : Number(v)); },
 };
 
