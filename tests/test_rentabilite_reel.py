@@ -10,7 +10,8 @@ il est cohérent avec le prix au mille facturé, 11,26 €.
 Ce que le test garde :
 - la valorisation MyStock d'un dossier (bobines × laize × mètres × €/m²,
   adhésif au kilo, mandrins et cartons à la palette, retours déduits) ;
-- le prix de vente lu sur la facture RVGI, par numéro de commande et article ;
+- le prix de vente lu sur la facture RVGI, par numéro de commande et article,
+  ramené aux étiquettes produites quand la facture en compte plus (stock) ;
 - le dossier « complet » quand il est produit, déstocké et facturé, et
   seulement si rien ne fait douter du résultat : sinon « à vérifier » ;
 - la fenêtre « 7 derniers jours ouvrés » lue dans le calendrier du planning ;
@@ -385,6 +386,21 @@ check("progression : la tendance monte", pr["tendance"]["mb_pct"]["fin"] > pr["t
 check("indice combiné = 100 sur les seuils", abs(progression(
     [{**x, "marge_brute": 1600, "heures": 1600 / 325, "prix_vente": 4000} for x in cmd], seuils)["points"][-1]["combine"] - 100) < 0.1)
 check("progression : moins de trois commandes, rien", progression(cmd[:2], seuils)["points"] == [])
+
+# ── Facturé plus que produit : le surplus vient du stock ─────────────
+# 9932659 (Kiabi) : 476 000 ex produits, facture 26110065 de 1 200 000 ex à
+# 10,86 €/mille = 13 032 €. La fiche doit garder 476 000 ex, soit 5 169 €.
+from app.services.rentabilite_reel import pv_au_produit  # noqa: E402
+pv, fact = pv_au_produit(13032.0, 1200000, 1.0, 476000)
+check("facture > produit : ramenée aux étiquettes produites", proche(pv, 5169.36) and fact == 1200000, (pv, fact))
+pv, fact = pv_au_produit(6756.0, 600000, 1.0, 600000)
+check("facture = produit : inchangée", proche(pv, 6756.0) and fact is None, (pv, fact))
+pv, fact = pv_au_produit(6756.0, 500000, 1.0, 600000)
+check("facture < produit (surproduction) : inchangée", proche(pv, 6756.0) and fact is None, (pv, fact))
+pv, fact = pv_au_produit(10000.0, 1000000, 0.4, 300000)
+check("commande à plusieurs créneaux : part puis plafond", proche(pv, 3000.0) and proche(fact, 400000), (pv, fact))
+pv, fact = pv_au_produit(10000.0, None, 1.0, 300000)
+check("facture sans quantité au mille : inchangée", proche(pv, 10000.0) and fact is None, (pv, fact))
 
 import shutil                                            # noqa: E402
 shutil.rmtree(tmp, ignore_errors=True)

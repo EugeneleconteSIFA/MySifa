@@ -22,6 +22,11 @@ D'OÙ VIENT CHAQUE CHIFFRE
 - Transport : le prix retenu dans MyExpé quand le départ en a un ; sinon celui
   du devis, signalé « non mesuré ». Outil, encre, cliché : le devis.
 
+Facturé plus que produit (le reste part du stock ou d'un autre dossier) :
+le prix de vente est ramené à la quantité produite, au prix facturé. Sans ça,
+9932659 (Kiabi, 476 000 ex produits, 1 200 000 facturés le 18/11/2026)
+sortait à 71,5 % de marge au lieu de 28 %.
+
 Hors marché, l'excédent produit est de la gâche : sa matière et son temps
 restent à la charge du dossier. Un marché facturé en plusieurs appels se juge
 au prorata facturé (arbitrage du 20/11/2026), et reste « provisoire » tant que
@@ -285,6 +290,26 @@ def factures_rvgi(racines, ref_produit: Optional[str]) -> Optional[dict]:
     }
 
 
+def pv_au_produit(montant: float, qte_facturee: Optional[float], part: float,
+                  qte_produite: float) -> tuple[float, Optional[float]]:
+    """Part de la facture qui revient aux étiquettes produites par ce créneau.
+
+    `montant` : facture de la commande (ou de l'article), `part` : la part du
+    créneau quand la commande en a plusieurs. Quand les étiquettes facturées
+    attribuées au créneau dépassent celles qu'il a produites, le surplus vient
+    du stock ou d'un autre dossier : il est retiré, au prix facturé.
+    Rend (prix de vente, étiquettes facturées attribuées) — la seconde vaut
+    None quand rien n'est retiré.
+    """
+    pv = montant * part
+    if not qte_facturee or qte_produite <= 0:
+        return pv, None
+    facturees = qte_facturee * part
+    if facturees <= qte_produite:
+        return pv, None
+    return pv * qte_produite / facturees, facturees
+
+
 def transport_myexpe(conn, entree_id: int, dossiers: list[str]) -> Optional[float]:
     """Prix retenu des départs du dossier, partagé entre les dossiers du départ.
 
@@ -449,8 +474,13 @@ def fiche_rentabilite(conn, planning_entry_id: int, relire: bool = True) -> dict
     facture = bool(fact and fact["montant"] > 0)
     prorata = 1.0
     if facture:
-        pv = fact["montant"] * part
+        pv, facturees = pv_au_produit(fact["montant"], fact["qte_ex"], part, qte_prod)
         source_pv = "facture RVGI" + (f" · {part * 100:.0f} % de la commande" if part < 0.999 else "")
+        if facturees:
+            source_pv += f" · ramenée à {qte_prod:,.0f} ex produits".replace(",", " ")
+            alertes.append({"niveau": "info", "message":
+                f"{facturees:,.0f} ex facturés pour {qte_prod:,.0f} produits : le surplus vient du stock "
+                "ou d'un autre dossier, le prix de vente est ramené aux étiquettes produites.".replace(",", " ")})
         if marche and fact["qte_ex"] and qte_prod > 0:
             prorata = min(1.0, fact["qte_ex"] * part / qte_prod)
     else:
