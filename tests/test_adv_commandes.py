@@ -225,6 +225,87 @@ check("horizon : la ligne à J+5 hors champ", "9930002-2" in groupes, False)
 check("compte par groupe", {g["cle"]: g["lignes"] for g in p["groupes"]},
       {"preparable": 0, "en_cours": 1, "partiel": 1, "attente": 1, "pretes": 0})
 
+# ── 3 bis. Ordre fixé à la main par l'ADV ────────────────────────────────────
+spec_o = importlib.util.spec_from_file_location(
+    "mig_ordre", "app/core/migrations/2026_11_24_adv_prepa_priorites.py")
+mig_o = importlib.util.module_from_spec(spec_o)
+spec_o.loader.exec_module(mig_o)
+b = sqlite3.connect(miroir.DB_PATH)
+mig_o.appliquer(b)
+mig_o.appliquer(b)                    # rejouable
+# B n'est plus engagée, mais l'ADV la place en tête ; D (J+5, hors horizon)
+# est placée juste après.
+b.execute("DELETE FROM adv_prepas WHERE numero='9930002' AND ligne=1")
+b.executemany("INSERT INTO adv_prepa_priorites(numero, ligne, rang, maj_le, maj_par) VALUES (?,?,?,?,?)",
+              [("9930002", 1, 1, jour(0), "ADV"), ("9930002", 2, 2, jour(0), "ADV")])
+b.commit()
+b.close()
+d = adv.construire()
+par = {l["cle"]: l for l in d["lignes"]}
+print("\nOrdre fixé à la main")
+check("le rang voyage avec la ligne", (par["9930002-1"]["priorite_manuelle"], par["9930001-1"]["priorite_manuelle"]), (1, None))
+check("le stock va d'abord à la ligne placée en tête",
+      (par["9930002-1"]["stock"]["alloue"], par["9930001-1"]["stock"]["alloue"]), (400.0, 800.0))
+p = adv.prepa(horizon=4)
+ordre = [l["cle"] for l in p["lignes"]]
+check("une ligne placée à la main reste visible hors horizon", "9930002-2" in ordre, True)
+check("les lignes placées passent avant l'ordre par date", ordre[:2], ["9930002-1", "9930002-2"])
+check("l'ordre manuel est signalé", p["ordre_manuel"], True)
+
+# ── 3 ter. Repiquage ─────────────────────────────────────────────────────────
+from app.services import machines_type as mtype  # noqa: E402
+
+
+def _migrer(fichier):
+    sp = importlib.util.spec_from_file_location("mig_" + fichier, "app/core/migrations/" + fichier)
+    mod = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(mod)
+    bb = sqlite3.connect(miroir.DB_PATH)
+    mod.appliquer(bb)
+    mod.appliquer(bb)                 # rejouable
+    bb.close()
+
+
+b = sqlite3.connect(miroir.DB_PATH)
+print("\nType de machine")
+check("avant migration : ancienne règle de nom", mtype.sql_nom_repiquage(b, "machine").startswith("(lower(trim("), True)
+b.execute("INSERT INTO machines(id, nom) VALUES (2, 'Repiquage')")
+b.commit()
+b.close()
+for f in ("2026_11_24_machines_type.py", "2026_11_24_planning_repiquage.py", "2026_11_24_adv_repiquage.py"):
+    _migrer(f)
+b = sqlite3.connect(miroir.DB_PATH)
+b.row_factory = sqlite3.Row
+check("la migration type les postes de repiquage", [r["type"] for r in b.execute("SELECT type FROM machines ORDER BY id")],
+      ["impression", "repiquage"])
+check("le type décide, plus le nom", (mtype.est_repiquage_nom(b, "Repiquage"), mtype.est_repiquage_nom(b, "Machine 1")), (True, False))
+b.execute("UPDATE machines SET nom='Atelier surimpression' WHERE id=2")
+check("un poste renommé reste un poste de repiquage", mtype.est_repiquage_nom(b, "Atelier surimpression"), True)
+check("fragment SQL sur les noms typés", mtype.sql_nom_repiquage(b, "machine"), "lower(trim(COALESCE(machine,''))) IN ('atelier surimpression')")
+# D (9930002-2) : son dossier 11 est imprimé, coché « pour repiquage » ; un
+# dossier de repiquage, sous une autre référence, le désigne comme origine.
+b.execute("UPDATE planning_entries SET pour_repiquage=1, statut='termine' WHERE id=11")
+b.execute("""INSERT INTO planning_entries(id, reference, numero_of, ref_produit, statut, machine_id, repiquage_source_id, planned_end)
+             VALUES (20, 'REP-ATELIER', 'REP-ATELIER', '', 'en_cours', 2, 11, ?)""", (jour(6),))
+b.commit()
+b.close()
+d = adv.construire()
+D = {l["cle"]: l for l in d["lignes"]}["9930002-2"]
+print("\nRepiquage dans Prod")
+check("le repiquage relié rejoint la ligne", sorted(x["id"] for x in D["dossiers"]), [11, 20])
+check("repiquage requis, en cours (planning)", (D["repiquage"]["requis"], D["repiquage"]["statut"], D["repiquage"]["manuel"]),
+      (True, "en_cours", False))
+check("Prod : impression faite, repiquage en cours", (D["etapes"]["prod"]["valeur"], D["etapes"]["prod"]["detail"]),
+      ("en_cours", "Impression terminée · repiquage en cours"))
+check("la fin de prod tient compte du repiquage", D["fin_prod"][:10], jour(6)[:10])
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("INSERT INTO adv_repiquages(numero, ligne, statut, maj_le, maj_par) VALUES ('9930002', 2, 'termine', ?, 'ADV')", (jour(0),))
+b.commit()
+b.close()
+D = {l["cle"]: l for l in adv.construire()["lignes"]}["9930002-2"]
+check("statut fixé par l'ADV : Prod faite", (D["etapes"]["prod"]["valeur"], D["repiquage"]["manuel"], D["repiquage"]["calcul"]),
+      ("oui", True, "en_cours"))
+
 # ── 4. Miroir absent ─────────────────────────────────────────────────────────
 miroir.ERP_MIRROR_DB = os.path.join(dossier, "absent.db")
 d = adv.construire()

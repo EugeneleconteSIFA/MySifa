@@ -18,6 +18,8 @@
   var ETAPES = BOOT.etapes || [];
   var ETATS = {};
   (BOOT.etats || []).forEach(function (e) { ETATS[e.cle] = e.label; });
+  var LIB_REPIQUAGE = {};
+  (BOOT.statuts_repiquage || []).forEach(function (e) { LIB_REPIQUAGE[e.cle] = e.label; });
   var LIB_PREPA = {};
   (BOOT.statuts_prepa || []).forEach(function (e) { LIB_PREPA[e.cle] = e.label; });
 
@@ -39,6 +41,7 @@
     ordre: [],                   // ordre des colonnes du carnet, propre à la personne
     colDrag: null,
     ficheEtape: null,            // étape dépliée pour correction dans la fiche
+    prepaDrag: null,             // préparation en cours de déplacement
     horizon: BOOT.horizon || 21,
     groupe: 'tous',
     carnet: null,
@@ -415,20 +418,33 @@
   // Les colonnes sont décrites une fois ici ; leur ORDRE appartient à chaque
   // personne (glisser un en-tête, enregistré en base par /api/adv/preferences).
   var COLONNES = [
-    {cle: 'commande', label: 'Commande', tri: 'commande', td: function (l) {
+    {cle: 'commande', famille: 'id', label: 'Commande', tri: 'commande', td: function (l) {
       return h('td', {className: 'adv-mono'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne}));
     }},
-    {cle: 'client', label: 'Client', tri: 'client', td: function (l) {
+    {cle: 'client', famille: 'id', label: 'Client', tri: 'client', td: function (l) {
       return h('td', {className: 'client', text: l.client});
     }},
-    {cle: 'article', label: 'Article', tri: 'article', td: function (l) {
+    {cle: 'article', famille: 'id', label: 'Article', tri: 'article', td: function (l) {
       return h('td', {className: 'des', 'data-tip': tip(l.cle + '|des', l.article, l.designation, libOrigine(l.origine) + (l.ref_client ? ' · réf. client ' + l.ref_client : ''))},
         h('div', {className: 'adv-mono', text: l.article}), h('div', {className: 'des-l', text: l.designation}));
     }},
-    {cle: 'qte', label: 'Commandé', tri: 'qte', num: true, td: function (l) {
+    {cle: 'expedition', famille: 'date', label: 'Expédition', tri: 'expedition', td: function (l) {
+      return h('td', {className: 'date' + (l.retard ? ' adv-date-retard' : ''), text: dateFr(l.expedition) || '—'});
+    }},
+    {cle: 'livraison', famille: 'date', label: 'Livraison', tri: 'livraison', td: function (l) {
+      return h('td', {className: 'date', text: dateFr(l.livraison) || '—'});
+    }},
+    {cle: 'fin_prod', famille: 'date', label: 'Fin de prod', tri: 'fin_prod', td: function (l) {
+      var tard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
+      return h('td', {className: 'date' + (tard ? ' adv-date-tard' : (l.fin_prod ? '' : ' adv-muet')),
+        'data-tip': l.fin_prod ? tip(l.cle + '|fin', l.fin_prod_reelle ? 'Fin de production saisie' : 'Fin de production planifiée',
+          dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : ''), tard ? 'Après la date d’expédition' : null) : null,
+        text: l.fin_prod ? dateFr(l.fin_prod) : '—'});
+    }},
+    {cle: 'qte', famille: 'qte', label: 'Commandé', tri: 'qte', num: true, td: function (l) {
       return h('td', {className: 'num'}, fN(l.qte), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + accord(unite(l), l.qte)}) : null);
     }},
-    {cle: 'stock', label: 'En stock', tri: 'stock', num: true, td: function (l) {
+    {cle: 'stock', famille: 'qte', label: 'En stock', tri: 'stock', num: true, td: function (l) {
       var a = l.stock ? l.stock.alloue : 0;
       return h('td', {className: 'num' + (a ? '' : ' adv-muet'),
         'data-tip': tip(l.cle + '|stock', 'Stock MyStock attribué à la ligne',
@@ -436,28 +452,23 @@
           l.livre ? 'Déjà livré : ' + fN(l.livre) + ' · reste à livrer ' + fN(l.reste) : 'Les lignes les plus urgentes sont servies d’abord.')},
         a ? fN(a) : '—');
     }},
-    {cle: 'a_fabriquer', label: 'À fabriquer', tri: 'a_fabriquer', num: true, td: function (l) {
+    {cle: 'a_fabriquer', famille: 'qte', label: 'À fabriquer', tri: 'a_fabriquer', num: true, td: function (l) {
       return h('td', {className: 'num' + (l.a_fabriquer > 0 ? ' adv-fort' : ' adv-muet')}, l.a_fabriquer > 0 ? fN(l.a_fabriquer) : '—');
-    }},
-    {cle: 'expedition', label: 'Expédition', tri: 'expedition', td: function (l) {
-      return h('td', {className: 'date' + (l.retard ? ' adv-date-retard' : ''), text: dateFr(l.expedition) || '—'});
-    }},
-    {cle: 'livraison', label: 'Livraison', tri: 'livraison', td: function (l) {
-      return h('td', {className: 'date', text: dateFr(l.livraison) || '—'});
-    }},
-    {cle: 'fin_prod', label: 'Fin de prod', tri: 'fin_prod', td: function (l) {
-      var tard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
-      return h('td', {className: 'date' + (tard ? ' adv-date-tard' : (l.fin_prod ? '' : ' adv-muet')),
-        'data-tip': l.fin_prod ? tip(l.cle + '|fin', l.fin_prod_reelle ? 'Fin de production saisie' : 'Fin de production planifiée',
-          dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : ''), tard ? 'Après la date d’expédition' : null) : null,
-        text: l.fin_prod ? dateFr(l.fin_prod) : '—'});
     }}
   ].concat(ETAPES.map(function (e) {
-    return {cle: 'etape_' + e.cle, label: e.label, etape: true, td: function (l) {
+    return {cle: 'etape_' + e.cle, famille: 'etape', label: e.label, etape: true, td: function (l) {
       return h('td', {className: 'etape'}, pastille(l, e.cle));
     }};
   }));
   var COL_PAR_CLE = {};
+  // Une barre verticale sépare deux familles de colonnes (dates, quantités,
+  // étapes) — sauf après l'identité de la ligne, qui ouvre le tableau. Calculé
+  // sur l'ordre affiché : elle suit les colonnes si la personne les déplace.
+  function separee(cols, i) {
+    if (i === 0) return false;
+    var prev = cols[i - 1].famille, cur = cols[i].famille;
+    return cur !== prev && prev !== 'id';
+  }
   COLONNES.forEach(function (c) { COL_PAR_CLE[c.cle] = c; });
 
   // L'ordre de la personne, complété des colonnes qu'il ne connaît pas encore
@@ -503,7 +514,7 @@
     var trTete = h('tr');
     cols.forEach(function (c, i) {
       var actif = c.tri && S.tri === c.tri;
-      var sep = c.etape && !(i > 0 && cols[i - 1].etape);
+      var sep = separee(cols, i);
       var th = h('th', {className: (c.num ? 'num' : '') + (c.etape ? ' etape' : '') + (sep ? ' sep' : '')
           + (c.tri ? ' triable' : '') + (actif ? ' trie' : ''),
         draggable: 'true', 'data-col': c.cle,
@@ -540,7 +551,7 @@
       var tr = h('tr', {onClick: function () { ouvrirFiche(l.cle); }});
       cols.forEach(function (c, i) {
         var td = c.td(l);
-        if (c.etape && !(i > 0 && cols[i - 1].etape)) td.classList.add('sep');
+        if (separee(cols, i)) td.classList.add('sep');
         var ton = S.mef.length ? tonCellule(l, c.cle) : null;
         if (ton) {
           td.classList.add('mef', 'mef-' + ton);
@@ -595,20 +606,22 @@
     return [b('Démarrer', 'en_cours', 'btn-accent'), b('Prête', 'prete')];
   }
 
-  // Une préparation = une ligne de deux étages au plus : qui, combien, où,
-  // quand, et les boutons. Le détail (dates complètes, auteur, FIFO) est au
-  // survol ou dans la fiche.
-  function cartePrepa(l, rang) {
+  // Une préparation = une ligne de deux étages au plus, en colonnes : rang,
+  // qui, commandé, en stock, à préparer, où prélever, quand, et les boutons.
+  // Le détail (dates complètes, auteur, FIFO) est au survol ou dans la fiche.
+  // L'administration et la direction peuvent changer l'ordre : glisser la
+  // ligne, ou ses flèches ↑ ↓ ; l'ordre est commun et s'impose à la logistique.
+  function cartePrepa(l, rang, ctx) {
     var st = l.stock || {};
-    var qte, qteSous = null;
+    var aPrep, aPrepSous = null;
     if (l.groupe === 'attente') {
-      qte = 'À produire : ' + qteU(l, l.reste);
-      qteSous = l.fin_prod
+      aPrep = h('div', {className: 'c-fab'}, fN(l.reste));
+      aPrepSous = l.fin_prod
         ? h('div', {className: 'c-sous', text: 'Fin de prod ' + dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '')})
         : h('div', {className: 'c-sous', text: l.etapes.prod.detail});
     } else {
-      qte = qteU(l, l.reste);
-      if (st.alloue < l.reste) qteSous = h('div', {className: 'c-sous adv-date-tard', text: qteU(l, st.alloue) + ' en stock'});
+      aPrep = h('div', {}, fN(l.reste));
+      if (st.alloue < l.reste) aPrepSous = h('div', {className: 'c-sous adv-date-tard', text: 'manque ' + fN(l.reste - st.alloue)});
     }
     var empl;
     if (st.emplacements && st.emplacements.length && l.groupe !== 'attente') {
@@ -630,26 +643,120 @@
         l.retard ? 'En retard' : null,
         dp ? 'Enlèvement ' + dateLongue(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '') + (dp.parti_le ? ' · parti' : '') : null)},
       h('div', {className: l.retard ? 'adv-date-retard' : '', text: l.expedition ? dateFr(l.expedition) : 'Non datée'}), quandSous);
-    return h('div', {className: 'adv-carte' + (l.retard ? ' retard' : ''), onClick: function () { ouvrirFiche(l.cle); }},
-      h('div', {className: 'adv-rang', text: String(rang)}),
+
+    var manuel = l.priorite_manuelle !== null && l.priorite_manuelle !== undefined;
+    var rangEl = h('div', {className: 'adv-rang' + (manuel ? ' manuel' : ''),
+      'data-tip': tip(l.cle + '|rang', manuel ? 'Ordre fixé à la main' : 'Ordre automatique',
+        manuel ? (l.priorite_par ? 'Par ' + l.priorite_par : '') + (l.priorite_le ? ' le ' + dateFr(l.priorite_le) : '') : 'Par date d’expédition',
+        ctx && DROITS.adv ? 'Glisser la ligne ou utiliser ↑ ↓ pour changer l’ordre' : null)}, String(rang));
+    var cellRang = h('div', {className: 'c-rang'}, rangEl);
+    if (ctx && DROITS.adv) {
+      var fleche = function (sens, lib) {
+        var cible = ctx.index + sens;
+        return h('button', {type: 'button', className: 'adv-fleche', 'aria-label': lib, disabled: cible < 0 || cible >= ctx.lignes.length,
+          onClick: function (ev) { ev.stopPropagation(); deplacerPrepa(ctx.lignes, ctx.index, cible); }}, sens < 0 ? '↑' : '↓');
+      };
+      cellRang.appendChild(h('div', {className: 'adv-fleches'}, fleche(-1, 'Monter'), fleche(1, 'Descendre')));
+    }
+
+    var ligne = h('div', {className: 'adv-carte' + (l.retard ? ' retard' : ''), 'data-cle': l.cle,
+        onClick: function () { ouvrirFiche(l.cle); }},
+      cellRang,
       h('div', {className: 'c-id'},
         h('div', {className: 'c-haut'}, h('span', {className: 'c-client', text: l.client}),
           h('span', {className: 'adv-mono adv-muet', text: l.numero + ' · ' + l.ligne + ' · ' + l.article})),
         h('div', {className: 'c-des', text: l.designation})),
-      h('div', {className: 'c-qte'}, h('div', {text: qte}), qteSous),
+      h('div', {className: 'c-num', 'data-l': 'Commandé'}, fN(l.qte), unite(l) ? h('div', {className: 'c-sous', text: accord(unite(l), l.qte)}) : null),
+      h('div', {className: 'c-num' + (st.alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, st.alloue ? fN(st.alloue) : '—'),
+      h('div', {className: 'c-num c-fort', 'data-l': l.groupe === 'attente' ? 'À produire' : 'À préparer'}, aPrep, aPrepSous),
       empl, quand,
       h('div', {className: 'adv-actions'}, boutonsPrepa(l)));
+
+    // Glisser-déposer, dans le groupe seulement : on ne change pas une
+    // préparation de groupe en la déplaçant (le groupe dit où elle en est).
+    if (ctx && DROITS.adv) {
+      ligne.setAttribute('draggable', 'true');
+      ligne.addEventListener('dragstart', function (ev) {
+        S.prepaDrag = {cle: l.cle, groupe: l.groupe, index: ctx.index};
+        ligne.classList.add('attrapee');
+        try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', l.cle); } catch (e) {}
+      });
+      ligne.addEventListener('dragend', function () {
+        S.prepaDrag = null;
+        document.querySelectorAll('.adv-carte.attrapee, .adv-carte.cible-haut, .adv-carte.cible-bas').forEach(function (x) {
+          x.classList.remove('attrapee', 'cible-haut', 'cible-bas');
+        });
+      });
+      ligne.addEventListener('dragover', function (ev) {
+        var d = S.prepaDrag;
+        if (!d || d.groupe !== l.groupe || d.cle === l.cle) return;
+        ev.preventDefault();
+        var bas = d.index < ctx.index;
+        ligne.classList.toggle('cible-bas', bas);
+        ligne.classList.toggle('cible-haut', !bas);
+      });
+      ligne.addEventListener('dragleave', function () { ligne.classList.remove('cible-haut', 'cible-bas'); });
+      ligne.addEventListener('drop', function (ev) {
+        var d = S.prepaDrag;
+        ligne.classList.remove('cible-haut', 'cible-bas');
+        if (!d || d.groupe !== l.groupe || d.cle === l.cle) return;
+        ev.preventDefault();
+        S.prepaDrag = null;
+        deplacerPrepa(ctx.lignes, d.index, ctx.index);
+      });
+    }
+    return ligne;
+  }
+
+  // Déplace la ligne `de` à la place `vers` dans son groupe, puis enregistre
+  // le rang des lignes du haut du groupe jusqu'à la plus basse des deux
+  // positions : le reste du groupe garde l'ordre automatique, et une ligne
+  // urgente qui arrive demain viendra encore se classer par sa date.
+  async function deplacerPrepa(lignesGroupe, de, vers) {
+    if (de === vers || vers < 0 || vers >= lignesGroupe.length) return;
+    var ordre = lignesGroupe.map(function (x) { return x.cle; });
+    var cle = ordre.splice(de, 1)[0];
+    ordre.splice(vers, 0, cle);
+    var envoi = ordre.slice(0, Math.max(de, vers) + 1);
+    var y = (document.querySelector('.main') || {}).scrollTop;
+    try {
+      await api('/api/adv/prepa/ordre', {method: 'PUT', body: {lignes: envoi}});
+      await charger();
+      S.carnet = null;              // l'attribution du stock a pu bouger
+      render();
+      var mn = document.querySelector('.main');
+      if (mn && y) mn.scrollTop = y;
+    } catch (e) { toast(e.message, 'danger'); }
+  }
+
+  function entetePrepa(groupe) {
+    return h('div', {className: 'adv-carte adv-carte-tete', 'aria-hidden': 'true'},
+      h('div', {text: '#'}), h('div', {text: 'Client · commande'}),
+      h('div', {className: 'c-num', text: 'Commandé'}), h('div', {className: 'c-num', text: 'En stock'}),
+      h('div', {className: 'c-num', text: groupe === 'attente' ? 'À produire' : 'À préparer'}), h('div', {text: groupe === 'attente' ? '' : 'Où prélever'}),
+      h('div', {text: 'Expédition'}), h('div'));
   }
 
   function renderPrepa(c) {
     var d = S.prepa || {};
     var tete = h('div', {className: 'adv-tete'},
       h('div', {}, h('h1', {text: 'Préparations'}),
-        h('div', {className: 'adv-maj', text: 'Par date d’expédition, retards en tête · emplacements MyStock en FIFO'})),
+        h('div', {className: 'adv-maj', text: (d.ordre_manuel ? 'Ordre fixé par l’ADV, puis date d’expédition' : 'Par date d’expédition, retards en tête')
+          + ' · emplacements MyStock en FIFO'})),
       h('div', {className: 'adv-puces'}, HORIZONS.map(function (n) {
         return h('button', {type: 'button', className: 'adv-puce' + (S.horizon === n ? ' active' : ''),
           onClick: async function () { S.horizon = n; S.charge = false; render(); await charger(); render(); }}, n + ' jours');
-      }), h('button', {type: 'button', className: 'btn btn-petit', onClick: async function () { await charger(); render(); toast('Préparations actualisées.'); }}, 'Actualiser')));
+      }),
+      DROITS.adv && d.ordre_manuel ? h('button', {type: 'button', className: 'btn btn-petit',
+        'data-tip': tip('btn-ordre-auto', 'Revenir à l’ordre automatique', 'Retire tous les rangs fixés à la main : la Prépa se range de nouveau par date d’expédition.'),
+        onClick: async function () {
+          try {
+            await api('/api/adv/prepa/ordre', {method: 'DELETE'});
+            await charger(); S.carnet = null; render();
+            toast('Ordre automatique rétabli.');
+          } catch (e) { toast(e.message, 'danger'); }
+        }}, 'Ordre automatique') : null,
+      h('button', {type: 'button', className: 'btn btn-petit', onClick: async function () { await charger(); render(); toast('Préparations actualisées.'); }}, 'Actualiser')));
     c.appendChild(tete);
     if (avertissements(c, d)) return;
     var groupes = d.groupes || [];
@@ -682,8 +789,9 @@
       if (S.groupe !== 'tous' && S.groupe !== g.cle) return;
       var ls = lignes.filter(function (l) { return l.groupe === g.cle; });
       if (!ls.length) return;
-      var bloc = h('div', {className: 'adv-groupe'}, h('h2', {}, g.label, h('span', {className: 'n', text: String(ls.length)})));
-      ls.forEach(function (l) { bloc.appendChild(cartePrepa(l, rangs[l.cle] || '·')); });
+      var bloc = h('div', {className: 'adv-groupe'}, h('h2', {}, g.label, h('span', {className: 'n', text: String(ls.length)})),
+        entetePrepa(g.cle));
+      ls.forEach(function (l, i) { bloc.appendChild(cartePrepa(l, rangs[l.cle] || '·', {lignes: ls, index: i})); });
       c.appendChild(bloc);
     });
   }
@@ -930,6 +1038,18 @@
     ecrireUrl();
   }
 
+  async function fixerRepiquage(l, statut) {
+    try {
+      await api('/api/adv/repiquage/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {statut: statut}});
+      toast(statut ? 'Repiquage : ' + (LIB_REPIQUAGE[statut] || statut).toLowerCase() + '.' : 'Statut du planning rétabli.');
+      await charger();
+      if (S.onglet === 'prepa') S.carnet = null; else S.prepa = null;
+      render();
+      fermerFiche(true);
+      ouvrirFiche(l.cle, true);
+    } catch (e) { toast(e.message, 'danger'); }
+  }
+
   async function forcer(l, etape, valeur, note) {
     try {
       await api('/api/adv/forcage/' + encodeURIComponent(l.numero) + '/' + l.ligne + '/' + etape,
@@ -1102,7 +1222,7 @@
     l.dossiers.forEach(function (d) {
       var sd = STATUT_DOS[d.statut] || [d.statut || '', ''];
       rangees.appendChild(h('a', {className: 'fi-rangee', href: '/planning?dossier=' + d.id},
-        h('span', {className: 'fi-rangee-ico', text: 'Prod'}),
+        h('span', {className: 'fi-rangee-ico', text: d.repiquage ? 'Repiq.' : 'Prod'}),
         h('span', {className: 'fi-rangee-t', text: d.reference || ('Dossier ' + d.id)}),
         h('span', {className: 'adv-muet', text: (d.machine || '') + (d.fin ? ' · fin ' + (d.fin_reelle ? '' : 'prévue ') + dateFr(d.fin) : '')}),
         h('span', {className: 'adv-badge ' + sd[1], text: sd[0]})));
@@ -1118,7 +1238,28 @@
         h('span', {className: 'adv-muet', text: (d.transporteur || '') + (d.no_bl ? ' · BL ' + d.no_bl : '')}),
         h('span', {className: 'adv-badge ' + badge[1], text: badge[0]})));
     });
-    var suivi = h('div', {className: 'fi-carte'}, h('h4', {text: 'Production et départs'}), rangees);
+    // Repiquage : son statut (du planning, ou fixé par l'ADV) et, pour
+    // l'administration et la direction, de quoi le fixer à la main.
+    var rep = l.repiquage || {};
+    var repBloc = null;
+    if (rep.requis || DROITS.adv) {
+      var TON_REP = {a_faire: 'danger', en_cours: 'warn', termine: 'ok'};
+      var info = rep.requis
+        ? h('span', {className: 'adv-badge ' + (TON_REP[rep.statut] || ''), text: 'Repiquage · ' + (LIB_REPIQUAGE[rep.statut] || rep.statut)})
+        : h('span', {className: 'adv-badge', text: 'Sans repiquage'});
+      var sous = rep.manuel
+        ? 'Fixé par ' + (rep.maj_par || 'l’ADV') + (rep.maj_le ? ' le ' + dateFr(rep.maj_le) : '') + (rep.calcul ? ' · planning : ' + (LIB_REPIQUAGE[rep.calcul] || rep.calcul) : '')
+        : (rep.requis ? (rep.planifie ? 'Suivi par le dossier de repiquage du planning' : 'Prod cochée « pour repiquage » · repiquage pas encore planifié') : null);
+      var boutons = null;
+      if (DROITS.adv) {
+        boutons = h('div', {className: 'fi-rep-b'}, Object.keys(LIB_REPIQUAGE).map(function (k) {
+          return h('button', {type: 'button', className: 'btn btn-petit' + (rep.manuel && rep.statut === k ? ' btn-accent' : ''),
+            onClick: function () { fixerRepiquage(l, k); }}, LIB_REPIQUAGE[k]);
+        }), rep.manuel ? h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { fixerRepiquage(l, null); }}, 'Statut du planning') : null);
+      }
+      repBloc = h('div', {className: 'fi-rep'}, h('div', {className: 'fi-rep-t'}, info, sous ? h('span', {className: 'adv-muet', text: sous}) : null), boutons);
+    }
+    var suivi = h('div', {className: 'fi-carte'}, h('h4', {text: 'Production et départs'}), repBloc, rangees);
 
     var liens = h('div', {className: 'adv-liens'},
       DROITS.adv ? h('a', {className: 'btn btn-petit', href: '/erp#/commandes?q=' + encodeURIComponent(l.numero)}, 'Commande dans l’ERP') : null,

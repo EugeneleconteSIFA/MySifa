@@ -43,6 +43,7 @@ du temps machine. Ces ecarts sont donc comptes dans `minutes` ET isoles dans
 """
 
 from __future__ import annotations
+from app.services import machines_type as _mtype
 
 import json
 import re
@@ -1301,12 +1302,10 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
 # de sens et sont masques partout ailleurs (app/routers/saisies.py). La liste
 # des saisies d'un point de production doit dire la meme chose que l'onglet
 # Saisies, sinon on compare deux verites.
-_REPIQUAGE_MASQUE = (
-    "NOT (operation_code IN ('01','89','86','87') AND "
-    "(lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
-    " OR lower(trim(COALESCE(machine,''))) = 'rep' "
-    " OR lower(trim(COALESCE(machine,''))) LIKE 'rep %'))"
-)
+def _repiquage_masque(conn) -> str:
+    # Postes de type « repiquage » (machines.type) ; base sans la colonne : nom.
+    return ("NOT (operation_code IN ('01','89','86','87') AND "
+            + _mtype.sql_nom_repiquage(conn, "machine") + ")")
 
 
 def saisies_periode(conn, machine: Any, debut: str, fin: str,
@@ -1344,7 +1343,7 @@ def saisies_periode(conn, machine: Any, debut: str, fin: str,
         f"""SELECT {', '.join(champs)}
               FROM production_data
              WHERE date_operation >= ? AND date_operation <= ?
-               AND {_REPIQUAGE_MASQUE}{filtre_annule}{filtre_machine}
+               AND {_repiquage_masque(conn)}{filtre_annule}{filtre_machine}
              ORDER BY date_operation, id""",
         params,
     ).fetchall()

@@ -22,7 +22,7 @@ from app.services import adv_commandes as adv
 from app.services import adv_mise_en_forme as mef
 from app.services.audit_service import log_action
 from services.auth_service import effective_role, get_current_user
-from config import ADV_ETATS, ADV_PREPA_STATUTS, ROLES_ADV, ROLES_ADV_PREPA
+from config import ADV_ETATS, ADV_PREPA_STATUTS, ADV_REPIQUAGE_STATUTS, ROLES_ADV, ROLES_ADV_PREPA
 from database import get_db
 
 router = APIRouter()
@@ -112,6 +112,106 @@ def maj_prepa(numero: str, ligne: int, body: PrepaIn, request: Request):
                        "apres": {"statut": body.statut, "note": note}},
                request=request)
     return {"ok": True, "statut": body.statut, "maj_le": quand, "maj_par": _nom(user)}
+
+
+# ── Ordre des préparations fixé à la main ────────────────────────────────────
+# L'administration et la direction (ROLES_ADV) imposent l'ordre ; la logistique
+# le voit. On reçoit la liste ordonnée des lignes concernées — le haut d'un
+# groupe, jusqu'à la ligne déplacée — et chacune prend son rang. Les lignes
+# qui ne sont pas envoyées gardent l'ordre automatique (date d'expédition).
+
+_RE_CLE = re.compile(r"^(\d{1,12})-(\d{1,4})$")
+MAX_ORDRE = 300
+
+
+class OrdrePrepaIn(BaseModel):
+    lignes: list
+
+
+@router.put("/api/adv/prepa/ordre")
+def ordonner_prepa(body: OrdrePrepaIn, request: Request):
+    user = _exiger(request, ROLES_ADV)
+    if not isinstance(body.lignes, list) or not body.lignes or len(body.lignes) > MAX_ORDRE:
+        raise HTTPException(status_code=400, detail="Liste de lignes invalide.")
+    cles, vus = [], set()
+    for c in body.lignes:
+        m = _RE_CLE.match(str(c))
+        if not m:
+            raise HTTPException(status_code=400, detail="Ligne de commande invalide.")
+        if m.group(0) in vus:
+            continue
+        vus.add(m.group(0))
+        cles.append((m.group(1), int(m.group(2))))
+    quand, par = adv.maintenant(), _nom(user)
+    with get_db() as conn:
+        # Les rangs déjà posés ailleurs (autre groupe) sont conservés ; ceux
+        # de la liste sont réécrits de 1 à n dans l'ordre reçu.
+        for rang, (numero, ligne) in enumerate(cles, start=1):
+            conn.execute("""
+                INSERT INTO adv_prepa_priorites (numero, ligne, rang, maj_le, maj_par)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(numero, ligne) DO UPDATE SET
+                    rang=excluded.rang, maj_le=excluded.maj_le, maj_par=excluded.maj_par
+            """, (numero, ligne, rang, quand, par))
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="adv",
+               objet="Ordre des préparations · %d ligne(s) placée(s)" % len(cles),
+               detail={"ordre": ["%s-%s" % c for c in cles]}, request=request)
+    return {"ok": True, "lignes": len(cles)}
+
+
+@router.delete("/api/adv/prepa/ordre")
+def ordre_automatique(request: Request):
+    """Retire tous les rangs fixés : la Prépa reprend l'ordre par date d'expédition."""
+    user = _exiger(request, ROLES_ADV)
+    with get_db() as conn:
+        n = conn.execute("SELECT COUNT(*) FROM adv_prepa_priorites").fetchone()[0]
+        conn.execute("DELETE FROM adv_prepa_priorites")
+        conn.commit()
+    log_action(user=user, action="DELETE", module="adv",
+               objet="Ordre des préparations · retour à l'ordre automatique (%d rang(s) retiré(s))" % n,
+               request=request)
+    return {"ok": True, "retires": n}
+
+
+# ── Repiquage d'une ligne : statut fixé à la main ────────────────────────────
+_LIB_REPIQUAGE = dict(ADV_REPIQUAGE_STATUTS)
+
+
+class RepiquageIn(BaseModel):
+    statut: Optional[str] = None      # None ou "" : rend la main au planning
+
+
+@router.put("/api/adv/repiquage/{numero}/{ligne}")
+def fixer_repiquage(numero: str, ligne: int, body: RepiquageIn, request: Request):
+    """Statut du repiquage de la ligne (à faire, en cours, terminé), ou retour au calcul.
+
+    L'étape Prod du carnet n'est « faite » que quand l'impression ET le
+    repiquage le sont ; le statut se lit sur le dossier de repiquage du
+    planning, et l'ADV peut le fixer quand le planning ne le dit pas.
+    """
+    user = _exiger(request, ROLES_ADV)
+    numero, ligne = _cle(numero, ligne)
+    statut = (body.statut or "").strip() or None
+    if statut and statut not in _LIB_REPIQUAGE:
+        raise HTTPException(status_code=400, detail="Statut de repiquage inconnu.")
+    with get_db() as conn:
+        avant = conn.execute("SELECT statut FROM adv_repiquages WHERE numero=? AND ligne=?",
+                             (numero, ligne)).fetchone()
+        if statut:
+            conn.execute("""
+                INSERT INTO adv_repiquages (numero, ligne, statut, maj_le, maj_par) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(numero, ligne) DO UPDATE SET
+                    statut=excluded.statut, maj_le=excluded.maj_le, maj_par=excluded.maj_par
+            """, (numero, ligne, statut, adv.maintenant(), _nom(user)))
+        else:
+            conn.execute("DELETE FROM adv_repiquages WHERE numero=? AND ligne=?", (numero, ligne))
+        conn.commit()
+    log_action(user=user, action="UPDATE" if statut else "DELETE", module="adv",
+               objet="Repiquage · commande %s ligne %s%s" % (
+                   numero, ligne, (" → " + _LIB_REPIQUAGE[statut]) if statut else " · statut du planning rétabli"),
+               detail={"avant": dict(avant) if avant else None, "apres": statut}, request=request)
+    return {"ok": True, "statut": statut}
 
 
 class ForcageIn(BaseModel):

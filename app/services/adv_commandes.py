@@ -49,6 +49,7 @@ from config import ADV_ETAPES, ADV_PREPA_HORIZON_JOURS
 from app.services import erp_mirror as miroir
 from app.services import erp_tdb as tdb
 from app.services.erp_stock import _reference
+from app.services import machines_type as _mtype
 
 _PARIS = ZoneInfo("Europe/Paris")
 ETAPES = tuple(k for k, _ in ADV_ETAPES)
@@ -219,13 +220,17 @@ def _dossiers(conn) -> List[Dict[str, Any]]:
         return []
     cols = _colonnes(conn, "planning_entries")
     of = "of_import_id" if "of_import_id" in cols else "NULL"
+    pour_rep = "pe.pour_repiquage" if "pour_repiquage" in cols else "0"
+    src_rep = "pe.repiquage_source_id" if "repiquage_source_id" in cols else "NULL"
+    m_type = "m.type" if "type" in _colonnes(conn, "machines") else "NULL"
     rows = _lignes(conn, """
         SELECT pe.id, pe.reference, pe.numero_of, pe.ref_produit, pe.statut, pe.statut_reel,
                pe.planned_start, pe.planned_end, pe.machine_id, pe.client, %s AS of_import_id,
-               m.nom AS machine
+               %s AS pour_repiquage, %s AS repiquage_source_id,
+               m.nom AS machine, %s AS machine_type
           FROM mysifa.planning_entries pe
           LEFT JOIN mysifa.machines m ON m.id = pe.machine_id
-    """ % of)
+    """ % (of, pour_rep, src_rep, m_type))
     if not rows:
         # Sans la table des machines (base partielle), on se passe du nom.
         rows = _lignes(conn, """
@@ -244,6 +249,8 @@ def _dossiers(conn) -> List[Dict[str, Any]]:
           GROUP BY planning_entry_id"""):
             fins[r["pe"]] = r["fin"]
     for r in rows:
+        # Poste de repiquage : son type (machines.type), sinon son nom.
+        r["repiquage"] = _mtype.est_repiquage({"type": r.get("machine_type"), "nom": r.get("machine")})
         texte = "%s %s" % (r.get("reference") or "", r.get("numero_of") or "")
         r["_numeros"] = set(_RE_COMMANDE.findall(texte))
         r["_lignes"] = {int(x) for x in _RE_LIGNE.findall(texte)}
@@ -292,6 +299,22 @@ def _prepas(conn) -> Dict[str, Dict[str, Any]]:
         return {}
     return {cle_ligne(r["numero"], r["ligne"]): r
             for r in _lignes(conn, "SELECT * FROM mysifa.adv_prepas")}
+
+
+def _repiquages(conn) -> Dict[str, Dict[str, Any]]:
+    """Statut du repiquage fixé à la main par l'ADV (à faire, en cours, terminé)."""
+    if not _table(conn, "adv_repiquages"):
+        return {}
+    return {cle_ligne(r["numero"], r["ligne"]): r
+            for r in _lignes(conn, "SELECT * FROM mysifa.adv_repiquages")}
+
+
+def _priorites(conn) -> Dict[str, Dict[str, Any]]:
+    """Rangs fixés à la main dans l'onglet Prépa (administration, direction)."""
+    if not _table(conn, "adv_prepa_priorites"):
+        return {}
+    return {cle_ligne(r["numero"], r["ligne"]): r
+            for r in _lignes(conn, "SELECT * FROM mysifa.adv_prepa_priorites")}
 
 
 def _forcages(conn) -> Dict[str, Dict[str, Dict[str, Any]]]:
@@ -351,7 +374,55 @@ def _etape_bat(l, bats, deja) -> Dict[str, Any]:
     return _etape("non", "Aucun BAT dans MyBAT pour cet article")
 
 
-def _etape_prod(l, dossiers) -> Dict[str, Any]:
+STATUTS_REPIQUAGE = ("a_faire", "en_cours", "termine")
+
+
+def _repiquage_de_ligne(dossiers, manuel) -> Dict[str, Any]:
+    """Le repiquage d'une ligne : requis ou non, et où il en est.
+
+    Requis quand une production de la ligne est cochée « pour repiquage », ou
+    qu'un dossier de repiquage la couvre. Le statut vient du dossier de
+    repiquage (terminé, en cours, sinon à faire) ; l'ADV peut le fixer à la
+    main — un repiquage sous-traité ou suivi hors planning existe aussi — et
+    le fixer rend le repiquage requis.
+    """
+    reps = [d for d in dossiers if d.get("repiquage")]
+    requis = bool(reps) or any(d.get("pour_repiquage") for d in dossiers)
+    if reps and all(d.get("statut") == "termine" for d in reps):
+        calcul = "termine"
+    elif any(d.get("statut") == "en_cours" or d.get("statut_reel") == "reellement_en_saisie" for d in reps):
+        calcul = "en_cours"
+    else:
+        calcul = "a_faire"
+    m = (manuel or {}).get("statut")
+    if m in STATUTS_REPIQUAGE:
+        return {"requis": True, "statut": m, "calcul": calcul if requis else None, "manuel": True,
+                "maj_par": manuel.get("maj_par"), "maj_le": manuel.get("maj_le"),
+                "planifie": bool(reps)}
+    return {"requis": requis, "statut": calcul if requis else None, "calcul": calcul if requis else None,
+            "manuel": False, "maj_par": None, "maj_le": None, "planifie": bool(reps)}
+
+
+def _etape_prod(l, dossiers, repiquage=None) -> Dict[str, Any]:
+    """Prod = l'impression, puis le repiquage quand la ligne en demande un."""
+    rep = repiquage or {}
+    impression = _etape_impression(l, [d for d in dossiers if not d.get("repiquage")])
+    if not rep.get("requis"):
+        return impression
+    # Une ligne servie sur stock peut être repiquée (étiquettes du stock
+    # surimprimées) : « sans objet » côté impression compte alors comme fait.
+    lib = {"a_faire": "repiquage à faire", "en_cours": "repiquage en cours",
+           "termine": "repiquage terminé"}[rep["statut"]]
+    if rep.get("manuel"):
+        lib += " (fixé par l’ADV)"
+    if impression["calcul"] in ("oui", "sans_objet"):
+        if rep["statut"] == "termine":
+            return _etape("oui", "Impression et repiquage terminés" + (" (repiquage fixé par l’ADV)" if rep.get("manuel") else ""))
+        return _etape("en_cours", "Impression terminée · " + lib)
+    return _etape(impression["calcul"], impression["detail"] + " · puis repiquage")
+
+
+def _etape_impression(l, dossiers) -> Dict[str, Any]:
     if l["origine"] == tdb.ORIG_STOCK:
         return _etape("sans_objet", "Ligne servie sur stock")
     if l["origine"] == tdb.ORIG_SOUS_TRAITANCE:
@@ -460,9 +531,12 @@ def _appliquer_forcage(etape: Dict[str, Any], f: Optional[Dict[str, Any]]) -> Di
 
 def _cle_priorite(l: Dict[str, Any]):
     """Prépas engagées d'abord (leurs étiquettes sont déjà mises de côté),
-    puis la date d'expédition, la plus proche en tête ; sans date, à la fin."""
+    puis l'ordre fixé à la main par l'ADV, puis la date d'expédition, la plus
+    proche en tête ; sans date, à la fin."""
     engagee = 0 if (l.get("_prepa_statut") in ("en_cours", "prete")) else 1
-    return (engagee, l["expedition"] or "9999-12-31", str(l["numero"]), int(l["ligne"] or 0))
+    rang = l.get("priorite_manuelle")
+    return (engagee, 0 if rang is not None else 1, rang or 0,
+            l["expedition"] or "9999-12-31", str(l["numero"]), int(l["ligne"] or 0))
 
 
 def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
@@ -511,12 +585,15 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
                 ratt_depart.setdefault(cle, set()).add(r["objet_id"])
         departs, deps_par_dossier, deps_par_numero = _departs(conn)
         prepas = _prepas(conn)
+        priorites = _priorites(conn)
+        repiquages_adv = _repiquages(conn)
         forcages = _forcages(conn)
 
     lignes: List[Dict[str, Any]] = []
     for b in brutes:
         cle = cle_ligne(b["numero"], b["ligne"])
         p = prepas.get(cle)
+        pr = priorites.get(cle)
         l = {
             "cle": cle,
             "numero": str(b["numero"]),
@@ -540,6 +617,9 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "expedition": _jour(b.get("amje")),
             "livraison": _jour(b.get("amjl")),
             "_prepa_statut": (p or {}).get("statut"),
+            "priorite_manuelle": int(pr["rang"]) if pr else None,
+            "priorite_par": (pr or {}).get("maj_par"),
+            "priorite_le": (pr or {}).get("maj_le"),
         }
         lignes.append(l)
 
@@ -572,12 +652,19 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
     semaine = (j + timedelta(days=7)).isoformat()
     for l in lignes:
         ds = _dossiers_de_ligne(l, dossiers, ratt_dossier, dossiers_par_id)
+        # Un dossier de repiquage relié (au planning) à l'une de ces productions
+        # fait partie de la ligne, même sous une autre référence.
+        ids_ds = {d["id"] for d in ds}
+        ds = ds + [d for d in dossiers if d.get("repiquage_source_id") in ids_ds and d["id"] not in ids_ds]
         l["dossiers"] = [{
             "id": d["id"], "reference": d.get("reference"), "statut": d.get("statut"),
             "machine": d.get("machine"), "debut": d.get("planned_start"),
             "fin": d.get("fin_reelle") or d.get("planned_end"),
             "fin_reelle": bool(d.get("fin_reelle")),
+            "repiquage": bool(d.get("repiquage")),
+            "pour_repiquage": bool(d.get("pour_repiquage")),
         } for d in ds]
+        l["repiquage"] = _repiquage_de_ligne(ds, repiquages_adv.get(l["cle"]))
         fins = [x["fin"] for x in l["dossiers"] if x["fin"]]
         l["fin_prod"] = (max(fins)[:16] if fins else None)
         l["fin_prod_reelle"] = bool(l["dossiers"]) and all(x["fin_reelle"] for x in l["dossiers"])
@@ -607,7 +694,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         l["a_fabriquer"] = max(l["reste"] - st["alloue"], 0.0)
         etapes = {
             "bat": _etape_bat(l, bats, deja),
-            "prod": _etape_prod(l, ds),
+            "prod": _etape_prod(l, ds, l["repiquage"]),
             "stock": _etape_stock(l["reste"], st["alloue"], st["total"], st["unite"]),
             "prepa": _etape_prepa(p),
             "depart": _etape_depart(deps, a_venir),
@@ -686,19 +773,24 @@ def prepa(aujourdhui: Optional[date] = None, horizon: Optional[int] = None) -> D
         g = groupe_prepa(l)
         if not g:
             continue
-        # Ce qui est engagé reste visible quelle que soit la date ; le reste
-        # suit l'horizon.
-        if g not in ("en_cours", "pretes") and l["expedition"] and l["expedition"] > limite:
+        # Ce qui est engagé, ou placé à la main par l'ADV, reste visible quelle
+        # que soit la date ; le reste suit l'horizon.
+        if (g not in ("en_cours", "pretes") and l["priorite_manuelle"] is None
+                and l["expedition"] and l["expedition"] > limite):
             continue
         l["groupe"] = g
         lignes.append(l)
-    lignes.sort(key=lambda l: (l["expedition"] or "9999-12-31", l["priorite"]))
+    # L'ordre fixé par l'ADV d'abord, puis la date d'expédition.
+    lignes.sort(key=lambda l: (0 if l["priorite_manuelle"] is not None else 1,
+                               l["priorite_manuelle"] or 0,
+                               l["expedition"] or "9999-12-31", l["priorite"]))
     base["lignes"] = lignes
     base["horizon"] = h
     base["groupes"] = [{"cle": k, "label": v,
                         "lignes": sum(1 for l in lignes if l["groupe"] == k)}
                        for k, v in GROUPES_PREPA]
     base["compteurs"] = compteurs(lignes) if lignes else compteurs([])
+    base["ordre_manuel"] = any(l["priorite_manuelle"] is not None for l in lignes)
     return base
 
 

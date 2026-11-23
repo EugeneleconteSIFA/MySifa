@@ -48,6 +48,16 @@ MOTIF_PLACEHOLDER = re.compile(
 # Sites que la preuve statique ne couvre pas. Chacun a ete relu le 27/08/2026.
 # `modele` déclenche la verification automatique de la raison invoquee.
 SITES_REVUS = {
+    # Postes de repiquage (machines.type, 24/11/2026) : le fragment liste les
+    # noms et codes des machines typées « repiquage », lus dans la table
+    # `machines` et échappés en littéraux par machines_type._litteraux() —
+    # aucune valeur venue de la requête n'y entre.
+    ("app/routers/saisies.py", "list_saisies"): {
+        "raison": "_repiquage_hide_filter() : noms de machines lus en base, échappés (machines_type)",
+    },
+    ("app/routers/saisies.py", "export_saisies"): {
+        "raison": "_repiquage_hide_filter() : noms de machines lus en base, échappés (machines_type)",
+    },
     ("app/routers/taches.py", "update_tache"): {
         "raison": "les cles viennent de TachePatch.model_dump()",
         "modele": "TachePatch",

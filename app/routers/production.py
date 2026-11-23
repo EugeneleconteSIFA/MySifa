@@ -8,6 +8,7 @@ _TZ_PARIS = _ZoneInfo('Europe/Paris')
 from database import get_db
 from services.timings import compute_dossier_times
 from app.services.dossier_stats import vitesse_plausible
+from app.services import machines_type as _mtype
 from config import PROD_VITESSE_MAX_M_MIN
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
 from services.prod_machine_filter import append_machine_filter
@@ -167,9 +168,8 @@ def _rep_team_for_operator(conn, operateur_nom: str, jour_iso: str):
     semaine = '{0}-W{1:02d}'.format(iso_year, iso_week)
     day_bit = 1 << (iso_weekday - 1)
     mach = conn.execute(
-        "SELECT id FROM machines WHERE actif=1 AND ("
-        "lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
-        "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+        "SELECT m.id FROM machines m WHERE m.actif=1 AND "
+        + _mtype.sql_machine_repiquage(conn, "m") + " ORDER BY m.id"
     ).fetchone()
     if not mach:
         return None
@@ -219,9 +219,8 @@ def _rep_get_full_team_for_date(conn, operateur_nom: str, jour_iso: str):
     semaine = '{0}-W{1:02d}'.format(iso_year, iso_week)
     day_bit = 1 << (iso_weekday - 1)
     mach = conn.execute(
-        "SELECT id FROM machines WHERE actif=1 AND ("
-        "lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
-        "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+        "SELECT m.id FROM machines m WHERE m.actif=1 AND "
+        + _mtype.sql_machine_repiquage(conn, "m") + " ORDER BY m.id"
     ).fetchone()
     if not mach:
         return (None, [])
@@ -467,7 +466,8 @@ def _is_machine_repiquage_name(name):
           .replace(chr(0xe9), 'e')
           .replace(chr(0xe8), 'e')
           .replace(chr(0xea), 'e'))
-    return n == 'repiquage' or n == 'rep' or n.startswith('rep ') or n.startswith('repiquage')
+    # Le type du poste (machines.type) décide ; base sans la colonne : nom.
+    return _mtype.est_repiquage_nom_global(name)
 
 
 @router.get("/api/production/machine-status")
@@ -559,9 +559,7 @@ def machine_status(request: Request):
         "COALESCE(SUM(pd.nb_cartons), 0) AS cartons "
         "FROM production_data pd "
         "WHERE pd.operation_code = '03' "
-        "AND (lower(trim(COALESCE(pd.machine,''))) LIKE 'repiquage%' "
-        "     OR lower(trim(COALESCE(pd.machine,''))) = 'rep' "
-        "     OR lower(trim(COALESCE(pd.machine,''))) LIKE 'rep %') "
+        "AND " + _mtype.sql_nom_repiquage_global("pd.machine") + " "
         "AND (pd.date_operation LIKE ? OR pd.date_operation LIKE ?) "
         "AND TRIM(COALESCE(pd.no_dossier,'')) != '' "
         "GROUP BY pd.no_dossier, pd.client, pd.designation "

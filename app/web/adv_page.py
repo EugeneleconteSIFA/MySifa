@@ -17,7 +17,7 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import (ADV_ETAPES, ADV_ETATS, ADV_PREPA_HORIZON_JOURS, ADV_PREPA_STATUTS,
+from config import (ADV_ETAPES, ADV_ETATS, ADV_PREPA_HORIZON_JOURS, ADV_PREPA_STATUTS, ADV_REPIQUAGE_STATUTS,
                     APP_ORG_NAME, APP_VERSION, ROLES_ADV, ROLES_ADV_PREPA)
 from services.auth_service import effective_role, get_current_user
 from app.services import adv_mise_en_forme as mef
@@ -54,6 +54,7 @@ def adv_page(request: Request):
         "etapes": [{"cle": k, "label": v} for k, v in ADV_ETAPES],
         "etats": [{"cle": k, "label": v} for k, v in ADV_ETATS],
         "statuts_prepa": [{"cle": k, "label": v} for k, v in ADV_PREPA_STATUTS],
+        "statuts_repiquage": [{"cle": k, "label": v} for k, v in ADV_REPIQUAGE_STATUTS],
         "horizon": ADV_PREPA_HORIZON_JOURS,
         "mef": mef.referentiel(),
     }
@@ -83,7 +84,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ia.css">
-<link rel="stylesheet" href="/static/mysifa_adv.css?v=8">
+<link rel="stylesheet" href="/static/mysifa_adv.css?v=12">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -126,7 +127,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_adv.js?v=8"></script>
+<script src="/static/mysifa_adv.js?v=11"></script>
 </body>
 </html>
 """)

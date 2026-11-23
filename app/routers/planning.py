@@ -578,6 +578,10 @@ def _normalize_str(s: str) -> str:
 
 def _machine_key_from_record(m: dict) -> str:
     """Identifie la clé machine (C1/C2/DSI/REP) depuis le dict machine — miroir du JS machineKey()."""
+    # Le type du poste décide du repiquage (machines.type) ; les autres clés
+    # restent lues sur le nom ou le code.
+    if str(m.get("type") or "").strip() == "repiquage":
+        return "REP"
     raw = str(m.get("code") or m.get("nom") or "").strip()
     norm = _normalize_str(raw)
     if "cohesio 2" in norm or norm == "c2":
@@ -1057,6 +1061,80 @@ def _entier_ou_none(v) -> Optional[int]:
     return n or None
 
 
+# ── Repiquage : la production d'origine d'un dossier de repiquage ────────────
+# Un dossier coché « pour repiquage » produit des étiquettes qui attendent un
+# repiquage pour la même commande ; le dossier du poste de repiquage
+# (machines.type = 'repiquage') désigne cette production par
+# `repiquage_source_id`, choisi sur le planning. Jusqu'ici seule la référence
+# partagée reliait les deux passes (ex. OF 9932304 : DSI puis Repiquage).
+
+def _poser_source_repiquage(conn, entry_id: int, body: dict) -> None:
+    """Écrit `repiquage_source_id` si le corps le porte. None/'' le retire.
+
+    La source doit être un autre dossier existant, sur un poste qui n'est pas
+    lui-même un poste de repiquage : un repiquage repique une production.
+    """
+    if "repiquage_source_id" not in body:
+        return
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+    if "repiquage_source_id" not in cols:
+        return
+    brut = body.get("repiquage_source_id")
+    src = None
+    if brut not in (None, "", 0, "0"):
+        try:
+            src = int(brut)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Production d'origine invalide.")
+        if src == int(entry_id):
+            raise HTTPException(400, "Un dossier ne peut pas être sa propre production d'origine.")
+        from app.services import machines_type as _mtype
+        row = conn.execute(
+            "SELECT pe.id, m.* FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id "
+            "WHERE pe.id=?", (src,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Production d'origine introuvable.")
+        if _mtype.est_repiquage(dict(row)):
+            raise HTTPException(400, "La production d'origine doit être un dossier d'impression, pas de repiquage.")
+    conn.execute("UPDATE planning_entries SET repiquage_source_id=? WHERE id=?", (src, entry_id))
+
+
+def _enrichir_repiquage(conn, slots: list) -> None:
+    """Ajoute aux créneaux de quoi dire le lien de repiquage, dans les deux sens.
+
+    - dossier de repiquage : `repiquage_source` = {id, reference, machine, statut}
+    - dossier pour repiquage : `repiquages` = [{id, reference, machine, statut}]
+    Deux requêtes pour tous les créneaux, pas une par créneau.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+    if "repiquage_source_id" not in cols or not slots:
+        return
+    def _info(r):
+        return {"id": r["id"], "reference": r["reference"], "machine": r["machine"], "statut": r["statut"]}
+    src_ids = sorted({int(s["repiquage_source_id"]) for s in slots if s.get("repiquage_source_id")})
+    if src_ids:
+        rows = conn.execute(
+            "SELECT pe.id, pe.reference, pe.statut, m.nom AS machine FROM planning_entries pe "
+            "LEFT JOIN machines m ON m.id = pe.machine_id WHERE pe.id IN (%s)" % ",".join("?" * len(src_ids)),
+            src_ids).fetchall()
+        par_id = {r["id"]: _info(r) for r in rows}
+        for s in slots:
+            if s.get("repiquage_source_id"):
+                s["repiquage_source"] = par_id.get(int(s["repiquage_source_id"]))
+    prod_ids = sorted({int(s["entry_id"]) for s in slots if s.get("pour_repiquage")})
+    if prod_ids:
+        rows = conn.execute(
+            "SELECT pe.id, pe.reference, pe.statut, pe.repiquage_source_id AS src, m.nom AS machine "
+            "FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id "
+            "WHERE pe.repiquage_source_id IN (%s)" % ",".join("?" * len(prod_ids)), prod_ids).fetchall()
+        par_src: dict = {}
+        for r in rows:
+            par_src.setdefault(r["src"], []).append(_info(r))
+        for s in slots:
+            if s.get("pour_repiquage"):
+                s["repiquages"] = par_src.get(int(s["entry_id"]), [])
+
+
 def _slot_payload(e: dict, start_iso: str, end_iso: str,
                   contrainte: Optional[dict] = None,
                   gel: Optional[dict] = None) -> dict:
@@ -1108,6 +1186,8 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str,
         "nb_palettes": _compute_nb_palettes(e),
         "prise_rdv": int(e.get("prise_rdv") or 0),
         "date_livraison_imposee": int(e.get("date_livraison_imposee") or 0),
+        "pour_repiquage": int(e.get("pour_repiquage") or 0),
+        "repiquage_source_id": e.get("repiquage_source_id"),
         "departement_livraison": (e.get("departement_livraison") or "").strip(),
         "ft_support": (e.get("_ft_support") or "").strip() or None,
         "ft_adhesif": (e.get("_ft_adhesif") or "").strip() or None,
@@ -2391,6 +2471,7 @@ async def add_entry(machine_id: int, request: Request):
         "departement_livraison": (body.get("departement_livraison") or "").strip() or "",
         "prise_rdv": _parse_a_placer(body.get("prise_rdv"), default=0),
         "date_livraison_imposee": _parse_a_placer(body.get("date_livraison_imposee"), default=0),
+        "pour_repiquage": _parse_a_placer(body.get("pour_repiquage"), default=0),
         "etiquettes_par_carton": _parse_etiq_par_carton(body.get("etiquettes_par_carton")),
         "created_by": user_name,
         "updated_by": user_name,
@@ -2438,6 +2519,7 @@ async def add_entry(machine_id: int, request: Request):
             )
             new_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
             _backfill_group_id(conn, new_id, pe_cols)
+            _poser_source_repiquage(conn, new_id, body)
             _invalidate_attente_plans(conn, machine_id)
             conn.commit()
     except HTTPException:
@@ -2676,6 +2758,12 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             else (exd.get("etiquettes_par_carton") if "etiquettes_par_carton" in ex.keys() else None),
             entry_id
         ))
+        # Repiquage : la case « prod pour repiquage » et la production d'origine
+        # d'un dossier de repiquage — écrites à part, seulement si envoyées.
+        if "pour_repiquage" in body and "pour_repiquage" in ex.keys():
+            conn.execute("UPDATE planning_entries SET pour_repiquage=? WHERE id=?",
+                         (_parse_a_placer(body.get("pour_repiquage"), default=0), entry_id))
+        _poser_source_repiquage(conn, entry_id, body)
 
         # Si un créneau planifié voit sa durée changer (donc planned_end bouge),
         # il faut pousser les dossiers suivants (non verrouillés) en invalidant
@@ -3427,6 +3515,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         "departement_livraison": (body.get("departement_livraison") or "").strip() or "",
         "prise_rdv": _parse_a_placer(body.get("prise_rdv"), default=0),
         "date_livraison_imposee": _parse_a_placer(body.get("date_livraison_imposee"), default=0),
+        "pour_repiquage": _parse_a_placer(body.get("pour_repiquage"), default=0),
     }
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
@@ -3443,6 +3532,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         )
         new_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         _backfill_group_id(conn, new_id, pe_cols)
+        _poser_source_repiquage(conn, new_id, body)
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
@@ -4021,6 +4111,88 @@ async def set_machine_sans_matiere_premiere(machine_id: int, request: Request):
     return {"success": True, "sans_matiere_premiere": smp}
 
 
+@router.get("/repiquage/sources")
+def repiquage_sources(request: Request, entry_id: Optional[int] = None, q: str = ""):
+    """Productions qu'un dossier de repiquage peut repiquer, la plus probable d'abord.
+
+    Candidats : dossiers cochés « pour repiquage », sur un poste qui n'est pas
+    de repiquage. En tête, la même référence de dossier, puis le même article,
+    puis les dossiers non terminés ; chaque candidat dit s'il est déjà repiqué
+    par un autre dossier. La source actuelle est toujours rendue.
+    """
+    require_planning_view(request)
+    from app.services import machines_type as _mtype
+    with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        if "pour_repiquage" not in cols:
+            return {"sources": [], "actuelle": None}
+        cur = None
+        if entry_id:
+            cur = conn.execute("SELECT id, reference, ref_produit, repiquage_source_id FROM planning_entries WHERE id=?",
+                               (entry_id,)).fetchone()
+        ref = ((cur["reference"] if cur else "") or "").strip()
+        art = ((cur["ref_produit"] if cur else "") or "").strip()
+        actuelle = cur["repiquage_source_id"] if cur else None
+        where = ["(pe.pour_repiquage = 1" + (" OR pe.id = ?" if actuelle else "") + ")",
+                 "NOT " + _mtype.sql_machine_repiquage(conn, "m")]
+        params: list = [actuelle] if actuelle else []
+        qq = (q or "").strip()
+        if qq:
+            where.append("(pe.reference LIKE ? OR pe.ref_produit LIKE ? OR pe.client LIKE ? OR pe.numero_of LIKE ?)")
+            params += ["%" + qq + "%"] * 4
+        rows = conn.execute("""
+            SELECT pe.id, pe.reference, pe.ref_produit, pe.client, pe.statut, pe.planned_end,
+                   m.nom AS machine,
+                   (SELECT COUNT(*) FROM planning_entries r WHERE r.repiquage_source_id = pe.id
+                      AND r.id <> COALESCE(?, -1)) AS deja_repique
+              FROM planning_entries pe JOIN machines m ON m.id = pe.machine_id
+             WHERE """ + " AND ".join(where) + """
+             LIMIT 200""", [entry_id] + params).fetchall()
+    def rang(r):
+        return (0 if r["id"] == actuelle else 1,
+                0 if ref and (r["reference"] or "").strip() == ref else 1,
+                0 if art and (r["ref_produit"] or "").strip() == art else 1,
+                0 if r["statut"] != "termine" else 1,
+                -(int(r["id"])))
+    sources = [dict(r) for r in sorted(rows, key=rang)[:30]]
+    for x in sources:
+        x["meme_reference"] = bool(ref) and (x["reference"] or "").strip() == ref
+        x["meme_article"] = bool(art) and (x["ref_produit"] or "").strip() == art
+    return {"sources": sources, "actuelle": actuelle}
+
+
+@router.put("/machines/{machine_id}/type")
+async def set_machine_type(machine_id: int, request: Request):
+    """Type du poste : `impression` ou `repiquage` (config.MACHINE_TYPES).
+
+    Body: {"type": "impression"|"repiquage"}
+    Le repiquage se reconnaissait au NOM de la machine ; il se lit maintenant
+    sur ce type (app/services/machines_type.py) : saisie au carton, codes de
+    début et de fin masqués, dossiers de repiquage reliés à leur production.
+    """
+    from config import MACHINE_TYPES
+    from app.services import machines_type as _mtype
+    user = require_admin(request)
+    body = await request.json()
+    t = str(body.get("type") or "").strip()
+    if t not in {k for k, _ in MACHINE_TYPES}:
+        raise HTTPException(400, "Type de poste inconnu.")
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute("UPDATE machines SET type=? WHERE id=?", (t, machine_id))
+        conn.commit()
+    _mtype.invalider_cache()
+    try:
+        log_action(user=user, action="UPDATE", module="planning",
+                   objet=f"Type du poste {ex['nom']} → {dict(MACHINE_TYPES)[t]}",
+                   detail={"type": t}, ip=request.client.host if request.client else None)
+    except Exception:
+        pass
+    return {"success": True, "type": t}
+
+
 @router.put("/machines/{machine_id}/hors-production")
 async def set_machine_hors_production(machine_id: int, request: Request):
     """Marque un poste comme n'etant pas une machine de production.
@@ -4381,6 +4553,10 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
             day_horaires_map,
             entries_list,
         )
+        try:
+            _enrichir_repiquage(conn, slots)
+        except sqlite3.Error:
+            pass
         conn.commit()
 
     return {
