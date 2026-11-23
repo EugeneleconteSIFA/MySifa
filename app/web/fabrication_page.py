@@ -581,6 +581,15 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-metrage-lu b{color:var(--text)}
 .fab-metrage-lu.ok .fab-metrage-ecart{color:var(--success)}
 .fab-metrage-lu.ko{color:var(--danger)}
+/* Reprise du dernier releve au demarrage d'un dossier : seulement a partir
+   du 2e dossier depuis l'arrivee (le compteur n'a pas bouge entre la fin du
+   precedent et ce debut). Le premier dossier se releve sur la machine. */
+.fab-metrage-ligne{display:flex;gap:8px;align-items:flex-start}
+.fab-metrage-ligne>div:first-child{flex:1;min-width:0}
+.fab-metrage-reprise{flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:48px;height:48px;border-radius:10px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text);cursor:pointer}
+.fab-metrage-reprise:hover{border-color:var(--accent);color:var(--accent)}
 /* Moteur de saisie d'outil : resultats sous le champ de recherche. La liste
    reste dans le flux (pas en absolu) — sur un ecran d'atelier, un calque qui
    recouvre le champ suivant se ferme par accident au premier effleurement. */
@@ -1957,6 +1966,7 @@ function icon(name,size=16){
     menu:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
     x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     check:'<polyline points="20 6 9 17 4 12"/>',
+    copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     play:'<polygon points="5 3 19 12 5 21 5 3"/>',
     pause:'<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
     'flag-off':'<line x1="4" y1="4" x2="4" y2="20"/><path d="M4 15s4-4 8 0 8 0 8 0V4s-4 4-8 0-8 0-8 0"/>',
@@ -6830,6 +6840,23 @@ async function debutConfirmerFscHeritees(heritees){
   );
 }
 
+/* Compteur a reprendre au debut d'un dossier, ou null.
+   Proposé seulement si l'opérateur a déjà démarré un dossier depuis sa
+   dernière arrivée (86) : entre la fin du dossier précédent et ce début, le
+   compteur n'a pas tourné. Au premier dossier du poste, la machine a pu
+   tourner sous une autre équipe : le relevé se fait sur le compteur. */
+function debutRepriseReleve(machine){
+  const actives = (S.saisies||[]).filter(s => s.kind!=='stock' && !Number(s.est_annule||0));
+  let depuis = 0;
+  actives.forEach((s,i) => { if(String(s.operation_code||'').trim()==='86') depuis = i+1; });
+  const dejaDemarre = actives.slice(depuis).some(s => String(s.operation_code||'').trim()==='01');
+  if(!dejaDemarre) return null;
+  const r = S.releveMachine;
+  const v = (r && r.precedent!=null) ? r.precedent
+          : (machine && machine.dernier_metrage!=null ? machine.dernier_metrage : null);
+  return v!=null ? Math.round(Number(v)) : null;
+}
+
 function renderDebutModal(){
   const d = S._selectedDossier;
   const refChoisie = d ? (d.reference||'') : '';
@@ -6850,6 +6877,7 @@ function renderDebutModal(){
     const el = document.getElementById('debut-metrage');
     if(el && document.activeElement?.tagName!=='INPUT') el.focus();
   },0);
+  const reprise = debutRepriseReleve(machDeb);
 
   const submit = async()=>{
     const dos = S._selectedDossier;
@@ -6957,7 +6985,16 @@ function renderDebutModal(){
           const dm = m&&m.dernier_metrage!=null?'  (dernier enregistré : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m)':'';
           return 'Métrage total de la machine — compteur au début, en mètres — obligatoire'+dm;
         })()),
-        inp
+        reprise==null ? inp : h('div',{className:'fab-metrage-ligne'},
+          inp,
+          h('button',{type:'button', className:'fab-metrage-reprise',
+            title:'Reprendre le dernier relevé : '+reprise.toLocaleString('fr-FR')+' m',
+            'aria-label':'Reprendre le dernier relevé : '+reprise.toLocaleString('fr-FR')+' m',
+            onClick:()=>{
+              S.metrageDebut = String(reprise);
+              fabRenderPreserveUi({});
+              setTimeout(()=>document.getElementById('debut-metrage')?.focus(),0);
+            }}, svgIcon('copy',18)))
       ),
       renderDebutOutils(),
       renderDebutMatieres(),
