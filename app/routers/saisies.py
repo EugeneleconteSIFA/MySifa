@@ -1694,23 +1694,28 @@ async def annuler_annulation_creneau(entry_id: int, request: Request):
 @router.get("/api/saisies/{row_id}/repartition")
 def apercu_repartition(row_id: int, request: Request):
     _exiger_admin_saisies(request)
-    from app.services.repartition_saisie import apercu
+    from app.services.repartition_saisie import apercu, fin_du_cycle
     with get_db() as conn:
         try:
-            return apercu(conn, row_id)
+            return apercu(conn, fin_du_cycle(conn, row_id))
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.post("/api/saisies/{row_id}/repartition")
 async def repartir_cycle(row_id: int, request: Request):
-    """`simuler: true` renvoie le découpage sans rien écrire."""
+    """`simuler: true` renvoie le découpage sans rien écrire.
+
+    `row_id` est n'importe quelle saisie du cycle ; la fin de production qui le
+    ferme est retrouvée."""
     user = _exiger_admin_saisies(request)
     body = await request.json()
     parts = body.get("parts")
-    from app.services.repartition_saisie import plan, appliquer
+    from app.services.repartition_saisie import plan, appliquer, fin_du_cycle
     with get_db() as conn:
         try:
+            # Ouverte depuis n'importe quelle ligne du cycle : on travaille sur sa fin.
+            row_id = fin_du_cycle(conn, row_id)
             if body.get("simuler"):
                 return plan(conn, row_id, parts)
             res = appliquer(conn, row_id, parts, user.get("email") or "",

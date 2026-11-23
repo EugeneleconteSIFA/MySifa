@@ -80,6 +80,44 @@ def _lire_fin(conn, fin_id: int) -> dict:
     return fin
 
 
+def fin_du_cycle(conn, saisie_id: int) -> int:
+    """La fin de production qui ferme le cycle de cette saisie.
+
+    On ouvre la fenêtre depuis la ligne qu'on regarde : la production de
+    6 h 39 autant que la fin de 13 h. Toute ligne du cycle (démarrage,
+    production, arrêt, reprise) mène à la même fin.
+    """
+    r = conn.execute("SELECT * FROM production_data WHERE id = ?", (int(saisie_id),)).fetchone()
+    if not r:
+        raise ValueError("Saisie introuvable.")
+    r = dict(r)
+    if int(r.get("est_annule") or 0):
+        raise ValueError("Saisie annulée avec le dossier — répartition impossible.")
+    if _code(r) == "89":
+        return int(r["id"])
+    ref = str(r.get("no_dossier") or "").strip()
+    machine = str(r.get("machine") or "").strip()
+    if not ref or not machine or _code(r) in ("86", "87", "90"):
+        raise ValueError("Cette ligne n'appartient à aucun cycle de dossier.")
+    suite = conn.execute(
+        """SELECT id, operation_code FROM production_data
+            WHERE trim(no_dossier) = ? AND trim(machine) = ?
+              AND COALESCE(est_annule, 0) = 0
+              AND (date_operation > ? OR (date_operation = ? AND id > ?))
+            ORDER BY date_operation, id""",
+        (ref, machine, r["date_operation"], r["date_operation"], r["id"]),
+    ).fetchall()
+    for s in suite:
+        code = str(s["operation_code"] or "").strip()
+        if code == "89":
+            return int(s["id"])
+        if code == "90":
+            raise ValueError("Cycle annulé — rien à répartir.")
+        if code == "01":
+            break
+    raise ValueError(f"Cycle de {ref} sans fin de production : saisir d'abord la fin de production.")
+
+
 def cycle(conn, fin_id: int) -> dict:
     """Le cycle que ferme la fin de production : démarrage, début de production, saisies."""
     fin = _lire_fin(conn, fin_id)
