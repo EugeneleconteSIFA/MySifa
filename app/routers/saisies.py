@@ -1684,3 +1684,52 @@ async def annuler_annulation_creneau(entry_id: int, request: Request):
     except Exception:
         pass
     return {"success": True, "trace_id": tid, **res}
+
+
+# ─── Répartir un cycle sur plusieurs dossiers de la commande ─────────────────
+# L'opérateur a enchaîné L8, L5 et L7 sous « L8 » : la fin de production se
+# découpe en un cycle par dossier, au prorata des quantités. Voir
+# app/services/repartition_saisie.py.
+
+@router.get("/api/saisies/{row_id}/repartition")
+def apercu_repartition(row_id: int, request: Request):
+    _exiger_admin_saisies(request)
+    from app.services.repartition_saisie import apercu
+    with get_db() as conn:
+        try:
+            return apercu(conn, row_id)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/api/saisies/{row_id}/repartition")
+async def repartir_cycle(row_id: int, request: Request):
+    """`simuler: true` renvoie le découpage sans rien écrire."""
+    user = _exiger_admin_saisies(request)
+    body = await request.json()
+    parts = body.get("parts")
+    from app.services.repartition_saisie import plan, appliquer
+    with get_db() as conn:
+        try:
+            if body.get("simuler"):
+                return plan(conn, row_id, parts)
+            res = appliquer(conn, row_id, parts, user.get("email") or "",
+                            (user.get("nom") or user.get("email") or "").strip())
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+    try:
+        from app.services.audit_service import log_action
+        segs = res["plan"]["segments"]
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="saisies",
+            objet=f"Cycle réparti · {' + '.join(s['no_dossier'] for s in segs)} · {res['plan']['machine']}",
+            detail={"saisie_id": row_id, "segments": segs, "crees": res["crees"],
+                    "deplacees": res["deplacees"]},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "segments": res["plan"]["segments"], "crees": res["crees"]}
