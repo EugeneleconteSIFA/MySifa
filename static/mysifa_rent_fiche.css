@@ -223,3 +223,10 @@
 .rt-kpi-ecart { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rt-ecart-ok { color: var(--success); }
 .rt-ecart-bad { color: var(--danger); }
+
+/* Liste par commande : ses dossiers dessous, en retrait. */
+.rt-ligne-enfant { padding-left: 28px; border-top-style: dashed; }
+.rt-ligne-enfant .rt-qui b { font-size: 12px; font-weight: 600; color: var(--text2); }
+/* Progression au fil des m² */
+.rt-prog-tendance { font-size: 13px; font-weight: 600; margin: 2px 0 6px; align-self: flex-start; display: inline-block; }
+.rt-tendance { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }

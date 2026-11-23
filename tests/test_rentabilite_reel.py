@@ -327,6 +327,65 @@ with get_db() as conn:
 check("résultat hors norme : à vérifier", f["etat"] == "a_verifier" and f["hors_norme"], (f["etat"], f.get("hors_norme")))
 check("hors norme : hors des compteurs", t["comptes"]["complets"] == 0 and t["comptes"]["a_verifier"] == 1, t["comptes"])
 
+print("7. Une commande en plusieurs dossiers, progression au m²")
+from app.services.rentabilite_reel import cle_commande, par_commande, progression  # noqa: E402
+check("lignes d'une commande : même clé", cle_commande({"racines": ["9932856"], "reference": "9932856 - L2"})
+      == cle_commande({"racines": ["9932856"], "reference": "9932856 - L6"}) == "9932856")
+check("marché sans numéro : suffixe de ligne retiré",
+      cle_commande({"racines": [], "reference": "Marché 776 - L2"}) == cle_commande({"racines": [], "reference": "Marché 776 L1"}))
+check("cadences d'un marché : commandes distinctes",
+      cle_commande({"racines": [], "reference": "Marché 646 - 1ere cadence"})
+      != cle_commande({"racines": [], "reference": "Marché 646 - 2e cadence"}))
+
+
+def dossier(i, mb, pv, h, date, etat="complet", qte=300000):
+    return {"planning_entry_id": i, "commande": "9932856", "date": date, "heures": h,
+            "reference": f"9932856 - L{i}", "client": "Perimedias", "machine": "Cohésio 1", "etat": etat,
+            "manque": [] if etat == "complet" else ["facture"], "verdict": {}, "modifies": [],
+            "mb_pct": {"bas": mb / pv * 100, "probable": mb / pv * 100, "haut": mb / pv * 100},
+            "cout_horaire": {"bas": mb / h, "probable": mb / h, "haut": mb / h},
+            "marge_brute": mb, "prix_vente": pv,
+            "marge_brute_f": {"bas": mb - 50, "probable": mb, "haut": mb + 50},
+            "heures_f": {"bas": h * 0.97, "probable": h, "haut": h * 1.03},
+            "agregat": {"prix_vente": pv, "qte": qte, "devis_id": 10, "qte_devis": 600000,
+                        "calage_devis_mn": 150, "surface_m2": 5000},
+            "cascade_marge": [{"cause": "Calage", "nature": "perte", "valeur": -100}],
+            "cascade_cout_horaire": [{"cause": "Calage", "nature": "perte", "valeur": -50}],
+            "hors_norme": [], "raisons": [], "alertes": 0}
+
+
+seuils = {"mb_pct": 40, "cout_horaire": 325}
+with get_db() as conn:
+    # Le premier dossier porte tout le calage : 4 h pour 3 000 €, le second 1 h.
+    cs = par_commande(conn, [dossier(1, 1200, 3000, 4.0, "2026-11-19"),
+                             dossier(2, 1500, 3000, 1.0, "2026-11-20")], seuils)
+c = cs[0]
+check("deux dossiers, une commande", len(cs) == 1 and c["nb_dossiers"] == 2 and len(c["membres"]) == 2, cs)
+check("marge de la commande = Σ MB ÷ Σ PV", abs(c["mb_pct"]["probable"] - 2700 / 6000 * 100) < 0.01, c["mb_pct"])
+check("coût horaire de la commande = Σ MB ÷ Σ heures", abs(c["cout_horaire"]["probable"] - 2700 / 5) < 0.01, c["cout_horaire"])
+check("fourchettes additionnées", c["mb_pct"]["bas"] < c["mb_pct"]["probable"] < c["mb_pct"]["haut"], c["mb_pct"])
+check("commande datée de son dernier dossier", c["date"] == "2026-11-20")
+check("devis ramené une fois à la quantité totale", c["devis_prix_vente"] == 6756.0, c["devis_prix_vente"])
+check("verdict jugé sur la commande", c["verdict"].get("global") in ("reussi", "limite", "sous_seuil"), c["verdict"])
+with get_db() as conn:
+    cs = par_commande(conn, [dossier(1, 1200, 3000, 4.0, "2026-11-19"),
+                             dossier(2, 1500, 3000, 1.0, "2026-11-20", etat="provisoire")], seuils)
+check("un dossier non facturé : commande provisoire", cs[0]["etat"] == "provisoire" and cs[0]["manque"] == ["facture"], cs[0]["etat"])
+
+# Progression : trois commandes de plus en plus rentables.
+cmd = []
+for i, (mb, h) in enumerate([(1000, 5.0), (1500, 4.5), (2000, 4.0), (2200, 3.8)]):
+    cmd.append({"etat": "complet", "commande": f"99300{i}", "reference": f"99300{i}", "client": "X",
+                "date": f"2026-10-0{i + 1}", "mb_pct": {"probable": mb / 40}, "cout_horaire": {"probable": mb / h},
+                "marge_brute": mb, "prix_vente": 4000, "heures": h, "surface_m2": 10000})
+pr = progression(cmd, seuils)
+check("progression : un point par commande, m² cumulés", [p["m2"] for p in pr["points"]] == [10000, 20000, 30000, 40000], pr["points"])
+check("progression : la tendance monte", pr["tendance"]["mb_pct"]["fin"] > pr["tendance"]["mb_pct"]["debut"]
+      and pr["tendance"]["combine"]["fin"] > pr["tendance"]["combine"]["debut"], pr["tendance"])
+check("indice combiné = 100 sur les seuils", abs(progression(
+    [{**x, "marge_brute": 1600, "heures": 1600 / 325, "prix_vente": 4000} for x in cmd], seuils)["points"][-1]["combine"] - 100) < 0.1)
+check("progression : moins de trois commandes, rien", progression(cmd[:2], seuils)["points"] == [])
+
 import shutil                                            # noqa: E402
 shutil.rmtree(tmp, ignore_errors=True)
 print()

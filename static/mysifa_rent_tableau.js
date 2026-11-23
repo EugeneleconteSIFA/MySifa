@@ -1,8 +1,10 @@
 /* MySifa — Rentabilité › Tableau de bord.
  *
- * Chaque dossier terminé et rattaché à un devis validé est placé selon ses
- * deux indicateurs : marge brute (MB %) et coût horaire (MB par heure
- * machine). Les barres d'erreur montrent la FOURCHETTE réelle, le rond creux
+ * Chaque COMMANDE terminée et rattachée à un devis validé est placée selon
+ * ses deux indicateurs : marge brute (MB %) et coût horaire (MB par heure
+ * machine). Une commande produite en plusieurs dossiers (une ligne par
+ * article, un changement de cliché entre chaque) est jugée d'un bloc : sinon
+ * le calage, porté par le premier dossier, le fausse et flatte les autres. Les barres d'erreur montrent la FOURCHETTE réelle, le rond creux
  * relié par un pointillé montre où le devis plaçait le dossier. Le quart en
  * haut à droite, au-dessus des deux seuils, est celui des dossiers réussis.
  *
@@ -12,7 +14,7 @@
  * où se lit la fiche détaillée.
  *
  * Données : textContent partout, jamais innerHTML.
- * API : MySifaRentTableau.monter(conteneur, {periode, machine, grain, courbe, surFiltre, ouvrir})
+ * API : MySifaRentTableau.monter(conteneur, {periode, machine, grain, courbe, progression, surFiltre, ouvrir})
  */
 (function () {
   'use strict';
@@ -78,6 +80,20 @@
     var F = window.MySifaRentFiche;
     if (F && F.infobulle) F.infobulle(cible, texte); else if (cible) cible.title = typeof texte === 'string' ? texte : (texte.titre || '');
     return cible;
+  }
+  function nbDossiers(l) {
+    return l.nb_dossiers > 1 ? l.nb_dossiers + ' dossiers' : '';
+  }
+  // Un écran vide dit pourquoi : rien de produit, ou rien encore de jugeable.
+  function vide(d) {
+    var c = d.comptes || {};
+    var n = (d.dossiers || []).length;
+    if (!n) return 'Aucune commande terminée avec un devis validé sur cette période.';
+    var morceaux = [];
+    if (c.attente) morceaux.push(nb(c.attente) + ' en attente de facture, de déstockage ou de fin de production');
+    if (c.a_verifier) morceaux.push(nb(c.a_verifier) + ' à vérifier');
+    return nb(n) + ' commande' + (n > 1 ? 's' : '') + ' sur la période, aucune complète'
+      + (morceaux.length ? ' : ' + morceaux.join(', ') + '.' : '.');
   }
   function cle(o) { return (o.periode || 'ouvres7') + '|' + (o.machine || ''); }
   function position(f, seuil) {
@@ -153,13 +169,13 @@
       t.appendChild(ligne);
       bulle(t, {titre: k, note: note,
         lignes: [['Seuil', nb(seuil) + ' ' + unite], ['Devisé', devis != null ? nb(devis, dec) + ' ' + unite : ''],
-                 ['Dossiers complets', nb(c.complets)]]});
+                 ['Commandes complètes', nb(c.complets)]]});
       row.appendChild(t);
     }
     tuile('Marge brute', d.mb_pct_pondere, '%', S.mb_pct, d.devis_mb_pct_pondere, 1, 'pt',
-      'Somme des marges ÷ somme des prix de vente des dossiers complets : un gros dossier pèse plus.');
+      'Somme des marges ÷ somme des prix de vente des commandes complètes : une grosse commande pèse plus.');
     tuile('Coût horaire médian', d.cout_horaire_median, '€/h', S.cout_horaire, d.devis_cout_horaire_median, 0, '€/h',
-      'Marge brute par heure machine du dossier complet du milieu.');
+      'Marge brute par heure machine de la commande complète du milieu.');
     return row;
   }
 
@@ -167,7 +183,7 @@
   function nuage(d, o) {
     var carte = el('div', 'rt-carte');
     var tete = el('div', 'rt-carte-tete');
-    tete.appendChild(el('b', '', 'Marge brute et coût horaire par dossier'));
+    tete.appendChild(el('b', '', 'Marge brute et coût horaire par commande'));
     var leg = el('div', 'rt-legende');
     [['ok', 'Réussi'], ['warn', 'À la limite'], ['bad', 'Sous un seuil'], ['devis', 'Devis']]
       .forEach(function (x) {
@@ -185,7 +201,7 @@
     var pts = (d.dossiers || []).filter(function (l) { return l.mb_pct && l.cout_horaire && l.etat === 'complet'; });
     var S = d.seuils || {mb_pct: 40, cout_horaire: 325};
     if (!pts.length) {
-      carte.appendChild(el('div', 'rt-vide', 'Aucun dossier complet sur cette période.'));
+      carte.appendChild(el('div', 'rt-vide', vide(d)));
       return carte;
     }
     // Axes calés sur le gros des dossiers (5e – 95e centile, seuils compris) ;
@@ -203,7 +219,7 @@
     var X = function (v) { return L + (Math.max(x0, Math.min(x1, v)) - x0) / (x1 - x0) * (R - L); };
     var Y = function (v) { return B - (Math.max(y0, Math.min(y1, v)) - y0) / (y1 - y0) * (B - T); };
     var s = svg('svg', {viewBox: '0 0 640 396', 'class': 'rt-nuage', role: 'img',
-      'aria-label': pts.length + ' dossiers placés selon leur marge brute et leur coût horaire'});
+      'aria-label': pts.length + ' commandes placées selon leur marge brute et leur coût horaire'});
     s.appendChild(svg('rect', {x: X(S.cout_horaire), y: T, width: R - X(S.cout_horaire),
       height: Math.max(0, Y(S.mb_pct) - T), 'class': 'rt-zone-ok'}));
     var tz = svg('text', {x: R - 6, y: T + 16, 'text-anchor': 'end', 'class': 'rt-zone-lib'});
@@ -244,7 +260,7 @@
         role: 'button', 'aria-label': (l.client || '') + ' ' + (l.reference || '')});
       var vd = VERDICT[v];
       bulle(g, {titre: l.client || '(client non renseigné)',
-        sous: [l.reference, l.machine].filter(Boolean).join(' · '),
+        sous: [l.reference, nbDossiers(l), l.machine].filter(Boolean).join(' · '),
         etat: vd ? vd.lib : '',
         ton: {ok: 'vert', warn: 'orange', bad: 'rouge'}[cls] || 'inconnu',
         lignes: [['Marge brute', nb(l.mb_pct.bas, 1) + ' – ' + nb(l.mb_pct.haut, 1) + ' %'],
@@ -278,9 +294,9 @@
     var carte = el('div', 'rt-carte rt-causes');
     function bloc(titre, liste, unite, dec) {
       carte.appendChild(bulle(el('b', '', titre),
-        {titre: titre, note: 'Moyenne par dossier complet des cascades de chaque fiche.'}));
+        {titre: titre, note: 'Moyenne par commande complète des cascades de ses dossiers.'}));
       if (!liste || !liste.length) {
-        carte.appendChild(el('div', 'rt-vide', 'Aucun dossier complet.'));
+        carte.appendChild(el('div', 'rt-vide', 'Aucune commande complète.'));
         return;
       }
       var maxi = Math.max.apply(null, liste.map(function (c) { return Math.abs(c.valeur); }).concat([0.01]));
@@ -416,7 +432,7 @@
 
     var ps = periodes(d.dossiers || [], grain);
     if (!ps.length) {
-      carte.appendChild(el('div', 'rt-vide', 'Aucun dossier daté sur cette période.'));
+      carte.appendChild(el('div', 'rt-vide', 'Aucune commande datée sur cette période.'));
       return carte;
     }
     var S = d.seuils || {mb_pct: 40, cout_horaire: 325};
@@ -442,7 +458,7 @@
     var Yv = function (v) { return B2 - (v - lo) / (hi - lo) * (B2 - T2); };
 
     var s = svg('svg', {viewBox: '0 0 ' + W + ' ' + H, 'class': 'rt-temps-svg', role: 'img',
-      'aria-label': 'Dossiers par verdict et ' + (courbe === 'horaire' ? 'coût horaire' : 'marge brute')
+      'aria-label': 'Commandes par verdict et ' + (courbe === 'horaire' ? 'coût horaire' : 'marge brute')
         + ' par ' + grain});
     // Repères : compte de dossiers en haut, valeur de la courbe en bas.
     [[T1, maxN], [B1, 0]].forEach(function (r) {
@@ -503,7 +519,7 @@
       var zone = svg('rect', {x: L + pas * i, y: T1, width: pas, height: B2 - T1, 'class': 'rt-temps-zone'});
       var tot = p.reussi + p.limite + p.sous_seuil;
       bulle(zone, {titre: libelleLong(p.cle, grain),
-        sous: tot ? nb(tot) + ' dossier' + (tot > 1 ? 's' : '') + ' complet' + (tot > 1 ? 's' : '') : 'Aucun dossier complet',
+        sous: tot ? nb(tot) + ' commande' + (tot > 1 ? 's' : '') + ' complète' + (tot > 1 ? 's' : '') : 'Aucune commande complète',
         lignes: [['Réussis', p.reussi ? nb(p.reussi) : ''], ['À la limite', p.limite ? nb(p.limite) : ''],
                  ['Sous un seuil', p.sous_seuil ? nb(p.sous_seuil) : ''], ['En attente', p.attente ? nb(p.attente) : ''],
                  ['Marge brute', p.mb_pct != null ? nb(p.mb_pct, 1) + ' %' : ''],
@@ -556,48 +572,162 @@
     });
     var S = d.seuils || {mb_pct: 40, cout_horaire: 325};
     var tete = el('div', 'rt-ligne rt-ligne-tete');
-    ['Dossier', 'Marge brute', 'Coût horaire', 'Verdict'].forEach(function (c) { tete.appendChild(el('span', '', c)); });
+    ['Commande', 'Marge brute', 'Coût horaire', 'Verdict'].forEach(function (c) { tete.appendChild(el('span', '', c)); });
     carte.appendChild(tete);
     if (!lignes.length) {
-      carte.appendChild(el('div', 'rt-vide', 'Aucun dossier terminé avec un devis validé sur cette période.'));
+      carte.appendChild(el('div', 'rt-vide', 'Aucune commande terminée avec un devis validé sur cette période.'));
       return carte;
     }
     var ehMax = Math.max.apply(null, lignes.map(function (l) {
       return Math.max((l.cout_horaire || {}).haut || 0, l.devis_cout_horaire || 0);
     }).concat([S.cout_horaire * 1.5]));
-    lignes.forEach(function (l) {
-      var r = el('button', 'rt-ligne');
+    function tag(l) {
+      if (l.etat === 'complet') {
+        var v = VERDICT[(l.verdict || {}).global];
+        return el('span', 'rt-tag rt-tag-' + (v ? v.cls : 'neutre'), v ? v.lib : 'Non calculable');
+      }
+      if (l.etat === 'a_verifier') {
+        return bulle(el('span', 'rt-tag rt-tag-bad', 'À vérifier'),
+          (l.hors_norme && l.hors_norme.length)
+            ? {titre: 'Résultat hors norme', note: l.hors_norme.join(', ')
+              + ' : facture ou matière probablement rattachée au mauvais dossier.'}
+            : {titre: 'Résultat incertain', note: (l.raisons || []).join(' ')});
+      }
+      if (l.etat === 'provisoire') {
+        return bulle(el('span', 'rt-tag rt-tag-neutre', 'Provisoire'), {titre: 'Provisoire', note: l.manque && l.manque.length
+          ? 'Il manque : ' + l.manque.join(', ') : 'Marché partiellement facturé'});
+      }
+      return el('span', 'rt-tag rt-tag-neutre', 'Non mesurable');
+    }
+    function ligne(l, enfant) {
+      var r = el('button', 'rt-ligne' + (enfant ? ' rt-ligne-enfant' : ''));
       r.type = 'button';
       r.addEventListener('click', function () { o.ouvrir(l.planning_entry_id); });
       var qui = el('span', 'rt-qui');
-      qui.appendChild(el('b', '', l.client || '(client non renseigné)'));
-      qui.appendChild(el('span', '', [l.reference, l.machine].filter(Boolean).join(' · ')));
-      if (l.modifies && l.modifies.length) {
+      qui.appendChild(el('b', '', enfant ? (l.reference || '') : (l.client || '(client non renseigné)')));
+      qui.appendChild(el('span', '', enfant ? [l.machine, l.date ? l.date.slice(8, 10) + '/' + l.date.slice(5, 7) : '']
+        .filter(Boolean).join(' · ') : [l.reference, nbDossiers(l), l.machine].filter(Boolean).join(' · ')));
+      if (!enfant && l.modifies && l.modifies.length) {
         bulle(qui.appendChild(el('span', 'rt-modifie', 'modifié')),
           {titre: 'Changé par rapport au devis', note: l.modifies.join(', ')});
       }
       r.appendChild(qui);
-      r.appendChild(mini(l.mb_pct, l.devis_mb_pct, S.mb_pct, Math.min(0, S.mb_pct - 30), S.mb_pct + 30, '%', 1));
-      r.appendChild(mini(l.cout_horaire, l.devis_cout_horaire, S.cout_horaire, 0, ehMax, '€/h', 0));
-      if (l.etat === 'complet') {
-        var v = VERDICT[(l.verdict || {}).global];
-        r.appendChild(el('span', 'rt-tag rt-tag-' + (v ? v.cls : 'neutre'), v ? v.lib : 'Non calculable'));
-      } else if (l.etat === 'a_verifier') {
-        r.appendChild(bulle(el('span', 'rt-tag rt-tag-bad', 'À vérifier'),
-          (l.hors_norme && l.hors_norme.length)
-            ? {titre: 'Résultat hors norme', note: l.hors_norme.join(', ')
-              + ' : facture ou matière probablement rattachée au mauvais dossier.'}
-            : {titre: 'Résultat incertain', note: (l.raisons || []).join(' ')}));
-      } else if (l.etat === 'provisoire') {
-        var t = el('span', 'rt-tag rt-tag-neutre', 'Provisoire');
-        bulle(t, {titre: 'Provisoire', note: l.manque && l.manque.length
-          ? 'Il manque : ' + l.manque.join(', ') : 'Marché partiellement facturé'});
-        r.appendChild(t);
-      } else {
-        r.appendChild(el('span', 'rt-tag rt-tag-neutre', 'Non mesurable'));
-      }
-      carte.appendChild(r);
+      r.appendChild(mini(l.mb_pct, enfant ? null : l.devis_mb_pct, S.mb_pct, Math.min(0, S.mb_pct - 30), S.mb_pct + 30, '%', 1));
+      r.appendChild(mini(l.cout_horaire, enfant ? null : l.devis_cout_horaire, S.cout_horaire, 0, ehMax, '€/h', 0));
+      r.appendChild(enfant ? el('span', 'rt-enfant-note', '') : tag(l));
+      return r;
+    }
+    lignes.forEach(function (l) {
+      carte.appendChild(ligne(l, false));
+      // Les dossiers d'une commande, dessous : on y voit lequel a porté le calage.
+      (l.membres || []).forEach(function (m) { carte.appendChild(ligne(m, true)); });
     });
+    return carte;
+  }
+
+  // ── Progression au fil des m² produits ─────────────────────────────
+  /* Axe horizontal : les m² cumulés depuis le début de l'historique, pas le
+     calendrier ; ils avancent avec le travail fait. Chaque point est une
+     moyenne pondérée glissante (calcul serveur), le tireté est la tendance. */
+  var SERIES = [['combine', 'Combiné'], ['marge', 'Marge brute'], ['horaire', 'Coût horaire']];
+  function m2(v) {
+    v = Number(v) || 0;
+    if (v >= 1e6) return nb(v / 1e6, 1) + ' M m²';
+    if (v >= 1e4) return nb(Math.round(v / 1000)) + ' k m²';
+    return nb(v) + ' m²';
+  }
+  function progressionCarte(d, o) {
+    var choix = o.progression || 'combine';
+    var P = d.progression || {};
+    var S = d.seuils || {mb_pct: 40, cout_horaire: 325};
+    var cleV = {combine: 'combine', marge: 'mb_pct', horaire: 'cout_horaire'}[choix];
+    var seuil = {combine: 100, marge: S.mb_pct, horaire: S.cout_horaire}[choix];
+    var unite = {combine: '', marge: ' %', horaire: ' €/h'}[choix];
+    var dec = choix === 'marge' ? 1 : 0;
+    var carte = el('div', 'rt-carte rt-temps rt-progression');
+    var tete = el('div', 'rt-carte-tete');
+    tete.appendChild(bulle(el('b', '', 'Progression'), {titre: 'Progression au fil des m² produits',
+      note: 'Toutes les commandes complètes depuis le début, quelle que soit la période choisie. '
+        + 'Moyenne pondérée sur le dernier sixième des m². Indice combiné : 100 = marge et coût horaire pile sur leurs seuils.'}));
+    var grp = el('div', 'rt-chips');
+    grp.setAttribute('role', 'group');
+    grp.setAttribute('aria-label', 'Indicateur');
+    SERIES.forEach(function (x) {
+      var c = el('button', 'rt-chip rt-chip-petit', x[1]);
+      c.type = 'button';
+      c.setAttribute('aria-pressed', String(choix === x[0]));
+      c.addEventListener('click', function () { o.surFiltre({progression: x[0]}); });
+      grp.appendChild(c);
+    });
+    tete.appendChild(grp);
+    carte.appendChild(tete);
+    var pts = (P.points || []).filter(function (p) { return p[cleV] != null; });
+    if (pts.length < 2) {
+      carte.appendChild(el('div', 'rt-vide', 'Pas encore assez de commandes complètes pour tracer une progression.'));
+      return carte;
+    }
+    var tend = (P.tendance || {})[cleV];
+    if (tend) {
+      var delta = tend.fin - tend.debut;
+      var ecart = el('div', 'rt-prog-tendance ' + (delta >= 0 ? 'rt-ecart-ok' : 'rt-ecart-bad'),
+        (delta >= 0 ? 'En progrès : ' : 'En recul : ') + signe(delta, dec) + ({marge: ' pt', horaire: ' €/h', combine: ' points d\'indice'}[choix])
+        + ' sur ' + m2(tend.m2_fin - tend.m2_debut));
+      bulle(ecart, {titre: 'Tendance', lignes: [['Au début', nb(tend.debut, dec) + unite], ['Aujourd\'hui', nb(tend.fin, dec) + unite],
+        ['Commandes', nb(P.commandes)], ['Surface', m2(P.m2_total)]]});
+      carte.appendChild(ecart);
+    }
+    var W = 1200, L = 56, R = 1186, T = 12, B = 250, H = 280;
+    var xs = pts.map(function (p) { return p.m2; });
+    var ys = pts.map(function (p) { return p[cleV]; }).concat([seuil]);
+    var x0 = 0, x1 = Math.max.apply(null, xs) || 1;
+    var lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
+    var pasY = pasNet(hi - lo || 1, 5);
+    lo = Math.floor(lo / pasY) * pasY - pasY; hi = Math.ceil(hi / pasY) * pasY + pasY;
+    if (choix !== 'marge') lo = Math.max(0, lo);
+    var X = function (v) { return L + (v - x0) / (x1 - x0) * (R - L); };
+    var Y = function (v) { return B - (v - lo) / (hi - lo) * (B - T); };
+    var s = svg('svg', {viewBox: '0 0 ' + W + ' ' + H, 'class': 'rt-temps-svg', role: 'img',
+      'aria-label': 'Progression de l\'indicateur au fil des m² produits'});
+    for (var vy = lo; vy <= hi + 1e-9; vy += pasY) {
+      s.appendChild(svg('line', {x1: L, x2: R, y1: Y(vy), y2: Y(vy), 'class': 'rt-grille'}));
+      var ty = svg('text', {x: L - 8, y: Y(vy) + 4, 'text-anchor': 'end', 'class': 'rt-axe'});
+      ty.textContent = nb(vy) + (choix === 'marge' ? ' %' : '');
+      s.appendChild(ty);
+    }
+    var pasX = pasNet(x1 - x0, 8);
+    for (var vx = pasX; vx <= x1 + 1e-9; vx += pasX) {
+      var tx = svg('text', {x: X(vx), y: H - 6, 'text-anchor': 'middle', 'class': 'rt-axe'});
+      tx.textContent = m2(vx);
+      s.appendChild(tx);
+    }
+    s.appendChild(svg('line', {x1: L, x2: R, y1: Y(seuil), y2: Y(seuil), 'class': 'rt-seuil'}));
+    var ls = svg('text', {x: R, y: Y(seuil) - 5, 'text-anchor': 'end', 'class': 'rt-seuil-lib'});
+    ls.textContent = choix === 'combine' ? 'Seuils' : nb(seuil) + unite;
+    s.appendChild(ls);
+    if (tend) s.appendChild(svg('line', {x1: X(tend.m2_debut), y1: Y(tend.debut), x2: X(tend.m2_fin), y2: Y(tend.fin),
+      'class': 'rt-tendance'}));
+    for (var i = 1; i < pts.length; i++) {
+      s.appendChild(svg('line', {x1: X(pts[i - 1].m2), y1: Y(pts[i - 1][cleV]), x2: X(pts[i].m2), y2: Y(pts[i][cleV]),
+        'class': 'rt-courbe'}));
+    }
+    pts.forEach(function (p, i) {
+      var v = p[cleV];
+      s.appendChild(svg('circle', {cx: X(p.m2), cy: Y(v), r: pts.length > 80 ? 2.5 : 3.5,
+        'class': 'rt-pt-svg rt-f-' + (v >= seuil ? 'ok' : 'bad')}));
+      // Zone de survol : de la moitié du segment précédent à la moitié du suivant.
+      var g = i ? (X(pts[i - 1].m2) + X(p.m2)) / 2 : L;
+      var dr = i < pts.length - 1 ? (X(p.m2) + X(pts[i + 1].m2)) / 2 : R;
+      var zone = svg('rect', {x: g, y: T, width: Math.max(1, dr - g), height: B - T, 'class': 'rt-temps-zone'});
+      bulle(zone, {titre: m2(p.m2) + ' produits',
+        sous: [p.client, p.commande, p.date ? p.date.slice(8, 10) + '/' + p.date.slice(5, 7) + '/' + p.date.slice(0, 4) : '']
+          .filter(Boolean).join(' · '),
+        lignes: [['Marge brute', p.mb_pct != null ? nb(p.mb_pct, 1) + ' %' : ''],
+                 ['Coût horaire', p.cout_horaire != null ? nb(p.cout_horaire) + ' €/h' : ''],
+                 ['Indice combiné', p.combine != null ? nb(p.combine) : ''],
+                 ['Moyenne sur', nb(p.n) + ' commande' + (p.n > 1 ? 's' : '')]]});
+      s.appendChild(zone);
+    });
+    carte.appendChild(s);
     return carte;
   }
 
@@ -624,6 +754,7 @@
     grille.appendChild(causes(d));
     conteneur.appendChild(grille);
     conteneur.appendChild(temporel(d, o));
+    conteneur.appendChild(progressionCarte(d, o));
     conteneur.appendChild(liste(d, o));
   }
 
