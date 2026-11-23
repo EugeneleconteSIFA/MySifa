@@ -6,7 +6,8 @@ L8 puis L5 et L7 enchaînés sans changer de dossier, fin de production à 13 h
 avec 19 162 m. Ce que le test protège :
 
 1. L'aperçu propose les autres lignes de la commande sur la même machine,
-   avec la quantité de leur OF, et pas les dossiers d'une autre commande.
+   avec la quantité de leur OF, et pas les dossiers d'une autre commande ;
+   le dossier du cycle reçoit le reste de son OF (déjà déclaré ailleurs ôté).
 2. Le découpage suit le prorata des quantités : heures et compteurs des
    coupures, le dernier segment finit sur la fin de production d'origine.
 3. L'application crée fin / démarrage / production à chaque coupure, déplace
@@ -68,6 +69,12 @@ class TestRepartition(unittest.TestCase):
                        duree_heures, statut, created_at, updated_at, of_import_id)
                        VALUES (?,?,?,?,2,'attente','2026-11-09T15:00:00','2026-11-09T15:00:00',?)""",
                     (MACHINE_ID, pos + 1, ref, "PERIMEDIAS", of_id)).lastrowid
+            # Cycle de la veille au soir sur L8 : 540 000 déjà déclarées.
+            _saisie(conn, "2026-11-19T15:49:39", "01", "01 - Démarrer un dossier", "9932856 - L8",
+                    metrage_total_debut=7817311)
+            _saisie(conn, "2026-11-19T17:30:00", "03", "03 - Production", "9932856 - L8")
+            _saisie(conn, "2026-11-19T20:20:28", "89", "89 - Fin de production", "9932856 - L8",
+                    quantite_traitee=540000, metrage_total_fin=7823062, fin_dossier=1)
             _saisie(conn, "2026-11-20T06:34:10", "01", "01 - Démarrer un dossier", "9932856 - L8",
                     metrage_total_debut=7823062)
             self.prod = _saisie(conn, "2026-11-20T06:39:53", "03", "03 - Production", "9932856 - L8")
@@ -92,6 +99,10 @@ class TestRepartition(unittest.TestCase):
         noms = [c["no_dossier"] for c in ap["candidats"]]
         self.assertEqual(noms, ["9932856 - L5", "9932856 - L7"])
         self.assertEqual(ap["candidats"][0]["qte_of"], 1080000)
+        # Reste de l'OF de L8 : 783 000 − 540 000 déjà déclarées la veille.
+        self.assertEqual(ap["reste"], 243000)
+        self.assertEqual(ap["deja"], 540000)
+        self.assertEqual(ap["candidats"][0]["reste"], 1080000)
         self.assertEqual(ap["metres"], 19162)
         self.assertEqual(ap["debut"], "2026-11-20T06:39:53")
 
@@ -118,7 +129,8 @@ class TestRepartition(unittest.TestCase):
             lignes = [dict(r) for r in conn.execute(
                 """SELECT date_operation, operation_code, no_dossier, quantite_traitee,
                           metrage_total_debut, metrage_total_fin, fin_dossier, est_manuel
-                     FROM production_data WHERE machine=? ORDER BY date_operation, id""",
+                     FROM production_data WHERE machine=? AND date_operation >= '2026-11-20'
+                    ORDER BY date_operation, id""",
                 (MACHINE,)).fetchall()]
             fins = [l for l in lignes if l["operation_code"] == "89"]
             self.assertEqual([(f["no_dossier"], f["quantite_traitee"]) for f in fins],
