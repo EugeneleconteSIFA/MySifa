@@ -83,7 +83,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ia.css">
-<link rel="stylesheet" href="/static/mysifa_adv.css?v=6">
+<link rel="stylesheet" href="/static/mysifa_adv.css?v=8">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -126,7 +126,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_adv.js?v=5"></script>
+<script src="/static/mysifa_adv.js?v=8"></script>
 </body>
 </html>
 """)

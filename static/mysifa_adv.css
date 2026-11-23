@@ -290,12 +290,14 @@ td.etape.mef-neutre .adv-etat{box-shadow:0 0 0 2px var(--muted)}
 .fi-jalon.ok .fi-jalon-p{border-color:var(--success);background:var(--success)}
 .fi-jalon.warn .fi-jalon-p{border-color:var(--warn);background:var(--warn)}
 .fi-jalon.danger .fi-jalon-p{border-color:var(--danger);background:var(--danger)}
-.fi-jalon-c{padding-right:8px}
-.fi-jalon-l{font-size:11.5px;font-weight:600;color:var(--muted)}
+.fi-jalon-c{padding-right:8px;min-width:0}
+.fi-jalon-l{font-size:11.5px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fi-jalon-d{font-size:14px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .fi-jalon.warn .fi-jalon-d{color:var(--warn)}
 .fi-jalon.danger .fi-jalon-d{color:var(--danger)}
-.fi-jalon-r{font-size:11.5px;color:var(--muted)}
+.fi-jalon-r{font-size:11.5px;color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fi-jalon-x{font-weight:600;color:var(--text2)}
+.fi-jalon.warn .fi-jalon-x{color:var(--warn)}
 .fi-jalon.vide .fi-jalon-d{color:var(--muted);font-weight:600}
 
 /* Préparation, production, départs */

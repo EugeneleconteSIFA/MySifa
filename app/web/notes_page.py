@@ -115,7 +115,7 @@ NOTES_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_notes_editeur.css?v=7" data-nted="1">
-<link rel="stylesheet" href="/static/mysifa_notes.css?v=11">
+<link rel="stylesheet" href="/static/mysifa_notes.css?v=12">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>

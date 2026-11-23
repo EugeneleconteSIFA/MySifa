@@ -116,6 +116,16 @@
     var u = l && l.stock && l.stock.unite;
     return u && !/^[ée]tiquette/i.test(u) ? u : '';
   }
+  // « 650 cartons », « 1 carton » : en français, le pluriel commence à 2.
+  function accord(mot, q) {
+    if (!mot || Math.abs(Number(q) || 0) < 2 || /[sxz]$/i.test(mot)) return mot;
+    return mot + 's';
+  }
+  // Quantité suivie de son unité accordée (rien pour l'étiquette, unité par défaut).
+  function qteU(l, q) {
+    var u = unite(l);
+    return fN(q) + (u ? ' ' + accord(u, q) : '');
+  }
   function libOrigine(o) { return o === 1 ? 'Fabrication' : o === 2 ? 'Stock' : o === 3 ? 'Sous-traitance' : '—'; }
 
   /* ── Infobulle instantanée ──────────────────────────────────── */
@@ -416,7 +426,7 @@
         h('div', {className: 'adv-mono', text: l.article}), h('div', {className: 'des-l', text: l.designation}));
     }},
     {cle: 'qte', label: 'Commandé', tri: 'qte', num: true, td: function (l) {
-      return h('td', {className: 'num'}, fN(l.qte), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + unite(l)}) : null);
+      return h('td', {className: 'num'}, fN(l.qte), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + accord(unite(l), l.qte)}) : null);
     }},
     {cle: 'stock', label: 'En stock', tri: 'stock', num: true, td: function (l) {
       var a = l.stock ? l.stock.alloue : 0;
@@ -590,21 +600,20 @@
   // survol ou dans la fiche.
   function cartePrepa(l, rang) {
     var st = l.stock || {};
-    var u = unite(l) ? ' ' + unite(l) : '';
     var qte, qteSous = null;
     if (l.groupe === 'attente') {
-      qte = 'À produire : ' + fN(l.reste) + u;
+      qte = 'À produire : ' + qteU(l, l.reste);
       qteSous = l.fin_prod
         ? h('div', {className: 'c-sous', text: 'Fin de prod ' + dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '')})
         : h('div', {className: 'c-sous', text: l.etapes.prod.detail});
     } else {
-      qte = fN(l.reste) + u;
-      if (st.alloue < l.reste) qteSous = h('div', {className: 'c-sous adv-date-tard', text: fN(st.alloue) + u + ' en stock'});
+      qte = qteU(l, l.reste);
+      if (st.alloue < l.reste) qteSous = h('div', {className: 'c-sous adv-date-tard', text: qteU(l, st.alloue) + ' en stock'});
     }
     var empl;
     if (st.emplacements && st.emplacements.length && l.groupe !== 'attente') {
       empl = h('div', {className: 'adv-empl'}, st.emplacements.map(function (e) {
-        return h('span', {'data-tip': tip(l.cle + '|lot' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + fN(e.quantite) + u, e.date_entree ? 'Entré le ' + dateLongue(e.date_entree) + ' (FIFO)' : null)},
+        return h('span', {'data-tip': tip(l.cle + '|lot' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + qteU(l, e.quantite), e.date_entree ? 'Entré le ' + dateLongue(e.date_entree) + ' (FIFO)' : null)},
           h('b', {text: e.emplacement}), ' · ' + fN(e.quantite));
       }));
     } else {
@@ -969,7 +978,6 @@
     if (!sansAdresse) { S.ligne = cle; ecrireUrl(); }
     else S.ligne = cle;
     var st = l.stock || {};
-    var u = unite(l) ? ' ' + unite(l) : '';
     var fermer = function () { fermerFiche(); };
 
     // ── En-tête ──
@@ -1036,7 +1044,7 @@
     var pc = function (v) { return (100 * v / qte).toFixed(2) + '%'; };
     var chiffre = function (lib, val, cls) { return h('div', {className: 'fi-chiffre ' + (cls || '')}, h('div', {className: 'fi-chiffre-v', text: fN(val)}), h('div', {className: 'fi-chiffre-l', text: lib})); };
     var quantites = h('div', {className: 'fi-carte'},
-      h('h4', {}, 'Quantités', u ? h('span', {className: 'adv-muet', text: ' · en' + u + 's'}) : null),
+      h('h4', {}, 'Quantités', unite(l) ? h('span', {className: 'adv-muet', text: ' · en ' + accord(unite(l), 2)}) : null),
       h('div', {className: 'fi-chiffres'},
         chiffre('Commandé', l.qte), chiffre('Déjà livré', l.livre, 'livre'), chiffre('En stock', st.alloue || 0, 'stock'), chiffre('À fabriquer', l.a_fabriquer || 0, 'fab')),
       h('div', {className: 'fi-barre', role: 'img', 'aria-label': 'Répartition de la quantité commandée'},
@@ -1047,20 +1055,26 @@
 
     // ── Échéances : une frise datée ──
     var finTard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
-    var jalon = function (lib, date, cls, plus) {
+    // Un jalon = un libellé court, la date seule en gros, et dessous le
+    // détail (heure, saisie ou prévue) suivi de l'écart à aujourd'hui. Rien
+    // ne s'ajoute à la date : sinon elle déborde sur la colonne voisine.
+    var jalon = function (lib, date, cls, detail) {
       return h('div', {className: 'fi-jalon ' + (cls || '') + (date ? '' : ' vide')},
         h('div', {className: 'fi-jalon-p'}),
         h('div', {className: 'fi-jalon-c'},
           h('div', {className: 'fi-jalon-l', text: lib}),
-          h('div', {className: 'fi-jalon-d', text: date ? dateFr(date) + (plus || '') : '—'}),
+          h('div', {className: 'fi-jalon-d', text: date ? dateFr(date) : '—'}),
+          date && detail ? h('div', {className: 'fi-jalon-r fi-jalon-x', text: detail}) : null,
           date ? h('div', {className: 'fi-jalon-r', text: relatif(date)}) : null));
     };
+    var detailFin = l.fin_prod
+      ? (l.fin_prod_reelle ? 'saisie' : 'prévue') + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : '')
+      : '';
     var echeances = h('div', {className: 'fi-carte'},
       h('h4', {text: 'Échéances'}),
       h('div', {className: 'fi-jalons'},
         jalon('Commande', l.creee_le, ''),
-        jalon(l.fin_prod_reelle ? 'Fin de prod (saisie)' : 'Fin de prod (prévue)', l.fin_prod, finTard ? 'warn' : (l.fin_prod_reelle ? 'ok' : ''),
-          l.fin_prod && heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : ''),
+        jalon('Fin de prod', l.fin_prod, finTard ? 'warn' : (l.fin_prod_reelle ? 'ok' : ''), detailFin),
         jalon('Expédition', l.expedition, l.retard ? 'danger' : 'fort'),
         jalon('Livraison', l.livraison, '')),
       finTard ? h('div', {className: 'fi-note fi-alerte', text: 'La production finit après la date d’expédition.'}) : null);
@@ -1068,7 +1082,7 @@
     // ── Préparation et stock ──
     var empl = (st.emplacements || []).length
       ? h('div', {className: 'adv-empl'}, st.emplacements.map(function (e) {
-          return h('span', {'data-tip': tip(l.cle + '|fiempl' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + fN(e.quantite) + u, e.date_entree ? 'Entré le ' + dateFr(e.date_entree) + ' (FIFO)' : null)},
+          return h('span', {'data-tip': tip(l.cle + '|fiempl' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + qteU(l, e.quantite), e.date_entree ? 'Entré le ' + dateFr(e.date_entree) + ' (FIFO)' : null)},
             h('b', {text: e.emplacement}), ' · ' + fN(e.quantite));
         }))
       : h('div', {className: 'adv-muet', text: st.connu ? 'Rien d’attribué à cette ligne.' : 'Article absent de MyStock.'});
@@ -1078,7 +1092,7 @@
         h('span', {className: 'adv-badge ' + ({prete: 'ok', en_cours: 'warn'}[l.prepa.statut] || ''), text: LIB_PREPA[l.prepa.statut] || l.prepa.statut}),
         l.prepa.maj_par ? h('span', {className: 'adv-muet', text: l.prepa.maj_par + ' · ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)}) : null,
         h('div', {className: 'fi-prepa-b'}, boutonsPrepa(l))),
-      h('div', {className: 'fi-sous-t', text: 'Où prélever' + (st.connu ? ' · ' + fN(st.total) + u + ' en stock pour l’article' : '')}),
+      h('div', {className: 'fi-sous-t', text: 'Où prélever' + (st.connu ? ' · ' + qteU(l, st.total) + ' en stock pour l’article' : '')}),
       empl);
 
     // ── Production et départs ──
