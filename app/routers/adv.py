@@ -11,6 +11,7 @@ Une ligne de commande se désigne par sa clé métier `numero` + `ligne`, comme
 dans `rvgi_rattachements` : l'id du miroir change à chaque synchro.
 """
 
+import json
 import re
 from typing import Optional
 
@@ -61,12 +62,14 @@ def _servir(fn, *args):
 def commandes(request: Request):
     # Le carnet complet est à l'ADV et à la direction ; la logistique et
     # l'expédition n'ont que l'onglet Prépa (/api/adv/prepa).
-    _exiger(request, ROLES_ADV)
+    user = _exiger(request, ROLES_ADV)
     data = _servir(adv.construire)
     data["droits"] = {"adv": True, "prepa": True}
-    # Les règles de couleur voyagent avec le carnet : une requête, pas deux.
+    # Les règles de couleur et l'ordre des colonnes de la personne voyagent
+    # avec le carnet : une requête, pas trois.
     with get_db() as conn:
         data["mises_en_forme"] = mef.lister(conn)
+        data["colonnes_ordre"] = _ordre_colonnes(conn, user)
     return data
 
 
@@ -182,3 +185,49 @@ def enregistrer_mises_en_forme(body: MisesEnFormeIn, request: Request):
                        "apres": regles},
                request=request)
     return {"regles": apres}
+
+
+# ── Préférences par utilisateur : ordre des colonnes du carnet ───────────────
+
+_CLE_ORDRE = "carnet.colonnes"
+
+
+def _ordre_valide(ordre) -> list:
+    """Clés de colonne connues, sans doublon — le reste est ignoré."""
+    vus, out = set(), []
+    for c in ordre if isinstance(ordre, list) else []:
+        c = str(c)
+        if c in mef.TYPES and c not in vus:
+            vus.add(c)
+            out.append(c)
+    return out
+
+
+def _ordre_colonnes(conn, user) -> list:
+    try:
+        r = conn.execute("SELECT valeur FROM adv_preferences WHERE user_id=? AND cle=?",
+                         (user.get("id"), _CLE_ORDRE)).fetchone()
+        return _ordre_valide(json.loads(r["valeur"])) if r else []
+    except Exception:
+        return []
+
+
+class OrdreIn(BaseModel):
+    ordre: list
+
+
+@router.put("/api/adv/preferences/colonnes")
+def enregistrer_ordre(body: OrdreIn, request: Request):
+    """L'ordre des colonnes de la personne connectée ; liste vide = ordre par défaut."""
+    user = _exiger(request, ROLES_ADV)
+    ordre = _ordre_valide(body.ordre)
+    with get_db() as conn:
+        if ordre:
+            conn.execute("""
+                INSERT INTO adv_preferences (user_id, cle, valeur, maj_le) VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, cle) DO UPDATE SET valeur=excluded.valeur, maj_le=excluded.maj_le
+            """, (user.get("id"), _CLE_ORDRE, json.dumps(ordre), adv.maintenant()))
+        else:
+            conn.execute("DELETE FROM adv_preferences WHERE user_id=? AND cle=?", (user.get("id"), _CLE_ORDRE))
+        conn.commit()
+    return {"ordre": ordre}

@@ -390,14 +390,33 @@ def _etape_prepa(p) -> Dict[str, Any]:
     return _etape("non", "Pas encore préparée")
 
 
-def _etape_depart(deps) -> Dict[str, Any]:
+# Un départ parti il y a plus longtemps que ça ne « prévoit » plus rien : la
+# ligne est toujours ouverte, c'est un envoi précédent (partiel, ou d'une autre
+# ligne de la même commande).
+JOURS_DEPART_RECENT = 7
+
+
+def _etape_depart(deps, aujourdhui: str) -> Dict[str, Any]:
+    """Un départ PRÉVU : à venir (ou du jour), ou parti il y a moins de 7 jours.
+
+    Relevé le 23/11/2026 : une ligne encore ouverte affichait « Départ prévu :
+    Oui » sur la foi d'un enlèvement du 29/10, rattaché par le numéro de
+    commande — un envoi antérieur. Un départ passé reste listé dans la fiche,
+    il ne valide plus l'étape.
+    """
     if not deps:
         return _etape("non", "Aucun départ MyExpé")
-    partis = [d for d in deps if d.get("parti_le")]
+    recent = (date.fromisoformat(aujourdhui) - timedelta(days=JOURS_DEPART_RECENT)).isoformat()
+    partis = [d for d in deps if d.get("parti_le") and str(d["parti_le"])[:10] >= recent]
     if partis:
         return _etape("oui", "Parti le %s" % _fr(partis[-1]["parti_le"]))
-    valides = [d for d in deps if d.get("statut") == "valide"]
-    d = (valides or deps)[0]
+    a_venir = [d for d in deps if not d.get("parti_le")
+               and (d.get("date_enlevement") or "")[:10] >= aujourdhui]
+    if not a_venir:
+        dernier = max((d.get("date_enlevement") or "")[:10] for d in deps)
+        return _etape("non", "Aucun départ à venir · dernier le %s" % _fr(dernier))
+    valides = [d for d in a_venir if d.get("statut") == "valide"]
+    d = (valides or a_venir)[0]
     txt = "Enlèvement prévu le %s" % _fr(d.get("date_enlevement"))
     return _etape("oui" if valides else "en_cours", txt if valides else txt + " (à valider)")
 
@@ -591,7 +610,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "prod": _etape_prod(l, ds),
             "stock": _etape_stock(l["reste"], st["alloue"], st["total"], st["unite"]),
             "prepa": _etape_prepa(p),
-            "depart": _etape_depart(deps),
+            "depart": _etape_depart(deps, a_venir),
         }
         f = forcages.get(l["cle"], {})
         for k in ETAPES:
@@ -640,7 +659,8 @@ GROUPES_PREPA = (
 
 def groupe_prepa(l: Dict[str, Any]) -> Optional[str]:
     """Où ranger la ligne dans l'onglet Prépa — None : elle n'y a pas sa place."""
-    if l["etapes"]["depart"]["calcul"] == "oui" and any(d.get("parti_le") for d in l["departs"]):
+    dep = l["etapes"]["depart"]
+    if dep["calcul"] == "oui" and dep["detail"].startswith("Parti"):
         return None                       # déjà partie
     statut = l["prepa"]["statut"]
     if statut == "prete":
