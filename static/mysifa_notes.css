@@ -24,7 +24,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .logo:hover .logo-brand span{color:var(--text)}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
-.msb-nav{display:flex;flex-direction:column;flex:1;min-height:0}
+/* Le menu défile seul : l'arbre des pages ne déborde plus sur le pied. */
+.msb-nav{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;margin:0 -12px;padding:0 12px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:background .15s,color .15s;margin-bottom:2px;text-decoration:none}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .nav-btn svg{flex-shrink:0}
