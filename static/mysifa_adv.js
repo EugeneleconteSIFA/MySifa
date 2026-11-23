@@ -36,6 +36,9 @@
     ligne: null,                 // clé « numero-ligne » de la fiche ouverte
     reglages: null,              // 'mise_en_forme' : fenêtre des règles de couleur
     mef: [],                     // règles de mise en forme (communes au service)
+    ordre: [],                   // ordre des colonnes du carnet, propre à la personne
+    colDrag: null,
+    ficheEtape: null,            // étape dépliée pour correction dans la fiche
     horizon: BOOT.horizon || 21,
     groupe: 'tous',
     carnet: null,
@@ -96,7 +99,7 @@
   function dateFr(s) {
     if (!s) return '';
     var d = String(s).slice(0, 10).split('-');
-    return d.length === 3 ? d[2] + '/' + d[1] : String(s);
+    return d.length === 3 ? d[2] + '/' + d[1] + '/' + d[0] : String(s);
   }
   function dateLongue(s) {
     if (!s) return '';
@@ -189,6 +192,7 @@
       if (S.onglet === 'commandes') {
         S.carnet = await api('/api/adv/commandes');
         S.mef = S.carnet.mises_en_forme || [];
+        S.ordre = S.carnet.colonnes_ordre || [];
       }
       else S.prepa = await api('/api/adv/prepa?horizon=' + encodeURIComponent(S.horizon));
     } catch (e) {
@@ -354,6 +358,9 @@
         h('button', {type: 'button', className: 'btn adv-btn-icone', 'aria-label': 'Mise en forme conditionnelle',
           'data-tip': tip('btn-mef', 'Mise en forme conditionnelle', S.mef.length ? S.mef.length + ' règle(s) actives' : 'Aucune règle'),
           html: ICONE_REGLAGES, onClick: function () { ouvrirReglages(); }}),
+        S.ordre.length ? h('button', {type: 'button', className: 'btn btn-petit',
+          'data-tip': tip('btn-ordre', 'Colonnes rangées à votre façon', 'Revenir à l’ordre par défaut'),
+          onClick: function () { S.ordre = []; sauverOrdre(); render(); toast('Ordre des colonnes par défaut.'); }}, 'Ordre par défaut') : null,
         h('button', {type: 'button', className: 'btn', onClick: async function () { await charger(); render(); toast('Carnet actualisé.'); }}, 'Actualiser')));
     c.appendChild(tete);
     if (avertissements(c, d)) return;
@@ -394,10 +401,87 @@
 
   // Seul le tableau se reconstruit à la frappe : la barre de recherche garde
   // son focus et son curseur.
+  //
+  // Les colonnes sont décrites une fois ici ; leur ORDRE appartient à chaque
+  // personne (glisser un en-tête, enregistré en base par /api/adv/preferences).
+  var COLONNES = [
+    {cle: 'commande', label: 'Commande', tri: 'commande', td: function (l) {
+      return h('td', {className: 'adv-mono'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne}));
+    }},
+    {cle: 'client', label: 'Client', tri: 'client', td: function (l) {
+      return h('td', {className: 'client', text: l.client});
+    }},
+    {cle: 'article', label: 'Article', tri: 'article', td: function (l) {
+      return h('td', {className: 'des', 'data-tip': tip(l.cle + '|des', l.article, l.designation, libOrigine(l.origine) + (l.ref_client ? ' · réf. client ' + l.ref_client : ''))},
+        h('div', {className: 'adv-mono', text: l.article}), h('div', {className: 'des-l', text: l.designation}));
+    }},
+    {cle: 'qte', label: 'Commandé', tri: 'qte', num: true, td: function (l) {
+      return h('td', {className: 'num'}, fN(l.qte), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + unite(l)}) : null);
+    }},
+    {cle: 'stock', label: 'En stock', tri: 'stock', num: true, td: function (l) {
+      var a = l.stock ? l.stock.alloue : 0;
+      return h('td', {className: 'num' + (a ? '' : ' adv-muet'),
+        'data-tip': tip(l.cle + '|stock', 'Stock MyStock attribué à la ligne',
+          fN(a) + ' sur ' + fN(l.stock ? l.stock.total : 0) + ' en stock pour cet article',
+          l.livre ? 'Déjà livré : ' + fN(l.livre) + ' · reste à livrer ' + fN(l.reste) : 'Les lignes les plus urgentes sont servies d’abord.')},
+        a ? fN(a) : '—');
+    }},
+    {cle: 'a_fabriquer', label: 'À fabriquer', tri: 'a_fabriquer', num: true, td: function (l) {
+      return h('td', {className: 'num' + (l.a_fabriquer > 0 ? ' adv-fort' : ' adv-muet')}, l.a_fabriquer > 0 ? fN(l.a_fabriquer) : '—');
+    }},
+    {cle: 'expedition', label: 'Expédition', tri: 'expedition', td: function (l) {
+      return h('td', {className: 'date' + (l.retard ? ' adv-date-retard' : ''), text: dateFr(l.expedition) || '—'});
+    }},
+    {cle: 'livraison', label: 'Livraison', tri: 'livraison', td: function (l) {
+      return h('td', {className: 'date', text: dateFr(l.livraison) || '—'});
+    }},
+    {cle: 'fin_prod', label: 'Fin de prod', tri: 'fin_prod', td: function (l) {
+      var tard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
+      return h('td', {className: 'date' + (tard ? ' adv-date-tard' : (l.fin_prod ? '' : ' adv-muet')),
+        'data-tip': l.fin_prod ? tip(l.cle + '|fin', l.fin_prod_reelle ? 'Fin de production saisie' : 'Fin de production planifiée',
+          dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : ''), tard ? 'Après la date d’expédition' : null) : null,
+        text: l.fin_prod ? dateFr(l.fin_prod) : '—'});
+    }}
+  ].concat(ETAPES.map(function (e) {
+    return {cle: 'etape_' + e.cle, label: e.label, etape: true, td: function (l) {
+      return h('td', {className: 'etape'}, pastille(l, e.cle));
+    }};
+  }));
+  var COL_PAR_CLE = {};
+  COLONNES.forEach(function (c) { COL_PAR_CLE[c.cle] = c; });
+
+  // L'ordre de la personne, complété des colonnes qu'il ne connaît pas encore
+  // (une colonne ajoutée plus tard apparaît, à sa place par défaut, en fin).
+  function colonnesOrdonnees() {
+    var vus = {}, out = [];
+    (S.ordre || []).forEach(function (k) { if (COL_PAR_CLE[k] && !vus[k]) { vus[k] = 1; out.push(COL_PAR_CLE[k]); } });
+    COLONNES.forEach(function (c) { if (!vus[c.cle]) out.push(c); });
+    return out;
+  }
+  var minuteurOrdre = null;
+  function sauverOrdre() {
+    clearTimeout(minuteurOrdre);
+    minuteurOrdre = setTimeout(async function () {
+      try { await api('/api/adv/preferences/colonnes', {method: 'PUT', body: {ordre: S.ordre}}); }
+      catch (e) { toast('Ordre des colonnes non enregistré : ' + e.message, 'danger'); }
+    }, 400);
+  }
+  function deplacerColonne(de, vers) {
+    var ordre = colonnesOrdonnees().map(function (c) { return c.cle; });
+    var i = ordre.indexOf(de), j = ordre.indexOf(vers);
+    if (i === -1 || j === -1 || i === j) return;
+    ordre.splice(i, 1);
+    ordre.splice(ordre.indexOf(vers) + (i < j ? 1 : 0), 0, de);
+    S.ordre = ordre;
+    sauverOrdre();
+    render();
+  }
+
   function renderTableSeule() {
     var hote = document.getElementById('adv-table-hote');
     if (!hote) return;
-    var y = (hote.querySelector('.adv-table-wrap') || {}).scrollTop || 0;
+    var ancien = hote.querySelector('.adv-table-wrap') || {};
+    var y = ancien.scrollTop || 0, x = ancien.scrollLeft || 0;
     hote.textContent = '';
     var d = S.carnet || {};
     var lignes = trier(filtrer(d.lignes || []));
@@ -405,56 +489,67 @@
       hote.appendChild(h('div', {className: 'adv-vide', text: S.q ? 'Aucun résultat pour « ' + S.q + ' »' : 'Aucune ligne pour ce filtre.'}));
       return;
     }
-    var th = function (lib, cle, cls) {
-      var actif = S.tri === cle;
-      return h('th', {className: (cls || '') + (cle ? ' triable' : '') + (actif ? ' trie' : ''),
-        onClick: cle ? function () {
-          if (S.tri !== cle) { S.tri = cle; S.sens = 'asc'; }
-          else if (S.sens === 'asc') S.sens = 'desc';
-          else { S.tri = 'expedition'; S.sens = 'asc'; }
-          renderTableSeule(); ecrireUrl();
-        } : null}, lib + (actif ? (S.sens === 'asc' ? ' ↑' : ' ↓') : ''));
-    };
-    var thead = h('thead', {}, h('tr', {},
-      th('Commande', 'commande'), th('Client', 'client'), th('Article', 'article'),
-      th('Commandé', 'qte', 'num'), th('En stock', 'stock', 'num'), th('À fabriquer', 'a_fabriquer', 'num'),
-      th('Expédition', 'expedition'), th('Livraison', 'livraison'), th('Fin de prod', 'fin_prod'),
-      ETAPES.map(function (e, i) { return th(e.label, null, 'etape' + (i === 0 ? ' sep' : '')); })));
+    var cols = colonnesOrdonnees();
+    var trTete = h('tr');
+    cols.forEach(function (c, i) {
+      var actif = c.tri && S.tri === c.tri;
+      var sep = c.etape && !(i > 0 && cols[i - 1].etape);
+      var th = h('th', {className: (c.num ? 'num' : '') + (c.etape ? ' etape' : '') + (sep ? ' sep' : '')
+          + (c.tri ? ' triable' : '') + (actif ? ' trie' : ''),
+        draggable: 'true', 'data-col': c.cle,
+        title: 'Glisser pour déplacer la colonne' + (c.tri ? ' · cliquer pour trier' : '')},
+        c.label + (actif ? (S.sens === 'asc' ? ' ↑' : ' ↓') : ''));
+      if (c.tri) th.addEventListener('click', function () {
+        if (S.tri !== c.tri) { S.tri = c.tri; S.sens = 'asc'; }
+        else if (S.sens === 'asc') S.sens = 'desc';
+        else { S.tri = 'expedition'; S.sens = 'asc'; }
+        renderTableSeule(); ecrireUrl();
+      });
+      th.addEventListener('dragstart', function (ev) {
+        S.colDrag = c.cle; th.classList.add('attrapee');
+        try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', c.cle); } catch (e) {}
+      });
+      th.addEventListener('dragend', function () {
+        S.colDrag = null;
+        trTete.querySelectorAll('th').forEach(function (t) { t.classList.remove('attrapee', 'cible'); });
+      });
+      th.addEventListener('dragover', function (ev) {
+        if (!S.colDrag || S.colDrag === c.cle) return;
+        ev.preventDefault(); th.classList.add('cible');
+      });
+      th.addEventListener('dragleave', function () { th.classList.remove('cible'); });
+      th.addEventListener('drop', function (ev) {
+        ev.preventDefault(); th.classList.remove('cible');
+        if (S.colDrag && S.colDrag !== c.cle) deplacerColonne(S.colDrag, c.cle);
+        S.colDrag = null;
+      });
+      trTete.appendChild(th);
+    });
     var tbody = h('tbody');
     lignes.forEach(function (l) {
-      var finTard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
-      var finTxt = l.fin_prod ? dateFr(l.fin_prod) : '';
-      var tr = h('tr', {onClick: function () { ouvrirFiche(l.cle); }},
-        h('td', {className: 'adv-mono'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne})),
-        h('td', {className: 'client', text: l.client}),
-        h('td', {className: 'des', 'data-tip': tip(l.cle + '|des', l.article, l.designation, libOrigine(l.origine) + (l.ref_client ? ' · réf. client ' + l.ref_client : ''))},
-          h('div', {className: 'adv-mono', text: l.article}), h('div', {className: 'des-l', text: l.designation})),
-        h('td', {className: 'num'}, fN(l.qte), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + unite(l)}) : null),
-        h('td', {className: 'num' + (l.stock && l.stock.alloue ? '' : ' adv-muet'),
-          'data-tip': tip(l.cle + '|stock', 'Stock MyStock attribué à la ligne',
-            fN(l.stock ? l.stock.alloue : 0) + ' sur ' + fN(l.stock ? l.stock.total : 0) + ' en stock pour cet article',
-            l.livre ? 'Déjà livré : ' + fN(l.livre) + ' · reste à livrer ' + fN(l.reste) : 'Les lignes les plus urgentes sont servies d’abord.')},
-          l.stock && l.stock.alloue ? fN(l.stock.alloue) : '—'),
-        h('td', {className: 'num' + (l.a_fabriquer > 0 ? ' adv-fort' : ' adv-muet')}, l.a_fabriquer > 0 ? fN(l.a_fabriquer) : '—'),
-        h('td', {className: l.retard ? 'adv-date-retard' : '', text: dateFr(l.expedition) || '—'}),
-        h('td', {text: dateFr(l.livraison) || '—'}),
-        h('td', {className: finTard ? 'adv-date-tard' : (l.fin_prod ? '' : 'adv-muet'),
-          'data-tip': l.fin_prod ? tip(l.cle + '|fin', l.fin_prod_reelle ? 'Fin de production saisie' : 'Fin de production planifiée',
-            dateLongue(l.fin_prod) + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : ''),
-            finTard ? 'Après la date d’expédition' : null) : null,
-          text: finTxt || '—'}),
-        ETAPES.map(function (e, i) { return h('td', {className: 'etape' + (i === 0 ? ' sep' : '')}, pastille(l, e.cle)); }));
-      if (S.mef.length) {
-        COLS_MEF.forEach(function (col, i) {
-          var ton = tonCellule(l, col);
-          if (ton) tr.children[i].classList.add('mef', 'mef-' + ton);
-        });
-      }
+      var tr = h('tr', {onClick: function () { ouvrirFiche(l.cle); }});
+      cols.forEach(function (c, i) {
+        var td = c.td(l);
+        if (c.etape && !(i > 0 && cols[i - 1].etape)) td.classList.add('sep');
+        var ton = S.mef.length ? tonCellule(l, c.cle) : null;
+        if (ton) {
+          td.classList.add('mef', 'mef-' + ton);
+          // Hors étapes (déjà en pastille), la valeur passe dans une pastille
+          // teintée : on voit la règle sans perdre la lecture de la colonne.
+          if (!c.etape) {
+            var p = h('span', {className: 'mef-p'});
+            while (td.firstChild) p.appendChild(td.firstChild);
+            td.appendChild(p);
+          }
+        }
+        tr.appendChild(td);
+      });
       tbody.appendChild(tr);
     });
-    var wrap = h('div', {className: 'adv-table-wrap'}, h('table', {className: 'adv-table'}, thead, tbody));
+    var wrap = h('div', {className: 'adv-table-wrap'}, h('table', {className: 'adv-table'}, h('thead', {}, trTete), tbody));
     hote.appendChild(wrap);
     if (y) wrap.scrollTop = y;
+    if (x) wrap.scrollLeft = x;
   }
 
   /* ── Onglet Prépa ───────────────────────────────────────────── */
@@ -589,9 +684,6 @@
   var REF = BOOT.mef || {colonnes: [], operateurs: {}, cibles: [], tons: [], max: 40};
   var TYPE_COL = {}, LIB_COL = {};
   REF.colonnes.forEach(function (c) { TYPE_COL[c.cle] = c.type; LIB_COL[c.cle] = c.label; });
-  // Ordre des cellules d'une ligne du carnet, colonne par colonne.
-  var COLS_MEF = ['commande', 'client', 'article', 'qte', 'stock', 'a_fabriquer', 'expedition', 'livraison', 'fin_prod']
-    .concat(ETAPES.map(function (e) { return 'etape_' + e.cle; }));
   var ICONE_REGLAGES = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>';
 
   function aujourdhuiPlus(n) {
@@ -834,12 +926,31 @@
       await api('/api/adv/forcage/' + encodeURIComponent(l.numero) + '/' + l.ligne + '/' + etape,
         {method: 'PUT', body: {valeur: valeur || null, note: note || null}});
       toast(valeur ? 'Étape fixée.' : 'Calcul rétabli.');
+      S.ficheEtape = null;
       await charger();
       if (S.onglet === 'prepa') S.carnet = null; else S.prepa = null;
       render();
       fermerFiche(true);
       ouvrirFiche(l.cle, true);
     } catch (e) { toast(e.message, 'danger'); }
+  }
+
+  var ICONES_ETAT = {
+    oui: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    en_cours: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><polyline points="12 8 12 12 15 14"/></svg>',
+    non: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="7" x2="17" y2="17"/><line x1="17" y1="7" x2="7" y2="17"/></svg>',
+    sans_objet: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="7" y1="12" x2="17" y2="12"/></svg>'
+  };
+  // « dans 3 j », « il y a 5 j », « aujourd’hui » : on ne soustrait pas de tête.
+  function relatif(s) {
+    if (!s) return '';
+    var a = new Date(String(s).slice(0, 10) + 'T00:00:00'), b = new Date();
+    b.setHours(0, 0, 0, 0);
+    var n = Math.round((a - b) / 86400000);
+    if (n === 0) return 'aujourd’hui';
+    if (n === 1) return 'demain';
+    if (n === -1) return 'hier';
+    return n > 0 ? 'dans ' + n + ' j' : 'il y a ' + (-n) + ' j';
   }
 
   function ouvrirFiche(cle, sansAdresse) {
@@ -852,94 +963,158 @@
     }
     var m = document.getElementById('mroot');
     m.textContent = '';
+    cacherTip();
     S.reglages = null;
+    if (S.ligne !== cle) S.ficheEtape = null;
     if (!sansAdresse) { S.ligne = cle; ecrireUrl(); }
     else S.ligne = cle;
     var st = l.stock || {};
     var u = unite(l) ? ' ' + unite(l) : '';
-    var g = function (lib, val) { return h('div', {}, h('div', {className: 'g-l', text: lib}), h('div', {className: 'g-v', text: val || '—'})); };
+    var fermer = function () { fermerFiche(); };
 
-    var etapes = h('div', {});
+    // ── En-tête ──
+    var puces = h('div', {className: 'fi-puces'},
+      h('span', {className: 'adv-badge', text: libOrigine(l.origine)}),
+      l.ref_client ? h('span', {className: 'adv-badge', text: 'Réf. client ' + l.ref_client}) : null,
+      l.creee_le ? h('span', {className: 'adv-badge', text: 'Créée le ' + dateFr(l.creee_le)}) : null,
+      l.retard ? h('span', {className: 'adv-badge danger', text: 'En retard'}) : null);
+    var tete = h('div', {className: 'fi-tete'},
+      h('div', {className: 'fi-titre'},
+        h('h3', {text: l.client}),
+        h('div', {className: 'fi-ref adv-mono', text: l.numero + ' · ligne ' + l.ligne + ' · ' + l.article}),
+        h('div', {className: 'fi-des', text: l.designation}),
+        puces),
+      h('button', {type: 'button', className: 'fi-fermer', 'aria-label': 'Fermer', onClick: fermer, html:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'}));
+
+    // ── Chaîne de valeur : une frise de 5 étapes ──
+    var frise = h('div', {className: 'fi-frise'});
     ETAPES.forEach(function (e) {
       var et = l.etapes[e.cle];
-      var det = h('div', {className: 'e-det', text: et.detail});
-      if (et.force) det.appendChild(h('span', {className: 'e-force',
-        text: 'Fixé à la main' + (et.force_par ? ' par ' + et.force_par : '') + (et.force_le ? ' le ' + dateLongue(et.force_le) : '') + (et.force_note ? ' · ' + et.force_note : '')}));
-      var zone = h('div');
-      // La prépa se règle par ses boutons (c'est la logistique qui la tient) ;
-      // les autres étapes peuvent être fixées par l'ADV, avec un motif.
-      if (DROITS.adv && e.cle !== 'prepa') {
-        var sel = h('select', {'aria-label': 'Fixer l’étape ' + e.label});
-        var motif = h('input', {type: 'text', placeholder: 'Motif (facultatif)', value: et.force_note || '',
-          style: 'margin-top:6px', 'aria-label': 'Motif pour l’étape ' + e.label});
-        sel.addEventListener('change', function () { forcer(l, e.cle, sel.value, sel.value ? motif.value : ''); });
-        motif.addEventListener('change', function () { if (sel.value) forcer(l, e.cle, sel.value, motif.value); });
-        sel.appendChild(h('option', {value: ''}, 'Calcul : ' + (ETATS[et.calcul] || et.calcul)));
-        Object.keys(ETATS).forEach(function (k) {
-          var o = h('option', {value: k}, 'Fixer : ' + ETATS[k]);
-          if (et.force && et.valeur === k) o.selected = true;
-          sel.appendChild(o);
-        });
-        ajouter(zone, [sel, motif]);
+      var corrigeable = DROITS.adv && e.cle !== 'prepa';
+      var noeud = h('div', {className: 'fi-etape ' + et.valeur + (et.force ? ' force' : '') + (S.ficheEtape === e.cle ? ' ouverte' : '') + (corrigeable ? ' cliquable' : ''),
+        role: corrigeable ? 'button' : null, tabindex: corrigeable ? '0' : null,
+        'data-tip': tip(l.cle + '|fi|' + e.cle, e.label + ' · ' + (ETATS[et.valeur] || et.valeur), et.detail,
+          et.force ? 'Fixé à la main' + (et.force_par ? ' par ' + et.force_par : '') + (et.force_note ? ' · ' + et.force_note : '') + ' · calcul : ' + (ETATS[et.calcul] || et.calcul)
+            : (corrigeable ? 'Cliquer pour corriger' : null))},
+        h('div', {className: 'fi-rond', html: ICONES_ETAT[et.valeur] || ''}),
+        h('div', {className: 'fi-etape-lib', text: e.label}),
+        h('div', {className: 'fi-etape-val', text: ETATS[et.valeur] || et.valeur}),
+        h('div', {className: 'fi-etape-det', text: et.detail}));
+      if (corrigeable) {
+        var basculer = function () { S.ficheEtape = S.ficheEtape === e.cle ? null : e.cle; ouvrirFiche(l.cle, true); };
+        noeud.addEventListener('click', basculer);
+        noeud.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); basculer(); } });
       }
-      etapes.appendChild(h('div', {className: 'adv-etape-ligne'},
-        h('div', {className: 'e-lib', text: e.label}), h('div', {}, pastille(l, e.cle)), det, zone));
+      frise.appendChild(noeud);
     });
 
-    var dossiers = h('div', {className: 'adv-liste'});
-    if (!l.dossiers.length) dossiers.appendChild(h('div', {className: 'adv-muet', text: 'Aucun dossier au planning pour cette ligne.'}));
-    l.dossiers.forEach(function (d) {
-      dossiers.appendChild(h('div', {},
-        h('a', {href: '/planning?dossier=' + d.id, text: d.reference || ('Dossier ' + d.id)}),
-        h('span', {className: 'adv-muet', text: ' · ' + ({attente: 'En attente', en_cours: 'En cours', termine: 'Terminé'}[d.statut] || d.statut || '')
-          + (d.machine ? ' · ' + d.machine : '') + (d.fin ? ' · fin ' + (d.fin_reelle ? 'saisie ' : 'prévue ') + dateLongue(d.fin) + (heure(d.fin) ? ' ' + heure(d.fin) : '') : '')})));
-    });
-
-    var departs = h('div', {className: 'adv-liste'});
-    if (!l.departs.length) departs.appendChild(h('div', {className: 'adv-muet', text: 'Aucun départ MyExpé rattaché.'}));
-    l.departs.forEach(function (d) {
-      departs.appendChild(h('div', {},
-        h('a', {href: '/expe?depart=' + d.id, text: 'Départ du ' + dateLongue(d.date_enlevement)}),
-        h('span', {className: 'adv-muet', text: (d.transporteur ? ' · ' + d.transporteur : '') + (d.parti_le ? ' · parti' : d.statut === 'valide' ? ' · validé' : ' · à valider') + (d.no_bl ? ' · BL ' + d.no_bl : '')})));
-    });
-
-    var stock = h('div', {className: 'adv-liste'});
-    if (!st.connu) stock.appendChild(h('div', {className: 'adv-muet', text: 'Article absent de MyStock.'}));
-    else {
-      stock.appendChild(h('div', {text: 'En stock : ' + fN(st.total) + u + ' · attribué à cette ligne : ' + fN(st.alloue) + u}));
-      if (st.emplacements && st.emplacements.length) {
-        stock.appendChild(h('div', {className: 'adv-empl'}, st.emplacements.map(function (e) {
-          return h('span', {}, h('b', {text: e.emplacement}), ' · ' + fN(e.quantite) + (e.date_entree ? ' · ' + dateFr(e.date_entree) : ''));
-        })));
-      }
+    var correction = null;
+    if (S.ficheEtape && DROITS.adv) {
+      var ec = ETAPES.find(function (x) { return x.cle === S.ficheEtape; });
+      var et = l.etapes[S.ficheEtape];
+      var sel = h('select', {'aria-label': 'Valeur de l’étape ' + ec.label});
+      sel.appendChild(h('option', {value: ''}, 'Calcul : ' + (ETATS[et.calcul] || et.calcul)));
+      Object.keys(ETATS).forEach(function (k) {
+        var o = h('option', {value: k}, 'Fixer à « ' + ETATS[k] + ' »');
+        if (et.force && et.valeur === k) o.selected = true;
+        sel.appendChild(o);
+      });
+      var motif = h('input', {type: 'text', placeholder: 'Motif (facultatif) — ex. BAT validé par mail', value: et.force_note || '',
+        'aria-label': 'Motif'});
+      correction = h('div', {className: 'fi-correction'},
+        h('div', {className: 'fi-correction-t', text: 'Corriger l’étape ' + ec.label}),
+        h('div', {className: 'fi-correction-l'}, sel, motif,
+          h('button', {type: 'button', className: 'btn btn-accent btn-petit', onClick: function () { forcer(l, S.ficheEtape, sel.value, sel.value ? motif.value : ''); }}, 'Appliquer'),
+          et.force ? h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { forcer(l, S.ficheEtape, '', ''); }}, 'Rétablir le calcul') : null),
+        h('div', {className: 'fi-correction-n adv-muet', text: 'Calcul : ' + et.detail}));
     }
 
-    var prepaZone = h('div', {className: 'adv-rangee', style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},
-      h('span', {className: 'adv-badge', text: LIB_PREPA[l.prepa.statut] || l.prepa.statut}),
-      l.prepa.maj_par ? h('span', {className: 'adv-muet', text: l.prepa.maj_par + ' · ' + dateLongue(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)}) : null,
-      boutonsPrepa(l));
+    // ── Quantités : une barre, quatre chiffres ──
+    var qte = Math.max(l.qte || 0, 0.0001);
+    var livre = Math.min(l.livre || 0, qte), dispo = Math.min(st.alloue || 0, qte - livre), fab = Math.min(l.a_fabriquer || 0, qte - livre - dispo);
+    var pc = function (v) { return (100 * v / qte).toFixed(2) + '%'; };
+    var chiffre = function (lib, val, cls) { return h('div', {className: 'fi-chiffre ' + (cls || '')}, h('div', {className: 'fi-chiffre-v', text: fN(val)}), h('div', {className: 'fi-chiffre-l', text: lib})); };
+    var quantites = h('div', {className: 'fi-carte'},
+      h('h4', {}, 'Quantités', u ? h('span', {className: 'adv-muet', text: ' · en' + u + 's'}) : null),
+      h('div', {className: 'fi-chiffres'},
+        chiffre('Commandé', l.qte), chiffre('Déjà livré', l.livre, 'livre'), chiffre('En stock', st.alloue || 0, 'stock'), chiffre('À fabriquer', l.a_fabriquer || 0, 'fab')),
+      h('div', {className: 'fi-barre', role: 'img', 'aria-label': 'Répartition de la quantité commandée'},
+        livre ? h('span', {className: 'livre', style: 'width:' + pc(livre)}) : null,
+        dispo ? h('span', {className: 'stock', style: 'width:' + pc(dispo)}) : null,
+        fab ? h('span', {className: 'fab', style: 'width:' + pc(fab)}) : null),
+      h('div', {className: 'fi-note adv-muet', text: 'Besoin calculé par RVGI (qtep) : ' + fN(l.besoin_rvgi) + ' · non utilisé'}));
+
+    // ── Échéances : une frise datée ──
+    var finTard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
+    var jalon = function (lib, date, cls, plus) {
+      return h('div', {className: 'fi-jalon ' + (cls || '') + (date ? '' : ' vide')},
+        h('div', {className: 'fi-jalon-p'}),
+        h('div', {className: 'fi-jalon-c'},
+          h('div', {className: 'fi-jalon-l', text: lib}),
+          h('div', {className: 'fi-jalon-d', text: date ? dateFr(date) + (plus || '') : '—'}),
+          date ? h('div', {className: 'fi-jalon-r', text: relatif(date)}) : null));
+    };
+    var echeances = h('div', {className: 'fi-carte'},
+      h('h4', {text: 'Échéances'}),
+      h('div', {className: 'fi-jalons'},
+        jalon('Commande', l.creee_le, ''),
+        jalon(l.fin_prod_reelle ? 'Fin de prod (saisie)' : 'Fin de prod (prévue)', l.fin_prod, finTard ? 'warn' : (l.fin_prod_reelle ? 'ok' : ''),
+          l.fin_prod && heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : ''),
+        jalon('Expédition', l.expedition, l.retard ? 'danger' : 'fort'),
+        jalon('Livraison', l.livraison, '')),
+      finTard ? h('div', {className: 'fi-note fi-alerte', text: 'La production finit après la date d’expédition.'}) : null);
+
+    // ── Préparation et stock ──
+    var empl = (st.emplacements || []).length
+      ? h('div', {className: 'adv-empl'}, st.emplacements.map(function (e) {
+          return h('span', {'data-tip': tip(l.cle + '|fiempl' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + fN(e.quantite) + u, e.date_entree ? 'Entré le ' + dateFr(e.date_entree) + ' (FIFO)' : null)},
+            h('b', {text: e.emplacement}), ' · ' + fN(e.quantite));
+        }))
+      : h('div', {className: 'adv-muet', text: st.connu ? 'Rien d’attribué à cette ligne.' : 'Article absent de MyStock.'});
+    var prepa = h('div', {className: 'fi-carte'},
+      h('h4', {text: 'Préparation'}),
+      h('div', {className: 'fi-prepa'},
+        h('span', {className: 'adv-badge ' + ({prete: 'ok', en_cours: 'warn'}[l.prepa.statut] || ''), text: LIB_PREPA[l.prepa.statut] || l.prepa.statut}),
+        l.prepa.maj_par ? h('span', {className: 'adv-muet', text: l.prepa.maj_par + ' · ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)}) : null,
+        h('div', {className: 'fi-prepa-b'}, boutonsPrepa(l))),
+      h('div', {className: 'fi-sous-t', text: 'Où prélever' + (st.connu ? ' · ' + fN(st.total) + u + ' en stock pour l’article' : '')}),
+      empl);
+
+    // ── Production et départs ──
+    var STATUT_DOS = {attente: ['En attente', ''], en_cours: ['En cours', 'warn'], termine: ['Terminé', 'ok']};
+    var rangees = h('div', {className: 'fi-rangees'});
+    if (!l.dossiers.length) rangees.appendChild(h('div', {className: 'adv-muet', text: 'Aucun dossier au planning.'}));
+    l.dossiers.forEach(function (d) {
+      var sd = STATUT_DOS[d.statut] || [d.statut || '', ''];
+      rangees.appendChild(h('a', {className: 'fi-rangee', href: '/planning?dossier=' + d.id},
+        h('span', {className: 'fi-rangee-ico', text: 'Prod'}),
+        h('span', {className: 'fi-rangee-t', text: d.reference || ('Dossier ' + d.id)}),
+        h('span', {className: 'adv-muet', text: (d.machine || '') + (d.fin ? ' · fin ' + (d.fin_reelle ? '' : 'prévue ') + dateFr(d.fin) : '')}),
+        h('span', {className: 'adv-badge ' + sd[1], text: sd[0]})));
+    });
+    var auj = new Date(); auj.setHours(0, 0, 0, 0);
+    if (!l.departs.length) rangees.appendChild(h('div', {className: 'adv-muet', text: 'Aucun départ MyExpé.'}));
+    l.departs.forEach(function (d) {
+      var passe = d.date_enlevement && new Date(d.date_enlevement + 'T00:00:00') < auj && !d.parti_le;
+      var badge = d.parti_le ? ['Parti', 'ok'] : passe ? ['Passé', ''] : d.statut === 'valide' ? ['Validé', 'ok'] : ['À valider', 'warn'];
+      rangees.appendChild(h('a', {className: 'fi-rangee' + (passe ? ' passe' : ''), href: '/expe?depart=' + d.id},
+        h('span', {className: 'fi-rangee-ico', text: 'Départ'}),
+        h('span', {className: 'fi-rangee-t', text: dateFr(d.date_enlevement)}),
+        h('span', {className: 'adv-muet', text: (d.transporteur || '') + (d.no_bl ? ' · BL ' + d.no_bl : '')}),
+        h('span', {className: 'adv-badge ' + badge[1], text: badge[0]})));
+    });
+    var suivi = h('div', {className: 'fi-carte'}, h('h4', {text: 'Production et départs'}), rangees);
 
     var liens = h('div', {className: 'adv-liens'},
       DROITS.adv ? h('a', {className: 'btn btn-petit', href: '/erp#/commandes?q=' + encodeURIComponent(l.numero)}, 'Commande dans l’ERP') : null,
       st.connu ? h('a', {className: 'btn btn-petit', href: '/stock?ref=' + encodeURIComponent(l.article)}, 'Article dans MyStock') : null);
 
-    var modal = h('div', {className: 'adv-modal', role: 'dialog', 'aria-modal': 'true'},
-      h('h3', {text: l.client + ' — ' + l.numero + ' · ligne ' + l.ligne}),
-      h('div', {className: 'm-sous', text: l.article + ' · ' + l.designation}),
-      h('h4', {text: 'Commande'}),
-      h('div', {className: 'adv-grille'},
-        g('Commandé', fN(l.qte) + u), g('Déjà livré', fN(l.livre)), g('Reste à livrer', fN(l.reste)),
-        g('En stock (attribué)', fN(st.alloue || 0)), g('À fabriquer', fN(l.a_fabriquer || 0)),
-        g('Besoin RVGI (qtep)', fN(l.besoin_rvgi)), g('Origine', libOrigine(l.origine)),
-        g('Expédition', dateLongue(l.expedition)), g('Livraison', dateLongue(l.livraison)),
-        g('Fin de prod', l.fin_prod ? dateLongue(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '') + (l.fin_prod_reelle ? ' (saisie)' : ' (prévue)') : ''),
-        g('Réf. client', l.ref_client), g('Créée le', dateLongue(l.creee_le))),
-      h('h4', {text: 'Chaîne de valeur'}), etapes,
-      h('h4', {text: 'Préparation'}), prepaZone,
-      h('h4', {text: 'Stock MyStock'}), stock,
-      h('h4', {text: 'Dossiers de production'}), dossiers,
-      h('h4', {text: 'Départs'}), departs,
-      h('div', {className: 'm-pied'}, liens, h('button', {type: 'button', className: 'btn', onClick: function () { fermerFiche(); }}, 'Fermer')));
+    var modal = h('div', {className: 'adv-modal adv-fiche', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ligne ' + l.numero + ' · ' + l.ligne},
+      tete,
+      h('div', {className: 'fi-carte fi-chaine'}, h('h4', {text: 'Chaîne de valeur'}), frise, correction),
+      h('div', {className: 'fi-grille'}, quantites, echeances, prepa, suivi),
+      h('div', {className: 'm-pied'}, liens, h('button', {type: 'button', className: 'btn', onClick: fermer}, 'Fermer')));
     var voile = h('div', {className: 'adv-voile', onClick: function (ev) { if (ev.target === voile) fermerFiche(); }}, modal);
     m.appendChild(voile);
   }

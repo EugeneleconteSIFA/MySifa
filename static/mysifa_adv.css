@@ -90,7 +90,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 @media(max-width:768px){.adv-table-wrap{max-height:none}}
 table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .adv-table th{position:sticky;top:0;z-index:2;background:var(--card);text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:10px 8px;border-bottom:1px solid var(--border);white-space:nowrap;user-select:none}
+.adv-table th{cursor:grab}
 .adv-table th.triable{cursor:pointer}
+.adv-table th.attrapee{opacity:.4}
+.adv-table th.cible{box-shadow:inset 3px 0 0 var(--accent);color:var(--accent)}
+.adv-table th.num{text-align:right}
+.adv-table td.date{font-variant-numeric:tabular-nums}
 .adv-table th.triable:hover{color:var(--accent)}
 .adv-table th.trie{color:var(--accent)}
 .adv-table th.etape{text-align:center}
@@ -155,17 +160,20 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-badge.ok{color:var(--success)}
 
 /* ── Mise en forme conditionnelle ── */
-/* Fond opaque (mélangé à la carte) : la première colonne est collante. */
-.adv-table tbody tr td.mef-danger{background:color-mix(in srgb,var(--danger) 16%,var(--card))}
-.adv-table tbody tr td.mef-warn{background:color-mix(in srgb,var(--warn) 18%,var(--card))}
-.adv-table tbody tr td.mef-ok{background:color-mix(in srgb,var(--success) 16%,var(--card))}
-.adv-table tbody tr td.mef-accent{background:color-mix(in srgb,var(--accent) 16%,var(--card))}
-.adv-table tbody tr td.mef-neutre{background:color-mix(in srgb,var(--muted) 18%,var(--card))}
-.adv-table tbody tr td.mef-danger:not(.etape){color:var(--danger);font-weight:700}
-.adv-table tbody tr td.mef-warn:not(.etape){color:var(--warn);font-weight:700}
-.adv-table tbody tr td.mef-ok:not(.etape){color:var(--success);font-weight:700}
-.adv-table tbody tr td.mef-accent:not(.etape){color:var(--accent);font-weight:700}
-.adv-table tbody tr td.mef .adv-muet,.adv-table tbody tr td.mef .des-l{color:inherit;opacity:.8}
+/* La valeur colorée passe dans une pastille teintée ; une étape (déjà en
+   pastille) reçoit un anneau de la couleur de la règle. */
+.mef-p{display:inline-block;padding:2px 8px;border-radius:8px;font-weight:700;max-width:100%}
+td.mef-danger .mef-p{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+td.mef-warn .mef-p{background:color-mix(in srgb,var(--warn) 17%,transparent);color:var(--warn)}
+td.mef-ok .mef-p{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+td.mef-accent .mef-p{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+td.mef-neutre .mef-p{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
+td.mef .mef-p .adv-muet,td.mef .mef-p .des-l{color:inherit;opacity:.75}
+td.etape.mef-danger .adv-etat{box-shadow:0 0 0 2px var(--danger)}
+td.etape.mef-warn .adv-etat{box-shadow:0 0 0 2px var(--warn)}
+td.etape.mef-ok .adv-etat{box-shadow:0 0 0 2px var(--success)}
+td.etape.mef-accent .adv-etat{box-shadow:0 0 0 2px var(--accent)}
+td.etape.mef-neutre .adv-etat{box-shadow:0 0 0 2px var(--muted)}
 .adv-tete-actions{display:flex;gap:8px;align-items:center}
 .btn.adv-btn-icone{padding:9px 11px}
 .adv-modal.adv-modal-large{width:min(1060px,100%)}
@@ -211,6 +219,96 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-liste a{color:var(--accent);text-decoration:none;font-weight:600}
 .adv-liste a:hover{text-decoration:underline}
 .adv-modal .m-pied{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+
+/* ── Fiche d'une ligne ── */
+.adv-modal.adv-fiche{width:min(1020px,100%);padding:0;background:var(--bg)}
+.adv-fiche .fi-tete{display:flex;justify-content:space-between;gap:16px;padding:20px 22px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
+.adv-fiche .fi-titre{min-width:0}
+.adv-fiche h3{font-size:20px;font-weight:800;letter-spacing:-.2px}
+.adv-fiche .fi-ref{font-size:12.5px;color:var(--text2);margin-top:3px}
+.adv-fiche .fi-des{font-size:13px;color:var(--muted);margin-top:2px}
+.adv-fiche .fi-puces{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.fi-fermer{width:36px;height:36px;flex-shrink:0;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.fi-fermer:hover{background:var(--card);color:var(--text)}
+.adv-fiche .fi-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.adv-fiche .fi-chaine{margin:16px 22px 0}
+.adv-fiche h4{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:0 0 12px}
+.adv-fiche .fi-grille{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 22px 0}
+@media(max-width:760px){.adv-fiche .fi-grille{grid-template-columns:1fr}}
+.adv-fiche .m-pied{padding:16px 22px 20px;margin-top:0;justify-content:space-between;align-items:center}
+
+/* Frise de la chaîne de valeur */
+.fi-frise{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:relative}
+.fi-etape{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;padding:4px 6px 8px;border-radius:10px;--c:var(--muted)}
+.fi-etape::before{content:"";position:absolute;top:22px;left:-50%;width:100%;height:3px;background:var(--border);z-index:0}
+.fi-etape:first-child::before{display:none}
+.fi-etape.oui{--c:var(--success)}
+.fi-etape.en_cours{--c:var(--warn)}
+.fi-etape.non{--c:var(--danger)}
+.fi-etape.oui::before{background:var(--success)}
+.fi-etape.cliquable{cursor:pointer}
+.fi-etape.cliquable:hover,.fi-etape.ouverte{background:var(--accent-bg)}
+.fi-rond{position:relative;z-index:1;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--c);color:white;box-shadow:0 0 0 4px var(--card)}
+.fi-etape.sans_objet .fi-rond{background:var(--bg);color:var(--muted);border:2px dashed var(--border)}
+.fi-etape.non .fi-rond{background:var(--card);color:var(--danger);border:2px solid var(--danger)}
+.fi-etape.force .fi-rond::after{content:"";position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
+.fi-etape-lib{font-size:13px;font-weight:800;margin-top:8px;color:var(--text)}
+.fi-etape-val{font-size:11.5px;font-weight:700;color:var(--c);margin-top:1px}
+.fi-etape-det{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:640px){.fi-etape-det{display:none}.fi-rond{width:32px;height:32px}.fi-etape::before{top:19px}}
+.fi-correction{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--accent)}
+.fi-correction-t{font-size:13px;font-weight:800;margin-bottom:8px}
+.fi-correction-l{display:grid;grid-template-columns:200px minmax(0,1fr) auto auto;gap:8px;align-items:center}
+@media(max-width:640px){.fi-correction-l{grid-template-columns:1fr}}
+.fi-correction-n{font-size:12px;margin-top:8px}
+
+/* Quantités */
+.fi-chiffres{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.fi-chiffre-v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
+.fi-chiffre-l{font-size:11.5px;font-weight:600;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:5px}
+.fi-chiffre.livre .fi-chiffre-l::before,.fi-chiffre.stock .fi-chiffre-l::before,.fi-chiffre.fab .fi-chiffre-l::before{content:"";width:8px;height:8px;border-radius:2px}
+.fi-chiffre.livre .fi-chiffre-l::before{background:var(--success)}
+.fi-chiffre.stock .fi-chiffre-l::before{background:var(--accent)}
+.fi-chiffre.fab .fi-chiffre-l::before{background:var(--warn)}
+.fi-chiffre.fab .fi-chiffre-v{color:var(--warn)}
+.fi-barre{display:flex;height:10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);overflow:hidden;margin-top:12px}
+.fi-barre span{height:100%}
+.fi-barre .livre{background:var(--success)}
+.fi-barre .stock{background:var(--accent)}
+.fi-barre .fab{background:var(--warn)}
+.fi-note{font-size:11.5px;margin-top:10px}
+.fi-alerte{color:var(--warn);font-weight:700}
+
+/* Échéances */
+.fi-jalons{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:relative}
+.fi-jalon{position:relative;padding-top:18px}
+.fi-jalon::before{content:"";position:absolute;top:5px;left:0;right:0;height:2px;background:var(--border)}
+.fi-jalon:first-child::before{left:6px}
+.fi-jalon:last-child::before{right:auto;width:6px}
+.fi-jalon-p{position:absolute;top:0;left:0;width:12px;height:12px;border-radius:50%;background:var(--card);border:2px solid var(--muted)}
+.fi-jalon.fort .fi-jalon-p{border-color:var(--text);background:var(--text)}
+.fi-jalon.ok .fi-jalon-p{border-color:var(--success);background:var(--success)}
+.fi-jalon.warn .fi-jalon-p{border-color:var(--warn);background:var(--warn)}
+.fi-jalon.danger .fi-jalon-p{border-color:var(--danger);background:var(--danger)}
+.fi-jalon-c{padding-right:8px}
+.fi-jalon-l{font-size:11.5px;font-weight:600;color:var(--muted)}
+.fi-jalon-d{font-size:14px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fi-jalon.warn .fi-jalon-d{color:var(--warn)}
+.fi-jalon.danger .fi-jalon-d{color:var(--danger)}
+.fi-jalon-r{font-size:11.5px;color:var(--muted)}
+.fi-jalon.vide .fi-jalon-d{color:var(--muted);font-weight:600}
+
+/* Préparation, production, départs */
+.fi-prepa{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fi-prepa-b{display:flex;gap:6px;margin-left:auto}
+.fi-sous-t{font-size:11.5px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+.fi-rangees{display:flex;flex-direction:column;gap:6px}
+.fi-rangee{display:grid;grid-template-columns:54px minmax(0,auto) minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 10px;border-radius:9px;background:var(--bg);border:1px solid var(--border);text-decoration:none;color:var(--text);font-size:13px}
+.fi-rangee:hover{border-color:var(--accent)}
+.fi-rangee.passe{opacity:.6}
+.fi-rangee-ico{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.fi-rangee-t{font-weight:700;white-space:nowrap}
+.fi-rangee .adv-muet{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 
 /* ── Toasts ── */
 .toast-wrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:9999;align-items:center}

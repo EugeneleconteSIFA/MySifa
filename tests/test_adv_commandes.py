@@ -143,7 +143,8 @@ INSERT INTO rvgi_rattachements(piece, objet, objet_id, numero, ligne) VALUES
     ('commande', 'dossier', 13, '9930002', 1);
 INSERT INTO expe_departs(id, date_enlevement, transporteur, statut, arc) VALUES
     (100, '{jour(1)[:10]}', 'TRANSP', 'valide', 'Cde 9930001'),
-    (101, '{jour(6)[:10]}', 'TRANSP', 'en_attente', NULL);
+    (101, '{jour(6)[:10]}', 'TRANSP', 'en_attente', NULL),
+    (102, '{jour(-20)[:10]}', 'TRANSP', 'valide', 'Envoi précédent 9930003');
 INSERT INTO expe_depart_dossiers(depart_id, planning_entry_id) VALUES (101, 11);
 INSERT INTO adv_forcages(numero, ligne, etape, valeur, note, maj_le, maj_par) VALUES
     ('9930003', 1, 'bat', 'non', 'Nouveau visuel', '{jour(0)}', 'ADV');
@@ -197,7 +198,9 @@ check("C : ligne sur stock, pas de prod", C["etapes"]["prod"]["valeur"], "sans_o
 print("\nDépart")
 check("A : départ par l'ARC", (A["etapes"]["depart"]["valeur"], [x["id"] for x in A["departs"]]), ("oui", [100]))
 check("D : départ du dossier, à valider", (D["etapes"]["depart"]["valeur"], [x["id"] for x in D["departs"]]), ("en_cours", [101]))
-check("C : aucun départ", C["etapes"]["depart"]["valeur"], "non")
+check("C : un départ passé ne « prévoit » rien", (C["etapes"]["depart"]["valeur"], [x["id"] for x in C["departs"]]),
+      ("non", [102]))
+check("C : le détail cite le dernier départ", C["etapes"]["depart"]["detail"].startswith("Aucun départ à venir"), True)
 check("étape bloquante de A : la prépa", A["bloquante"], "prepa")
 
 # ── 2. Une prépa engagée garde ses étiquettes ────────────────────────────────
