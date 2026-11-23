@@ -473,12 +473,14 @@ def fiche_rentabilite(conn, planning_entry_id: int, relire: bool = True) -> dict
 
     # ── Postes annexes ────────────────────────────────────────────
     transport = transport_myexpe(conn, planning_entry_id, dossiers)
+    # Ce qui n'est pas mesuré est repris du devis RAMENÉ à la ligne : une
+    # commande en huit lignes ne paie qu'une fois son outil et ses clichés.
     annexes = {
-        "outil": Fourchette.exacte(_f(v.get("cout_outil"))),
-        "encre": Fourchette.exacte(_f(v.get("cout_encre"))),
-        "cliche": Fourchette.exacte(_f(v.get("cout_cliche"))),
-        "emballage": Fourchette.exacte(emballage_eur if emballage_eur > 0 else _f(v.get("cout_emballage"))),
-        "transport": Fourchette.exacte(transport if transport is not None else _f(v.get("cout_transport"))),
+        "outil": Fourchette.exacte(_f(vr.get("cout_outil"))),
+        "encre": Fourchette.exacte(_f(vr.get("cout_encre"))),
+        "cliche": Fourchette.exacte(_f(vr.get("cout_cliche"))),
+        "emballage": Fourchette.exacte(emballage_eur if emballage_eur > 0 else _f(vr.get("cout_emballage"))),
+        "transport": Fourchette.exacte(transport if transport is not None else _f(vr.get("cout_transport"))),
     }
 
     entrees = EntreesReelles(
@@ -581,6 +583,9 @@ def fiche_rentabilite(conn, planning_entry_id: int, relire: bool = True) -> dict
         "dossiers": dossiers,
         "racine": racine,
         "racines": racines,
+        "agregat": {"prix_vente": round(pv, 2), "qte": qte_prod, "devis_id": devis["id"],
+                    "qte_devis": qte_devis, "calage_devis_mn": calage_d,
+                    "surface_m2": round(surface.probable, 1)},
         "seuils": seuils,
         "devis_calcul": calc_d,
         "devis_verdict": vd_devis,
@@ -736,7 +741,194 @@ def resume_fiche(f: dict, date_fin: Optional[str] = None) -> dict:
         "alertes": len(f.get("alertes") or []),
         "hors_norme": f.get("hors_norme") or [],
         "raisons": f.get("raisons") or [],
+        "commande": cle_commande(f),
+        "agregat": f.get("agregat"),
+        "heures_f": (reel.get("heures") or None),
+        "marge_brute_f": (reel.get("marge_brute") or None),
+        "devis_id": (f.get("devis") or {}).get("id") or f.get("devis_id"),
     }
+
+
+# ── Une commande, plusieurs dossiers de production ───────────────
+# Une commande est souvent produite en plusieurs dossiers (une ligne par
+# article, un changement de cliché entre chaque) : le gros du calage tombe sur
+# le premier, qui paraît ruineux, et les suivants paraissent trop beaux. Le
+# tableau de bord juge donc la COMMANDE : sommes des prix, marges et heures,
+# et devis ramené UNE fois à la quantité totale.
+LIGNE_RE = re.compile(r"\s*(?:[-–/]\s*)?(?:l|ligne)\s*\d+\s*$", re.IGNORECASE)
+
+
+def cle_commande(f: dict) -> str:
+    racines = f.get("racines") or []
+    if racines:
+        return "+".join(sorted(racines))
+    ref = LIGNE_RE.sub("", str(f.get("reference") or "")).strip().lower()
+    return ref or f"creneau-{f.get('planning_entry_id')}"
+
+
+def _ff(d: Optional[dict]) -> Optional[Fourchette]:
+    return Fourchette(d["bas"], d["probable"], d["haut"]) if d else None
+
+
+def _devis_commande(conn, membres: list[dict]) -> Optional[dict]:
+    """PV, MB et heures devisés de la commande : chaque devis ramené une fois
+    à la quantité produite de ses lignes, calage compté une fois."""
+    par_devis: dict[int, list[dict]] = {}
+    for m in membres:
+        a = m.get("agregat") or {}
+        if a.get("devis_id"):
+            par_devis.setdefault(int(a["devis_id"]), []).append(a)
+    pv = mb = h = 0.0
+    for did, lignes in par_devis.items():
+        ch = devis_chiffrage.chiffrage_du_devis(conn, did)
+        if not ch or ch["valeurs"].get("prix_vente") is None:
+            return None
+        qte = sum(_f(a["qte"]) for a in lignes)
+        qd = _f(lignes[0]["qte_devis"])
+        k = (qte / qd) if (qd > 0 and qte > 0) else 1.0
+        if 0.9 <= k <= 1.1:
+            k = 1.0
+        c = calcul_devis(devis_ramene(ch["valeurs"], k, _f(lignes[0]["calage_devis_mn"])))
+        pv += c["prix_vente"]; mb += c["marge_brute"]; h += c["heures"]
+    if pv <= 0:
+        return None
+    return {"prix_vente": pv, "marge_brute": mb, "mb_pct": mb / pv * 100.0,
+            "cout_horaire": (mb / h) if h > 0 else None}
+
+
+def par_commande(conn, lignes: list[dict], seuils: dict) -> list[dict]:
+    """Les résumés de dossiers regroupés par commande, au même format.
+
+    Complète si TOUS ses dossiers le sont ; à vérifier dès qu'un l'est ;
+    provisoire sinon, avec la liste de ce qui manque."""
+    groupes: dict[str, list[dict]] = {}
+    for l in lignes:
+        groupes.setdefault(l.get("commande") or f"creneau-{l['planning_entry_id']}", []).append(l)
+    out = []
+    for cle, ms in groupes.items():
+        ms = sorted(ms, key=lambda x: (x.get("date") or "", x.get("reference") or ""))
+        if len(ms) == 1:
+            out.append({**ms[0], "nb_dossiers": 1, "membres": []})
+            continue
+        etats = {m["etat"] for m in ms}
+        etat = "a_verifier" if "a_verifier" in etats else ("complet" if etats == {"complet"} else "provisoire")
+        manque = sorted({x for m in ms for x in (m.get("manque") or [])})
+        if etat == "provisoire" and not manque:
+            manque = ["un dossier de la commande à juger"]
+        mesurables = [m for m in ms if m.get("marge_brute_f") and m.get("heures_f") and m.get("agregat")]
+        mb_pct = eh = mbf = None
+        pv = None
+        if mesurables:
+            mbf = sum((_ff(m["marge_brute_f"]) for m in mesurables), Fourchette.exacte(0))
+            hf = sum((_ff(m["heures_f"]) for m in mesurables), Fourchette.exacte(0))
+            pv = sum(_f(m["agregat"]["prix_vente"]) for m in mesurables)
+            mb_pct = mbf.en_pct_de(pv).dict() if pv else None
+            eh = mbf.divise_par(hf).dict() if hf.bas > 0 else None
+            heures = hf.probable
+        else:
+            heures = None
+        dv = _devis_commande(conn, ms)
+        tot_h = sum(_f(m.get("heures")) for m in ms) or 1.0
+        cascade_eh: dict[str, dict] = {}
+        cascade_mb: dict[str, dict] = {}
+        for m in ms:
+            for e in m.get("cascade_marge") or []:
+                c = cascade_mb.setdefault(e["cause"], {**e, "valeur": 0.0})
+                c["valeur"] += _f(e.get("valeur"))
+            for e in m.get("cascade_cout_horaire") or []:
+                c = cascade_eh.setdefault(e["cause"], {**e, "valeur": 0.0})
+                c["valeur"] += _f(e.get("valeur")) * _f(m.get("heures")) / tot_h
+        tete = ms[0]
+        machines = sorted({m["machine"] for m in ms if m.get("machine")})
+        out.append({
+            "planning_entry_id": tete["planning_entry_id"],
+            "commande": cle,
+            "date": max((m.get("date") or "") for m in ms) or None,
+            "heures": heures,
+            "reference": cle.replace("+", " · ") if cle[:2] == "99" else tete.get("reference"),
+            "client": tete.get("client"), "machine": " · ".join(machines), "format": tete.get("format"),
+            "etat": etat, "manque": manque,
+            "verdict": verdict(mb_pct, eh, seuils["mb_pct"], seuils["cout_horaire"]) if (mb_pct and eh) else {},
+            "mb_pct": mb_pct, "cout_horaire": eh,
+            "marge_brute": round(mbf.probable, 2) if mbf else None,
+            "prix_vente": round(pv, 2) if pv else None,
+            "devis_mb_pct": round(dv["mb_pct"], 2) if dv else None,
+            "devis_cout_horaire": round(dv["cout_horaire"], 1) if dv and dv["cout_horaire"] is not None else None,
+            "devis_prix_vente": round(dv["prix_vente"], 2) if dv else None,
+            "modifies": sorted({x for m in ms for x in (m.get("modifies") or [])}),
+            "cascade_marge": list(cascade_mb.values()),
+            "cascade_cout_horaire": list(cascade_eh.values()),
+            "alertes": sum(m.get("alertes") or 0 for m in ms),
+            "hors_norme": [x for m in ms for x in (m.get("hors_norme") or [])],
+            "raisons": [x for m in ms for x in (m.get("raisons") or [])],
+            "surface_m2": sum(_f((m.get("agregat") or {}).get("surface_m2")) for m in ms),
+            "nb_dossiers": len(ms),
+            "membres": ms,
+        })
+    return out
+
+
+def progression(commandes: list[dict], seuils: dict) -> dict:
+    """Marge brute, coût horaire et indice combiné au fil des m² produits.
+
+    Les m² cumulés servent d'axe : ils avancent avec le travail fait, pas
+    avec le calendrier, si bien qu'une semaine creuse ne tasse rien. Chaque
+    point est une moyenne PONDÉRÉE glissante sur la dernière tranche de m²
+    (un sixième du total), sinon une commande isolée ferait la courbe.
+    L'indice combiné vaut 100 quand marge et coût horaire sont pile sur leurs
+    seuils : moyenne de MB % ÷ seuil MB et €/h ÷ seuil €/h.
+    """
+    cs = sorted((c for c in commandes if c["etat"] == "complet" and c.get("mb_pct") and c.get("cout_horaire")
+                 and _f(c.get("prix_vente")) > 0 and _f(c.get("heures")) > 0),
+                key=lambda c: (c.get("date") or "", c.get("commande") or ""))
+    surf = []
+    for c in cs:
+        s_ = _f(c.get("surface_m2")) or _f((c.get("agregat") or {}).get("surface_m2"))
+        surf.append(max(s_, 0.0))
+    total = sum(surf)
+    if len(cs) < 3 or total <= 0:
+        return {"points": [], "m2_total": round(total), "commandes": len(cs), "tendance": None}
+    fenetre = total / 6.0
+    points, cumul, debut, cum_debut = [], 0.0, 0, 0.0
+    for i, c in enumerate(cs):
+        cumul += surf[i]
+        while debut < i and cumul - (cum_debut + surf[debut]) >= fenetre:
+            cum_debut += surf[debut]
+            debut += 1
+        # Avant que la première tranche soit pleine, un point ne s'appuie que
+        # sur une poignée de commandes : il ferait un pic sans signification.
+        if cumul < fenetre:
+            continue
+        bloc = cs[debut:i + 1]
+        mb = sum(_f(x["marge_brute"]) for x in bloc)
+        pv = sum(_f(x["prix_vente"]) for x in bloc)
+        h = sum(_f(x["heures"]) for x in bloc)
+        mbp = mb / pv * 100.0 if pv else None
+        eh = mb / h if h else None
+        comb = (50.0 * (mbp / seuils["mb_pct"] + eh / seuils["cout_horaire"])
+                if (mbp is not None and eh is not None and seuils["mb_pct"] and seuils["cout_horaire"]) else None)
+        points.append({"m2": round(cumul), "date": c.get("date"), "commande": c.get("reference"),
+                       "client": c.get("client"), "n": len(bloc),
+                       "mb_pct": round(mbp, 2) if mbp is not None else None,
+                       "cout_horaire": round(eh, 1) if eh is not None else None,
+                       "combine": round(comb, 1) if comb is not None else None})
+
+    def tendance(cle):
+        xy = [(p["m2"], p[cle]) for p in points if p[cle] is not None]
+        if len(xy) < 3:
+            return None
+        n = len(xy)
+        mx = sum(x for x, _ in xy) / n
+        my = sum(y for _, y in xy) / n
+        sxx = sum((x - mx) ** 2 for x, _ in xy)
+        if sxx <= 0:
+            return None
+        pente = sum((x - mx) * (y - my) for x, y in xy) / sxx
+        x0, x1 = xy[0][0], xy[-1][0]
+        return {"debut": round(my + pente * (x0 - mx), 2), "fin": round(my + pente * (x1 - mx), 2),
+                "m2_debut": x0, "m2_fin": x1}
+    return {"points": points, "m2_total": round(total), "commandes": len(cs),
+            "tendance": {k: tendance(k) for k in ("mb_pct", "cout_horaire", "combine")}}
 
 
 def _mediane(v: list[float]) -> Optional[float]:
@@ -823,30 +1015,30 @@ def _relire_en_fond(devis_ids: list[int]) -> None:
 
 
 def tableau_de_bord(conn, periode: str = PERIODE_DEFAUT, machine: str = "", force: bool = False) -> dict:
-    """Les dossiers terminés et rattachés à un devis validé, jugés un par un.
+    """Les COMMANDES terminées et rattachées à un devis validé, jugées une par une.
 
-    Les compteurs, l'écart moyen et les causes ne portent que sur les dossiers
-    COMPLETS (produits, déstockés, facturés) ; les autres sont listés « en
-    attente » avec ce qui leur manque. Machines retirées du suivi des devis
-    exclues, comme dans le Pilotage.
+    Tout l'historique est jugé (cache de dix minutes par dossier), regroupé par
+    commande, puis la période retient les commandes dont le DERNIER dossier y
+    finit : une commande à cheval sur deux périodes reste entière. Compteurs,
+    chiffres de tête et causes ne portent que sur les commandes COMPLÈTES ; la
+    progression au m² couvre tout l'historique, quelle que soit la période.
+    Machines retirées du suivi des devis exclues, comme dans le Pilotage.
     """
     if periode not in PERIODES:
         periode = PERIODE_DEFAUT
     du, au = bornes_periode(periode, conn=conn)
     params = rentabilite_parametres.lire(conn)
-    sql = """SELECT e.id, m.nom AS machine,
-                    substr(COALESCE(e.planned_end, e.updated_at), 1, 10) AS date_fin
-               FROM planning_entries e
-               JOIN rent_links l ON l.planning_entry_id = e.id AND l.devis_id IS NOT NULL
-               LEFT JOIN machines m ON m.id = e.machine_id
-              WHERE e.statut = 'termine'
-                AND NOT (COALESCE(l.origine, 'manuel') = 'auto' AND l.valide_at IS NULL)
-                AND COALESCE(m.rent_suivi_devis, 1) != 0"""
-    args: list = []
-    if du:
-        sql += " AND substr(COALESCE(e.planned_end, e.updated_at), 1, 10) BETWEEN ? AND ?"
-        args += [du, au]
-    lignes_sql = conn.execute(sql + " ORDER BY COALESCE(e.planned_end, e.updated_at) DESC", args).fetchall()
+    seuils = {"mb_pct": params["seuil_mb_pct"], "cout_horaire": params["seuil_cout_horaire"]}
+    lignes_sql = conn.execute(
+        """SELECT e.id, m.nom AS machine,
+                  substr(COALESCE(e.planned_end, e.updated_at), 1, 10) AS date_fin
+             FROM planning_entries e
+             JOIN rent_links l ON l.planning_entry_id = e.id AND l.devis_id IS NOT NULL
+             LEFT JOIN machines m ON m.id = e.machine_id
+            WHERE e.statut = 'termine'
+              AND NOT (COALESCE(l.origine, 'manuel') = 'auto' AND l.valide_at IS NULL)
+              AND COALESCE(m.rent_suivi_devis, 1) != 0
+            ORDER BY COALESCE(e.planned_end, e.updated_at) DESC""").fetchall()
     machines = sorted({r["machine"] for r in lignes_sql if r["machine"]})
 
     if force:
@@ -878,35 +1070,35 @@ def tableau_de_bord(conn, periode: str = PERIODE_DEFAUT, machine: str = "", forc
     if a_lire:
         _relire_en_fond(sorted(set(a_lire)))
 
-    complets = [l for l in lignes if l["etat"] == "complet" and l["mb_pct"] and l["cout_horaire"]]
+    toutes = par_commande(conn, lignes, seuils)
+    commandes = [c for c in toutes if not du or (c.get("date") and du <= c["date"] <= au)]
+    commandes.sort(key=lambda c: c.get("date") or "", reverse=True)
+
+    complets = [c for c in commandes if c["etat"] == "complet" and c["mb_pct"] and c["cout_horaire"]]
     comptes = {"reussi": 0, "limite": 0, "sous_seuil": 0}
-    for l in complets:
-        g = (l["verdict"] or {}).get("global")
+    for c in complets:
+        g = (c["verdict"] or {}).get("global")
         if g in comptes:
             comptes[g] += 1
-    ecarts = [l["mb_pct"]["probable"] - l["devis_mb_pct"] for l in complets if l["devis_mb_pct"] is not None]
-    # Marge de la période PONDÉRÉE (Σ MB ÷ Σ PV) : le dossier de 80 000 € pèse
-    # plus que celui de 2 000 €. Le devisé se pondère de la même façon.
-    pv_tot = sum(_f(l.get("prix_vente")) for l in complets)
-    mb_tot = sum(_f(l.get("marge_brute")) for l in complets)
-    avec_devis = [l for l in complets if l["devis_mb_pct"] is not None and _f(l.get("devis_prix_vente")) > 0]
-    pv_dv = sum(_f(l["devis_prix_vente"]) for l in avec_devis)
-    mb_dv = sum(_f(l["devis_mb_pct"]) * _f(l["devis_prix_vente"]) / 100.0 for l in avec_devis)
-    ehs_dv = sorted(_f(l["devis_cout_horaire"]) for l in complets if l.get("devis_cout_horaire") is not None)
-    ehs = sorted(l["cout_horaire"]["probable"] for l in complets)
-    mediane = None
-    if ehs:
-        k = len(ehs) // 2
-        mediane = ehs[k] if len(ehs) % 2 else (ehs[k - 1] + ehs[k]) / 2
+    ecarts = [c["mb_pct"]["probable"] - c["devis_mb_pct"] for c in complets if c["devis_mb_pct"] is not None]
+    # Marge de la période PONDÉRÉE (Σ MB ÷ Σ PV) : la commande de 80 000 €
+    # pèse plus que celle de 2 000 €. Le devisé se pondère de la même façon.
+    pv_tot = sum(_f(c.get("prix_vente")) for c in complets)
+    mb_tot = sum(_f(c.get("marge_brute")) for c in complets)
+    avec_devis = [c for c in complets if c["devis_mb_pct"] is not None and _f(c.get("devis_prix_vente")) > 0]
+    pv_dv = sum(_f(c["devis_prix_vente"]) for c in avec_devis)
+    mb_dv = sum(_f(c["devis_mb_pct"]) * _f(c["devis_prix_vente"]) / 100.0 for c in avec_devis)
+    ehs_dv = sorted(_f(c["devis_cout_horaire"]) for c in complets if c.get("devis_cout_horaire") is not None)
+    mediane = _mediane(sorted(c["cout_horaire"]["probable"] for c in complets))
     return {
         "periode": periode, "du": du, "au": au, "machine": machine or None,
-        "machines": machines,
-        "seuils": {"mb_pct": params["seuil_mb_pct"], "cout_horaire": params["seuil_cout_horaire"]},
+        "machines": machines, "seuils": seuils,
         "comptes": {**comptes, "complets": len(complets),
-                    "attente": sum(1 for l in lignes if l["etat"] == "provisoire"),
-                    "a_verifier": sum(1 for l in lignes if l["etat"] == "a_verifier"),
-                    "non_calculables": sum(1 for l in lignes if l["etat"] not in
+                    "attente": sum(1 for c in commandes if c["etat"] == "provisoire"),
+                    "a_verifier": sum(1 for c in commandes if c["etat"] == "a_verifier"),
+                    "non_calculables": sum(1 for c in commandes if c["etat"] not in
                                            ("complet", "provisoire", "a_verifier")),
+                    "dossiers": sum(c["nb_dossiers"] for c in commandes),
                     "erreurs": erreurs},
         "ecart_mb_pts": round(sum(ecarts) / len(ecarts), 2) if ecarts else None,
         "cout_horaire_median": round(mediane, 1) if mediane is not None else None,
@@ -915,7 +1107,8 @@ def tableau_de_bord(conn, periode: str = PERIODE_DEFAUT, machine: str = "", forc
         "devis_cout_horaire_median": round(_mediane(ehs_dv), 1) if ehs_dv else None,
         "causes_marge": _causes(complets, "cascade_marge", True),
         "causes_cout_horaire": _causes(complets, "cascade_cout_horaire", False),
-        "dossiers": lignes,
+        "dossiers": commandes,
+        "progression": progression(toutes, seuils),
         "lecture_devis": {"en_cours": _lecture["en_cours"] or bool(a_lire),
                           "restants": _lecture["restants"] or len(set(a_lire))},
     }

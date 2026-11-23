@@ -222,6 +222,7 @@
     rentTdbMachine: '',
     rentTdbGrain: 'jour',
     rentTdbCourbe: 'marge',
+    rentTdbProg: 'combine',
     // Filtre de la file de travail : a_lier | comparables | tous.
     rentFiltre: 'a_lier',
     // Tri de la liste des dossiers : colonne + sens, poses par l'en-tete.
@@ -370,6 +371,7 @@
         if(S.rentTdbMachine) p.machine=S.rentTdbMachine;
         if(S.rentTdbGrain&&S.rentTdbGrain!=='jour') p.grain=S.rentTdbGrain;
         if(S.rentTdbCourbe&&S.rentTdbCourbe!=='marge') p.courbe=S.rentTdbCourbe;
+        if(S.rentTdbProg&&S.rentTdbProg!=='combine') p.progression=S.rentTdbProg;
       }else if(rs==='dossiers'){
         if(S.rentFiltre&&S.rentFiltre!=='a_lier') p.filtre=S.rentFiltre;
         var rt=S.rentTri||{};
@@ -622,6 +624,7 @@
         S.rentTdbMachine=(tm.length<=80&&!/[\u0000-\u001f<>]/.test(tm))?tm:'';
         S.rentTdbGrain=u.get('grain','jour',['jour','semaine','mois']);
         S.rentTdbCourbe=u.get('courbe','marge',['marge','horaire']);
+        S.rentTdbProg=u.get('progression','combine',['combine','marge','horaire']);
       }else if(S.rentSubTab==='pilotage'){
         S.rentPilotMachine=u.get('machine',null);
         S.rentPilotSemaines=Number(u.get('semaines','2',['1','2','4']));
@@ -7944,12 +7947,14 @@ function renderRentTableau(){
     machine: S.rentTdbMachine || '',
     grain: S.rentTdbGrain || 'jour',
     courbe: S.rentTdbCourbe || 'marge',
+    progression: S.rentTdbProg || 'combine',
     surFiltre: patch => {
       const p = {};
       if(patch.periode !== undefined) p.rentTdbPeriode = patch.periode;
       if(patch.machine !== undefined) p.rentTdbMachine = patch.machine;
       if(patch.grain !== undefined) p.rentTdbGrain = patch.grain;
       if(patch.courbe !== undefined) p.rentTdbCourbe = patch.courbe;
+      if(patch.progression !== undefined) p.rentTdbProg = patch.progression;
       set(p);
     },
     ouvrir: async entryId => {
