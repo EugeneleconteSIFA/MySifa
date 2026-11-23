@@ -801,6 +801,19 @@ ADV_MEF_TONS = (("danger", "Rouge"), ("warn", "Orange"), ("ok", "Vert"),
                 ("accent", "Bleu"), ("neutre", "Gris"))
 ADV_MEF_MAX_REGLES = 40
 
+# Type de poste (machines.type), réglé dans Paramètres › Machines : la logique
+# lit le type, jamais le nom de la machine (app/services/machines_type.py).
+MACHINE_TYPES = (
+    ("impression", "Impression"),
+    ("repiquage", "Repiquage"),
+)
+# Statut du repiquage d'une ligne de commande, réglable par l'ADV (adv_repiquages).
+ADV_REPIQUAGE_STATUTS = (
+    ("a_faire", "À faire"),
+    ("en_cours", "En cours"),
+    ("termine", "Terminé"),
+)
+
 # Nouvel ERP (remplaçant de RVGI), servi sur son propre sous-domaine par le
 # middleware `router_hote_erp` de main.py : une requête dont le Host figure dans
 # ERP2_HOSTS est servie sous ERP2_PREFIXE. En construction, sans données réelles :

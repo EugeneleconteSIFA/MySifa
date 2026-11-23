@@ -1505,6 +1505,14 @@ __SETTINGS_FAMILLES__
           <p id="mac-je-hint" class="sub" style="margin-top:-8px;margin-bottom:14px;font-size:11px;color:var(--muted)">
             Quand activé, cette machine tourne en continu tous les jours travaillés. Les horaires ci-dessous ne sont utilisés que si un override journalier ou hebdomadaire les rétablit.
           </p>
+          <label for="mac-type" style="display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Type de poste</label>
+          <select id="mac-type" style="width:100%;max-width:320px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;margin-bottom:6px">
+            <option value="impression">Impression</option>
+            <option value="repiquage">Repiquage</option>
+          </select>
+          <p class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
+            Un poste de repiquage surimprime des &eacute;tiquettes d&eacute;j&agrave; fabriqu&eacute;es : saisie au carton, pas de code de d&eacute;but ni de fin de dossier, et ses dossiers se relient &agrave; la production qu&rsquo;ils repiquent. MySifa lit ce type, plus le nom de la machine.
+          </p>
           <label id="mac-sbm-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:6px;font-size:13px">
             <input type="checkbox" id="mac-sbm">
             <span style="font-weight:600;color:var(--text)">Poste sans matière première</span>
@@ -3957,6 +3965,7 @@ let macMachine = null;
 let _macPanelReady = false;
 
 function macMachineKey(m) {
+  if (m && m.type === 'repiquage') return 'REP';
   const raw = String((m && (m.code || m.nom)) || '').trim();
   const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (norm.includes('cohesio 1') || norm === 'c1') return 'C1';
@@ -4073,6 +4082,8 @@ function renderMacHorairesForm() {
   const parityBox = document.getElementById('mac-horaires-parity');
   const jeBox = document.getElementById('mac-je');
   if (jeBox) jeBox.checked = !!(m && +m.journee_entiere === 1);
+  const typeSel = document.getElementById('mac-type');
+  if (typeSel) typeSel.value = (m && m.type) || 'impression';
   const sbmBox = document.getElementById('mac-sbm');
   if (sbmBox) sbmBox.checked = !!(m && +m.sans_matiere_premiere === 1);
   const hpBox = document.getElementById('mac-hp');
@@ -4248,6 +4259,15 @@ async function saveMacHoraires() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ journee_entiere: je }),
     });
+    // Type du poste : impression ou repiquage, lu à la place du nom.
+    const typeSel = document.getElementById('mac-type');
+    if (typeSel) {
+      await api('/api/planning/machines/' + id + '/type', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: typeSel.value }),
+      });
+    }
     // Consommation matière : propriété de la machine, lue par MyStock.
     const sbmBox = document.getElementById('mac-sbm');
     await api('/api/planning/machines/' + id + '/sans-matiere-premiere', {

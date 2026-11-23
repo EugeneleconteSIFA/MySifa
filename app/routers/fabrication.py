@@ -13,6 +13,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 logger = logging.getLogger(__name__)
 
 from app.services.audit_service import log_action
+from app.services import machines_type as _mtype
 from config import PROD_VITESSE_MAX_M_MIN
 from app.services import origine_bobine
 from app.services import poste_bobine, bobines_montees
@@ -4719,7 +4720,9 @@ def _is_machine_repiquage(name) -> bool:
     n = n.replace("é", "e").replace("è", "e").replace("ê", "e")
     n = n.replace("à", "a").replace("â", "a")
     n = n.replace("î", "i").replace("ô", "o")
-    return n == "repiquage" or n == "rep" or n.startswith("rep ")
+    # Le type du poste (machines.type) décide ; le nom ne sert plus qu'à
+    # retrouver le poste. Base sans la colonne : ancienne règle de nom.
+    return _mtype.est_repiquage_nom_global(name)
 
 
 @router.patch("/api/fabrication/saisie/{saisie_id}/repiquage")
@@ -4859,11 +4862,9 @@ def delete_saisie_repiquage(saisie_id: int, request: Request):
 # Filtre SQL pour ne considerer que les saisies repiquage (toutes variantes
 # de nom de machine "Repiquage" / "rep" / etc.) Evite que des saisies code 03
 # d'autres machines polluent les compteurs.
-_REP_MACHINE_FILTER = (
-    "(lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
-    "OR lower(trim(COALESCE(machine,''))) = 'rep' "
-    "OR lower(trim(COALESCE(machine,''))) LIKE 'rep %')"
-)
+def _rep_machine_filter() -> str:
+    # Saisies d'un poste de type « repiquage » (machines.type).
+    return "(" + _mtype.sql_nom_repiquage_global("machine") + ")"
 
 
 def _rep_get_equipe_members(conn, operateur: str):
@@ -4888,9 +4889,8 @@ def _rep_get_equipe_members(conn, operateur: str):
 
     # Trouver le machine_id Repiquage
     mach = conn.execute(
-        "SELECT id FROM machines WHERE actif=1 AND ("
-        "lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
-        "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+        "SELECT m.id FROM machines m WHERE m.actif=1 AND "
+        + _mtype.sql_machine_repiquage(conn, "m") + " ORDER BY m.id"
     ).fetchone()
     if not mach:
         return None
@@ -4970,8 +4970,7 @@ def _rep_get_etiq_par_carton(conn, no_dossier: str):
         "SELECT pe.etiquettes_par_carton FROM planning_entries pe "
         "LEFT JOIN machines m ON m.id = pe.machine_id "
         "WHERE trim(pe.reference) = trim(?) "
-        "AND (lower(trim(COALESCE(m.nom,''))) LIKE 'repiquage%' "
-        "     OR lower(trim(COALESCE(m.nom,''))) = 'rep') "
+        "AND " + _mtype.sql_machine_repiquage(conn, "m") + " "
         "AND pe.etiquettes_par_carton IS NOT NULL "
         "ORDER BY pe.id DESC LIMIT 1",
         (no_dossier,),
@@ -4999,7 +4998,7 @@ def _rep_get_or_create_saisie_03(conn, operateur: str, no_dossier: str, machine_
     sql = (
         "SELECT * FROM production_data "
         "WHERE trim(operateur)=trim(?) AND trim(no_dossier)=trim(?) "
-        "  AND operation_code='03' AND " + _REP_MACHINE_FILTER + " "
+        "  AND operation_code='03' AND " + _rep_machine_filter() + " "
         "  AND (date_operation LIKE ? OR date_operation LIKE ?) "
         "ORDER BY id DESC LIMIT 1"
     )
@@ -5087,7 +5086,7 @@ def _rep_aggregate(conn, no_dossier: str, operateur: str, today_only: bool):
                 "       COALESCE(SUM(quantite_traitee),0) AS e "
                 "FROM production_data "
                 "WHERE trim(no_dossier)=trim(?) AND operation_code='03' "
-                "  AND " + _REP_MACHINE_FILTER + " "
+                "  AND " + _rep_machine_filter() + " "
                 "  AND (date_operation LIKE ? OR date_operation LIKE ?) "
                 "  AND trim(lower(operateur)) IN (" + placeholders + ")"
             )
@@ -5101,7 +5100,7 @@ def _rep_aggregate(conn, no_dossier: str, operateur: str, today_only: bool):
                 "       COALESCE(SUM(quantite_traitee),0) AS e "
                 "FROM production_data "
                 "WHERE trim(no_dossier)=trim(?) AND operation_code='03' "
-                "  AND " + _REP_MACHINE_FILTER + " "
+                "  AND " + _rep_machine_filter() + " "
                 "  AND (date_operation LIKE ? OR date_operation LIKE ?)"
             )
             row = conn.execute(sql, (no_dossier, today + "%", today_fr + "%")).fetchone()
@@ -5111,7 +5110,7 @@ def _rep_aggregate(conn, no_dossier: str, operateur: str, today_only: bool):
             "       COALESCE(SUM(quantite_traitee),0) AS e "
             "FROM production_data "
             "WHERE trim(no_dossier)=trim(?) AND operation_code='03' "
-            "  AND " + _REP_MACHINE_FILTER
+            "  AND " + _rep_machine_filter()
         )
         row = conn.execute(sql, (no_dossier,)).fetchone()
     return int(row["c"] or 0), int(row["e"] or 0)
@@ -5400,7 +5399,7 @@ async def retirer_carton_complet(request: Request):
         sql_ret = (
             "SELECT id, nb_cartons, quantite_traitee FROM production_data "
             "WHERE trim(operateur)=trim(?) AND trim(no_dossier)=trim(?) "
-            "  AND operation_code='03' AND " + _REP_MACHINE_FILTER + " "
+            "  AND operation_code='03' AND " + _rep_machine_filter() + " "
             "  AND (date_operation LIKE ? OR date_operation LIKE ?) "
             "ORDER BY id DESC LIMIT 1"
         )
@@ -5615,9 +5614,7 @@ def get_repiquage_historique(request: Request, no_dossier: str):
                       pd.data
                FROM production_data pd
                WHERE pd.no_dossier = ? AND pd.operation_code = '03'
-                 AND (lower(trim(pd.machine)) LIKE 'repiquage%'
-                      OR lower(trim(pd.machine)) = 'rep'
-                      OR lower(trim(pd.machine)) LIKE 'rep %')
+                 AND """ + _mtype.sql_nom_repiquage(conn, "pd.machine") + """
                ORDER BY pd.date_operation DESC, pd.id DESC""",
             (no_dossier,),
         ).fetchall()
@@ -5810,9 +5807,8 @@ def list_dossiers_repiquage(request: Request):
             ).fetchone()
         else:
             machine = conn.execute(
-                "SELECT id, nom, code FROM machines WHERE actif=1 "
-                "AND (lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
-                "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+                "SELECT m.id, m.nom, m.code FROM machines m WHERE m.actif=1 "
+                "AND " + _mtype.sql_machine_repiquage(conn, "m") + " ORDER BY m.id"
             ).fetchone()
         if not machine:
             return {"dossiers": [], "machine": None}
@@ -5841,8 +5837,32 @@ def list_dossiers_repiquage(request: Request):
             d["nb_cartons_jour"] = jour_c
             d["qte_etiq_jour"] = jour_e
             dossiers.append(d)
+        _rep_sources(conn, dossiers)
 
     return {"dossiers": dossiers, "machine": dict(machine)}
+
+
+def _rep_sources(conn, dossiers) -> None:
+    """La production d'origine de chaque dossier de repiquage (choisie au planning).
+
+    L'atelier voit d'où viennent les étiquettes qu'il surimprime, et si leur
+    impression est finie : un repiquage dont la production n'est pas terminée
+    attend sa matière. Fin réelle = saisie 89 non annulée, sinon fin planifiée.
+    """
+    ids = sorted({int(d["repiquage_source_id"]) for d in dossiers if d.get("repiquage_source_id")})
+    if not ids:
+        return
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(
+        "SELECT pe.id, pe.reference, pe.statut, pe.planned_end, m.nom AS machine, "
+        "(SELECT MAX(pd.date_operation) FROM production_data pd WHERE pd.planning_entry_id = pe.id "
+        "   AND pd.operation_code = '89' AND COALESCE(pd.est_annule, 0) = 0) AS fin_reelle "
+        "FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id "
+        "WHERE pe.id IN (" + ph + ")", ids).fetchall()
+    par_id = {r["id"]: dict(r) for r in rows}
+    for d in dossiers:
+        if d.get("repiquage_source_id"):
+            d["repiquage_source"] = par_id.get(int(d["repiquage_source_id"]))
 
 
 # =============================================================================

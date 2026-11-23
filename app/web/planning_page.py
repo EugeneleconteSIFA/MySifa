@@ -2113,6 +2113,8 @@ function timeInputFromFloat(f){
 }
 function machineKey(){
   const m=S.machine||{};
+  // Le type du poste (machines.type) décide du repiquage, plus le nom.
+  if(m.type==="repiquage") return "REP";
   const raw=String(m.code||m.nom||String(MID)||"").trim();
   const norm=raw
     .normalize("NFD").replace(/[\u0300-\u036f]/g,"") // remove accents (Cohésio -> Cohesio)
@@ -3571,6 +3573,13 @@ function mkTL(mon,slots){
     if(isExpeVue && nbPalettes!==null){
       expeBrightnessStyle = nbPalettes>=6 ? "" : "filter:brightness(0.4);";
     }
+    // Repiquage : une production « pour repiquage », ou un repiquage et sa
+    // production d'origine (repiquage_source, choisie dans le formulaire).
+    const repTxt=s.repiquage_source
+      ? "Repique "+(s.repiquage_source.reference||"")+(s.repiquage_source.machine?" ("+s.repiquage_source.machine+")":"")
+      : (s.pour_repiquage
+        ? "Pour repiquage"+((s.repiquages||[]).length?" · "+s.repiquages.map(x=>(x.reference||"")+" "+({attente:"à faire",en_cours:"en cours",termine:"fait"}[x.statut]||"")).join(", "):" · repiquage à planifier")
+        : "");
     // Date de livraison imposée — la date passe en rouge dans le slot et le tooltip
     const dlImp=!!s.date_livraison_imposee;
     const dlRed=dlImp?"color:var(--danger);font-weight:700":"";
@@ -3586,7 +3595,8 @@ function mkTL(mon,slots){
       line2SlotHtml=line2Txt?escHtml(line2Txt):"";
       const dateLivHtml=s.date_livraison?`<span style="${dlRed}">${escHtml("à livrer pour "+s.date_livraison)}</span>`:"";
       const comHtml=com?escHtml(com):"";
-      const l3parts=[dateLivHtml,comHtml].filter(Boolean);
+      const repHtml=repTxt?`<span style="color:var(--accent);font-weight:700">${escHtml(repTxt)}</span>`:"";
+      const l3parts=[repHtml,dateLivHtml,comHtml].filter(Boolean);
       line3SlotHtml=l3parts.length?l3parts.join(" | "):"";
     }
 
@@ -3594,7 +3604,7 @@ function mkTL(mon,slots){
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
-      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
+      ` data-rep="${escAttr(repTxt)}" data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
       ` data-tr="${s.transport?'1':'0'}" data-tr-transp="${escAttr((s.transport&&s.transport.transporteur)||"")}" data-tr-date="${escAttr((s.transport&&s.transport.date_enlevement)||"")}" data-tr-pal="${escAttr(s.transport&&s.transport.palettes!=null?String(s.transport.palettes):"")}" data-tr-limite="${escAttr((s.transport&&s.transport.limite)||"")}" data-tr-tension="${escAttr((s.transport&&s.transport.tension)||"")}" data-tr-marge="${escAttr(s.transport&&s.transport.marge_heures?String(s.transport.marge_heures):"")}" data-tr-nb="${escAttr(String((s.transport&&s.transport.departs&&s.transport.departs.length)||0))}"`+
       ` data-annule="${annuleSlot?'1':'0'}" data-annule-motif="${escAttr(s.annule_motif||"")}" data-annule-par="${escAttr(s.annule_par||"")}" data-annule-count="${escAttr(String(s.annule_count||0))}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
@@ -3968,6 +3978,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     <span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
     ${(()=>{const r=d.statutReel||"";if(r==="reellement_termine")return`<span class="k">Saisie</span><span class="v" style="color:var(--muted)">✓ Terminé</span>`;if(r==="reellement_en_saisie")return`<span class="k">Saisie</span><span class="v" style="color:var(--success)">⚙ En cours</span>`;return"";})()}
+    ${(d.rep||"").trim()?`<span class="k">Repiquage</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(d.rep)}</span>`:""}
     ${expeTipRows}`;
   // Colonne droite : infos techniques (frontal/adhésif depuis fiche, qté étiquettes)
   const supTxt=(d.support||"").trim();
@@ -4388,7 +4399,7 @@ function duplicateEntry(id){
   _dossierEditId=null;  // duplication : nouveau dossier, pas d'enregistrement à la volée
   document.getElementById("mroot").innerHTML=modalHTML(
     "Dupliquer le dossier",
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0,e.etiquettes_par_carton??null),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0,e.etiquettes_par_carton??null,null,e.pour_repiquage||0,null),
     "Ajouter","submitDuplicate()"
   ,"","",false,"md--dossier");
 }
@@ -4822,7 +4833,7 @@ function rvgiRafraichirResume(entryId){
   else z.innerHTML='';
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null,entryId=null){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null,entryId=null,pourRepiquage=0,repSourceId=null){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&FSC_REQ_CODES.includes(fscType))?fscType:FSC_CLAIM_DEFAUT;
   const rdvOn=priseRdv===1||priseRdv===true;
@@ -4911,12 +4922,67 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           </div>
         </div>
       </div>
+      ${repiquageSection(entryId,pourRepiquage,repSourceId)}
       <div class="dossier-section">
         <span class="dossier-section-label">Particularités et commentaires</span>
         <div class="fd"><label>Commentaire</label><input id="f-com" value="${escAttr(commentaire)}" placeholder="Bobine, contraintes, etc."></div>
         <div class="fd"><label>Exigences de production</label><textarea id="f-exig" class="dossier-ta" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)">${escHtml(exigences_production||"")}</textarea></div>
       </div>
     </div>`
+}
+
+// Repiquage dans le formulaire du dossier :
+// - poste d'impression : la case « Prod pour repiquage » (les étiquettes
+//   attendent un repiquage pour la même commande) ;
+// - poste de repiquage (machines.type) : la production d'origine, choisie
+//   parmi les dossiers cochés, la plus probable d'abord (même dossier, même
+//   article), chargée par /api/planning/repiquage/sources.
+function repiquageSection(entryId,pourRepiquage,repSourceId){
+  if(machineKey()==="REP"){
+    setTimeout(()=>chargerSourcesRepiquage(entryId,repSourceId),0);
+    return `<div class="dossier-section">
+        <span class="dossier-section-label">Repiquage</span>
+        <div class="fd fd--full">
+          <label for="f-rep-src">Production d'origine</label>
+          <select id="f-rep-src" class="form-sel" style="width:100%" data-actuelle="${repSourceId!=null?escAttr(String(repSourceId)):''}">
+            <option value="">Chargement…</option>
+          </select>
+          <span style="font-size:11px;color:var(--muted);display:block;margin-top:4px">Le dossier d'impression dont ce repiquage surimprime les étiquettes. Seuls les dossiers cochés « Prod pour repiquage » sont proposés.</span>
+        </div>
+      </div>`;
+  }
+  const on=pourRepiquage===1||pourRepiquage===true;
+  return `<div class="dossier-section">
+      <span class="dossier-section-label">Repiquage</span>
+      <label class="dossier-check-lbl" style="margin:0">
+        <input type="checkbox" id="f-pour-rep" ${on?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+        Prod pour repiquage — les étiquettes seront repiquées avant de partir
+      </label>
+    </div>`;
+}
+async function chargerSourcesRepiquage(entryId,actuelle,essai=0){
+  const sel=document.getElementById("f-rep-src");
+  // La fenêtre est posée dans la page après la construction du formulaire :
+  // on attend le champ (au plus ~2 s) au lieu de le manquer.
+  if(!sel){ if(essai<40) setTimeout(()=>chargerSourcesRepiquage(entryId,actuelle,essai+1),50); return; }
+  try{
+    const r=await fetch("/api/planning/repiquage/sources"+(entryId?"?entry_id="+encodeURIComponent(entryId):""),{credentials:"include"});
+    const d=r.ok?await r.json():{sources:[]};
+    if(!document.body.contains(sel))return;
+    const st={attente:"en attente",en_cours:"en cours",termine:"terminé"};
+    sel.innerHTML="";
+    const vide=document.createElement("option");vide.value="";vide.textContent="— Aucune production d'origine —";sel.appendChild(vide);
+    (d.sources||[]).forEach(x=>{
+      const o=document.createElement("option");
+      o.value=String(x.id);
+      o.textContent=[(x.reference||"Dossier "+x.id),x.machine,x.ref_produit,x.client,st[x.statut]||x.statut].filter(Boolean).join(" · ")
+        +(x.meme_reference?" · même dossier":x.meme_article?" · même article":"")
+        +(x.deja_repique?" · déjà repiqué":"");
+      if(actuelle!=null&&String(actuelle)===String(x.id))o.selected=true;
+      sel.appendChild(o);
+    });
+    if(!(d.sources||[]).length){vide.textContent="Aucune production cochée « pour repiquage »";}
+  }catch(e){sel.innerHTML='<option value="">Liste indisponible</option>';}
 }
 
 function getFormData(withStatut){
@@ -4935,6 +5001,9 @@ function getFormData(withStatut){
     valide:document.getElementById("f-valide")?.checked?1:0,
     departement_livraison:(document.getElementById("f-dept")?.value||"").trim(),
     prise_rdv:document.getElementById("f-rdv")?.checked?1:0,
+    ...(document.getElementById("f-pour-rep")?{pour_repiquage:document.getElementById("f-pour-rep").checked?1:0}:{}),
+    ...(document.getElementById("f-rep-src")&&document.getElementById("f-rep-src").options.length>0&&document.getElementById("f-rep-src").options[0].textContent!=="Chargement…"
+      ?{repiquage_source_id:document.getElementById("f-rep-src").value?parseInt(document.getElementById("f-rep-src").value,10):null}:{}),
     date_livraison_imposee:document.getElementById("f-dl-imp")?.checked?1:0,
     etiquettes_par_carton:(()=>{
       const v=document.getElementById("f-epc")?.value;
@@ -5351,7 +5420,7 @@ function openEdit(id){
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
   setTimeout(()=>rvgiRafraichirResume(e.id??null),0);
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null,e.pour_repiquage||0,e.repiquage_source_id??null);
 
   // Bouton déstockage compact en en-tête
   // Repère RVGI (collègue qui déstocke dans l'ERP) — disjoint du stock MySifa.

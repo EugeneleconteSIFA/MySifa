@@ -9035,6 +9035,17 @@ function renderRepiquageGrid(){
   }
 
   const fmtNum = n => Number(n||0).toLocaleString('fr-FR');
+  // La production d'origine du dossier (choisie au planning) : d'où viennent
+  // les étiquettes à repiquer, et si leur impression est finie.
+  const repSourceLigne = src => {
+    if (!src) return null;
+    const fini = src.statut === 'termine';
+    const fin = (src.fin_reelle || src.planned_end || '').slice(0,10).split('-').reverse().join('/');
+    const txt = 'Issu de ' + (src.reference || '—') + (src.machine ? ' · ' + src.machine : '')
+      + (fini ? ' · imprimé' + (fin ? ' le ' + fin : '') : (src.statut === 'en_cours' ? ' · impression en cours' : ' · impression à faire'));
+    return h('div',{style:{fontSize:'11px',fontWeight:'700',color: fini ? 'var(--success)' : 'var(--warn)',
+      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, txt);
+  };
 
   const cards = dossiers.length
     ? dossiers.map(d => {
@@ -9057,6 +9068,7 @@ function renderRepiquageGrid(){
           h('div',{style:{fontSize:'15px',fontWeight:'800',color:'var(--accent)'}}, ref),
           client ? h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, client) : null,
           desc ? h('div',{style:{fontSize:'11px',color:'var(--muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, desc) : null,
+          repSourceLigne(d.repiquage_source),
           // Cumul affiché (cartons + étiquettes) - séparateur visuel
           h('div',{style:{
             marginTop:'auto', padding:'8px 10px',
