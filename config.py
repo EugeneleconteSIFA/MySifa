@@ -387,6 +387,15 @@ PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
 # tournent autour de 75-100 m/min.
 PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
 
+# Délai de réaction au passage calage → production (minutes). La machine
+# démarre, puis le conducteur clique « Production » et relève le compteur :
+# le clic arrive en retard. Sur un dossier court, ce retard pèse lourd
+# (9932856 - L1 du 20/11/2026 : 687 m en 4,8 min = 143 m/min affichés pour
+# une machine qui tourne autour de 100). Ce délai est retiré du calage et
+# rendu à la production à chaque calage directement suivi d'une production,
+# sans jamais dépasser la durée du calage. 0 désactive la correction.
+PROD_DELAI_REACTION_CALAGE_MIN = float(os.getenv("PROD_DELAI_REACTION_CALAGE_MIN", "3"))
+
 # Part de la vitesse conducteur que represente la vitesse du devis. Le devis
 # chiffre une vitesse moyenne, inferieure a celle que le conducteur regle :
 # la vitesse theorique comparee au reel est donc devis / part. Le chiffre

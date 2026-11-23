@@ -1,6 +1,7 @@
 from datetime import datetime
 from collections import defaultdict
 from database import parse_datetime
+import config as _cfg
 from config import (
     CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE, CODE_DEBUT_DOS, CODE_FIN_DOS,
     CODE_ANNUL_DOS,
@@ -19,7 +20,14 @@ def compute_dossier_times(rows):
     le temps passé et la matière engagée sont réels, seule la livraison du
     dossier n'a pas eu lieu. La session est alors marquée `annule=True`.
     La durée d'une opération = écart jusqu'à l'opération suivante du même opérateur/jour.
+
+    Délai de réaction (`config.PROD_DELAI_REACTION_CALAGE_MIN`) : quand un
+    calage est directement suivi d'une production du même dossier, le clic
+    « Production » arrive après le vrai démarrage. Ce délai passe du calage à
+    la production, sans dépasser la durée du calage. Chaque session porte le
+    total déplacé dans `delai_reaction_min`.
     """
+    delai_reaction = max(0.0, float(getattr(_cfg, "PROD_DELAI_REACTION_CALAGE_MIN", 0) or 0))
     # Grouper par opérateur + jour, trier
     by_op_day = defaultdict(list)
     for r in rows:
@@ -47,6 +55,7 @@ def compute_dossier_times(rows):
         "quantite_a_traiter": 0,
         "quantite_traitee": 0,
         "annule": False,
+        "delai_reaction_min": 0.0,
     })
 
     for (operateur, jour), items in by_op_day.items():
@@ -105,7 +114,18 @@ def compute_dossier_times(rows):
 
             cat = str(r.get("operation_category") or "")
             if code in CODES_CALAGE:
-                acc["temps_calage_min"] += delta_min
+                # Calage suivi directement d'une production du même dossier :
+                # le délai de réaction appartient à la production.
+                rendu = 0.0
+                if delai_reaction > 0:
+                    suiv = next((x for x in items_sorted[i + 1:] if x[0] is not None), None)
+                    if (suiv is not None
+                            and str(suiv[1].get("operation_code") or "") == CODE_PRODUCTION
+                            and (suiv[1].get("no_dossier") or "") == dos):
+                        rendu = min(delai_reaction, delta_min)
+                acc["temps_calage_min"] += delta_min - rendu
+                acc["temps_prod_min"] += rendu
+                acc["delai_reaction_min"] += rendu
             elif code in (CODE_PRODUCTION, CODE_REPRISE):
                 acc["temps_prod_min"] += delta_min
             elif cat == "arret":
@@ -130,6 +150,7 @@ def compute_dossier_times(rows):
         acc["temps_prod_min"]      = round(acc["temps_prod_min"],      1)
         acc["temps_arret_min"]     = round(acc["temps_arret_min"],     1)
         acc["temps_nettoyage_min"] = round(acc["temps_nettoyage_min"], 1)
+        acc["delai_reaction_min"]  = round(acc["delai_reaction_min"],  1)
         results.append(acc)
 
     return results
