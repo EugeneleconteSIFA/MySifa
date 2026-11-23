@@ -11673,7 +11673,12 @@ function openEditModal(row) {
     && (String(row.operation_code||'').trim()==='90' || !!String(row.annule_le||'').trim());
   // Plusieurs dossiers de la commande tournés sous ce seul dossier (L8 puis
   // L5 et L7) : le cycle se découpe, un cycle par dossier (mysifa_repartition.js).
-  const repartirBtn = (peutConvertir && window.MySifaRepartition)
+  // Depuis n'importe quelle ligne du cycle (démarrage, production, arrêt,
+  // reprise, fin) : le serveur retrouve la fin de production qui le ferme.
+  const peutRepartir = isAdmin(S.user) && (!row.kind || row.kind==='prod')
+    && String(row.no_dossier||'').trim() && !Number(row.est_annule||0)
+    && ['86','87','90'].indexOf(String(row.operation_code||'').trim())===-1;
+  const repartirBtn = (peutRepartir && window.MySifaRepartition)
     ? h('button',{className:'btn-sm',title:'Ce cycle a couvert plusieurs dossiers de la commande',
         onClick:e=>{ e.stopPropagation();
           try{ closeModal(); }catch(_){}
@@ -11686,6 +11691,8 @@ function openEditModal(row) {
         h('button',{className:'btn-danger',title:'Le dossier a été annulé, pas terminé',
           onClick:e=>{ e.stopPropagation(); openConvertirAnnulation(row); }},'Convertir en annulation'),
         repartirBtn)
+    : (repartirBtn && !peutRetablir)
+      ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}}, deleteBtn, repartirBtn)
     : peutRetablir
       ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
           deleteBtn,

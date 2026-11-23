@@ -12,7 +12,9 @@ avec 19 162 m. Ce que le test protège :
 3. L'application crée fin / démarrage / production à chaque coupure, déplace
    l'arrêt saisi pendant le cycle dans le dossier où il tombe, et clôture
    chaque dossier au planning.
-4. Les erreurs de saisie sont refusées : premier dossier différent du cycle,
+4. La fenêtre s'ouvre depuis n'importe quelle ligne du cycle (production,
+   arrêt) : elle retrouve la fin de production qui le ferme.
+5. Les erreurs de saisie sont refusées : premier dossier différent du cycle,
    dossier d'une autre commande, quantité nulle.
 
 Lancer : python3 tests/test_repartition_saisie.py
@@ -68,7 +70,7 @@ class TestRepartition(unittest.TestCase):
                     (MACHINE_ID, pos + 1, ref, "PERIMEDIAS", of_id)).lastrowid
             _saisie(conn, "2026-11-20T06:34:10", "01", "01 - Démarrer un dossier", "9932856 - L8",
                     metrage_total_debut=7823062)
-            _saisie(conn, "2026-11-20T06:39:53", "03", "03 - Production", "9932856 - L8")
+            self.prod = _saisie(conn, "2026-11-20T06:39:53", "03", "03 - Production", "9932856 - L8")
             # Arrêt pendant le cycle, vers 11 h 30 : il tombe dans L7.
             self.arret = _saisie(conn, "2026-11-20T11:30:00", "53", "53 - Casse bande", "9932856 - L8")
             _saisie(conn, "2026-11-20T11:40:00", "88", "88 - Reprise production", "9932856 - L8")
@@ -133,6 +135,19 @@ class TestRepartition(unittest.TestCase):
         self.assertEqual(statuts["9932856 - L5"], "termine")
         self.assertEqual(statuts["9932856 - L7"], "termine")
         self.assertEqual(statuts["9932999 - L1"], "attente")
+
+    def test_depuis_une_ligne_du_cycle(self):
+        from database import get_db
+        from app.services.repartition_saisie import fin_du_cycle
+        with get_db() as conn:
+            self.assertEqual(fin_du_cycle(conn, self.prod), self.fin)
+            self.assertEqual(fin_du_cycle(conn, self.arret), self.fin)
+            self.assertEqual(fin_du_cycle(conn, self.fin), self.fin)
+            # Cycle sans fin de production : refusé, avec la raison.
+            conn.execute("DELETE FROM production_data WHERE id=?", (self.fin,))
+            with self.assertRaises(ValueError):
+                fin_du_cycle(conn, self.prod)
+            conn.rollback()
 
     def test_refus(self):
         from database import get_db
