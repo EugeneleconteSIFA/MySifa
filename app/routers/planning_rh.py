@@ -20,6 +20,7 @@ from config import (
     ROLES_PLANNING_RH_HR_VIEW,
     ROLES_PLANNING_RH_HR_EDIT,
     PLANNING_RH_EXCLUDED_NOMS,
+    national_holidays_between,
 )
 
 router = APIRouter(prefix="/api/rh", tags=["planning_rh"])
@@ -615,6 +616,59 @@ def jours_affectes_pendant(conn, user_id: int, d_deb: date, d_fin: date) -> list
     return [{"semaine": s, "jours": [JOURS_ABREVS[i] for i in sorted(out[s])]} for s in sorted(out)]
 
 
+def jours_ouvres(d_deb: date, d_fin: date) -> float:
+    """Jours ouvrés (lundi–vendredi) de la période, jours fériés nationaux retirés."""
+    feries = {ds for ds, _ in national_holidays_between(d_deb.isoformat(), d_fin.isoformat())}
+    n, d = 0, d_deb
+    while d <= d_fin:
+        if d.weekday() < 5 and d.isoformat() not in feries:
+            n += 1
+        d += timedelta(days=1)
+    return float(n)
+
+
+def motif_decompte(conn, code) -> str:
+    """Solde sur lequel le motif s'impute : 'cp', 'rtt' ou 'aucun'."""
+    try:
+        row = conn.execute(
+            "SELECT decompte FROM rh_motifs_absence WHERE code = ?", (str(code or ""),)
+        ).fetchone()
+    except Exception:
+        row = None
+    if row:
+        return row["decompte"] or "aucun"
+    return {"CP": "cp", "RTT": "rtt"}.get(str(code or ""), "aucun")
+
+
+def _lire_nb(val, defaut: float) -> float:
+    """Nombre de jours saisi (par demi-journée), ou le défaut si vide."""
+    if val in (None, ""):
+        return defaut
+    try:
+        nb = float(val)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Nombre de jours invalide.")
+    if nb <= 0 or (nb * 2) % 1:
+        raise HTTPException(400, "Nombre de jours invalide — valeur positive, par demi-journée.")
+    return nb
+
+
+def _lire_jours_cp(conn, type_conge, val, nb_jours: float):
+    """Part décomptée des CP : sans objet pour un motif CP (NULL), 0 par défaut sinon."""
+    if motif_decompte(conn, type_conge) == "cp":
+        return None
+    if val in (None, ""):
+        return 0.0
+    try:
+        jcp = float(val)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Jours décomptés des CP invalides.")
+    if jcp < 0 or jcp > nb_jours or (jcp * 2) % 1:
+        raise HTTPException(
+            400, f"Jours décomptés des CP invalides — entre 0 et {nb_jours:g}, par demi-journée.")
+    return jcp
+
+
 def _assert_motif_actif(conn, code) -> None:
     """Le type d'un congé est le code d'un motif de rh_motifs_absence."""
     try:
@@ -644,7 +698,7 @@ def get_conges(
     with get_db() as conn:
         q = """SELECT c.id, c.user_id, u.nom AS user_nom, u.role AS user_role,
                       c.date_debut, c.date_fin, c.nb_jours,
-                      c.type_conge, c.note, c.statut,
+                      c.type_conge, c.note, c.statut, c.jours_cp,
                       c.created_by, c.created_at,
                       c.fermeture_id, f.libelle AS fermeture_libelle
                FROM rh_conges c
@@ -683,23 +737,26 @@ async def create_conge(request: Request):
     type_conge = body.get("type_conge", "CP")
     note       = body.get("note", "")
 
-    if not all([user_id, date_debut, date_fin, nb_jours is not None]):
-        raise HTTPException(400, "Champs obligatoires : user_id, date_debut, date_fin, nb_jours")
+    if not all([user_id, date_debut, date_fin]):
+        raise HTTPException(400, "Champs obligatoires : employé, date de début, date de fin.")
 
     try:
         d_deb = date.fromisoformat(date_debut)
         d_fin = date.fromisoformat(date_fin)
-        nb    = float(nb_jours)
     except (ValueError, TypeError):
-        raise HTTPException(400, "Format de date invalide ou nb_jours non numérique")
+        raise HTTPException(400, "Dates invalides — format AAAA-MM-JJ attendu.")
 
     if d_fin < d_deb:
         raise HTTPException(400, "La date de fin doit être ≥ à la date de début")
+    # Les dates font foi : jours ouvrés de la période, sauf ajustement
+    # explicite (demi-journée).
+    nb = _lire_nb(nb_jours, jours_ouvres(d_deb, d_fin))
     if nb <= 0:
-        raise HTTPException(400, "Le nombre de jours doit être supérieur à 0")
+        raise HTTPException(400, "Aucun jour ouvré sur cette période.")
 
     with get_db() as conn:
         _assert_motif_actif(conn, type_conge)
+        jours_cp = _lire_jours_cp(conn, type_conge, body.get("jours_cp"), nb)
         user_row = conn.execute(
             "SELECT id, nom FROM users WHERE id = ? AND actif = 1", (user_id,)
         ).fetchone()
@@ -724,10 +781,10 @@ async def create_conge(request: Request):
         cur = conn.execute(
             """INSERT INTO rh_conges
                    (user_id, date_debut, date_fin, nb_jours, type_conge, note,
-                    statut, created_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, 'pose', ?, ?)""",
+                    statut, created_by, created_at, jours_cp)
+               VALUES (?, ?, ?, ?, ?, ?, 'pose', ?, ?, ?)""",
             (user_id, date_debut, date_fin, nb, type_conge, note or None,
-             editor.get("email"), now),
+             editor.get("email"), now, jours_cp),
         )
         conn.commit()
         new_id = cur.lastrowid
@@ -735,7 +792,7 @@ async def create_conge(request: Request):
         row = conn.execute(
             """SELECT c.id, c.user_id, u.nom AS user_nom,
                       c.date_debut, c.date_fin, c.nb_jours,
-                      c.type_conge, c.note, c.statut, c.created_at
+                      c.type_conge, c.note, c.statut, c.jours_cp, c.created_at
                FROM rh_conges c JOIN users u ON u.id = c.user_id
                WHERE c.id = ?""",
             (new_id,),
@@ -758,18 +815,36 @@ async def update_conge(conge_id: int, request: Request):
 
     with get_db() as conn:
         existing = conn.execute(
-            "SELECT id FROM rh_conges WHERE id = ?", (conge_id,)
+            "SELECT * FROM rh_conges WHERE id = ?", (conge_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(404, "Congé introuvable")
 
-        allowed = {"date_debut", "date_fin", "nb_jours", "type_conge", "note", "statut"}
+        allowed = {"date_debut", "date_fin", "nb_jours", "type_conge", "note", "statut", "jours_cp"}
         fields = {k: v for k, v in body.items() if k in allowed}
         if not fields:
             raise HTTPException(400, "Aucun champ modifiable fourni")
 
         if "type_conge" in fields:
             _assert_motif_actif(conn, fields["type_conge"])
+        try:
+            d_deb = date.fromisoformat(str(fields.get("date_debut", existing["date_debut"])))
+            d_fin = date.fromisoformat(str(fields.get("date_fin", existing["date_fin"])))
+        except ValueError:
+            raise HTTPException(400, "Dates invalides — format AAAA-MM-JJ attendu.")
+        if d_fin < d_deb:
+            raise HTTPException(400, "La date de fin doit être ≥ à la date de début")
+        # Dates changées sans nombre de jours ajusté : les jours ouvrés suivent.
+        dates_changees = ("date_debut" in fields or "date_fin" in fields)
+        if "nb_jours" in fields or dates_changees:
+            fields["nb_jours"] = _lire_nb(fields.get("nb_jours"), jours_ouvres(d_deb, d_fin))
+        nb = float(fields.get("nb_jours", existing["nb_jours"]))
+        if nb <= 0:
+            raise HTTPException(400, "Aucun jour ouvré sur cette période.")
+        type_final = fields.get("type_conge", existing["type_conge"])
+        if "jours_cp" in fields or "type_conge" in fields or "nb_jours" in fields:
+            brut = fields.get("jours_cp", existing["jours_cp"])
+            fields["jours_cp"] = _lire_jours_cp(conn, type_final, brut, nb)
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [conge_id]
         conn.execute(f"UPDATE rh_conges SET {set_clause} WHERE id = ?", vals)
@@ -778,7 +853,7 @@ async def update_conge(conge_id: int, request: Request):
         row = conn.execute(
             """SELECT c.id, c.user_id, u.nom AS user_nom,
                       c.date_debut, c.date_fin, c.nb_jours,
-                      c.type_conge, c.note, c.statut, c.created_at
+                      c.type_conge, c.note, c.statut, c.jours_cp, c.created_at
                FROM rh_conges c JOIN users u ON u.id = c.user_id
                WHERE c.id = ?""",
             (conge_id,),
@@ -859,7 +934,8 @@ def get_soldes(request: Request, annee: Optional[int] = None, scope: str = "atel
         soldes_map = {r["user_id"]: dict(r) for r in soldes_raw}
 
         poses = conn.execute(
-            """SELECT user_id, type_conge, SUM(nb_jours) AS total
+            """SELECT user_id, type_conge, SUM(nb_jours) AS total,
+                      SUM(COALESCE(jours_cp, 0)) AS total_cp
                FROM rh_conges
                WHERE strftime('%Y', date_debut) = ? AND statut != 'refuse'
                GROUP BY user_id, type_conge""",
@@ -880,6 +956,10 @@ def get_soldes(request: Request, annee: Optional[int] = None, scope: str = "atel
             tc = p["type_conge"]
             total = float(p["total"] or 0)
             dec = decomptes.get(tc, "aucun")
+            if dec != "cp":
+                # Absence justifiée : la part qui dépasse ce qu'elle couvre
+                # se retire des CP.
+                poses_map[uid]["CP"] += float(p["total_cp"] or 0)
             if dec == "cp":
                 poses_map[uid]["CP"] += total
             elif dec == "rtt":

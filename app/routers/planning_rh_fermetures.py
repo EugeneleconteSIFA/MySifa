@@ -21,7 +21,7 @@ Règles :
 Écriture réservée aux éditeurs RH (comptabilité, direction, superadmin) :
 une fermeture touche tous les services.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -32,6 +32,7 @@ from app.routers.planning_rh import (
     _require_hr_edit,
     _require_hr_view,
     jours_affectes_pendant,
+    jours_ouvres,
 )
 from app.services.audit_service import log_action
 from config import national_holidays_between
@@ -41,16 +42,9 @@ router = APIRouter(prefix="/api/rh", tags=["planning_rh_fermetures"])
 
 
 # ── Calcul ───────────────────────────────────────────────────────
-def jours_ouvres(d_deb: date, d_fin: date) -> tuple[float, list[dict]]:
-    """Jours ouvrés (lundi–vendredi) de la période, jours fériés nationaux retirés."""
-    feries = {ds: lib for ds, lib in national_holidays_between(d_deb.isoformat(), d_fin.isoformat())}
-    n = 0
-    d = d_deb
-    while d <= d_fin:
-        if d.weekday() < 5 and d.isoformat() not in feries:
-            n += 1
-        d += timedelta(days=1)
-    return float(n), [{"date": k, "libelle": v} for k, v in sorted(feries.items())]
+def _ouvres_et_feries(d_deb: date, d_fin: date) -> tuple[float, list[dict]]:
+    feries = national_holidays_between(d_deb.isoformat(), d_fin.isoformat())
+    return jours_ouvres(d_deb, d_fin), [{"date": d, "libelle": l} for d, l in sorted(feries)]
 
 
 def _dates(body: dict) -> tuple[date, date]:
@@ -161,7 +155,7 @@ def apercu_fermeture(request: Request, du: str, au: str):
     """Avant création : jours ouvrés proposés et situation de chaque employé."""
     _require_hr_view(request)
     d_deb, d_fin = _dates({"date_debut": du, "date_fin": au})
-    nb, feries = jours_ouvres(d_deb, d_fin)
+    nb, feries = _ouvres_et_feries(d_deb, d_fin)
     with get_db() as conn:
         det = _detail(conn, {"id": 0, "date_debut": d_deb.isoformat(), "date_fin": d_fin.isoformat()})
     return {"nb_jours": nb, "feries": feries, "employes": det["employes"], "compte": det["compte"]}
@@ -224,7 +218,7 @@ async def creer_fermeture(request: Request):
     if not libelle:
         raise HTTPException(400, "Nom de la fermeture obligatoire.")
     d_deb, d_fin = _dates(body)
-    nb_defaut, _ = jours_ouvres(d_deb, d_fin)
+    nb_defaut = jours_ouvres(d_deb, d_fin)
     nb = _nb(body.get("nb_jours"), nb_defaut)
     type_conge = str(body.get("type_conge") or "CP")
     exclus = [int(u) for u in (body.get("exclus") or []) if str(u).isdigit()]

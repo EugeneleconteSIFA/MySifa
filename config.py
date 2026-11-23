@@ -1277,6 +1277,19 @@ FERIES_NATIONAUX_FR: dict[int, list[tuple[str, str]]] = {
         ("2026-11-11", "Armistice 1918"),
         ("2026-12-25", "Noël"),
     ],
+    2027: [
+        ("2027-01-01", "Jour de l'an"),
+        ("2027-03-29", "Lundi de Pâques"),
+        ("2027-05-01", "Fête du Travail"),
+        ("2027-05-08", "Victoire des Alliés 1945"),
+        ("2027-05-06", "Jeudi de l'Ascension"),
+        ("2027-05-17", "Lundi de Pentecôte"),
+        ("2027-07-14", "Fête Nationale"),
+        ("2027-08-15", "Assomption"),
+        ("2027-11-01", "La Toussaint"),
+        ("2027-11-11", "Armistice 1918"),
+        ("2027-12-25", "Noël"),
+    ],
 }
 
 

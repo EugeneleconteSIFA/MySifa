@@ -222,7 +222,14 @@ function prhOuvrirDemande(nature) {
 function prhJoursOuvres(deb, fin) {
   if (!deb || !fin || fin < deb) return null;
   let n = 0; const d = new Date(deb + 'T00:00:00'); const f = new Date(fin + 'T00:00:00');
-  while (d <= f) { const j = d.getDay(); if (j !== 0 && j !== 6) n++; d.setDate(d.getDate() + 1); }
+  // Fériés retirés (window.PRH_FERIES, posé par la page) : même calcul que le serveur.
+  const feries = window.PRH_FERIES || {};
+  while (d <= f) {
+    const j = d.getDay();
+    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    if (j !== 0 && j !== 6 && !feries[iso]) n++;
+    d.setDate(d.getDate() + 1);
+  }
   return n;
 }
 
