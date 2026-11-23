@@ -72,8 +72,12 @@ JOURNEE = [
 stats = build_dossier_production_stats(JOURNEE, DOS)
 check("metrage = compteur fin - compteur debut", stats["quantites"]["metrage_m"], 17531.0)
 check("etiquettes remontees", stats["quantites"]["etiquettes"], 891000.0)
-check("temps de production (03 + 88)", stats["temps_totaux"]["production_min"], 279.8)
-check("vitesse non nulle", round(stats["vitesse_m_min"], 2), 62.66)
+# 03 + 88 = 279,8 min, plus le délai de réaction rendu par le calage qui
+# précède le 03 (config.PROD_DELAI_REACTION_CALAGE_MIN, 3 min par défaut).
+import config as _config  # noqa: E402
+_delai = _config.PROD_DELAI_REACTION_CALAGE_MIN
+check("temps de production (03 + 88)", stats["temps_totaux"]["production_min"], round(279.8 + _delai, 1))
+check("vitesse non nulle", round(stats["vitesse_m_min"], 2), round(17531.0 / round(279.8 + _delai, 1), 2))
 
 print("--- repli sur les anciennes colonnes (lignes historiques) ---")
 ANCIEN = [
