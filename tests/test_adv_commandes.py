@@ -491,6 +491,44 @@ check("auteur et date de la prépa", (par_h["9930003-1"]["prete_par"], par_h["99
 check("sur 90 jours, la plus ancienne revient", len(adv.historique_prepa(90)["lignes"]), 4)
 check("partie : absente de l'onglet Prépa", "9930001-1" in {l["cle"] for l in adv.prepa(horizon=30)["lignes"]}, False)
 
+# ── 9. Planning de prépa : le jour où préparer ──────────────────────────────
+print("\nJour de prépa")
+from datetime import date as _d  # noqa: E402
+check("jour ouvré avant un lundi = vendredi", adv.jour_ouvre_avant(_d(2026, 11, 30)).isoformat(), "2026-11-27")
+check("jour ouvré avant un mercredi = mardi", adv.jour_ouvre_avant(_d(2026, 11, 25)).isoformat(), "2026-11-24")
+LUNDI = _d(2026, 11, 23)
+check("expédition jeudi → préparée mercredi",
+      adv.jour_prepa({"expedition": "2026-11-26"}, LUNDI), ("2026-11-25", "expedition"))
+check("un enlèvement prévu prime sur l'expédition",
+      adv.jour_prepa({"expedition": "2026-11-27", "departs": [{"date_enlevement": "2026-11-25", "parti_le": None}]}, LUNDI),
+      ("2026-11-24", "enlevement"))
+check("un enlèvement déjà parti ne compte pas",
+      adv.jour_prepa({"expedition": "2026-11-27", "departs": [{"date_enlevement": "2026-11-25", "parti_le": "2026-11-25"}]}, LUNDI),
+      ("2026-11-26", "expedition"))
+check("en retard → aujourd'hui", adv.jour_prepa({"expedition": "2026-11-20"}, LUNDI), ("2026-11-23", "expedition"))
+check("expédition demain → aujourd'hui", adv.jour_prepa({"expedition": "2026-11-24"}, LUNDI), ("2026-11-23", "expedition"))
+check("jour fixé par l'ADV", adv.jour_prepa({"expedition": "2026-11-27", "jour_manuel": "2026-11-24"}, LUNDI),
+      ("2026-11-24", "manuel"))
+check("jour fixé dépassé → aujourd'hui", adv.jour_prepa({"expedition": "2026-11-27", "jour_manuel": "2026-11-20"}, LUNDI),
+      ("2026-11-23", "manuel"))
+check("sans date", adv.jour_prepa({"expedition": None}, LUNDI), (None, "sans_date"))
+spec_j = importlib.util.spec_from_file_location("mig_jours", "app/core/migrations/2026_11_24_adv_prepa_jours.py")
+mig_j = importlib.util.module_from_spec(spec_j)
+spec_j.loader.exec_module(mig_j)
+b = sqlite3.connect(miroir.DB_PATH)
+mig_j.appliquer(b)
+mig_j.appliquer(b)                    # rejouable
+b.execute("DELETE FROM adv_prepas")
+b.execute("INSERT INTO adv_prepa_jours(numero, ligne, jour, maj_le, maj_par) VALUES ('9930003', 1, ?, ?, 'ADV')",
+          ((AUJ + timedelta(days=3)).isoformat(), jour(0)))
+b.commit()
+b.close()
+par_p = {l["cle"]: l for l in adv.prepa(horizon=30)["lignes"]}
+check("le jour fixé par l'ADV remonte dans la Prépa",
+      (par_p["9930003-1"]["jour_prepa"], par_p["9930003-1"]["jour_source"]), ((AUJ + timedelta(days=3)).isoformat(), "manuel"))
+check("chaque ligne de la Prépa a un jour (ou None sans date)",
+      all("jour_prepa" in l for l in par_p.values()), True)
+
 print()
 if ko:
     print(f"test_adv_commandes : {ko} échec(s)")
