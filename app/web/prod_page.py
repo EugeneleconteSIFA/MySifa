@@ -95,7 +95,7 @@ __ARRIVEE_PLANNING__
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1-msb1">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent19-san3-sev1-opk2-ofl10">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent20-san3-sev1-opk2-ofl10">
 <!-- Portrait telephone de MyProd > Production. Le socle mobile partage
      (prefixe .msf-) fournit les briques ; la feuille qui suit ne porte que
      ce qui appartient a MyProd (.mpm-) et quelques reprises du bureau. -->
@@ -154,7 +154,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_rent_tableau.js?v=7"></script>
 <!-- Rentabilite > lecture d'un devis : resultat, chaine du classeur, sensibilite -->
 <script src="/static/mysifa_rent_devis.js?v=3"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent30-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit4-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp61-rep2"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent31-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit4-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp61-rep2"></script>
 <!-- Repartir une fin de production sur plusieurs dossiers de la commande -->
 <script src="/static/mysifa_repartition.js?v=2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
