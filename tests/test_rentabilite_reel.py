@@ -228,6 +228,16 @@ qte = next(p for p in f["parametres"] if p["parametre"] == "Quantité")
 check("quantité produite 600 000 (deux équipes)", qte["reel"] == 600000, qte)
 print("     MB", r["marge_brute"], "MB %", r["mb_pct"], "€/h", r["cout_horaire"], "verdict", f["verdict"]["global"])
 
+with get_db() as conn:
+    from app.routers.rentabilite import caracteristiques_dossier_devis   # noqa: E402
+    ca = caracteristiques_dossier_devis(conn, 707)
+    ca_sans = caracteristiques_dossier_devis(conn, 708)
+check("caractéristiques : devis lié par défaut, cinq lignes", ca["devis_id"] == 10 and len(ca["lignes"]) == 5, ca)
+check("caractéristiques : format du planning faute d'OF, quantité du devis",
+      ca["lignes"][0]["dossier"] == "148 × 105.125 mm" and ca["lignes"][1]["devis"] == 600000, ca["lignes"][:2])
+check("caractéristiques sans devis : colonne devis vide, aucun écart",
+      ca_sans["devis_id"] is None and ca_sans["ecarts"] == 0 and all(l["devis"] is None for l in ca_sans["lignes"]))
+
 print("3. États explicites")
 with get_db() as conn:
     check("créneau sans devis", fiche_rentabilite(conn, 708)["etat"] == "sans_devis")

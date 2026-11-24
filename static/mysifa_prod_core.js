@@ -8437,8 +8437,10 @@ function rentSelecteurDevis(o){
     return t.length === 3 ? t[2] + '/' + t[1] + '/' + t[0] : ''; };
   const details = s => [
     (s.format_h && s.format_v) ? (s.format_v + '×' + s.format_h + ' mm') : null,
-    s.papier || null,
     s.qte_etiquettes ? fmtQte(s.qte_etiquettes) + ' ex' : null,
+    s.ex_rouleau ? fmtQte(s.ex_rouleau) + ' ex/rlx' : null,
+    s.papier || null,
+    s.colle || null,
     s.date_devis ? fmtJour(s.date_devis) : null,
   ].filter(Boolean).join(' · ');
 
@@ -8554,6 +8556,46 @@ function rentSelecteurDevis(o){
   return racine;
 }
 
+/* Le dossier et son devis côte à côte : format, quantité, étiquettes par
+   rouleau, matière, colle (demande du 24/11/2026). Une ligne qui diffère est
+   marquée ; un côté inconnu n'est jamais un écart. Calcul serveur
+   (`/caracteristiques`, service `rentabilite_caracteristiques.py`), dessin
+   ici, réutilisé partout où un dossier et un devis se côtoient.
+   `devisId` : un devis choisi mais pas encore enregistré (panneau Dossiers). */
+function rentCaracteristiques(entryId, devisId){
+  const zone = h('div',{className:'rent-carac'},
+    h('div',{className:'rent-carac-attente'},'Lecture du dossier et du devis…'));
+  const fmt = (l, v) => {
+    if(v == null || v === '') return '—';
+    if(typeof v === 'number') return v.toLocaleString('fr-FR') + (l.unite ? ' ' + l.unite : '');
+    return String(v);
+  };
+  api('/api/rentabilite/planning/' + entryId + '/caracteristiques'
+      + (devisId ? '?devis_id=' + encodeURIComponent(devisId) : ''))
+    .then(r => {
+      zone.textContent = '';
+      zone.append(h('div',{className:'rent-carac-ligne rent-carac-tete'},
+        h('span',null,''), h('span',null,'Dossier'), h('span',null,'Devis')));
+      (r.lignes || []).forEach(l => {
+        const devis = h('span',{className:'rent-carac-val'}, fmt(l, l.devis));
+        if(l.note) devis.title = 'Quantité du devis : ' + l.note + ' de celle du dossier';
+        if(l.cle === 'matiere' || l.cle === 'colle'){
+          if(r.devis_fichier && l.devis) devis.title = 'Lu dans le nom du fichier : ' + r.devis_fichier;
+        }
+        zone.append(h('div',{className:'rent-carac-ligne' + (l.ecart ? ' is-ecart' : ''),
+            title: l.ecart ? l.libelle + ' : le dossier diffère du devis' : ''},
+          h('span',{className:'rent-carac-lib'}, l.ecart ? h('span',{className:'rent-carac-diff'},'≠') : null, l.libelle),
+          h('span',{className:'rent-carac-val'}, fmt(l, l.dossier)),
+          devis));
+      });
+    })
+    .catch(() => {
+      zone.textContent = '';
+      zone.append(h('div',{className:'rent-carac-attente'},'Caractéristiques indisponibles.'));
+    });
+  return zone;
+}
+
 // ── Fenêtre de rattachement ──────────────────────────────────────
 // `sansAdresse` : fermeture technique (relance, réouverture, Retour du
 // navigateur, passage à la fiche complète) — voir url-etat.md.
@@ -8655,6 +8697,7 @@ async function ouvrirRattachementModal(entryId, file){
   corps.innerHTML = '';
   corps.appendChild(h('div',{className:'form-section-title'},'Devis'));
   corps.appendChild(selecteur);
+  if(lien.devis_id) corps.appendChild(rentCaracteristiques(entryId));
   if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
   // Rattachement validé : la fiche rentabilité (devisé contre réel, en
   // fourchettes) se lit sous le devis. Calcul serveur, dessin dans
@@ -9467,7 +9510,10 @@ function renderRentPanneau(g, listeVisible){
 
   // Le choix n'est enregistré qu'au clic sur « Enregistrer », avec les
   // dossiers de production : on peut corriger les deux avant de valider.
-  const devisSel=rentSelecteurDevis({entryId, devisId:lien.devis_id});
+  const caracZone=h('div');
+  const peindreCarac=id=>{ caracZone.textContent=''; if(id) caracZone.appendChild(rentCaracteristiques(entryId, id)); };
+  const devisSel=rentSelecteurDevis({entryId, devisId:lien.devis_id, onChange:peindreCarac});
+  peindreCarac(lien.devis_id);
 
   const dosInput=h('input',{type:'text',className:'rent-input',
     placeholder:'N° dossier production (ex : 1003/0002)…',
@@ -9596,6 +9642,7 @@ function renderRentPanneau(g, listeVisible){
       h('div',null,
         h('div',{className:'form-section-title'},'Devis'),
         devisSel,
+        caracZone,
         dz, dzInp
       ),
       h('div',null,
