@@ -174,6 +174,8 @@ check("A servie d'abord, lots FIFO", [(e["emplacement"], e["quantite"]) for e in
 check("A : stock oui", A["etapes"]["stock"]["valeur"], "oui")
 check("B : reste = qte − BL vivants, pas qtep", (B["reste"], B["besoin_rvgi"]), (400.0, 9999.0))
 check("B : 200 en stock sur 400", (B["stock"]["alloue"], B["etapes"]["stock"]["valeur"]), (200.0, "en_cours"))
+check("B : jauge du stock à 50 %, unité accordée", (B["etapes"]["stock"]["jauge"], B["etapes"]["stock"]["detail"]),
+      (0.5, "Stock partiel : 200 étiquettes sur 400 (50 %)"))
 check("le lot en carton ne sert pas une ligne en étiquettes", A["stock"]["total"], 1200.0)
 check("C : rien en stock", C["etapes"]["stock"]["valeur"], "non")
 check("à fabriquer = reste à livrer − stock attribué", (A["a_fabriquer"], B["a_fabriquer"], C["a_fabriquer"]),
@@ -391,7 +393,9 @@ print("\nStock probable")
 check("E1 : prod faite, 1 200 produites pour 1 000 : stock probable",
       (E1["etapes"]["prod"]["valeur"], E1["etapes"]["stock"]["valeur"]), ("oui", "probable"))
 check("E1 : sortie de prod et plus rien à fabriquer", (E1["stock"]["sortie_prod"], E1["a_fabriquer"]), (1000.0, 0.0))
-check("E1 : le stock ne bloque plus (reste le BAT, absent du jeu)", E1["bloquante"], "bat")
+check("E1 : le stock ne bloque plus, ni le BAT (prod faite)", E1["bloquante"], "prepa")
+check("E1 : sans BAT dans MyBAT, la prod faite vaut BAT bon",
+      (E1["etapes"]["bat"]["valeur"], "production lancée" in E1["etapes"]["bat"]["detail"]), ("oui", True))
 check("E3 : le même dossier ne sert pas deux fois (200 restantes pour 500)",
       (E3["etapes"]["stock"]["valeur"], E3["a_fabriquer"]), ("non", 500.0))
 check("F : cartons sans « étiquettes par carton », on ne devine pas", F["etapes"]["stock"]["valeur"], "non")

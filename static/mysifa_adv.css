@@ -106,10 +106,28 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-table tbody tr:hover td{background:var(--accent-bg)}
 .adv-table td.num{text-align:right;font-variant-numeric:tabular-nums}
 /* La commande reste visible quand le tableau défile en largeur. */
-.adv-table th:first-child,.adv-table td:first-child{position:sticky;left:0;z-index:1;background:var(--card)}
+.adv-table th:first-child,.adv-table td:first-child{position:sticky;left:0;z-index:2;background:var(--card)}
 .adv-table th:first-child{z-index:3}
 .adv-table tbody tr:hover td:first-child{background:var(--card);box-shadow:inset 0 0 0 999px var(--accent-bg)}
-.adv-table td.etape{text-align:center;padding:6px 4px}
+.adv-table td.etape{text-align:center;padding:6px 4px;position:relative}
+/* Frise d'avancement : un trait relie les étapes voisines (pas une étape
+   déplacée loin des autres), vert quand l'étape d'arrivée est franchie. */
+.adv-table td.etape.lien-g::before,.adv-table td.etape.lien-d::after{content:"";position:absolute;top:50%;height:3px;margin-top:-1.5px;background:var(--border);z-index:0}
+.adv-table td.etape.lien-g::before{left:0;right:50%}
+.adv-table td.etape.lien-d::after{left:50%;right:0}
+.adv-table td.etape.lien-g.v-oui::before,.adv-table td.etape.lien-d.suiv-oui::after{background:var(--success)}
+.adv-table td.etape.lien-g.v-probable::before,.adv-table td.etape.lien-d.suiv-probable::after{background:repeating-linear-gradient(90deg,var(--success) 0 5px,transparent 5px 9px)}
+.adv-noeud{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;vertical-align:middle;box-sizing:border-box}
+.adv-noeud svg{width:13px;height:13px}
+.adv-noeud.oui{background:var(--success);color:white}
+.adv-noeud.en_cours{background:var(--warn);color:white}
+.adv-noeud.non{background:var(--card);color:var(--danger);border:2px solid var(--danger)}
+.adv-noeud.sans_objet{background:var(--card);color:var(--muted);border:2px dashed var(--border)}
+.adv-noeud.probable{background:var(--card);color:var(--success);border:2px dashed var(--success)}
+/* Jauge : Stock et Prod en cours se remplissent de bas en haut (--p, en %). */
+.adv-noeud.jauge,.fi-etape .fi-rond.jauge{background:var(--card);color:var(--warn);border:2px solid var(--warn)}
+.adv-noeud.jauge::before,.fi-etape .fi-rond.jauge::before{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(to top,var(--warn) calc(var(--p) * 1%),transparent calc(var(--p) * 1%));opacity:.4;z-index:-1}
+.adv-noeud.force::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
 .adv-table td.des{max-width:210px;overflow:hidden}
 .adv-table td.des .des-l{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .adv-table td.client{max-width:150px;overflow:hidden;text-overflow:ellipsis;font-weight:600}
@@ -119,15 +137,7 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-date-retard{color:var(--danger);font-weight:700}
 .adv-date-tard{color:var(--warn);font-weight:700}
 
-/* Pastille d'étape : un état se lit en un coup d'œil, le détail au survol. */
-.adv-etat{display:inline-flex;align-items:center;justify-content:center;min-width:44px;gap:4px;padding:3px 6px;border-radius:999px;font-size:11px;font-weight:700;position:relative;border:1px solid transparent}
-.adv-etat.oui{background:var(--accent-bg);color:var(--success)}
-.adv-etat.en_cours{background:var(--accent-bg);color:var(--warn)}
-.adv-etat.non{background:var(--bg);color:var(--danger);border-color:var(--border)}
-.adv-etat.sans_objet{background:transparent;color:var(--muted)}
-.adv-etat.probable{background:var(--accent-bg);color:var(--success);border:1px dashed var(--success)}
 .adv-empl .adv-sortie-prod{border:1px dashed var(--success);color:var(--success);white-space:nowrap}
-.adv-etat.force::after{content:"";position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--accent);border:1px solid var(--card)}
 
 /* Infobulle instantanée (plusieurs lignes) */
 #adv-tip{position:fixed;z-index:100000;pointer-events:none;max-width:320px;padding:9px 12px;border-radius:9px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12px;line-height:1.45;box-shadow:0 8px 28px rgba(0,0,0,.35);opacity:0;transition:opacity .08s}
@@ -196,11 +206,11 @@ td.mef-ok .mef-p{background:color-mix(in srgb,var(--success) 15%,transparent);co
 td.mef-accent .mef-p{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 td.mef-neutre .mef-p{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
 td.mef .mef-p .adv-muet,td.mef .mef-p .des-l{color:inherit;opacity:.75}
-td.etape.mef-danger .adv-etat{box-shadow:0 0 0 2px var(--danger)}
-td.etape.mef-warn .adv-etat{box-shadow:0 0 0 2px var(--warn)}
-td.etape.mef-ok .adv-etat{box-shadow:0 0 0 2px var(--success)}
-td.etape.mef-accent .adv-etat{box-shadow:0 0 0 2px var(--accent)}
-td.etape.mef-neutre .adv-etat{box-shadow:0 0 0 2px var(--muted)}
+td.etape.mef-danger .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--danger)}
+td.etape.mef-warn .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--warn)}
+td.etape.mef-ok .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--success)}
+td.etape.mef-accent .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent)}
+td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--muted)}
 .adv-tete-actions{display:flex;gap:8px;align-items:center}
 .btn.adv-btn-icone{padding:9px 11px}
 .adv-modal.adv-modal-large{width:min(1060px,100%)}
