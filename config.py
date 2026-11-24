@@ -775,6 +775,10 @@ ADV_PREPA_HORIZON_JOURS = int(os.getenv("ADV_PREPA_HORIZON_JOURS", "21"))
 # couvrir (étiquettes de fin de prod) pour qu'on la juge préparable sans
 # entrée MyStock. 0.95 = la gâche d'un tirage ne bloque pas la ligne.
 ADV_STOCK_PROBABLE_COUVERTURE = float(os.getenv("ADV_STOCK_PROBABLE_COUVERTURE", "0.95"))
+# Une préparation préparable devient urgente quand son expédition tombe dans
+# ce nombre de jours (0 = aujourd'hui, 1 = demain), retards compris. S'ajoute
+# aux lignes marquées « urgente » par l'ADV (table adv_urgences).
+ADV_PREPA_URGENCE_JOURS = int(os.getenv("ADV_PREPA_URGENCE_JOURS", "1"))
 
 # Mise en forme conditionnelle du carnet ADV (règles en base, table
 # adv_mises_en_forme). Ce qui peut être coloré, comment on compare, et avec

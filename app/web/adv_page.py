@@ -60,7 +60,14 @@ def adv_page(request: Request):
         # Le bouton « Mettre à jour » du miroir RVGI est ouvert aux rôles de l'ERP.
         "rvgi_demande": role in ROLES_ERP,
     }
+    # Pour la logistique et l'expédition, l'appli s'appelle « Prépa » : elles
+    # n'en voient que l'onglet des préparations.
+    prepa_seule = role not in ROLES_ADV
+    boot["appli"] = "Prépa" if prepa_seule else "ADV"
     html = (PAGE_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
+            .replace("__APPLI__", boot["appli"])
+            .replace("__SECTION__", "Préparations" if prepa_seule else "Administration des ventes")
+            .replace("__ACCUEIL__", "/adv?onglet=prepa" if prepa_seule else "/adv")
             .replace("__BOOT__", _json_script(boot)))
     return HTMLResponse(content=html, headers=_SANS_CACHE)
 
@@ -76,7 +83,7 @@ _ICONE_PREPA = ('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" str
 PAGE_HTML = (r"""<!DOCTYPE html>
 <html lang="fr">
 <head>
-<title>ADV — MySifa</title>
+<title>__APPLI__ — MySifa</title>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0a0e17"><!-- hex-ok : barre système, avant le thème -->
@@ -86,7 +93,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ia.css">
-<link rel="stylesheet" href="/static/mysifa_adv.css?v=13">
+<link rel="stylesheet" href="/static/mysifa_adv.css?v=14">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -99,16 +106,16 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <div class="app">
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <nav class="sidebar" id="sidebar">
-    <div class="logo" onclick="location.href='/adv'" title="Menu ADV" aria-label="Menu ADV">
+    <div class="logo" onclick="location.href='__ACCUEIL__'" title="Menu __APPLI__" aria-label="Menu __APPLI__">
       <div class="logo-brand">My<span>Sifa</span></div>
-      <div class="logo-sub">ADV</div>
+      <div class="logo-sub">__APPLI__</div>
     </div>
     <div class="msb-nav" id="adv-nav">
-      <div class="nav-section-label msb-section"><span>Administration des ventes</span></div>
+      <div class="nav-section-label msb-section"><span>__SECTION__</span></div>
       <button type="button" class="nav-btn" data-onglet="commandes">""" + _ICONE_CARNET + r"""<span>Commandes</span><span class="adv-nav-nb" id="adv-nb-commandes"></span></button>
       <button type="button" class="nav-btn" data-onglet="prepa">""" + _ICONE_PREPA + r"""<span>Prépa</span><span class="adv-nav-nb" id="adv-nb-prepa"></span></button>
     </div>
-    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="ADV" data-msb-version="__V_LABEL__"></div>
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="__APPLI__" data-msb-version="__V_LABEL__"></div>
   </nav>
   <main class="main">
     <div class="mobile-topbar">
@@ -116,7 +123,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
-        <div class="mobile-topbar-title">ADV</div>
+        <div class="mobile-topbar-title">__APPLI__</div>
         <div class="mobile-topbar-sub" id="mobile-sub">Commandes</div>
       </div>
       <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
@@ -130,7 +137,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/mysifa_rvgi_synchro.js?v=1"></script>
-<script src="/static/mysifa_adv.js?v=13"></script>
+<script src="/static/mysifa_adv.js?v=14"></script>
 </body>
 </html>
 """)
