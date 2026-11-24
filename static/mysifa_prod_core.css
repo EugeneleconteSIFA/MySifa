@@ -1958,3 +1958,7 @@ button.ofe-case{cursor:pointer;text-align:left;white-space:nowrap;overflow:hidde
 .rent-carac-ligne.is-ecart{background:var(--warn-bg)}
 .rent-carac-ligne.is-ecart .rent-carac-val{font-weight:700}
 .rent-carac-diff{color:var(--warn);font-weight:800}
+.rent-carac-seul .rent-carac-ligne{grid-template-columns:minmax(120px,.9fr) minmax(0,2.4fr)}
+.rent-carac-devis{margin-bottom:14px}
+.rent-carac-dossier{display:flex;gap:8px;align-items:baseline;margin:12px 0 -4px;font-size:13px}
+.rent-carac-dossier span{color:var(--muted)}
