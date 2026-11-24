@@ -18,7 +18,8 @@ la valeur forcée s'affiche, le calcul reste lisible à côté.
 D'où vient chaque étape
 -----------------------
 - **BAT** : `bat_entries` par numéro d'article (`code1/code2`). Validé → oui,
-  en attente → en cours. Sans BAT dans MySifa, un article déjà livré
+  en attente → en cours. Sans BAT validé, une production lancée ou du stock
+  de l'article valent BAT bon (oui). Sans BAT dans MySifa, un article déjà livré
   (`vte_ligne`) est une réimpression : sans objet. Le drapeau `bat` de RVGI
   n'apprend rien — il vaut 1 sur tout le carnet.
 - **Prod** : les dossiers du planning qui couvrent la ligne (voir
@@ -313,6 +314,33 @@ def _production_en_unite(etiq: float, unite: Optional[str], d: Dict[str, Any]) -
     return None
 
 
+def _jauge_prod(lignes: List[Dict[str, Any]], produites: Dict[str, float]) -> None:
+    """Prod en cours : la part déjà produite, pour la jauge du nœud.
+
+    Étiquettes de fin de prod saisies jusqu'ici sur les dossiers d'impression
+    de la ligne, ramenées à son unité, sur le reste à livrer. Sans conversion
+    possible (cartons sans « étiquettes par carton »…), pas de jauge.
+    """
+    for l in lignes:
+        et = l["etapes"]["prod"]
+        ds = l.get("_ds_impression") or []
+        if et["valeur"] != "en_cours" or et.get("force") or not ds or l["reste"] <= 0:
+            continue
+        unite = l["stock"]["unite"]
+        fait = 0.0
+        for d in ds:
+            q = _production_en_unite(produites.get(str(d.get("reference") or "").strip(), 0.0), unite, d)
+            if q is None:
+                fait = None
+                break
+            fait += q
+        if not fait:
+            continue
+        et["jauge"] = _ratio(fait, l["reste"])
+        et["detail"] += " · %s %s produites sur %s (%d %%)" % (
+            _n(fait), _accord(unite, fait), _n(l["reste"]), int(min(fait / l["reste"], 1) * 100))
+
+
 def _stock_probable(lignes: List[Dict[str, Any]], produites: Dict[str, float]) -> None:
     """Passe le stock en « probable » quand la production terminée couvre la ligne.
 
@@ -480,6 +508,24 @@ def _etape_bat(l, bats, deja) -> Dict[str, Any]:
     return _etape("non", "Aucun BAT dans MyBAT pour cet article")
 
 
+def _bat_par_la_suite(bat, prod, stock) -> Dict[str, Any]:
+    """Le BAT n'est pas toujours tracé dans MyBAT : une production lancée, ou
+    du stock de l'article, dit qu'il a été bon. Décision d'Eugène (24/11/2026).
+    """
+    if bat["calcul"] not in ("non", "en_cours"):
+        return bat
+    raisons = []
+    if prod["calcul"] in ("oui", "en_cours"):
+        raisons.append("production lancée")
+    if stock["calcul"] in ("oui", "en_cours"):
+        raisons.append("article en stock")
+    if not raisons:
+        return bat
+    avant = "BAT en attente dans MyBAT" if bat["calcul"] == "en_cours" else "Pas de BAT validé dans MyBAT"
+    extra = {k: v for k, v in bat.items() if k == "bat_id"}
+    return _etape("oui", "%s, mais %s : BAT réputé bon" % (avant, " et ".join(raisons)), **extra)
+
+
 STATUTS_REPIQUAGE = ("a_faire", "en_cours", "termine")
 
 
@@ -547,12 +593,28 @@ def _etape_impression(l, dossiers) -> Dict[str, Any]:
     return _etape("non", "Planifié, pas encore démarré")
 
 
+def _accord(unite: Optional[str], q: float) -> str:
+    """« étiquette » → « étiquettes » au-delà de 1 (bobine, carton…)."""
+    u = (unite or "étiquette").strip() or "étiquette"
+    if abs(q) < 2 or u[-1:].lower() in ("s", "x", "z"):
+        return u
+    return u + "s"
+
+
+def _ratio(fait: float, total: float) -> Optional[float]:
+    """Part faite, pour la jauge du nœud : entre 0 et 1, None si rien à mesurer."""
+    if total <= 0:
+        return None
+    return round(max(0.0, min(fait / total, 1.0)), 3)
+
+
 def _etape_stock(reste, alloue, total, unite) -> Dict[str, Any]:
-    u = (" " + unite) if unite else ""
     if reste > 0 and alloue >= reste:
         return _etape("oui", "Stock MyStock suffisant")
     if alloue > 0:
-        return _etape("en_cours", "Stock partiel : %s%s sur %s" % (_n(alloue), u, _n(reste)))
+        return _etape("en_cours", "Stock partiel : %s %s sur %s (%d %%)" % (
+            _n(alloue), _accord(unite, alloue), _n(reste), int(alloue * 100 // reste)),
+            jauge=_ratio(alloue, reste))
     if total > 0:
         return _etape("non", "Stock MyStock déjà réservé par des lignes plus urgentes")
     return _etape("non", "Rien en stock dans MyStock")
@@ -806,6 +868,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "prepa": _etape_prepa(p),
             "depart": _etape_depart(deps, a_venir),
         }
+        etapes["bat"] = _bat_par_la_suite(etapes["bat"], etapes["prod"], etapes["stock"])
         f = forcages.get(l["cle"], {})
         for k in ETAPES:
             _appliquer_forcage(etapes[k], f.get(k))
@@ -818,9 +881,11 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         l.pop("_prepa_statut", None)
 
     # Stock « probable » : production finie, pas rentrée dans MyStock.
+    # Et jauge de la Prod en cours : ce qui est déjà produit.
     candidats = {str(d.get("reference") or "").strip()
                  for l in lignes
-                 if l["etapes"]["prod"]["valeur"] == "oui" and l["etapes"]["stock"]["calcul"] != "oui"
+                 if (l["etapes"]["prod"]["valeur"] == "oui" and l["etapes"]["stock"]["calcul"] != "oui")
+                 or l["etapes"]["prod"]["valeur"] == "en_cours"
                  for d in l.get("_ds_impression", [])}
     produites = {}
     if candidats:
@@ -829,6 +894,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
                 produites = _etiquettes_produites(conn, candidats)
         except Exception:
             produites = {}
+    _jauge_prod(lignes, produites)
     _stock_probable(lignes, produites)
     for l in lignes:
         l.pop("_ds_impression", None)

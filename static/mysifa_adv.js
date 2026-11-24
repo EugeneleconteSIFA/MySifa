@@ -314,18 +314,36 @@
     return false;
   }
 
-  function pastille(l, cle) {
+  // Une étape = un nœud de la frise d'avancement, comme dans la fiche : rond
+  // plein franchi, cerclé rouge à faire, pointillé sans objet ou probable. Le
+  // libellé est dans l'en-tête de colonne, la valeur et le détail au survol.
+  function noeudEtape(l, cle) {
     var e = l.etapes[cle];
     var lib = ETAPES.find(function (x) { return x.cle === cle; });
     var v = e.valeur;
-    var txt = v === 'sans_objet' ? '—' : (ETATS[v] || v);
     var note = null;
     if (e.force) {
       note = 'Fixé à la main' + (e.force_par ? ' par ' + e.force_par : '') + (e.force_le ? ' le ' + dateLongue(e.force_le) : '')
         + (e.force_note ? ' · ' + e.force_note : '') + ' · calcul : ' + (ETATS[e.calcul] || e.calcul);
     }
-    return h('span', {className: 'adv-etat ' + v + (e.force ? ' force' : ''),
-      'data-tip': tip(l.cle + '|' + cle, (lib ? lib.label : cle) + ' · ' + (ETATS[v] || v), e.detail, note)}, txt);
+    var n = h('span', {className: 'adv-noeud ' + v + (e.force ? ' force' : ''), role: 'img',
+      'aria-label': (lib ? lib.label : cle) + ' : ' + (ETATS[v] || v),
+      'data-tip': tip(l.cle + '|' + cle, (lib ? lib.label : cle) + ' · ' + (ETATS[v] || v), e.detail, note)});
+    n.innerHTML = ICONES_ETAT[v] || '';   // pictos SVG constants, aucune donnée
+    jauge(n, e);
+    return n;
+  }
+  // Stock et Prod en cours : le nœud se remplit de bas en haut à la part faite
+  // (96 000 sur 100 000 → rempli à 96 %).
+  function pctJauge(e) {
+    return e && e.valeur === 'en_cours' && e.jauge !== null && e.jauge !== undefined
+      ? Math.floor(Number(e.jauge) * 100 + 1e-9) : null;   // arrondi bas, comme le détail serveur
+  }
+  function jauge(el, e) {
+    var p = pctJauge(e);
+    if (p === null) return;
+    el.classList.add('jauge');
+    el.style.setProperty('--p', String(p));
   }
 
   function tuile(lib, val, sous, ton, actif, onClick, cle) {
@@ -477,7 +495,7 @@
     }}
   ].concat(ETAPES.map(function (e) {
     return {cle: 'etape_' + e.cle, famille: 'etape', label: e.label, etape: true, td: function (l) {
-      return h('td', {className: 'etape'}, pastille(l, e.cle));
+      return h('td', {className: 'etape'}, noeudEtape(l, e.cle));
     }};
   }));
   var COL_PAR_CLE = {};
@@ -572,6 +590,14 @@
       cols.forEach(function (c, i) {
         var td = c.td(l);
         if (separee(cols, i)) td.classList.add('sep');
+        if (c.etape) {
+          // Le trait relie deux étapes voisines ; il passe au vert quand
+          // l'étape où il arrive est franchie, comme la frise de la fiche.
+          var etat = function (col) { return l.etapes[col.cle.slice(6)].valeur; };
+          td.classList.add('v-' + etat(c));
+          if (cols[i - 1] && cols[i - 1].etape) td.classList.add('lien-g');
+          if (cols[i + 1] && cols[i + 1].etape) td.classList.add('lien-d', 'suiv-' + etat(cols[i + 1]));
+        }
         var ton = S.mef.length ? tonCellule(l, c.cle) : null;
         if (ton) {
           td.classList.add('mef', 'mef-' + ton);
@@ -1157,8 +1183,9 @@
             : (corrigeable ? 'Cliquer pour corriger' : null))},
         h('div', {className: 'fi-rond', html: ICONES_ETAT[et.valeur] || ''}),
         h('div', {className: 'fi-etape-lib', text: e.label}),
-        h('div', {className: 'fi-etape-val', text: ETATS[et.valeur] || et.valeur}),
+        h('div', {className: 'fi-etape-val', text: (ETATS[et.valeur] || et.valeur) + (pctJauge(et) !== null ? ' · ' + pctJauge(et) + ' %' : '')}),
         h('div', {className: 'fi-etape-det', text: et.detail}));
+      jauge(noeud.querySelector('.fi-rond'), et);
       if (corrigeable) {
         var basculer = function () { S.ficheEtape = S.ficheEtape === e.cle ? null : e.cle; ouvrirFiche(l.cle, true); };
         noeud.addEventListener('click', basculer);
