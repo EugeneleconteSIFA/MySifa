@@ -48,12 +48,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* ── Éléments communs ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s,background .15s;text-decoration:none;white-space:nowrap}
 .btn:hover{background:var(--bg)}
-.adv-carte .btn,.adv-modal .btn{background:var(--bg)}
-.adv-carte .btn:hover,.adv-modal .btn:hover{background:var(--card)}
-.btn-accent,.adv-carte .btn-accent,.adv-modal .btn-accent{background:var(--accent);border-color:var(--accent);color:white}
-.btn-accent:hover,.adv-carte .btn-accent:hover,.adv-modal .btn-accent:hover{background:var(--accent);filter:brightness(1.08)}
-.btn-ok,.adv-carte .btn-ok{background:var(--success);border-color:var(--success);color:white}
-.btn-ok:hover,.adv-carte .btn-ok:hover{background:var(--success);filter:brightness(1.08)}
+.adv-pl .btn,.adv-modal .btn{background:var(--bg)}
+.adv-pl .btn:hover,.adv-modal .btn:hover{background:var(--card)}
+.btn-accent,.adv-pl .btn-accent,.adv-modal .btn-accent{background:var(--accent);border-color:var(--accent);color:white}
+.btn-accent:hover,.adv-pl .btn-accent:hover,.adv-modal .btn-accent:hover{background:var(--accent);filter:brightness(1.08)}
+.btn-ok,.adv-pl .btn-ok{background:var(--success);border-color:var(--success);color:white}
+.btn-ok:hover,.adv-pl .btn-ok:hover{background:var(--success);filter:brightness(1.08)}
 .btn:disabled{opacity:.6;cursor:default}
 .btn-petit{padding:6px 11px;font-size:12px;border-radius:8px}
 
@@ -147,44 +147,51 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 #adv-tip .tip-n{color:var(--muted);margin-top:4px;font-size:11px}
 
 /* ── Prépa ── */
-.adv-groupe{margin-bottom:16px}
-.adv-groupe h2{font-size:14px;font-weight:800;margin:0 0 8px;display:flex;align-items:center;gap:8px}
-.adv-groupe h2 .n{font-size:12px;color:var(--muted);font-weight:700}
-.adv-carte{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:grid;grid-template-columns:46px minmax(130px,1.4fr) 108px 96px 92px 76px 92px 100px minmax(140px,1.4fr) 96px auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .15s}
-.adv-carte:hover{border-color:var(--accent)}
-.adv-carte.retard{border-left:3px solid var(--danger)}
-/* Ligne d'en-tête des colonnes, au-dessus de chaque groupe */
-.adv-carte.adv-carte-tete{background:transparent;border-color:transparent;padding-top:0;padding-bottom:2px;margin-bottom:2px;cursor:default;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.adv-carte.adv-carte-tete:hover{border-color:transparent}
-.adv-carte.adv-carte-tete>div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* Alignement en-tête / lignes. Chaque ligne était sa propre grille : la piste
-   des boutons (auto) et les pistes fr se calculaient ligne par ligne, et
-   l'en-tête, sans bouton, tombait jusqu'à 60 px à côté de ses valeurs. Une
-   seule grille porte désormais les colonnes de toute la liste ; groupes,
-   en-têtes et lignes s'y inscrivent en subgrid, et la piste des boutons prend
-   la largeur du plus large (« Prête », « Remettre à préparer », deux boutons).
-   1re piste en auto : elle absorbe la marge intérieure et le bord rouge des
-   cartes. Pistes fixes au plus juste des valeurs mesurées ; en dessous de
-   1420 px la ligne ne tient plus, la disposition empilée prend le relais.
-   Sans subgrid (navigateur ancien), chaque ligne garde sa propre grille. */
-@supports (grid-template-columns:subgrid){@media not all and (max-width:1420px){
-.adv-prepa-liste{display:grid;grid-template-columns:auto minmax(140px,1.3fr) 84px 84px 88px 64px 80px 92px minmax(170px,1.7fr) 84px minmax(108px,auto);column-gap:10px}
-.adv-prepa-liste>.adv-groupe,.adv-groupe>h2,.adv-groupe>.adv-carte{grid-column:1/-1}
-.adv-prepa-liste>.adv-groupe{display:grid;grid-template-columns:subgrid;column-gap:10px}
-.adv-groupe>.adv-carte{grid-template-columns:subgrid;column-gap:10px}
-/* Un libellé long (« Remettre à préparer ») passe sur deux lignes plutôt que
-   d'élargir la colonne des boutons pour toute la liste quand la place manque ;
-   le plancher de 108 px évite une troisième ligne. */
-.adv-prepa-liste .adv-actions .btn{white-space:normal;text-wrap:balance;text-align:center;line-height:1.2}
-/* Aucune puce ne déborde sur la colonne Expédition. */
-.adv-prepa-liste .adv-empl{min-width:0}
-.adv-prepa-liste .adv-empl .adv-sortie-prod{white-space:normal}
-}}
-.adv-carte .c-num{text-align:right;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.adv-carte .c-cde,.adv-carte .c-ref{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.adv-carte .c-fort{font-weight:800}
-.adv-carte .c-fab{color:var(--warn);font-weight:800}
-.c-rang{display:flex;align-items:center;gap:3px}
+/* Bascule Préparations / Historique, en tête de l'onglet. */
+.adv-sous{display:inline-flex;gap:4px;padding:4px;margin-bottom:14px;background:var(--card);border:1px solid var(--border);border-radius:12px}
+.adv-sous-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:9px;border:1px solid transparent;background:var(--card);color:var(--text2);font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer}
+.adv-sous-btn:hover{background:var(--bg)}
+.adv-sous-btn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
+/* Un vrai tableau : un seul en-tête, collé en haut quand la liste défile,
+   un <tbody> par groupe ouvert par sa ligne titre. Les colonnes tombent
+   d'elles-mêmes sous leur en-tête, quelle que soit la largeur des valeurs. */
+.adv-prepa-wrap{max-height:calc(100vh - 300px)}
+.adv-prepa-table th{cursor:default;background:var(--bg);color:var(--text2);font-size:11px;font-weight:800;letter-spacing:.3px;padding:11px 8px;border-bottom:2px solid var(--border)}
+.adv-prepa-table td{padding:8px;font-size:13px}
+.adv-prepa-table .num,.adv-prepa-table .c-num{text-align:right;font-variant-numeric:tabular-nums}
+/* Ligne titre de groupe : le groupe se lit d'un coup d'œil, sans couper les colonnes. */
+.adv-prepa-table tr.adv-pl-groupe td{position:static;background:var(--card);font-size:13.5px;font-weight:800;color:var(--text);padding:16px 10px 8px;border-bottom:2px solid var(--border);cursor:default}
+.adv-prepa-table tbody tr.adv-pl-groupe:hover td{background:var(--card);box-shadow:none}
+.adv-prepa-table tr.adv-pl-groupe .n{margin-left:8px;font-size:12px;color:var(--muted);font-weight:700}
+.adv-pl .c-client{font-weight:800}
+/* Une cellule de tableau ignore max-width : le plafond va sur son contenu. */
+.adv-pl .c-client-t{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(min-width:1700px){.adv-pl .c-client-t{max-width:320px}}
+.adv-pl .c-cde,.adv-pl .c-ref{font-size:12.5px}
+.adv-pl .c-ref,.adv-pl .c-unite{color:var(--text2)}
+.adv-pl .c-empl{white-space:normal;min-width:120px}
+.adv-pl .c-act{width:1%}
+/* Les boutons restent visibles à droite même si le tableau défile en largeur. */
+.adv-prepa-table th.c-act,.adv-prepa-table td.c-act{position:sticky;right:0;z-index:2}
+.adv-prepa-table th.c-act{z-index:3}
+.adv-prepa-table td.c-act{background:var(--card)}
+.adv-prepa-table tbody tr.adv-pl:hover td.c-act{box-shadow:inset 0 0 0 999px var(--accent-bg)}
+/* Largeur moyenne : « Urgente » et « Prête » l'un sous l'autre, un libellé
+   long (« Remettre à préparer ») sur deux lignes, la puce « Sortie prod »
+   coupée au besoin : aucun contenu n'impose sa largeur à toute la colonne. */
+@media(max-width:1500px){.adv-pl .adv-actions{flex-direction:column;align-items:stretch;gap:4px}
+.adv-prepa-table .adv-actions .btn{white-space:normal;text-wrap:balance;text-align:center;line-height:1.2}
+.adv-prepa-table .adv-empl .adv-sortie-prod{white-space:normal}}
+.adv-pl .c-fort{font-weight:800}
+.adv-pl .c-fab{color:var(--warn);font-weight:800}
+.adv-pl .c-aprep.adv-date-tard{color:var(--warn)}
+.adv-pl .c-quand{font-weight:700}
+.adv-pl .c-quand.adv-date-retard{color:var(--danger)}
+/* En retard : bord rouge à gauche de la ligne. */
+.adv-prepa-table tbody tr.adv-pl.retard td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
+.adv-prepa-table tbody tr.adv-pl.retard:hover td:first-child{box-shadow:inset 3px 0 0 var(--danger),inset 0 0 0 999px var(--accent-bg)}
+.adv-rang-cel{display:flex;align-items:center;gap:3px}
 .adv-rang{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--text2)}
 /* Rang fixé à la main par l'ADV : il se distingue de l'ordre automatique. */
 .adv-rang.manuel{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
@@ -193,32 +200,59 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-btn-urgence{background:var(--bg);color:var(--danger);border:1px solid var(--border)}
 .adv-btn-urgence.on{background:var(--danger);border-color:var(--danger);color:white}
 .adv-fleches{display:flex;flex-direction:column;gap:1px;opacity:0;transition:opacity .12s}
-.adv-carte:hover .adv-fleches,.adv-carte:focus-within .adv-fleches{opacity:1}
+.adv-pl:hover .adv-fleches,.adv-pl:focus-within .adv-fleches{opacity:1}
 @media(hover:none){.adv-fleches{opacity:1}}
 .adv-fleche{width:15px;height:13px;padding:0;border:none;border-radius:4px;background:var(--bg);color:var(--text2);font-size:10px;line-height:13px;cursor:pointer}
 .adv-fleche:hover:not(:disabled){background:var(--accent-bg);color:var(--accent)}
 .adv-fleche:disabled{opacity:.3;cursor:default}
-.adv-carte[draggable=true]{cursor:grab}
-.adv-carte.attrapee{opacity:.4}
-.adv-carte.cible-haut{box-shadow:inset 0 3px 0 var(--accent)}
-.adv-carte.cible-bas{box-shadow:inset 0 -3px 0 var(--accent)}
-.adv-carte .c-unite{font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* Une ligne de Prépa : une valeur par colonne, aucun sous-texte. */
-.adv-carte .c-client{font-weight:800;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.adv-carte .c-ref{color:var(--text2)}
-.adv-carte .c-quand{font-size:13px;font-weight:700;white-space:nowrap}
-.adv-carte .c-quand.adv-date-retard{color:var(--danger)}
-.adv-carte .c-aprep.adv-date-tard{color:var(--warn)}
-.adv-carte .adv-empl{margin-top:0}
-/* Écran étroit : identité et boutons sur la première ligne, chiffres en
-   dessous ; l'en-tête des colonnes n'a plus de sens, il disparaît. */
-/* Écran étroit : client et bouton en tête, puis commande / réf / expédition,
-   puis les quantités, puis les emplacements ; l'en-tête des colonnes
-   disparaît et chaque chiffre porte son libellé. */
-@media(max-width:1420px){.adv-carte{grid-template-columns:46px repeat(3,minmax(0,1fr)) auto;row-gap:6px}.adv-carte .c-rang{grid-row:1/3}.adv-carte .c-client{grid-column:2/5;grid-row:1}.adv-carte .adv-actions{grid-column:5;grid-row:1}.adv-carte .c-cde{grid-column:2;grid-row:2}.adv-carte .c-ref{grid-column:3;grid-row:2}.adv-carte .c-quand{grid-column:4/6;grid-row:2}.adv-carte .c-qte{grid-column:2;grid-row:3}.adv-carte .c-stk{grid-column:3;grid-row:3}.adv-carte .c-aprep{grid-column:4;grid-row:3}.adv-carte .c-unite{display:none}.adv-carte .c-num{text-align:left}.adv-carte .adv-empl{grid-column:2/6;grid-row:4}.adv-carte.adv-carte-tete{display:none}.adv-carte .c-num[data-l]::before{content:attr(data-l);display:block;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}.adv-carte .c-num{min-width:0;align-self:end}.adv-carte .c-num[data-l]::before{white-space:normal}}
+/* Glisser-déposer (ADV) : la ligne se prend à la main, la cible se marque d'un trait. */
+.adv-pl[draggable=true]{cursor:grab}
+.adv-pl.attrapee{opacity:.4}
+.adv-prepa-table tbody tr.adv-pl.cible-haut td{box-shadow:inset 0 3px 0 var(--accent)}
+.adv-prepa-table tbody tr.adv-pl.cible-bas td{box-shadow:inset 0 -3px 0 var(--accent)}
+/* Écran étroit : chaque ligne redevient une carte. Client et boutons en tête,
+   puis commande / réf / expédition, puis les quantités avec leur libellé,
+   puis les emplacements ; l'en-tête des colonnes disparaît. En dessous de
+   1400 px, les onze colonnes ne tiennent plus à côté du menu. */
+@media(max-width:1400px){
+.adv-prepa-wrap{background:transparent;border:0;border-radius:0;max-height:none;overflow:visible}
+.adv-prepa-table,.adv-prepa-table tbody{display:block}
+.adv-prepa-table thead{display:none}
+.adv-prepa-table tr.adv-pl-groupe,.adv-prepa-table tr.adv-pl-groupe td{display:block;background:transparent;border:0;padding:14px 2px 8px}
+.adv-prepa-table tbody tr.adv-pl-groupe:hover td{background:transparent}
+.adv-prepa-table tr.adv-pl{display:grid;grid-template-columns:46px repeat(3,minmax(0,1fr)) auto;gap:6px 12px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:6px;transition:border-color .15s}
+.adv-prepa-table tr.adv-pl:hover{border-color:var(--accent)}
+.adv-prepa-table tr.adv-pl.retard{border-left:3px solid var(--danger)}
+.adv-prepa-table tbody tr.adv-pl td,.adv-prepa-table tbody tr.adv-pl:hover td,.adv-prepa-table tbody tr.adv-pl td:first-child,.adv-prepa-table tbody tr.adv-pl:hover td:first-child,.adv-prepa-table tbody tr.adv-pl.retard td:first-child,.adv-prepa-table tbody tr.adv-pl.retard:hover td:first-child{display:block;padding:0;border:0;position:static;background:transparent;box-shadow:none;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis}
+.adv-prepa-table tbody tr.adv-pl.cible-haut{box-shadow:inset 0 3px 0 var(--accent)}
+.adv-prepa-table tbody tr.adv-pl.cible-bas{box-shadow:inset 0 -3px 0 var(--accent)}
+.adv-pl .c-rang{grid-row:1/3}
+.adv-pl .c-client{grid-column:2/5;grid-row:1}
+.adv-pl .c-client-t{max-width:none}
+.adv-pl .adv-actions{flex-direction:row}
+.adv-pl .c-act{grid-column:5;grid-row:1;width:auto}
+.adv-pl .c-cde{grid-column:2;grid-row:2}
+.adv-pl .c-ref{grid-column:3;grid-row:2}
+.adv-pl .c-quand{grid-column:4/6;grid-row:2}
+.adv-pl .c-qte{grid-column:2;grid-row:3}
+.adv-pl .c-stk{grid-column:3;grid-row:3}
+.adv-pl .c-aprep{grid-column:4;grid-row:3}
+.adv-pl .c-unite{display:none !important}
+.adv-pl .c-empl{grid-column:2/6;grid-row:4;white-space:normal;overflow:visible}
+.adv-prepa-table .adv-pl .c-num{text-align:left;align-self:end}
+.adv-pl .c-num[data-l]::before{content:attr(data-l);display:block;white-space:normal;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+}
 /* Téléphone : le bouton ne réserve plus sa propre colonne, il se range au-dessus
    de la date ; les trois chiffres gagnent la place. */
-@media(max-width:560px){.adv-carte{grid-template-columns:46px repeat(3,minmax(0,1fr))}.adv-carte .c-client{grid-column:2/4}.adv-carte .adv-actions{grid-column:4}.adv-carte .c-quand{grid-column:4}.adv-carte .adv-empl{grid-column:2/5}}
+@media(max-width:560px){
+.adv-prepa-table tr.adv-pl{grid-template-columns:46px repeat(3,minmax(0,1fr))}
+.adv-pl .c-client{grid-column:2/4}
+.adv-pl .c-act{grid-column:4}
+.adv-pl .c-quand{grid-column:4}
+.adv-pl .c-empl{grid-column:2/5}
+.adv-sous{display:flex}
+.adv-sous-btn{flex:1;justify-content:center}
+}
 .adv-empl{display:flex;gap:5px;flex-wrap:wrap}
 .adv-empl span{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:7px;background:var(--bg);border:1px solid var(--border);color:var(--text2)}
 .adv-empl span b{color:var(--text);font-family:ui-monospace,Menlo,Consolas,monospace}
