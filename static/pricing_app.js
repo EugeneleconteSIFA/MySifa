@@ -5630,8 +5630,10 @@
     const ouvertDefaut = !prCartes();
     const groupes = facettes.map((col) => {
       const comptes = facetteComptes(col, lignes, facettes);
-      if (!comptes.size) return "";
       const coches = facetteValeurs("produits", col.cle);
+      // Un critère à un seul choix ne trie rien : la glassine est la même
+      // sur tout le catalogue, la proposer n'ajouterait qu'une case inutile.
+      if (comptes.size < 2 && !coches.length) return "";
       const opts = [...comptes.keys()].sort((a, b) =>
         col.facetteTri ? col.facetteTri(a, b) : a.localeCompare(b, "fr", { numeric: true }));
       const deplie = S.facettesDepliees && S.facettesDepliees[col.cle];
@@ -5808,8 +5810,9 @@
       })
       .join("");
 
+    const terme = (S.filters.msProdQ || "").trim();
     const vide = `<div class="msp-vide">
-        <strong>Aucun produit ne répond à ces critères.</strong>
+        <strong>${terme ? `Aucun résultat pour « ${escHtml(terme)} »` : "Aucun produit ne répond à ces critères."}</strong>
         <span>Retirez un critère ou effacez la recherche.</span>
       </div>`;
     const corps = vue === "liste"
@@ -5888,6 +5891,12 @@
     // méritent pas un aller-retour, et le champ garde son curseur.
     const q = document.getElementById("msp-q");
     if (q) {
+      // Échap vide la recherche et rend toute la liste.
+      q.onkeydown = (ev) => {
+        if (ev.key !== "Escape" || !q.value) return;
+        q.value = "";
+        q.dispatchEvent(new Event("input"));
+      };
       q.oninput = () => {
         clearTimeout(S.debounceMsProd);
         S.debounceMsProd = setTimeout(() => {
