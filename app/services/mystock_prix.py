@@ -220,7 +220,7 @@ def list_materials(
     placeholders = ",".join("?" for _ in CATEGORIES_VISIBLES)
     sql = f"""
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
-               mp.sous_section,
+               mp.sous_section, mp.sous_categorie,
                COALESCE(mp.prix_eur_m2, 0)    AS prix_eur_m2,
                COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                COALESCE(v.prix_unitaire, 0)   AS prix_unitaire
@@ -424,6 +424,9 @@ def list_materials(
                 # utilise déjà — on la reprend telle quelle plutôt que d'en
                 # inventer une deuxième.
                 "sous_section": _col(r, "sous_section") or None,
+                # Le nom commercial (« Permanent », « Thermique Pro ») : ce que
+                # montrent les produits à la place de la référence.
+                "sous_categorie": _col(r, "sous_categorie") or None,
                 "reference": r["reference"],
                 "designation": r["designation"],
                 "libelles_techniques": techs_par_mat.get(mid, []),
