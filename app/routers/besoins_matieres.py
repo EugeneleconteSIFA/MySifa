@@ -3077,6 +3077,20 @@ def _matiere_conv(conn, matiere_id: int) -> Optional[dict]:
     return dict(r) if r else None
 
 
+def _libelles_techniques(conn) -> dict:
+    """{matiere_id: libellé technique} : variante principale, sinon la première active."""
+    out: dict = {}
+    try:
+        for r in conn.execute(
+                "SELECT matiere_id, libelle_technique FROM mp_variantes "
+                "WHERE actif = 1 AND COALESCE(libelle_technique, '') <> '' "
+                "ORDER BY matiere_id, principal DESC, id ASC").fetchall():
+            out.setdefault(int(r[0]), r[1])
+    except sqlite3.OperationalError:
+        pass  # mp_variantes absente : migration pas encore passée
+    return out
+
+
 def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict:
     """Matières proposables en remplacement, par catégorie, avec leurs laizes."""
     cats = sorted(c for c in categories if c)
@@ -3102,6 +3116,7 @@ def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict
                 l.append(f["nom"])
     except sqlite3.OperationalError:
         pass  # mp_variantes absente : migration pas encore passée
+    tech = _libelles_techniques(conn)
     out: dict = {}
     for r in rows:
         kind = _kind_de_categorie(r["categorie"])
@@ -3109,6 +3124,7 @@ def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict
         out.setdefault(r["categorie"], []).append({
             "matiere_id": r["id"], "reference": r["reference"],
             "designation": r["designation"], "categorie": r["categorie"],
+            "libelle_technique": tech.get(int(r["id"]), ""),
             "stock": stocks.get(int(r["id"]), 0.0),
             "fournisseurs": fournisseurs.get(int(r["id"]), []),
             "kind": kind, "conversion": conv,
@@ -4064,6 +4080,12 @@ def destockage_relecture(planning_id: int, request: Request):
             categories.update(cats)
         candidats = _candidats_remplacement(
             conn, categories, ctx.get("mod_laize"), ctx.get("perte_pct"))
+
+        # La modale nomme la matière par son libellé TECHNIQUE (celui de la
+        # variante fournisseur) : c'est lui que l'atelier lit sur la bobine.
+        tech = _libelles_techniques(conn)
+        for li in lignes:
+            li["matiere_libelle_technique"] = tech.get(int(li["matiere_id"]), "") if li.get("matiere_id") else ""
 
         return {**apercu, "lignes": lignes, "candidats": candidats}
 
