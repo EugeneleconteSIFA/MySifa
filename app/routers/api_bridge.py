@@ -846,6 +846,16 @@ def _erp_importer_en_fond(dossier_csv: str, dossier_temp: str) -> None:
             "erreur": str(e)[:400],
         }
     finally:
+        # Une demande de mise à jour faite depuis MySifa est close par l'import,
+        # réussi ou non ; le bouton le voit au relevé suivant.
+        try:
+            from app.services import erp_synchro
+            st = _ERP_ETAT.get("statut")
+            with get_db() as conn:
+                erp_synchro.terminer(conn, st in ("ok", "partiel"),
+                                     _ERP_ETAT.get("erreur") or ("Import partiel" if st == "partiel" else ""))
+        except Exception:
+            pass
         # Les CSV portent des noms de clients, des adresses et des prix :
         # ils ne survivent pas à l'import, quoi qu'il arrive.
         shutil.rmtree(dossier_temp, ignore_errors=True)
@@ -912,6 +922,21 @@ async def erp_pousser_miroir(
     except Exception as e:
         shutil.rmtree(dossier_temp, ignore_errors=True)
         raise HTTPException(status_code=500, detail="Réception impossible : %s" % e)
+
+
+@router.post("/erp/demande/prendre")
+def erp_prendre_demande(x_api_key: Optional[str] = Header(None)):
+    """Le poste SIFA relève la demande de mise à jour faite depuis MySifa.
+
+    Appelé toutes les deux minutes par `sync_rvgi.ps1 -SiDemande`. Rend la
+    demande en attente (et la marque prise), ou `null` : le poste ne lance
+    alors rien. Même clé que l'envoi du miroir (portée erp:write).
+    """
+    _require_scope(x_api_key, "erp:write")
+    from app.services import erp_synchro
+    with get_db() as conn:
+        d = erp_synchro.prendre(conn)
+    return {"demande": d}
 
 
 @router.get("/erp/miroir")

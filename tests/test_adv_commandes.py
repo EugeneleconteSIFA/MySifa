@@ -350,6 +350,82 @@ except mef.RegleInvalide:
     trop = True
 check("plafond de règles", trop, True)
 
+# ── 6. Stock « probable » : production finie, pas rentrée dans MyStock ───────
+# La logistique ne met pas toujours en stock ce qui part directement. Prod
+# faite + étiquettes de fin de production qui couvrent la ligne = préparable.
+miroir.ERP_MIRROR_DB = os.path.join(dossier, "miroir.db")   # rebranché après le §4
+m = sqlite3.connect(miroir.ERP_MIRROR_DB)
+m.execute("INSERT INTO cde_entete(numero, rs, amjc) VALUES (9930004, 'CLIENT E', ?)", (jour(-3),))
+m.executemany("""INSERT INTO cde_ligne(numero, ligne, lpos, qte, qtep, amje, amjl, orig, code1, code2, des1)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)""", [
+    (9930004, 1, 0, 1000, 1000, jour(2), jour(3), 1, "400", "0004", "Etiquette E"),
+    (9930004, 2, 0, 10, 10, jour(2), jour(3), 1, "500", "0005", "Etiquette F en cartons"),
+    (9930004, 3, 0, 500, 500, jour(3), jour(4), 1, "400", "0004", "Etiquette E, suite"),
+])
+m.commit()
+m.close()
+b = sqlite3.connect(miroir.DB_PATH)
+for col in ("no_dossier TEXT", "quantite_traitee REAL", "operateur TEXT",
+            "metrage_total_debut REAL", "metrage_total_fin REAL"):
+    b.execute("ALTER TABLE production_data ADD COLUMN " + col)
+b.execute("ALTER TABLE planning_entries ADD COLUMN etiquettes_par_carton INTEGER")
+b.execute("INSERT INTO produits(id, reference, designation, unite) VALUES (5, '500/0005', 'Etiquette F', 'carton')")
+b.executemany("""INSERT INTO planning_entries(id, reference, numero_of, ref_produit, statut,
+                 planned_start, planned_end, machine_id) VALUES (?,?,?,?,?,?,?,1)""", [
+    (40, "9930004 - L1", "9930004 - L1", "400/0004", "termine", jour(-2), jour(-2, "12:00:00")),
+    (41, "9930004 - L2", "9930004 - L2", "500/0005", "termine", jour(-2), jour(-2, "12:00:00")),
+])
+for pe, dos in ((40, "9930004 - L1"), (41, "9930004 - L2")):
+    b.executemany("""INSERT INTO production_data(planning_entry_id, no_dossier, operation_code, date_operation,
+                     est_annule, operateur, quantite_traitee, metrage_total_debut, metrage_total_fin)
+                     VALUES (?,?,?,?,0,'OP',?,?,?)""", [
+        (pe, dos, "01", jour(-2)[:10] + "T08:00:00", None, 0, None),
+        (pe, dos, "89", jour(-2)[:10] + "T12:00:00", 1200, None, 500),
+    ])
+b.commit()
+b.close()
+d = adv.construire()
+par = {l["cle"]: l for l in d["lignes"]}
+E1, F, E3 = par["9930004-1"], par["9930004-2"], par["9930004-3"]
+print("\nStock probable")
+check("E1 : prod faite, 1 200 produites pour 1 000 : stock probable",
+      (E1["etapes"]["prod"]["valeur"], E1["etapes"]["stock"]["valeur"]), ("oui", "probable"))
+check("E1 : sortie de prod et plus rien à fabriquer", (E1["stock"]["sortie_prod"], E1["a_fabriquer"]), (1000.0, 0.0))
+check("E1 : le stock ne bloque plus (reste le BAT, absent du jeu)", E1["bloquante"], "bat")
+check("E3 : le même dossier ne sert pas deux fois (200 restantes pour 500)",
+      (E3["etapes"]["stock"]["valeur"], E3["a_fabriquer"]), ("non", 500.0))
+check("F : cartons sans « étiquettes par carton », on ne devine pas", F["etapes"]["stock"]["valeur"], "non")
+p = adv.prepa(horizon=10)
+check("E1 se prépare", {l["cle"]: l["groupe"] for l in p["lignes"]}.get("9930004-1"), "preparable")
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("UPDATE planning_entries SET etiquettes_par_carton = 100 WHERE id = 41")
+b.commit()
+b.close()
+F = {l["cle"]: l for l in adv.construire()["lignes"]}["9930004-2"]
+check("F : 1 200 étiquettes à 100 par carton couvrent 10 cartons", F["etapes"]["stock"]["valeur"], "probable")
+# Marge : 95 % du reste suffisent (la gâche d'un tirage ne bloque pas).
+def _produit_e(q):
+    b = sqlite3.connect(miroir.DB_PATH)
+    b.execute("UPDATE production_data SET quantite_traitee=? WHERE planning_entry_id=40 AND operation_code='89'", (q,))
+    b.commit()
+    b.close()
+    return {l["cle"]: l for l in adv.construire()["lignes"]}["9930004-1"]
+E1 = _produit_e(960)
+check("960 pour 1 000 (96 %) : probable, 960 en sortie de prod",
+      (E1["etapes"]["stock"]["valeur"], E1["stock"]["sortie_prod"]), ("probable", 960.0))
+check("le détail dit la couverture", "96 % du reste" in E1["etapes"]["stock"]["detail"], True)
+E1 = _produit_e(900)
+check("900 pour 1 000 (90 %) : pas assez", E1["etapes"]["stock"]["valeur"], "non")
+_produit_e(1200)
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("""INSERT INTO adv_forcages(numero, ligne, etape, valeur, maj_le, maj_par)
+             VALUES ('9930004', 1, 'stock', 'non', ?, 'ADV')""", (jour(0),))
+b.commit()
+b.close()
+E1 = {l["cle"]: l for l in adv.construire()["lignes"]}["9930004-1"]
+check("un forçage de l'ADV prime sur « probable »", (E1["etapes"]["stock"]["valeur"], E1["etapes"]["stock"]["force"]),
+      ("non", True))
+
 print()
 if ko:
     print(f"test_adv_commandes : {ko} échec(s)")

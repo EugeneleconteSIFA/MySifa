@@ -10,7 +10,8 @@ même carnet, donc les prédicats sont importés, pas recopiés.
 
     BAT → Prod → Stock → Prépa → Départ prévu
 
-Chaque étape vaut `oui`, `en_cours`, `non` ou `sans_objet`, et dit d'où elle
+Chaque étape vaut `oui`, `en_cours`, `non` ou `sans_objet` (et, pour le
+stock seulement, `probable` — voir plus bas), et dit d'où elle
 le tient (`detail`). L'ADV peut fixer une étape à la main (`adv_forcages`) :
 la valeur forcée s'affiche, le calcul reste lisible à côté.
 
@@ -28,6 +29,13 @@ D'où vient chaque étape
   attribué par ordre de priorité (prépas engagées d'abord, puis date
   d'expédition), et les lots en FIFO — deux lignes ne revendiquent jamais
   les mêmes étiquettes.
+  **Probable** : la logistique ne rentre pas toujours en stock une
+  production qui part directement. Quand la Prod est faite et que les
+  étiquettes saisies en fin de production (code 89, compte de MyProd)
+  couvrent le reste à livrer (95 % suffisent, `ADV_STOCK_PROBABLE_COUVERTURE` :
+  la gâche ne bloque pas), le stock est réputé là : la ligne se prépare.
+  La production d'un dossier qui sert plusieurs lignes se partage entre
+  elles dans l'ordre de priorité, comme le stock.
 - **Prépa** : `adv_prepas`, saisie par la logistique dans l'onglet Prépa.
 - **Départ prévu** : un départ MyExpé rattaché à la ligne, à l'un de ses
   dossiers, ou qui porte le numéro de commande dans son ARC.
@@ -45,7 +53,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from config import ADV_ETAPES, ADV_PREPA_HORIZON_JOURS
+from config import ADV_ETAPES, ADV_PREPA_HORIZON_JOURS, ADV_STOCK_PROBABLE_COUVERTURE
 from app.services import erp_mirror as miroir
 from app.services import erp_tdb as tdb
 from app.services.erp_stock import _reference
@@ -53,7 +61,9 @@ from app.services import machines_type as _mtype
 
 _PARIS = ZoneInfo("Europe/Paris")
 ETAPES = tuple(k for k, _ in ADV_ETAPES)
-VALEURS = ("oui", "en_cours", "non", "sans_objet")
+VALEURS = ("oui", "en_cours", "non", "sans_objet", "probable")
+# Ce qui laisse la ligne avancer : rien à relancer sur cette étape.
+FRANCHIES = ("oui", "sans_objet", "probable")
 STATUTS_PREPA = ("a_preparer", "en_cours", "prete")
 
 # Le numéro de commande RVGI dans un texte libre (référence de dossier, ARC
@@ -223,14 +233,15 @@ def _dossiers(conn) -> List[Dict[str, Any]]:
     pour_rep = "pe.pour_repiquage" if "pour_repiquage" in cols else "0"
     src_rep = "pe.repiquage_source_id" if "repiquage_source_id" in cols else "NULL"
     m_type = "m.type" if "type" in _colonnes(conn, "machines") else "NULL"
+    epc = "pe.etiquettes_par_carton" if "etiquettes_par_carton" in cols else "NULL"
     rows = _lignes(conn, """
         SELECT pe.id, pe.reference, pe.numero_of, pe.ref_produit, pe.statut, pe.statut_reel,
                pe.planned_start, pe.planned_end, pe.machine_id, pe.client, %s AS of_import_id,
                %s AS pour_repiquage, %s AS repiquage_source_id,
-               m.nom AS machine, %s AS machine_type
+               m.nom AS machine, %s AS machine_type, %s AS etiquettes_par_carton
           FROM mysifa.planning_entries pe
           LEFT JOIN mysifa.machines m ON m.id = pe.machine_id
-    """ % (of, pour_rep, src_rep, m_type))
+    """ % (of, pour_rep, src_rep, m_type, epc))
     if not rows:
         # Sans la table des machines (base partielle), on se passe du nom.
         rows = _lignes(conn, """
@@ -257,6 +268,101 @@ def _dossiers(conn) -> List[Dict[str, Any]]:
         r["_ref"] = _ref_norm(r.get("ref_produit"))
         r["fin_reelle"] = fins.get(r["id"])
     return rows
+
+
+def _etiquettes_produites(conn, refs: set) -> Dict[str, float]:
+    """Étiquettes produites par dossier (`no_dossier`), au compte de MyProd.
+
+    `build_dossier_production_stats` est le calcul de l'écran de référence
+    (quantité saisie en fin de production, une par opérateur et par jour) :
+    l'ADV ne recompte pas, un dossier n'a qu'un chiffre.
+    """
+    refs = sorted(r for r in refs if r)
+    if not refs or not _table(conn, "production_data"):
+        return {}
+    from app.services.dossier_stats import build_dossier_production_stats
+    ph = ",".join("?" * len(refs))
+    rows = _lignes(conn, """
+        SELECT * FROM mysifa.production_data
+         WHERE no_dossier IN (%s) AND COALESCE(est_annule, 0) = 0""" % ph, refs)
+    out = {}
+    for ref in refs:
+        try:
+            q = build_dossier_production_stats(rows, ref)["quantites"]
+            out[ref] = float(q.get("etiquettes") or 0)
+        except Exception:
+            out[ref] = 0.0
+    return out
+
+
+# L'unité de la ligne est celle de la référence MyStock ; sans référence, ce
+# sont des étiquettes.
+_UNITES_ETIQUETTE = (None, "", "0", "étiquette", "etiquette")
+
+
+def _production_en_unite(etiq: float, unite: Optional[str], d: Dict[str, Any]) -> Optional[float]:
+    """Les étiquettes produites, dans l'unité de la ligne — None si on ne sait
+    pas convertir (un carton sans « étiquettes par carton » au planning, une
+    bobine, une planche…)."""
+    u = (unite or "").strip().lower()
+    if u in _UNITES_ETIQUETTE:
+        return etiq
+    if u in ("carton", "cartons"):
+        epc = _f(d.get("etiquettes_par_carton"))
+        return etiq / epc if epc > 0 else None
+    return None
+
+
+def _stock_probable(lignes: List[Dict[str, Any]], produites: Dict[str, float]) -> None:
+    """Passe le stock en « probable » quand la production terminée couvre la ligne.
+
+    Ne touche que les lignes dont la Prod est faite et dont le stock MyStock
+    ne suffit pas. La production d'un dossier est partagée entre ses lignes
+    dans l'ordre de priorité ; ce que MyStock leur a déjà attribué compte.
+    """
+    reste_dossier = dict(produites)
+    for l in sorted(lignes, key=lambda x: x["priorite"]):
+        et = l["etapes"]["stock"]
+        ds = l.pop("_ds_impression", [])
+        if (l["etapes"]["prod"]["valeur"] != "oui" or et["calcul"] == "oui"
+                or et.get("force") or not ds or l["reste"] <= 0):
+            continue
+        besoin = l["reste"] - l["stock"]["alloue"]
+        unite = l["stock"]["unite"]
+        dispo = []
+        for d in ds:
+            ref = str(d.get("reference") or "").strip()
+            q = _production_en_unite(reste_dossier.get(ref, 0.0), unite, d)
+            if q is None:
+                dispo = None
+                break
+            dispo.append((ref, d, q))
+        total = sum(q for _, _, q in dispo) if dispo else 0.0
+        # La gâche d'un tirage ne bloque pas : il suffit de couvrir 95 % du
+        # reste (ADV_STOCK_PROBABLE_COUVERTURE).
+        if not dispo or total < besoin * ADV_STOCK_PROBABLE_COUVERTURE:
+            continue
+        sortie = min(total, besoin)
+        pris = sortie
+        for ref, d, q in dispo:
+            if pris <= 0:
+                break
+            prend = min(q, pris)
+            pris -= prend
+            par_unite = _production_en_unite(1.0, unite, d) or 1.0
+            reste_dossier[ref] = max(reste_dossier.get(ref, 0.0) - prend / par_unite, 0.0)
+        refs = ", ".join(ref for ref, _, _ in dispo)
+        u = (" " + unite) if unite and unite.strip().lower() not in _UNITES_ETIQUETTE else " étiquettes"
+        l["stock"]["sortie_prod"] = sortie
+        l["stock"]["dossiers_prod"] = [ref for ref, _, _ in dispo]
+        l["etapes"]["stock"] = _etape(
+            "probable",
+            "Production terminée (%s%s produites%s, dossier %s) mais pas entrée dans MyStock : "
+            "à préparer en sortie de production" % (
+                _n(total), u,
+                (", %d %% du reste à livrer" % int(total * 100 // besoin)) if total < besoin else "",
+                refs))
+        l["a_fabriquer"] = 0.0
 
 
 def _rattachements(conn) -> List[Dict[str, Any]]:
@@ -665,6 +771,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "pour_repiquage": bool(d.get("pour_repiquage")),
         } for d in ds]
         l["repiquage"] = _repiquage_de_ligne(ds, repiquages_adv.get(l["cle"]))
+        l["_ds_impression"] = [d for d in ds if not d.get("repiquage")]
         fins = [x["fin"] for x in l["dossiers"] if x["fin"]]
         l["fin_prod"] = (max(fins)[:16] if fins else None)
         l["fin_prod_reelle"] = bool(l["dossiers"]) and all(x["fin_reelle"] for x in l["dossiers"])
@@ -710,6 +817,24 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         l["semaine"] = bool(l["expedition"] and a_venir <= l["expedition"] < semaine)
         l.pop("_prepa_statut", None)
 
+    # Stock « probable » : production finie, pas rentrée dans MyStock.
+    candidats = {str(d.get("reference") or "").strip()
+                 for l in lignes
+                 if l["etapes"]["prod"]["valeur"] == "oui" and l["etapes"]["stock"]["calcul"] != "oui"
+                 for d in l.get("_ds_impression", [])}
+    produites = {}
+    if candidats:
+        try:
+            with miroir.get_erp_db(avec_mysifa=True) as conn:
+                produites = _etiquettes_produites(conn, candidats)
+        except Exception:
+            produites = {}
+    _stock_probable(lignes, produites)
+    for l in lignes:
+        l.pop("_ds_impression", None)
+        l["bloquante"] = next((k for k in ETAPES
+                               if l["etapes"][k]["valeur"] in ("non", "en_cours")), None)
+
     lignes.sort(key=lambda x: (x["expedition"] or "9999-12-31", x["numero"], x["ligne"]))
     sortie["lignes"] = lignes
     sortie["compteurs"] = compteurs(lignes)
@@ -724,7 +849,7 @@ def compteurs(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         "carnet": _c(lambda l: True),
         "retard": _c(lambda l: l["retard"]),
         "semaine": _c(lambda l: l["semaine"]),
-        "pretes": _c(lambda l: all(l["etapes"][k]["valeur"] in ("oui", "sans_objet")
+        "pretes": _c(lambda l: all(l["etapes"][k]["valeur"] in FRANCHIES
                                    for k in ("bat", "prod", "stock", "prepa"))),
     }
     out["etapes"] = {k: _c(lambda l, k=k: l["etapes"][k]["valeur"] in ("non", "en_cours"))
@@ -737,7 +862,7 @@ def compteurs(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
 # Dans l'ordre où la logistique les traite : ce qui est commencé d'abord.
 GROUPES_PREPA = (
     ("en_cours", "En cours de préparation"),
-    ("preparable", "À préparer — stock disponible"),
+    ("preparable", "À préparer — disponible"),
     ("partiel", "Stock partiel"),
     ("attente", "En attente de production"),
     ("pretes", "Prêtes, en attente de départ"),
@@ -755,7 +880,7 @@ def groupe_prepa(l: Dict[str, Any]) -> Optional[str]:
     if statut == "en_cours":
         return "en_cours"
     stock = l["etapes"]["stock"]["valeur"]
-    if stock == "oui" or stock == "sans_objet":
+    if stock in FRANCHIES:
         return "preparable"
     if stock == "en_cours":
         return "partiel"

@@ -760,6 +760,9 @@ ADV_ETATS = (
     ("en_cours", "En cours"),
     ("non", "Non"),
     ("sans_objet", "Sans objet"),
+    # Stock seulement, calculé jamais fixé à la main : production terminée
+    # pour toute la ligne mais pas entrée dans MyStock (part directement).
+    ("probable", "Probable"),
 )
 ADV_PREPA_STATUTS = (
     ("a_preparer", "À préparer"),
@@ -768,6 +771,10 @@ ADV_PREPA_STATUTS = (
 )
 # L'onglet Prépa montre ce qui part dans les N prochains jours, retards compris.
 ADV_PREPA_HORIZON_JOURS = int(os.getenv("ADV_PREPA_HORIZON_JOURS", "21"))
+# Stock « probable » : part du reste à livrer que la production terminée doit
+# couvrir (étiquettes de fin de prod) pour qu'on la juge préparable sans
+# entrée MyStock. 0.95 = la gâche d'un tirage ne bloque pas la ligne.
+ADV_STOCK_PROBABLE_COUVERTURE = float(os.getenv("ADV_STOCK_PROBABLE_COUVERTURE", "0.95"))
 
 # Mise en forme conditionnelle du carnet ADV (règles en base, table
 # adv_mises_en_forme). Ce qui peut être coloré, comment on compare, et avec

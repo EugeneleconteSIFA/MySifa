@@ -125,6 +125,8 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-etat.en_cours{background:var(--accent-bg);color:var(--warn)}
 .adv-etat.non{background:var(--bg);color:var(--danger);border-color:var(--border)}
 .adv-etat.sans_objet{background:transparent;color:var(--muted)}
+.adv-etat.probable{background:var(--accent-bg);color:var(--success);border:1px dashed var(--success)}
+.adv-empl .adv-sortie-prod{border:1px dashed var(--success);color:var(--success);white-space:nowrap}
 .adv-etat.force::after{content:"";position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--accent);border:1px solid var(--card)}
 
 /* Infobulle instantanée (plusieurs lignes) */
@@ -137,14 +139,14 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-groupe{margin-bottom:16px}
 .adv-groupe h2{font-size:14px;font-weight:800;margin:0 0 8px;display:flex;align-items:center;gap:8px}
 .adv-groupe h2 .n{font-size:12px;color:var(--muted);font-weight:700}
-.adv-carte{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:grid;grid-template-columns:46px minmax(200px,2fr) 96px 96px 104px minmax(140px,1.3fr) 108px auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .15s}
+.adv-carte{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:grid;grid-template-columns:46px minmax(130px,1.4fr) 108px 96px 92px 76px 92px 100px minmax(140px,1.4fr) 96px auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .15s}
 .adv-carte:hover{border-color:var(--accent)}
 .adv-carte.retard{border-left:3px solid var(--danger)}
 /* Ligne d'en-tête des colonnes, au-dessus de chaque groupe */
 .adv-carte.adv-carte-tete{background:transparent;border-color:transparent;padding-top:0;padding-bottom:2px;margin-bottom:2px;cursor:default;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
 .adv-carte.adv-carte-tete:hover{border-color:transparent}
 .adv-carte .c-num{text-align:right;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.adv-carte .c-num .c-sous{text-align:right}
+.adv-carte .c-cde,.adv-carte .c-ref{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .adv-carte .c-fort{font-weight:800}
 .adv-carte .c-fab{color:var(--warn);font-weight:800}
 .c-rang{display:flex;align-items:center;gap:3px}
@@ -161,17 +163,20 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-carte.attrapee{opacity:.4}
 .adv-carte.cible-haut{box-shadow:inset 0 3px 0 var(--accent)}
 .adv-carte.cible-bas{box-shadow:inset 0 -3px 0 var(--accent)}
-.adv-carte .c-id{min-width:0}
-.adv-carte .c-haut{display:flex;gap:8px;align-items:baseline;min-width:0;white-space:nowrap;overflow:hidden}
-.adv-carte .c-client{font-weight:800;font-size:13.5px;overflow:hidden;text-overflow:ellipsis}
-.adv-carte .c-des{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.adv-carte .c-unite{font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Une ligne de Prépa : une valeur par colonne, aucun sous-texte. */
+.adv-carte .c-client{font-weight:800;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.adv-carte .c-ref{color:var(--text2)}
 .adv-carte .c-quand{font-size:13px;font-weight:700;white-space:nowrap}
-.adv-carte .c-sous{font-size:11.5px;font-weight:600;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.adv-carte .c-sous.adv-ok{color:var(--success)}
+.adv-carte .c-quand.adv-date-retard{color:var(--danger)}
+.adv-carte .c-aprep.adv-date-tard{color:var(--warn)}
 .adv-carte .adv-empl{margin-top:0}
 /* Écran étroit : identité et boutons sur la première ligne, chiffres en
    dessous ; l'en-tête des colonnes n'a plus de sens, il disparaît. */
-@media(max-width:1100px){.adv-carte{grid-template-columns:46px repeat(3,minmax(0,1fr)) auto;row-gap:6px}.adv-carte .c-id{grid-column:2/5;grid-row:1}.adv-carte .adv-actions{grid-column:5;grid-row:1}.adv-carte .c-num{text-align:left;grid-row:2}.adv-carte>:nth-child(3){grid-column:2}.adv-carte>:nth-child(4){grid-column:3}.adv-carte>:nth-child(5){grid-column:4}.adv-carte .c-num .c-sous{text-align:left}.adv-carte .adv-empl{grid-column:2/4;grid-row:3}.adv-carte .c-quand{grid-column:4/6;grid-row:3}.adv-carte.adv-carte-tete{display:none}.adv-carte .c-num[data-l]::before{content:attr(data-l);display:block;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}}
+/* Écran étroit : client et bouton en tête, puis commande / réf / expédition,
+   puis les quantités, puis les emplacements ; l'en-tête des colonnes
+   disparaît et chaque chiffre porte son libellé. */
+@media(max-width:1100px){.adv-carte{grid-template-columns:46px repeat(3,minmax(0,1fr)) auto;row-gap:6px}.adv-carte .c-rang{grid-row:1/3}.adv-carte .c-client{grid-column:2/5;grid-row:1}.adv-carte .adv-actions{grid-column:5;grid-row:1}.adv-carte .c-cde{grid-column:2;grid-row:2}.adv-carte .c-ref{grid-column:3;grid-row:2}.adv-carte .c-quand{grid-column:4/6;grid-row:2}.adv-carte .c-qte{grid-column:2;grid-row:3}.adv-carte .c-stk{grid-column:3;grid-row:3}.adv-carte .c-aprep{grid-column:4;grid-row:3}.adv-carte .c-unite{display:none}.adv-carte .c-num{text-align:left}.adv-carte .adv-empl{grid-column:2/6;grid-row:4}.adv-carte.adv-carte-tete{display:none}.adv-carte .c-num[data-l]::before{content:attr(data-l);display:block;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}}
 .adv-empl{display:flex;gap:5px;flex-wrap:wrap}
 .adv-empl span{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:7px;background:var(--bg);border:1px solid var(--border);color:var(--text2)}
 .adv-empl span b{color:var(--text);font-family:ui-monospace,Menlo,Consolas,monospace}
@@ -272,6 +277,8 @@ td.etape.mef-neutre .adv-etat{box-shadow:0 0 0 2px var(--muted)}
 .fi-etape.cliquable:hover,.fi-etape.ouverte{background:var(--accent-bg)}
 .fi-rond{position:relative;z-index:1;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--c);color:white;box-shadow:0 0 0 4px var(--card)}
 .fi-etape.sans_objet .fi-rond{background:var(--bg);color:var(--muted);border:2px dashed var(--border)}
+.fi-etape.probable{--c:var(--success)}
+.fi-etape.probable .fi-rond{background:var(--card);color:var(--success);border:2px dashed var(--success)}
 .fi-etape.non .fi-rond{background:var(--card);color:var(--danger);border:2px solid var(--danger)}
 .fi-etape.force .fi-rond::after{content:"";position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
 .fi-etape-lib{font-size:13px;font-weight:800;margin-top:8px;color:var(--text)}
