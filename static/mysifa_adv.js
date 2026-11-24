@@ -65,7 +65,7 @@
     jour: null,                  // jour du planning de prépa : null = aujourd'hui, 'tous', ou AAAA-MM-JJ
     vue: '2w',                   // planning de prépa : '1w', '2w', '4w'
     semaine: null,               // lundi de la première semaine affichée (null : la semaine en cours)
-    friseDrag: null,             // préparation glissée dans la frise
+    friseDrag: null,             // lignes de la commande glissée dans la frise
     sous: null,                  // 'historique' : les préparations déjà faites
     histoJours: 30,
     historique: null,
@@ -1024,17 +1024,24 @@
     if (tw) tw.scrollTop = 0;
   }
 
-  async function deplacerJour(cle, jour) {
-    var l = ligneParCle(cle);
-    if (!l || l.jour_prepa === jour) return;
+  // Déplace une ou plusieurs préparations (une commande entière) sur un jour.
+  async function deplacerJour(cles, jour) {
+    var ls = [].concat(cles).map(ligneParCle).filter(function (l) { return l && l.jour_prepa !== jour; });
+    if (!ls.length) return;
     try {
-      await api('/api/adv/prepa/jour/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {jour: jour}});
+      for (var i = 0; i < ls.length; i++) {
+        await api('/api/adv/prepa/jour/' + encodeURIComponent(ls[i].numero) + '/' + ls[i].ligne, {method: 'PUT', body: {jour: jour}});
+      }
       var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
       await charger(); S.carnet = null; render();
       var tw = document.querySelector('.adv-table-wrap');
       if (tw && yt) tw.scrollTop = yt;
-      toast('Préparation ' + l.numero + '-L' + l.ligne + ' déplacée au ' + jourLong(jour) + '.');
-    } catch (e) { toast(e.message, 'danger'); }
+      toast((ls.length > 1 ? 'Commande ' + ls[0].numero + ' (' + ls.length + ' lignes)' : 'Préparation ' + ls[0].numero + '-L' + ls[0].ligne)
+        + ' déplacée au ' + jourLong(jour) + '.');
+    } catch (e) {
+      toast(e.message, 'danger');
+      await charger(); render();
+    }
   }
 
   var SOURCES_JOUR = {
@@ -1042,34 +1049,57 @@
     enlevement: function () { return 'Veille de l’enlèvement prévu dans MyExpé'; },
     expedition: function () { return 'Veille de l’expédition'; }
   };
-
-  // Une préparation dans la frise, comme un dossier du planning machine :
-  // client en gros, quantité et référence, date d'expédition ; le reste au
-  // survol. Trop étroit, le bloc ne garde que le client, à la verticale.
-  function blocFrise(l) {
-    var cls = 'pf-bloc ' + teinteClient(l.client) + (l.groupe === 'pretes' ? ' faite' : l.groupe === 'partiel' ? ' partiel' : '')
-      + (l.urgence ? ' urgente' : '');
-    var etat = l.groupe === 'pretes' ? 'Prête' : l.groupe === 'partiel' ? 'Stock partiel'
+  function etatLigne(l) {
+    return l.groupe === 'pretes' ? 'Prête' : l.groupe === 'partiel' ? 'Stock partiel'
       : l.groupe === 'en_cours' ? 'En cours de préparation' : 'À préparer';
-    var b = h('div', {className: cls, 'data-cle': l.cle,
-      'data-tip': tip(l.cle + '|pf', l.client,
-        l.numero + '-L' + l.ligne + ' · ' + l.article + ' · ' + qteU(l, l.reste) + '\n' + etat
-          + (l.expedition ? ' · expédition ' + dateFr(l.expedition) : '') + (l.urgence ? '\n' + l.urgence : ''),
-        (SOURCES_JOUR[l.jour_source] ? SOURCES_JOUR[l.jour_source](l) : '')
-          + (DROITS.adv && l.groupe !== 'pretes' ? ' · glisser sur un autre jour pour la déplacer' : '')),
-      onClick: function () { ouvrirFiche(l.cle); }},
-      h('div', {className: 'pf-cli', text: l.client}),
-      h('div', {className: 'pf-l2', text: qteU(l, l.reste) + ' · ' + l.article}),
-      h('div', {className: 'pf-l3' + (l.retard ? ' retard' : ''), text: l.expedition ? 'à expédier le ' + dateFr(l.expedition).slice(0, 5) : 'expédition non datée'}),
-      l.urgence ? h('div', {className: 'pf-badge', text: 'Urgente'})
-        : l.groupe === 'partiel' ? h('div', {className: 'pf-badge partiel', text: 'Stock partiel'})
-        : l.groupe === 'pretes' ? h('div', {className: 'pf-badge faite', text: 'Prête'}) : null);
-    if (DROITS.adv && l.groupe !== 'pretes') {
+  }
+
+  // Les lignes d'un jour, regroupées par commande, dans l'ordre de la première
+  // ligne de chaque commande.
+  function parCommande(lignes) {
+    var ordre = [], par = {};
+    lignes.forEach(function (l) {
+      if (!par[l.numero]) { par[l.numero] = {numero: l.numero, lignes: []}; ordre.push(par[l.numero]); }
+      par[l.numero].lignes.push(l);
+    });
+    return ordre;
+  }
+
+  // Une commande dans la frise, comme un dossier du planning machine : client
+  // en gros, puis la quantité et la référence (une ligne) ou le nombre de
+  // lignes, puis la date d'expédition ; le détail ligne par ligne au survol.
+  // Trop étroit, le bloc ne garde que le client, à la verticale.
+  function blocFrise(g) {
+    var ls = g.lignes, l0 = ls[0], seule = ls.length === 1;
+    var aFaire = ls.filter(function (l) { return l.groupe !== 'pretes'; });
+    var faite = !aFaire.length;
+    var urgente = ls.some(function (l) { return l.urgence; });
+    var partiel = ls.some(function (l) { return l.groupe === 'partiel'; });
+    var retard = ls.some(function (l) { return l.retard; });
+    var exp = ls.map(function (l) { return l.expedition; }).filter(Boolean).sort()[0];
+    var cls = 'pf-bloc ' + teinteClient(l0.client) + (faite ? ' faite' : partiel ? ' partiel' : '') + (urgente ? ' urgente' : '');
+    var detail = ls.map(function (l) {
+      return 'L' + l.ligne + ' · ' + l.article + ' · ' + qteU(l, l.reste) + ' · ' + etatLigne(l) + (l.urgence ? ' · urgente' : '');
+    }).join('\n');
+    var sources = ls.map(function (l) { return SOURCES_JOUR[l.jour_source] ? SOURCES_JOUR[l.jour_source](l) : ''; })
+      .filter(function (x, i, t) { return x && t.indexOf(x) === i; }).join(' · ');
+    var b = h('div', {className: cls, 'data-cde': g.numero,
+      'data-tip': tip('pf|' + g.numero + '|' + l0.jour_prepa, l0.client + ' · commande ' + g.numero,
+        detail + (exp ? '\nExpédition ' + dateFr(exp) : ''),
+        sources + (DROITS.adv && !faite ? ' · glisser sur un autre jour pour ' + (seule ? 'la déplacer' : 'déplacer la commande') : '')),
+      onClick: function () { ouvrirFiche(l0.cle); }},
+      h('div', {className: 'pf-cli', text: l0.client}),
+      h('div', {className: 'pf-l2', text: seule ? qteU(l0, l0.reste) + ' · ' + l0.article : ls.length + ' lignes · ' + g.numero}),
+      h('div', {className: 'pf-l3' + (retard ? ' retard' : ''), text: exp ? 'à expédier le ' + dateFr(exp).slice(0, 5) : 'expédition non datée'}),
+      urgente ? h('div', {className: 'pf-badge', text: 'Urgente'})
+        : partiel ? h('div', {className: 'pf-badge partiel', text: 'Stock partiel'})
+        : faite ? h('div', {className: 'pf-badge faite', text: 'Prête'}) : null);
+    if (DROITS.adv && !faite) {
       b.setAttribute('draggable', 'true');
       b.addEventListener('dragstart', function (ev) {
-        S.friseDrag = l.cle;
+        S.friseDrag = aFaire.map(function (l) { return l.cle; });
         b.classList.add('attrapee');
-        try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', l.cle); } catch (e) {}
+        try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', g.numero); } catch (e) {}
       });
       b.addEventListener('dragend', function () {
         S.friseDrag = null;
@@ -1081,7 +1111,7 @@
   }
 
   // Une semaine : son titre, une ligne d'en-têtes de jour, puis une barre où
-  // chaque jour est un segment et chaque préparation un bloc. En-têtes et
+  // chaque jour est un segment et chaque commande un bloc. En-têtes et
   // segments se partagent la largeur de la même façon : ils tombent l'un
   // sous l'autre.
   function semaineFrise(lundi, lignes, auj, actif) {
@@ -1103,7 +1133,7 @@
         h('span', {className: 'pf-jh-n', text: aFaire ? aFaire + ' à faire' : x.lignes.length ? 'fait' : '—'}));
     }));
     var barre = h('div', {className: 'pf-barre'}, jours.map(function (x) {
-      var seg = h('div', {className: 'pf-seg' + etat(x), 'data-jour': x.jour}, x.lignes.map(blocFrise));
+      var seg = h('div', {className: 'pf-seg' + etat(x), 'data-jour': x.jour}, parCommande(x.lignes).map(blocFrise));
       if (DROITS.adv && x.jour >= auj) {
         seg.addEventListener('dragover', function (ev) {
           if (!(S.friseDrag || S.prepaDrag)) return;
