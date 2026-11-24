@@ -238,6 +238,19 @@ check("caractéristiques : format du planning faute d'OF, quantité du devis",
 check("caractéristiques sans devis : colonne devis vide, aucun écart",
       ca_sans["devis_id"] is None and ca_sans["ecarts"] == 0 and all(l["devis"] is None for l in ca_sans["lignes"]))
 
+with get_db() as conn:
+    from app.routers.rentabilite import caracteristiques_devis_seul   # noqa: E402
+    cs = caracteristiques_devis_seul(conn, 10)
+check("devis seul : ses caractéristiques et son dossier rattaché",
+      len(cs["lignes"]) == 5 and cs["lignes"][1]["devis"] == 600000
+      and [d["planning_entry_id"] for d in cs["dossiers"]] == [707] and cs["dossiers"][0]["valide"], cs)
+try:
+    with get_db() as conn:
+        caracteristiques_devis_seul(conn, 99999)
+    check("devis inconnu : LookupError", False)
+except LookupError:
+    check("devis inconnu : LookupError", True)
+
 print("3. États explicites")
 with get_db() as conn:
     check("créneau sans devis", fiche_rentabilite(conn, 708)["etat"] == "sans_devis")

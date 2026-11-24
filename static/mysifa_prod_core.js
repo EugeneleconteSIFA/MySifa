@@ -8562,32 +8562,66 @@ function rentSelecteurDevis(o){
    (`/caracteristiques`, service `rentabilite_caracteristiques.py`), dessin
    ici, réutilisé partout où un dossier et un devis se côtoient.
    `devisId` : un devis choisi mais pas encore enregistré (panneau Dossiers). */
-function rentCaracteristiques(entryId, devisId){
-  const zone = h('div',{className:'rent-carac'},
-    h('div',{className:'rent-carac-attente'},'Lecture du dossier et du devis…'));
+function rentCaracTableau(r, avecDossier){
   const fmt = (l, v) => {
     if(v == null || v === '') return '—';
     if(typeof v === 'number') return v.toLocaleString('fr-FR') + (l.unite ? ' ' + l.unite : '');
     return String(v);
   };
+  const zone = h('div',{className:'rent-carac' + (avecDossier ? '' : ' rent-carac-seul')});
+  zone.append(h('div',{className:'rent-carac-ligne rent-carac-tete'},
+    h('span',null,''), avecDossier ? h('span',null,'Dossier') : null, h('span',null,'Devis')));
+  (r.lignes || []).forEach(l => {
+    const devis = h('span',{className:'rent-carac-val'}, fmt(l, l.devis));
+    if(l.note) devis.title = 'Quantité du devis : ' + l.note + ' de celle du dossier';
+    if((l.cle === 'matiere' || l.cle === 'colle') && r.devis_fichier && l.devis)
+      devis.title = 'Lu dans le nom du fichier : ' + r.devis_fichier;
+    zone.append(h('div',{className:'rent-carac-ligne' + (l.ecart ? ' is-ecart' : ''),
+        title: l.ecart ? l.libelle + ' : le dossier diffère du devis' : ''},
+      h('span',{className:'rent-carac-lib'}, l.ecart ? h('span',{className:'rent-carac-diff'},'≠') : null, l.libelle),
+      avecDossier ? h('span',{className:'rent-carac-val'}, fmt(l, l.dossier)) : null,
+      devis));
+  });
+  return zone;
+}
+
+function rentCaracteristiques(entryId, devisId){
+  const zone = h('div',null, h('div',{className:'rent-carac-attente'},'Lecture du dossier et du devis…'));
   api('/api/rentabilite/planning/' + entryId + '/caracteristiques'
       + (devisId ? '?devis_id=' + encodeURIComponent(devisId) : ''))
+    .then(r => { zone.textContent = ''; zone.append(rentCaracTableau(r, true)); })
+    .catch(() => {
+      zone.textContent = '';
+      zone.append(h('div',{className:'rent-carac-attente'},'Caractéristiques indisponibles.'));
+    });
+  return zone;
+}
+
+/* Fenêtre d'un devis seul : ses caractéristiques, puis le même tableau
+   « Dossier / Devis » pour chaque dossier qui lui est rattaché. */
+function rentCaracteristiquesDevis(devisId){
+  const zone = h('div',{className:'rent-carac-devis'},
+    h('div',{className:'rent-carac-attente'},'Lecture du devis…'));
+  api('/api/rentabilite/devis/' + devisId + '/caracteristiques')
     .then(r => {
       zone.textContent = '';
-      zone.append(h('div',{className:'rent-carac-ligne rent-carac-tete'},
-        h('span',null,''), h('span',null,'Dossier'), h('span',null,'Devis')));
-      (r.lignes || []).forEach(l => {
-        const devis = h('span',{className:'rent-carac-val'}, fmt(l, l.devis));
-        if(l.note) devis.title = 'Quantité du devis : ' + l.note + ' de celle du dossier';
-        if(l.cle === 'matiere' || l.cle === 'colle'){
-          if(r.devis_fichier && l.devis) devis.title = 'Lu dans le nom du fichier : ' + r.devis_fichier;
-        }
-        zone.append(h('div',{className:'rent-carac-ligne' + (l.ecart ? ' is-ecart' : ''),
-            title: l.ecart ? l.libelle + ' : le dossier diffère du devis' : ''},
-          h('span',{className:'rent-carac-lib'}, l.ecart ? h('span',{className:'rent-carac-diff'},'≠') : null, l.libelle),
-          h('span',{className:'rent-carac-val'}, fmt(l, l.dossier)),
-          devis));
+      const dossiers = r.dossiers || [];
+      if(!dossiers.length){
+        zone.append(h('div',{className:'form-section-title'},'Caractéristiques'),
+          rentCaracTableau(r, false));
+        return;
+      }
+      zone.append(h('div',{className:'form-section-title'},
+        dossiers.length > 1 ? 'Dossiers rattachés' : 'Dossier rattaché'));
+      dossiers.forEach(d => {
+        zone.append(h('div',{className:'rent-carac-dossier'},
+          h('b',null, d.reference || ('Dossier ' + d.planning_entry_id)),
+          h('span',null, [d.machine, d.valide ? null : 'proposé, à confirmer'].filter(Boolean).join(' · '))),
+          rentCaracTableau(d, true));
       });
+      if(r.total_dossiers > dossiers.length)
+        zone.append(h('div',{className:'rent-carac-attente'},
+          '+ ' + (r.total_dossiers - dossiers.length) + ' autre(s) dossier(s) rattaché(s).'));
     })
     .catch(() => {
       zone.textContent = '';
@@ -9845,7 +9879,7 @@ function ouvrirDevisModal(devisId){
           h('div',{className:'devis-alerte devis-alerte-avertissement'},
             iconEl('alert-triangle',13), h('span',null,' '+dv.note)))
       : null,
-    h('div',{className:'contact-modal-body'}, lecture, valeursLues),
+    h('div',{className:'contact-modal-body'}, rentCaracteristiquesDevis(dv.id), lecture, valeursLues),
     h('div',{className:'devis-modal-actions'},
       dejaValide
         ? h('span',{className:'devis-modal-valide'},
