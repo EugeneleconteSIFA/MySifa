@@ -217,7 +217,8 @@
       // réellement sortie.
       if (l.matiere_id && !cand[l.matiere_id]) {
         cand[l.matiere_id] = {matiere_id: l.matiere_id, reference: l.matiere_ref,
-          designation: l.matiere_designation, categorie: l.matiere_categorie,
+          designation: l.matiere_designation, libelle_technique: l.matiere_libelle_technique || '',
+          categorie: l.matiere_categorie,
           kind: l.kind, conversion: l.conversion || {}, laizes: l.laizes || []};
       }
       const conv = l.conversion || {};
@@ -381,8 +382,13 @@
     return options;
   }
 
+  // Libellé technique d'abord (celui de la variante fournisseur), le
+  // commercial seulement s'il manque.
+  function designationMatiere(o) { return o.libelle_technique || o.designation || ''; }
+
   function libelleMatiere(o) {
-    return (o.reference || '') + (o.designation && o.designation !== o.reference ? ' — ' + o.designation : '');
+    const d = designationMatiere(o);
+    return (o.reference || '') + (d && d !== o.reference ? ' — ' + d : '');
   }
 
   function ligneHtml(i) {
@@ -552,7 +558,7 @@
     const mots = normaliser(ch.q).split(/\s+/).filter(Boolean);
     const items = optionsLigne(ch.i).filter(o => {
       if (!mots.length) return true;
-      const t = normaliser((o.reference || '') + ' ' + (o.designation || '') + ' ' + (o.fournisseurs || []).join(' '));
+      const t = normaliser((o.reference || '') + ' ' + (o.libelle_technique || '') + ' ' + (o.designation || '') + ' ' + (o.fournisseurs || []).join(' '));
       return mots.every(m => t.includes(m));
     }).map(o => ({mid: o.matiere_id, o: o}));
     // Créer une référence depuis n'importe quelle ligne (02/10/2026) : la
@@ -588,7 +594,7 @@
           + (x.mid === '__creer__' ? ' creer' : (x.mid === r.mid ? ' sel' : ''));
         const corps = x.mid === '__creer__' ? '+ Créer une référence…'
           : '<span class="ref">' + esc(x.o.reference || '') + '</span>'
-            + (x.o.designation && x.o.designation !== x.o.reference ? ' <span class="des">— ' + esc(x.o.designation) + '</span>' : '')
+            + (designationMatiere(x.o) && designationMatiere(x.o) !== x.o.reference ? ' <span class="des">— ' + esc(designationMatiere(x.o)) + '</span>' : '')
             + infosChoix(x.o);
         return '<div role="option" class="' + cls + '" data-dr-choix-k="' + k + '"'
           + (k === ch.actif ? ' aria-selected="true"' : '') + '>' + corps + '</div>';
