@@ -25,7 +25,7 @@ TYPES = {k: t for k, _, t in ADV_MEF_COLONNES}
 LIBELLES = {k: l for k, l, _ in ADV_MEF_COLONNES}
 TONS = {k for k, _ in ADV_MEF_TONS}
 CIBLES = {k for k, _ in ADV_MEF_CIBLES}
-ETATS_ETAPE = ("oui", "en_cours", "non", "sans_objet")
+ETATS_ETAPE = ("oui", "en_cours", "non", "sans_objet", "probable")
 SANS_CIBLE = ("vide", "non_vide")
 
 

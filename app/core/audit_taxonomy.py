@@ -379,6 +379,9 @@ _METHOD_ACTIONS = {"POST": "CREATE", "PUT": "UPDATE", "PATCH": "UPDATE", "DELETE
 # noierait le journal sous des milliers de lignes sans auteur ni intention.
 SKIP_PREFIXES: tuple[str, ...] = (
     "/api/guides/heartbeat",
+    # Relève des demandes de mise à jour du miroir RVGI par le poste SIFA,
+    # toutes les deux minutes. La demande (bouton) et l'import sont, eux, tracés.
+    "/api/bridge/erp/demande",
     "/api/print/agent/heartbeat",
     "/api/print/agent/jobs",
     "/api/print/preview",

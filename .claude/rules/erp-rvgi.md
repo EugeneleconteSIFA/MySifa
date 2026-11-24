@@ -209,7 +209,8 @@ de MyStock. En cas de doute sur un ajout à `/erp` : demander.
 |---|---|
 | `scripts/export_rvgi_csv.ps1` | ERP → CSV, lecture seule, 61 tables. Lit le `.env`. |
 | `scripts/import_rvgi_csv.py` | CSV → `data/erp_mirror.db`. stdlib seule, aucun import de `app.*`. |
-| `scripts/sync_rvgi.ps1` | Export + zip + envoi HTTPS. Tâche planifiée, 5 h et 12 h 30. |
+| `scripts/sync_rvgi.ps1` | Export + zip + envoi HTTPS. Tâche planifiée : toutes les heures de 6 h à 20 h, plus 2 h la nuit (`-Installer` la crée). Une seconde tâche (`-SiDemande`, toutes les 2 min) relève le bouton « Mettre à jour » de l'ERP et de l'ADV. |
+| `app/services/erp_synchro.py` | Demandes de mise à jour : déposées par le bouton, relevées par le poste (`/api/bridge/erp/demande/prendre`), closes par la fin de l'import. |
 | `app/services/erp_mirror.py` | Connexion `mode=ro`, moteur de liste générique, sentinelles. |
 | `app/services/erp_catalogue.py` | Les 27 écrans, en déclaratif. |
 | `app/services/erp_export.py` | La vue courante en `.xlsx`. Ne décide rien, écrit. |

@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from config import (ADV_ETAPES, ADV_ETATS, ADV_PREPA_HORIZON_JOURS, ADV_PREPA_STATUTS, ADV_REPIQUAGE_STATUTS,
-                    APP_ORG_NAME, APP_VERSION, ROLES_ADV, ROLES_ADV_PREPA)
+                    APP_ORG_NAME, APP_VERSION, ROLES_ADV, ROLES_ADV_PREPA, ROLES_ERP)
 from services.auth_service import effective_role, get_current_user
 from app.services import adv_mise_en_forme as mef
 
@@ -57,6 +57,8 @@ def adv_page(request: Request):
         "statuts_repiquage": [{"cle": k, "label": v} for k, v in ADV_REPIQUAGE_STATUTS],
         "horizon": ADV_PREPA_HORIZON_JOURS,
         "mef": mef.referentiel(),
+        # Le bouton « Mettre à jour » du miroir RVGI est ouvert aux rôles de l'ERP.
+        "rvgi_demande": role in ROLES_ERP,
     }
     html = (PAGE_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
             .replace("__BOOT__", _json_script(boot)))
@@ -84,7 +86,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ia.css">
-<link rel="stylesheet" href="/static/mysifa_adv.css?v=12">
+<link rel="stylesheet" href="/static/mysifa_adv.css?v=13">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -127,7 +129,8 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <div id="mroot"></div>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
-<script src="/static/mysifa_adv.js?v=11"></script>
+<script src="/static/mysifa_rvgi_synchro.js?v=1"></script>
+<script src="/static/mysifa_adv.js?v=13"></script>
 </body>
 </html>
 """)

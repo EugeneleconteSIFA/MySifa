@@ -228,6 +228,8 @@ def forcer(numero: str, ligne: int, etape: str, body: ForcageIn, request: Reques
     valeur = (body.valeur or "").strip() or None
     if valeur and valeur not in _LIB_ETAT:
         raise HTTPException(status_code=400, detail="Valeur inconnue.")
+    if valeur == "probable":
+        raise HTTPException(status_code=400, detail="« Probable » se calcule, il ne se fixe pas — choisir Oui ou Non.")
     note = (body.note or "").strip()[:500] or None
     quand = adv.maintenant()
     with get_db() as conn:

@@ -267,10 +267,30 @@
       if (q) { q.focus(); try { q.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
     }
     compteursNav();
+    monterRvgi();
     ecrireUrl();
     if (S.ligne && !modalOuverte()) ouvrirFiche(S.ligne, true);
     else if (S.reglages && !modalOuverte()) ouvrirReglages(true);
     if (!S.ligne && !S.reglages && modalOuverte()) fermerFiche(true);
+  }
+
+  // Date des données RVGI et « Mettre à jour » (static/mysifa_rvgi_synchro.js) :
+  // quand le miroir a été reconstruit, la page relit ses données.
+  function monterRvgi() {
+    if (!window.MySifaRvgiSynchro) return;
+    document.querySelectorAll('.adv-rvgi').forEach(function (hote) {
+      MySifaRvgiSynchro.monter(hote, {
+        peutDemander: !!BOOT.rvgi_demande,
+        surErreur: function (m) { toast(m, 'danger'); },
+        surMiseAJour: async function () {
+          if (modalOuverte()) return;
+          await charger();
+          if (S.onglet === 'prepa') S.carnet = null; else S.prepa = null;
+          render();
+          toast('Données RVGI mises à jour.');
+        }
+      });
+    });
   }
 
   function compteursNav() {
@@ -322,7 +342,7 @@
       if (S.filtre === 'retard' && !l.retard) return false;
       if (S.filtre === 'semaine' && !l.semaine) return false;
       if (S.filtre === 'pretes' && !['bat', 'prod', 'stock', 'prepa'].every(function (k) {
-        var v = l.etapes[k].valeur; return v === 'oui' || v === 'sans_objet';
+        var v = l.etapes[k].valeur; return v === 'oui' || v === 'sans_objet' || v === 'probable';
       })) return false;
       if (S.filtre.indexOf('etape_') === 0) {
         var v = l.etapes[S.filtre.slice(6)].valeur;
@@ -366,7 +386,7 @@
     var d = S.carnet || {};
     var tete = h('div', {className: 'adv-tete'},
       h('div', {}, h('h1', {text: 'Carnet de commandes'}),
-        h('div', {className: 'adv-maj', text: 'Lignes à traiter dans RVGI · stock MyStock · actualisé à ' + new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})})),
+        h('div', {className: 'adv-maj adv-rvgi'})),
       h('div', {className: 'adv-tete-actions'},
         h('button', {type: 'button', className: 'btn adv-btn-icone', 'aria-label': 'Mise en forme conditionnelle',
           'data-tip': tip('btn-mef', 'Mise en forme conditionnelle', S.mef.length ? S.mef.length + ' règle(s) actives' : 'Aucune règle'),
@@ -601,48 +621,56 @@
         onClick: function (ev) { ev.stopPropagation(); changerPrepa(l, statut, el); }}, lib);
       return el;
     };
+    // Un seul geste : « Prête ». Une prépa déjà prête peut être remise à préparer.
     if (s === 'prete') return [b('Remettre à préparer', 'a_preparer')];
-    if (s === 'en_cours') return [b('Prête', 'prete', 'btn-ok'), b('Remettre à préparer', 'a_preparer')];
-    return [b('Démarrer', 'en_cours', 'btn-accent'), b('Prête', 'prete')];
+    return [b('Prête', 'prete', 'btn-accent')];
   }
 
-  // Une préparation = une ligne de deux étages au plus, en colonnes : rang,
-  // qui, commandé, en stock, à préparer, où prélever, quand, et les boutons.
-  // Le détail (dates complètes, auteur, FIFO) est au survol ou dans la fiche.
-  // L'administration et la direction peuvent changer l'ordre : glisser la
-  // ligne, ou ses flèches ↑ ↓ ; l'ordre est commun et s'impose à la logistique.
+  // Une préparation = UNE ligne, une valeur par colonne, sans sous-texte :
+  // rang, client, commande (« 9932425-L3 »), réf produit, commandé, unité, en
+  // stock, à préparer, où prélever, expédition, et le bouton « Prête ». Le
+  // détail (désignation, manque, fin de prod, enlèvement, auteur) est au
+  // survol ou dans la fiche. L'administration et la direction peuvent changer
+  // l'ordre : glisser la ligne, ou ses flèches ↑ ↓ ; il s'impose à la logistique.
   function cartePrepa(l, rang, ctx) {
     var st = l.stock || {};
-    var aPrep, aPrepSous = null;
-    if (l.groupe === 'attente') {
-      aPrep = h('div', {className: 'c-fab'}, fN(l.reste));
-      aPrepSous = l.fin_prod
-        ? h('div', {className: 'c-sous', text: 'Fin de prod ' + dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '')})
-        : h('div', {className: 'c-sous', text: l.etapes.prod.detail});
-    } else {
-      aPrep = h('div', {}, fN(l.reste));
-      if (st.alloue < l.reste) aPrepSous = h('div', {className: 'c-sous adv-date-tard', text: 'manque ' + fN(l.reste - st.alloue)});
-    }
+    var uniteReelle = (st.unite || 'étiquette');
+    var sortie = st.sortie_prod || 0;     // stock « probable » : sortie de production
+    var manque = l.groupe !== 'attente' && st.alloue + sortie < l.reste ? l.reste - st.alloue - sortie : 0;
+    var aPrep = h('div', {className: 'c-num c-fort c-aprep' + (l.groupe === 'attente' ? ' c-fab' : (manque ? ' adv-date-tard' : '')),
+        'data-l': l.groupe === 'attente' ? 'À produire' : 'À préparer',
+        'data-tip': l.groupe === 'attente'
+          ? tip(l.cle + '|aprep', 'À produire', l.fin_prod ? 'Fin de prod ' + dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '') : l.etapes.prod.detail)
+          : (manque ? tip(l.cle + '|aprep', sortie ? 'Production un peu sous la commande' : 'Stock partiel',
+              'Manque ' + fN(manque) + ' ' + accord(uniteReelle, manque)) : null)},
+      fN(l.reste));
     var empl;
     if (st.emplacements && st.emplacements.length && l.groupe !== 'attente') {
       empl = h('div', {className: 'adv-empl'}, st.emplacements.map(function (e) {
         return h('span', {'data-tip': tip(l.cle + '|lot' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + qteU(l, e.quantite), e.date_entree ? 'Entré le ' + dateLongue(e.date_entree) + ' (FIFO)' : null)},
           h('b', {text: e.emplacement}), ' · ' + fN(e.quantite));
       }));
-    } else {
+    } else if (!sortie) {
       empl = h('div', {className: 'adv-empl adv-muet', text: '—'});
     }
-    var dp = l.departs && l.departs.length ? l.departs[0] : null;
-    var quandSous = null;
-    if (l.prepa.statut !== 'a_preparer' && l.prepa.maj_par) {
-      quandSous = h('div', {className: 'c-sous', text: l.prepa.maj_par + ' · ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)});
-    } else if (dp) {
-      quandSous = h('div', {className: 'c-sous adv-ok', text: 'Enlèv. ' + dateFr(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '')});
+    if (sortie && l.groupe !== 'attente') {
+      var puce = h('span', {className: 'adv-sortie-prod',
+          'data-tip': tip(l.cle + '|sortie', 'Sortie de production', l.etapes.stock.detail,
+            (st.dossiers_prod || []).length ? 'Dossier ' + st.dossiers_prod.join(', ') : null)},
+        h('b', {text: 'Sortie prod'}), ' · ' + fN(sortie));
+      if (empl) empl.appendChild(puce);
+      else empl = h('div', {className: 'adv-empl'}, puce);
     }
-    var quand = h('div', {className: 'c-quand', 'data-tip': tip(l.cle + '|quand', 'Expédition ' + (dateLongue(l.expedition) || 'non datée'),
-        l.retard ? 'En retard' : null,
-        dp ? 'Enlèvement ' + dateLongue(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '') + (dp.parti_le ? ' · parti' : '') : null)},
-      h('div', {className: l.retard ? 'adv-date-retard' : '', text: l.expedition ? dateFr(l.expedition) : 'Non datée'}), quandSous);
+    var dp = l.departs && l.departs.length ? l.departs[0] : null;
+    var notesQuand = [];
+    if (dp) notesQuand.push('Enlèvement ' + dateLongue(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '') + (dp.parti_le ? ' · parti' : ''));
+    if (l.prepa.statut !== 'a_preparer' && l.prepa.maj_par) {
+      notesQuand.push((LIB_PREPA[l.prepa.statut] || '') + ' · ' + l.prepa.maj_par + ' ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le));
+    }
+    var quand = h('div', {className: 'c-quand' + (l.retard ? ' adv-date-retard' : ''),
+      'data-tip': tip(l.cle + '|quand', 'Expédition ' + (dateLongue(l.expedition) || 'non datée') + (l.retard ? ' · en retard' : ''),
+        notesQuand[0] || null, notesQuand[1] || null)},
+      l.expedition ? dateFr(l.expedition) : 'Non datée');
 
     var manuel = l.priorite_manuelle !== null && l.priorite_manuelle !== undefined;
     var rangEl = h('div', {className: 'adv-rang' + (manuel ? ' manuel' : ''),
@@ -662,13 +690,13 @@
     var ligne = h('div', {className: 'adv-carte' + (l.retard ? ' retard' : ''), 'data-cle': l.cle,
         onClick: function () { ouvrirFiche(l.cle); }},
       cellRang,
-      h('div', {className: 'c-id'},
-        h('div', {className: 'c-haut'}, h('span', {className: 'c-client', text: l.client}),
-          h('span', {className: 'adv-mono adv-muet', text: l.numero + ' · ' + l.ligne + ' · ' + l.article})),
-        h('div', {className: 'c-des', text: l.designation})),
-      h('div', {className: 'c-num', 'data-l': 'Commandé'}, fN(l.qte), unite(l) ? h('div', {className: 'c-sous', text: accord(unite(l), l.qte)}) : null),
-      h('div', {className: 'c-num' + (st.alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, st.alloue ? fN(st.alloue) : '—'),
-      h('div', {className: 'c-num c-fort', 'data-l': l.groupe === 'attente' ? 'À produire' : 'À préparer'}, aPrep, aPrepSous),
+      h('div', {className: 'c-client', text: l.client}),
+      h('div', {className: 'c-cde adv-mono', text: l.numero + '-L' + l.ligne}),
+      h('div', {className: 'c-ref adv-mono', text: l.article, 'data-tip': tip(l.cle + '|ref', l.article, l.designation)}),
+      h('div', {className: 'c-num c-qte', 'data-l': 'Commandé · ' + accord(uniteReelle, l.qte)}, fN(l.qte)),
+      h('div', {className: 'c-unite', 'data-l': 'Unité', text: accord(uniteReelle, l.qte)}),
+      h('div', {className: 'c-num c-stk' + (st.alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, st.alloue ? fN(st.alloue) : '—'),
+      aPrep,
       empl, quand,
       h('div', {className: 'adv-actions'}, boutonsPrepa(l)));
 
@@ -731,9 +759,10 @@
 
   function entetePrepa(groupe) {
     return h('div', {className: 'adv-carte adv-carte-tete', 'aria-hidden': 'true'},
-      h('div', {text: '#'}), h('div', {text: 'Client · commande'}),
-      h('div', {className: 'c-num', text: 'Commandé'}), h('div', {className: 'c-num', text: 'En stock'}),
-      h('div', {className: 'c-num', text: groupe === 'attente' ? 'À produire' : 'À préparer'}), h('div', {text: groupe === 'attente' ? '' : 'Où prélever'}),
+      h('div', {text: '#'}), h('div', {text: 'Client'}), h('div', {text: 'Commande'}), h('div', {text: 'Réf produit'}),
+      h('div', {className: 'c-num', text: 'Commandé'}), h('div', {text: 'Unité'}), h('div', {className: 'c-num', text: 'En stock'}),
+      h('div', {className: 'c-num', text: groupe === 'attente' ? 'À produire' : 'À préparer'}),
+      h('div', {text: groupe === 'attente' ? '' : 'Où prélever'}),
       h('div', {text: 'Expédition'}), h('div'));
   }
 
@@ -741,8 +770,8 @@
     var d = S.prepa || {};
     var tete = h('div', {className: 'adv-tete'},
       h('div', {}, h('h1', {text: 'Préparations'}),
-        h('div', {className: 'adv-maj', text: (d.ordre_manuel ? 'Ordre fixé par l’ADV, puis date d’expédition' : 'Par date d’expédition, retards en tête')
-          + ' · emplacements MyStock en FIFO'})),
+        h('div', {className: 'adv-maj'}, h('span', {className: 'adv-rvgi'}),
+          h('span', {text: ' · ' + (d.ordre_manuel ? 'Ordre fixé par l’ADV, puis date d’expédition' : 'Par date d’expédition, retards en tête')}))),
       h('div', {className: 'adv-puces'}, HORIZONS.map(function (n) {
         return h('button', {type: 'button', className: 'adv-puce' + (S.horizon === n ? ' active' : ''),
           onClick: async function () { S.horizon = n; S.charge = false; render(); await charger(); render(); }}, n + ' jours');
@@ -769,7 +798,7 @@
       'data-bloc-valeur-attente': String(n('attente')),
       'data-bloc-valeur-pretes': String(n('pretes'))},
       tuile('En cours', n('en_cours'), null, '', S.groupe === 'en_cours', basculer('en_cours')),
-      tuile('À préparer', n('preparable'), 'stock disponible', n('preparable') ? 'warn' : '', S.groupe === 'preparable', basculer('preparable')),
+      tuile('À préparer', n('preparable'), 'disponible', n('preparable') ? 'warn' : '', S.groupe === 'preparable', basculer('preparable')),
       tuile('Stock partiel', n('partiel'), null, '', S.groupe === 'partiel', basculer('partiel')),
       tuile('Attente de prod', n('attente'), null, '', S.groupe === 'attente', basculer('attente')),
       tuile('Prêtes', n('pretes'), 'en attente de départ', n('pretes') ? 'ok' : '', S.groupe === 'pretes', basculer('pretes'))));
@@ -1068,7 +1097,8 @@
     oui: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
     en_cours: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><polyline points="12 8 12 12 15 14"/></svg>',
     non: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="7" x2="17" y2="17"/><line x1="17" y1="7" x2="7" y2="17"/></svg>',
-    sans_objet: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="7" y1="12" x2="17" y2="12"/></svg>'
+    sans_objet: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="7" y1="12" x2="17" y2="12"/></svg>',
+    probable: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
   };
   // « dans 3 j », « il y a 5 j », « aujourd’hui » : on ne soustrait pas de tête.
   function relatif(s) {
@@ -1144,6 +1174,7 @@
       var sel = h('select', {'aria-label': 'Valeur de l’étape ' + ec.label});
       sel.appendChild(h('option', {value: ''}, 'Calcul : ' + (ETATS[et.calcul] || et.calcul)));
       Object.keys(ETATS).forEach(function (k) {
+        if (k === 'probable') return;           // se calcule, ne se fixe pas
         var o = h('option', {value: k}, 'Fixer à « ' + ETATS[k] + ' »');
         if (et.force && et.valeur === k) o.selected = true;
         sel.appendChild(o);
@@ -1205,7 +1236,15 @@
           return h('span', {'data-tip': tip(l.cle + '|fiempl' + e.lot_id, 'Emplacement ' + e.emplacement, 'Prélever ' + qteU(l, e.quantite), e.date_entree ? 'Entré le ' + dateFr(e.date_entree) + ' (FIFO)' : null)},
             h('b', {text: e.emplacement}), ' · ' + fN(e.quantite));
         }))
-      : h('div', {className: 'adv-muet', text: st.connu ? 'Rien d’attribué à cette ligne.' : 'Article absent de MyStock.'});
+      : (st.sortie_prod ? null : h('div', {className: 'adv-muet', text: st.connu ? 'Rien d’attribué à cette ligne.' : 'Article absent de MyStock.'}));
+    if (st.sortie_prod) {
+      // Stock « probable » : la production finie n'est pas entrée dans MyStock.
+      var puceSortie = h('span', {className: 'adv-sortie-prod',
+          'data-tip': tip(l.cle + '|fisortie', 'Sortie de production', l.etapes.stock.detail)},
+        h('b', {text: 'Sortie prod'}), ' · ' + fN(st.sortie_prod) + ((st.dossiers_prod || []).length ? ' · dossier ' + st.dossiers_prod.join(', ') : ''));
+      if (empl) empl.appendChild(puceSortie);
+      else empl = h('div', {className: 'adv-empl'}, puceSortie);
+    }
     var prepa = h('div', {className: 'fi-carte'},
       h('h4', {text: 'Préparation'}),
       h('div', {className: 'fi-prepa'},
