@@ -3,6 +3,7 @@
  * Deux onglets, tout l'état dans l'adresse (.claude/rules/url-etat.md) :
  *   /adv?onglet=commandes (défaut si droit ADV) &filtre=&tri=&sens=&ligne=<n°-lg>
  *   /adv?onglet=prepa &horizon=<jours> &groupe=<groupe> &ligne=<n°-lg>
+ *   /adv?onglet=prepa&sous=historique &periode=last7|last90 (défaut last30)
  * Fenêtre : la fiche d'une ligne (`ligne`). Hors adresse : la recherche
  * texte (saisie en cours).
  *
@@ -28,6 +29,7 @@
   var TRIS = ['commande', 'client', 'article', 'qte', 'stock', 'a_fabriquer', 'expedition', 'livraison', 'fin_prod'];
   var HORIZONS = [7, 14, 21, 30];
   var GROUPES = ['tous', 'preparable', 'en_cours', 'partiel', 'attente', 'pretes'];
+  var HISTO_JOURS = [7, 30, 90];         // mêmes valeurs que adv.HISTORIQUE_JOURS
 
   var S = {
     onglet: ONGLETS[0],
@@ -44,6 +46,9 @@
     prepaDrag: null,             // préparation en cours de déplacement
     horizon: BOOT.horizon || 21,
     groupe: 'tous',
+    sous: null,                  // 'historique' : les préparations déjà faites
+    histoJours: 30,
+    historique: null,
     carnet: null,
     prepa: null,
     erreur: null,
@@ -176,6 +181,9 @@
     if (HORIZONS.indexOf(hz) !== -1) S.horizon = hz; else if (complet) S.horizon = BOOT.horizon || 21;
     var g = u.get('groupe', null, GROUPES);
     if (g || complet) S.groupe = g || 'tous';
+    S.sous = S.onglet === 'prepa' && u.get('sous', null, ['historique']) ? 'historique' : null;
+    var pe = u.get('periode', null, HISTO_JOURS.map(function (n) { return 'last' + n; }));
+    if (pe || complet) S.histoJours = pe ? parseInt(pe.slice(4), 10) : 30;
     var l = u.get('ligne', null);
     S.ligne = (l && /^\d{1,12}-\d{1,4}$/.test(l)) ? l : null;
     S.reglages = (DROITS.adv && S.onglet === 'commandes' && !S.ligne)
@@ -191,10 +199,14 @@
     } else {
       if (S.horizon !== (BOOT.horizon || 21)) p.horizon = String(S.horizon);
       if (S.groupe !== 'tous') p.groupe = S.groupe;
+      if (S.sous) {
+        p.sous = S.sous;
+        if (S.histoJours !== 30) p.periode = 'last' + S.histoJours;
+      }
     }
     if (S.ligne) p.ligne = S.ligne;
     else if (S.reglages) p.reglages = S.reglages;
-    MySifaUrl.ecrire(p, {navigation: S.onglet + (S.ligne ? ':fiche' : S.reglages ? ':reglages' : '')});
+    MySifaUrl.ecrire(p, {navigation: S.onglet + (S.sous ? ':' + S.sous : '') + (S.ligne ? ':fiche' : S.reglages ? ':reglages' : '')});
   }
 
   /* ── Données ────────────────────────────────────────────────── */
@@ -207,6 +219,7 @@
         S.mef = S.carnet.mises_en_forme || [];
         S.ordre = S.carnet.colonnes_ordre || [];
       }
+      else if (S.sous === 'historique') S.historique = await api('/api/adv/prepa/historique?jours=' + S.histoJours);
       else S.prepa = await api('/api/adv/prepa?horizon=' + encodeURIComponent(S.horizon));
     } catch (e) {
       S.erreur = e.message || String(e);
@@ -630,6 +643,8 @@
       await charger();
       // L'autre onglet se relira à son ouverture : sa prépa est périmée.
       if (S.onglet === 'prepa') S.carnet = null; else S.prepa = null;
+      // Idem entre la liste Prépa et l'historique.
+      if (S.sous === 'historique') S.prepa = null; else S.historique = null;
       render();
       if (modalOuverte()) { fermerFiche(true); ouvrirFiche(l.cle, true); }
       var mn = document.querySelector('.main');
@@ -711,6 +726,9 @@
       if (empl) empl.appendChild(puce);
       else empl = h('div', {className: 'adv-empl'}, puce);
     }
+    // La cellule existe toujours : sans elle, les colonnes suivantes glissent
+    // d'un cran (cas d'une ligne en attente de prod avec une sortie de prod).
+    if (!empl) empl = h('div', {className: 'adv-empl adv-muet', text: '—'});
     var dp = l.departs && l.departs.length ? l.departs[0] : null;
     var notesQuand = [];
     if (dp) notesQuand.push('Enlèvement ' + dateLongue(dp.date_enlevement) + (dp.transporteur ? ' · ' + dp.transporteur : '') + (dp.parti_le ? ' · parti' : ''));
@@ -818,7 +836,64 @@
       h('div', {text: 'Expédition'}), h('div'));
   }
 
+  // Liste des préparations (sous = null) ou historique : charge ce qui manque.
+  async function allerSous(sous) {
+    S.sous = sous;
+    var manque = sous === 'historique' ? !S.historique || S.historique.jours !== S.histoJours : !S.prepa;
+    if (manque) { S.charge = false; render(); await charger(); }
+    render();
+    var mn = document.querySelector('.main');
+    if (mn) mn.scrollTop = 0;
+  }
+
+  // Les préparations passées « Prête », même parties ou sorties du carnet :
+  // on les retrouve, et on corrige un statut posé par erreur. Remise « à
+  // préparer » ou « en cours », la ligne quitte l'historique et revient dans
+  // l'onglet (si elle est encore au carnet).
+  function renderHistorique(c) {
+    var d = S.historique || {};
+    c.appendChild(h('div', {className: 'adv-tete'},
+      h('div', {}, h('h1', {text: 'Historique des préparations'}),
+        h('div', {className: 'adv-maj', text: 'Passées « Prête » ces ' + S.histoJours + ' derniers jours, la plus récente en tête'})),
+      h('div', {className: 'adv-puces'}, HISTO_JOURS.map(function (n) {
+        return h('button', {type: 'button', className: 'adv-puce' + (S.histoJours === n ? ' active' : ''),
+          onClick: async function () { S.histoJours = n; S.charge = false; render(); await charger(); render(); }}, n + ' jours');
+      }),
+      h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { allerSous(null); }}, '← Préparations'))));
+    if (avertissements(c, d)) return;
+    var lignes = d.lignes || [];
+    if (!lignes.length) {
+      c.appendChild(h('div', {className: 'adv-vide', text: 'Aucune préparation passée « Prête » ces ' + S.histoJours + ' derniers jours.'}));
+      return;
+    }
+    var statuts = BOOT.statuts_prepa || [];
+    var TONS = {parti: 'ok', attente_depart: '', sortie: ''};
+    var corps = h('tbody', {}, lignes.map(function (l) {
+      var uniteReelle = l.unite || 'étiquette';
+      var sel = h('select', {className: 'adv-histo-statut', 'aria-label': 'Statut de la préparation ' + l.numero + '-L' + l.ligne},
+        statuts.map(function (st) { return h('option', {value: st.cle, selected: st.cle === l.statut}, st.label); }));
+      sel.addEventListener('change', function () { changerPrepa(l, sel.value, sel); });
+      return h('tr', {},
+        h('td', {className: 'date'}, dateFr(l.prete_le), h('span', {className: 'adv-muet', text: heure(l.prete_le) ? ' ' + heure(l.prete_le) : ''})),
+        h('td', {className: l.prete_par ? '' : 'adv-muet', text: l.prete_par || '—'}),
+        h('td', {className: 'client', text: l.client || '—', title: l.client || ''}),
+        h('td', {className: 'adv-mono', text: l.numero + '-L' + l.ligne}),
+        h('td', {className: 'adv-mono adv-muet', text: l.article || '—', title: l.designation || ''}),
+        h('td', {className: 'num', text: fN(l.qte)}),
+        h('td', {className: 'adv-muet', text: accord(uniteReelle, l.qte)}),
+        h('td', {className: 'date', text: l.expedition ? dateFr(l.expedition) : '—'}),
+        h('td', {}, h('span', {className: 'adv-badge' + (TONS[l.situation] ? ' ' + TONS[l.situation] : ''), text: l.situation_label})),
+        h('td', {}, sel));
+    }));
+    var tete = ['Prête le', 'Par', 'Client', 'Commande', 'Réf produit', 'Commandé', 'Unité', 'Expédition', 'Devenue', 'Statut'];
+    c.appendChild(h('div', {className: 'adv-table-wrap adv-histo'},
+      h('table', {className: 'adv-table'},
+        h('thead', {}, h('tr', {}, tete.map(function (t) { return h('th', {className: t === 'Commandé' ? 'num' : null, text: t}); }))),
+        corps)));
+  }
+
   function renderPrepa(c) {
+    if (S.sous === 'historique') { renderHistorique(c); return; }
     var d = S.prepa || {};
     var tete = h('div', {className: 'adv-tete'},
       h('div', {}, h('h1', {text: 'Préparations'}),
@@ -837,6 +912,9 @@
             toast('Ordre automatique rétabli.');
           } catch (e) { toast(e.message, 'danger'); }
         }}, 'Ordre automatique') : null,
+      h('button', {type: 'button', className: 'btn btn-petit',
+        'data-tip': tip('btn-historique', 'Historique', 'Les préparations déjà faites, même parties : les retrouver et corriger leur statut.'),
+        onClick: function () { allerSous('historique'); }}, 'Historique'),
       h('button', {type: 'button', className: 'btn btn-petit', onClick: async function () { await charger(); render(); toast('Préparations actualisées.'); }}, 'Actualiser')));
     c.appendChild(tete);
     if (avertissements(c, d)) return;
@@ -866,6 +944,10 @@
     ['en_cours', 'preparable', 'partiel'].forEach(function (g) {
       lignes.filter(function (l) { return l.groupe === g; }).forEach(function (l) { rangs[l.cle] = ++rang; });
     });
+    // Une seule grille pour tous les groupes : en-têtes et lignes partagent
+    // les mêmes colonnes (subgrid, voir mysifa_adv.css), d'un groupe à l'autre.
+    var liste = h('div', {className: 'adv-prepa-liste'});
+    c.appendChild(liste);
     groupes.forEach(function (g) {
       if (S.groupe !== 'tous' && S.groupe !== g.cle) return;
       var ls = lignes.filter(function (l) { return l.groupe === g.cle; });
@@ -873,7 +955,7 @@
       var bloc = h('div', {className: 'adv-groupe'}, h('h2', {}, g.label, h('span', {className: 'n', text: String(ls.length)})),
         entetePrepa(g.cle));
       ls.forEach(function (l, i) { bloc.appendChild(cartePrepa(l, rangs[l.cle] || '·', {lignes: ls, index: i})); });
-      c.appendChild(bloc);
+      liste.appendChild(bloc);
     });
   }
 
@@ -1374,7 +1456,7 @@
       var o = b.getAttribute('data-onglet');
       if (ONGLETS.indexOf(o) === -1) return;
       fermerFiche(true);
-      S.onglet = o; S.ligne = null;
+      S.onglet = o; S.ligne = null; S.sous = null;
       if (!donnees()) { S.charge = false; render(); await charger(); }
       render();
       if (document.body.classList.contains('sb-open') && window.closeSidebar) window.closeSidebar();
@@ -1384,7 +1466,9 @@
   MySifaUrl.surRetour(async function () {
     var avant = S.onglet, hz = S.horizon;
     lireUrl(true);
-    if (S.onglet !== avant || !donnees() || (S.onglet === 'prepa' && hz !== S.horizon)) { await charger(); }
+    var histo = S.onglet === 'prepa' && S.sous === 'historique';
+    if (histo ? !S.historique || S.historique.jours !== S.histoJours
+      : (S.onglet !== avant || !donnees() || (S.onglet === 'prepa' && hz !== S.horizon))) { await charger(); }
     if (!S.ligne && !S.reglages) fermerFiche(true);
     else if (modalOuverte()) fermerFiche(true);   // render() rouvrira la bonne
     render();

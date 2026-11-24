@@ -462,6 +462,35 @@ check("bulle logistique = urgences de la Prépa", bd["urgentes"],
 check("bulle administration = tuiles retard + 7 jours du carnet",
       (bd["retard"], bd["semaine"]), (d["compteurs"]["retard"]["lignes"], d["compteurs"]["semaine"]["lignes"]))
 
+# ── 8. Historique des préparations déjà faites ──────────────────────────────
+print("\nHistorique")
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("DELETE FROM adv_prepas")
+b.executemany("INSERT INTO adv_prepas(numero, ligne, statut, maj_le, maj_par) VALUES (?, ?, ?, ?, 'LOG')", [
+    ("9930003", 1, "prete", jour(0, "10:00:00")),      # dans le carnet, pas partie
+    ("9930001", 1, "prete", jour(-1, "08:00:00")),     # son départ est parti
+    ("9930003", 2, "prete", jour(-2, "09:00:00")),     # sortie du carnet (soldée)
+    ("9930002", 2, "prete", jour(-40, "09:00:00")),    # hors des 30 jours
+    ("9930002", 1, "en_cours", jour(0, "11:00:00")),   # pas encore faite
+])
+b.execute("UPDATE expe_departs SET parti_le = ? WHERE id = 100", (jour(-1, "16:00:00"),))
+b.commit()
+b.close()
+hst = adv.historique_prepa(30)
+check("les prêtes des 30 jours, la plus récente en tête", [l["cle"] for l in hst["lignes"]],
+      ["9930003-1", "9930001-1", "9930003-2"])
+par_h = {l["cle"]: l for l in hst["lignes"]}
+check("encore au carnet : en attente de départ", par_h["9930003-1"]["situation"], "attente_depart")
+check("départ parti : la ligne a quitté la Prépa, l'historique la garde",
+      (par_h["9930001-1"]["situation"], par_h["9930001-1"]["situation_label"][:9]), ("parti", "Parti le "))
+check("sortie du carnet : client et article relus dans le miroir",
+      tuple(par_h["9930003-2"][k] for k in ("situation", "client", "article", "qte")),
+      ("sortie", "CLIENT C", "200/0002", 10.0))
+check("auteur et date de la prépa", (par_h["9930003-1"]["prete_par"], par_h["9930003-1"]["prete_le"][:10]),
+      ("LOG", jour(0)[:10]))
+check("sur 90 jours, la plus ancienne revient", len(adv.historique_prepa(90)["lignes"]), 4)
+check("partie : absente de l'onglet Prépa", "9930001-1" in {l["cle"] for l in adv.prepa(horizon=30)["lignes"]}, False)
+
 print()
 if ko:
     print(f"test_adv_commandes : {ko} échec(s)")
