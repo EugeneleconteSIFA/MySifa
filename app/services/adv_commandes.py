@@ -54,7 +54,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from config import ADV_ETAPES, ADV_PREPA_HORIZON_JOURS, ADV_STOCK_PROBABLE_COUVERTURE
+from config import ADV_ETAPES, ADV_PREPA_HORIZON_JOURS, ADV_PREPA_URGENCE_JOURS, ADV_STOCK_PROBABLE_COUVERTURE
 from app.services import erp_mirror as miroir
 from app.services import erp_tdb as tdb
 from app.services.erp_stock import _reference
@@ -451,6 +451,14 @@ def _priorites(conn) -> Dict[str, Dict[str, Any]]:
             for r in _lignes(conn, "SELECT * FROM mysifa.adv_prepa_priorites")}
 
 
+def _urgences(conn) -> Dict[str, Dict[str, Any]]:
+    """Préparations marquées « urgente » à la main par l'ADV."""
+    if not _table(conn, "adv_urgences"):
+        return {}
+    return {cle_ligne(r["numero"], r["ligne"]): r
+            for r in _lignes(conn, "SELECT * FROM mysifa.adv_urgences")}
+
+
 def _forcages(conn) -> Dict[str, Dict[str, Dict[str, Any]]]:
     out: Dict[str, Dict[str, Dict[str, Any]]] = {}
     if not _table(conn, "adv_forcages"):
@@ -699,11 +707,12 @@ def _appliquer_forcage(etape: Dict[str, Any], f: Optional[Dict[str, Any]]) -> Di
 
 def _cle_priorite(l: Dict[str, Any]):
     """Prépas engagées d'abord (leurs étiquettes sont déjà mises de côté),
-    puis l'ordre fixé à la main par l'ADV, puis la date d'expédition, la plus
-    proche en tête ; sans date, à la fin."""
+    puis l'ordre fixé à la main par l'ADV, puis les lignes marquées urgentes,
+    puis la date d'expédition, la plus proche en tête ; sans date, à la fin."""
     engagee = 0 if (l.get("_prepa_statut") in ("en_cours", "prete")) else 1
     rang = l.get("priorite_manuelle")
     return (engagee, 0 if rang is not None else 1, rang or 0,
+            0 if l.get("urgente_manuelle") else 1,
             l["expedition"] or "9999-12-31", str(l["numero"]), int(l["ligne"] or 0))
 
 
@@ -754,6 +763,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         departs, deps_par_dossier, deps_par_numero = _departs(conn)
         prepas = _prepas(conn)
         priorites = _priorites(conn)
+        urgences = _urgences(conn)
         repiquages_adv = _repiquages(conn)
         forcages = _forcages(conn)
 
@@ -762,6 +772,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         cle = cle_ligne(b["numero"], b["ligne"])
         p = prepas.get(cle)
         pr = priorites.get(cle)
+        ur = urgences.get(cle)
         l = {
             "cle": cle,
             "numero": str(b["numero"]),
@@ -788,6 +799,9 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "priorite_manuelle": int(pr["rang"]) if pr else None,
             "priorite_par": (pr or {}).get("maj_par"),
             "priorite_le": (pr or {}).get("maj_le"),
+            "urgente_manuelle": bool(ur),
+            "urgente_par": (ur or {}).get("maj_par"),
+            "urgente_le": (ur or {}).get("maj_le"),
         }
         lignes.append(l)
 
@@ -953,6 +967,41 @@ def groupe_prepa(l: Dict[str, Any]) -> Optional[str]:
     return "attente"
 
 
+def urgence(l: Dict[str, Any], groupe: Optional[str], aujourdhui: date) -> Optional[str]:
+    """Pourquoi la préparation est urgente — None si elle ne l'est pas.
+
+    Marquée par l'ADV, ou préparable (stock là, sortie de prod, ou déjà
+    commencée) avec une expédition passée ou dans ADV_PREPA_URGENCE_JOURS.
+    Une prépa prête ou partie n'est plus urgente.
+    """
+    if not groupe or groupe == "pretes":
+        return None
+    if l.get("urgente_manuelle"):
+        return "Marquée urgente" + (" par " + l["urgente_par"] if l.get("urgente_par") else "")
+    limite = (aujourdhui + timedelta(days=ADV_PREPA_URGENCE_JOURS)).isoformat()
+    if groupe in ("preparable", "en_cours") and l.get("expedition") and l["expedition"] <= limite:
+        j = aujourdhui.isoformat()
+        quand = ("en retard" if l["expedition"] < j else
+                 "aujourd'hui" if l["expedition"] == j else "le " + _fr(l["expedition"]))
+        return "Expédition " + quand + ", de quoi la préparer"
+    return None
+
+
+def badges(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
+    """Les bulles rouges des tuiles du portail, d'un seul calcul du carnet.
+
+    `urgentes` : préparations urgentes (logistique) ; `retard` et `semaine` :
+    lignes à expédier en retard ou sous 7 jours (administration), les mêmes
+    que les tuiles du carnet.
+    """
+    base = construire(aujourdhui)
+    j = date.fromisoformat(base["aujourdhui"])
+    c = base.get("compteurs") or compteurs(base["lignes"])
+    urgentes = sum(1 for l in base["lignes"] if urgence(l, groupe_prepa(l), j))
+    return {"present": base["present"], "urgentes": urgentes,
+            "retard": c["retard"]["lignes"], "semaine": c["semaine"]["lignes"]}
+
+
 def prepa(aujourdhui: Optional[date] = None, horizon: Optional[int] = None) -> Dict[str, Any]:
     """Les préparations à faire, dans l'ordre où les faire."""
     base = construire(aujourdhui)
@@ -967,13 +1016,17 @@ def prepa(aujourdhui: Optional[date] = None, horizon: Optional[int] = None) -> D
         # Ce qui est engagé, ou placé à la main par l'ADV, reste visible quelle
         # que soit la date ; le reste suit l'horizon.
         if (g not in ("en_cours", "pretes") and l["priorite_manuelle"] is None
+                and not l["urgente_manuelle"]
                 and l["expedition"] and l["expedition"] > limite):
             continue
         l["groupe"] = g
+        l["urgence"] = urgence(l, g, j)
         lignes.append(l)
-    # L'ordre fixé par l'ADV d'abord, puis la date d'expédition.
+    # L'ordre fixé par l'ADV d'abord, puis les lignes marquées urgentes, puis
+    # la date d'expédition.
     lignes.sort(key=lambda l: (0 if l["priorite_manuelle"] is not None else 1,
                                l["priorite_manuelle"] or 0,
+                               0 if l["urgente_manuelle"] else 1,
                                l["expedition"] or "9999-12-31", l["priorite"]))
     base["lignes"] = lignes
     base["horizon"] = h
@@ -982,6 +1035,7 @@ def prepa(aujourdhui: Optional[date] = None, horizon: Optional[int] = None) -> D
                        for k, v in GROUPES_PREPA]
     base["compteurs"] = compteurs(lignes) if lignes else compteurs([])
     base["ordre_manuel"] = any(l["priorite_manuelle"] is not None for l in lignes)
+    base["urgentes"] = sum(1 for l in lignes if l["urgence"])
     return base
 
 

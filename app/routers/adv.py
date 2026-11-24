@@ -5,7 +5,8 @@ par `app/services/adv_commandes.py`.
 
 Écriture, dans la base MySifa uniquement — jamais dans RVGI :
 - l'état d'une préparation (`adv_prepas`), par la logistique ;
-- une étape de la chaîne fixée à la main (`adv_forcages`), par l'ADV.
+- une étape de la chaîne fixée à la main (`adv_forcages`), par l'ADV ;
+- une préparation marquée « urgente » (`adv_urgences`), par l'ADV.
 
 Une ligne de commande se désigne par sa clé métier `numero` + `ligne`, comme
 dans `rvgi_rattachements` : l'id du miroir change à chaque synchro.
@@ -13,6 +14,7 @@ dans `rvgi_rattachements` : l'id du miroir change à chaque synchro.
 
 import json
 import re
+import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -126,6 +128,59 @@ MAX_ORDRE = 300
 
 class OrdrePrepaIn(BaseModel):
     lignes: list
+
+
+# ── Bulles rouges du portail ─────────────────────────────────────────────────
+# Le portail s'ouvre souvent : le carnet n'est pas recalculé plus d'une fois
+# par minute pour elles. Une écriture ADV (urgence, prépa) remet à zéro.
+_BADGES_TTL = 60
+_badges_cache = {"t": 0.0, "data": None}
+
+
+def _badges_invalider():
+    _badges_cache["t"] = 0.0
+
+
+@router.get("/api/adv/badges")
+def badges(request: Request):
+    user = _exiger(request, ROLES_ADV_PREPA)
+    if not _badges_cache["data"] or time.time() - _badges_cache["t"] > _BADGES_TTL:
+        try:
+            _badges_cache["data"] = adv.badges()
+        except FileNotFoundError:
+            _badges_cache["data"] = {"present": False, "urgentes": 0, "retard": 0, "semaine": 0}
+        _badges_cache["t"] = time.time()
+    d = _badges_cache["data"]
+    # L'administration suit les expéditions (en retard + sous 7 jours) ; la
+    # logistique et l'expédition, les préparations urgentes.
+    if effective_role(user) in ROLES_ADV:
+        return {"vue": "carnet", "nombre": d["retard"] + d["semaine"],
+                "retard": d["retard"], "semaine": d["semaine"]}
+    return {"vue": "prepa", "nombre": d["urgentes"], "urgentes": d["urgentes"]}
+
+
+class UrgenceIn(BaseModel):
+    urgente: bool = True
+
+
+@router.put("/api/adv/prepa/urgence/{numero}/{ligne}")
+def marquer_urgente(numero: str, ligne: int, body: UrgenceIn, request: Request):
+    user = _exiger(request, ROLES_ADV)
+    numero, ligne = _cle(numero, ligne)
+    with get_db() as conn:
+        if body.urgente:
+            conn.execute("""
+                INSERT INTO adv_urgences (numero, ligne, maj_le, maj_par) VALUES (?, ?, ?, ?)
+                ON CONFLICT(numero, ligne) DO UPDATE SET maj_le=excluded.maj_le, maj_par=excluded.maj_par
+            """, (numero, ligne, adv.maintenant(), _nom(user)))
+        else:
+            conn.execute("DELETE FROM adv_urgences WHERE numero=? AND ligne=?", (numero, ligne))
+        conn.commit()
+    _badges_invalider()
+    log_action(user=user, action="UPDATE", module="adv",
+               objet="Préparation %s-L%d · %s" % (numero, ligne, "marquée urgente" if body.urgente else "urgence retirée"),
+               request=request)
+    return {"ok": True, "urgente": bool(body.urgente)}
 
 
 @router.put("/api/adv/prepa/ordre")

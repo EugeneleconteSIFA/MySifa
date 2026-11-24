@@ -430,6 +430,38 @@ E1 = {l["cle"]: l for l in adv.construire()["lignes"]}["9930004-1"]
 check("un forçage de l'ADV prime sur « probable »", (E1["etapes"]["stock"]["valeur"], E1["etapes"]["stock"]["force"]),
       ("non", True))
 
+# ── 7. Préparations urgentes et bulles du portail ───────────────────────────
+print("\nUrgences")
+spec_u = importlib.util.spec_from_file_location("mig_urg", "app/core/migrations/2026_11_24_adv_urgences.py")
+mig_u = importlib.util.module_from_spec(spec_u)
+spec_u.loader.exec_module(mig_u)
+b = sqlite3.connect(miroir.DB_PATH)
+mig_u.appliquer(b)
+mig_u.appliquer(b)                    # rejouable
+b.execute("INSERT INTO adv_urgences(numero, ligne, maj_le, maj_par) VALUES ('9930003', 1, ?, 'ADV')", (jour(0),))
+b.commit()
+b.close()
+p = adv.prepa(horizon=4)
+par_p = {l["cle"]: l for l in p["lignes"]}
+check("marquée par l'ADV : urgente, avec son auteur", par_p["9930003-1"]["urgence"], "Marquée urgente par ADV")
+check("une ligne marquée (expédition à J+4) reste visible sur un horizon d'un jour",
+      "9930003-1" in {l["cle"] for l in adv.prepa(horizon=1)["lignes"]}, True)
+J = AUJ
+check("calcul : préparable, expédition demain → urgente",
+      bool(adv.urgence({"expedition": (J + timedelta(days=1)).isoformat()}, "preparable", J)), True)
+check("calcul : préparable, expédition dans 3 jours → non",
+      adv.urgence({"expedition": (J + timedelta(days=3)).isoformat()}, "preparable", J), None)
+check("calcul : en retard mais en attente de prod → non (rien à préparer)",
+      adv.urgence({"expedition": (J - timedelta(days=2)).isoformat()}, "attente", J), None)
+check("une prépa prête n'est plus urgente",
+      adv.urgence({"urgente_manuelle": True, "expedition": None}, "pretes", J), None)
+bd = adv.badges()
+d = adv.construire()
+check("bulle logistique = urgences de la Prépa", bd["urgentes"],
+      sum(1 for l in d["lignes"] if adv.urgence(l, adv.groupe_prepa(l), J)))
+check("bulle administration = tuiles retard + 7 jours du carnet",
+      (bd["retard"], bd["semaine"]), (d["compteurs"]["retard"]["lignes"], d["compteurs"]["semaine"]["lignes"]))
+
 print()
 if ko:
     print(f"test_adv_commandes : {ko} échec(s)")

@@ -248,7 +248,7 @@
     });
     var sub = document.getElementById('mobile-sub');
     if (sub) sub.textContent = S.onglet === 'commandes' ? 'Commandes' : 'Prépa';
-    document.title = (S.onglet === 'commandes' ? 'Commandes' : 'Prépa') + ' — ADV — MySifa';
+    document.title = DROITS.adv ? (S.onglet === 'commandes' ? 'Commandes' : 'Prépa') + ' — ADV — MySifa' : 'Prépa — MySifa';
     var c = document.getElementById('content');
     var focus = document.activeElement && document.activeElement.id === 'adv-q';
     var caret = focus ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
@@ -333,7 +333,7 @@
     jauge(n, e);
     return n;
   }
-  // Stock et Prod en cours : le nœud se remplit de bas en haut à la part faite
+  // Stock et Prod en cours : le nœud se remplit de gauche à droite à la part faite
   // (96 000 sur 100 000 → rempli à 96 %).
   function pctJauge(e) {
     return e && e.valeur === 'en_cours' && e.jauge !== null && e.jauge !== undefined
@@ -649,7 +649,31 @@
     };
     // Un seul geste : « Prête ». Une prépa déjà prête peut être remise à préparer.
     if (s === 'prete') return [b('Remettre à préparer', 'a_preparer')];
-    return [b('Prête', 'prete', 'btn-accent')];
+    var out = [b('Prête', 'prete', 'btn-accent')];
+    // L'ADV marque une préparation urgente : elle passe en tête de son groupe
+    // et compte dans la bulle rouge de la tuile « Prépa » du portail.
+    if (DROITS.adv) {
+      var u = h('button', {type: 'button', className: 'btn btn-petit adv-btn-urgence' + (l.urgente_manuelle ? ' on' : ''),
+        'aria-pressed': l.urgente_manuelle ? 'true' : 'false',
+        'data-tip': tip(l.cle + '|urg', l.urgente_manuelle ? 'Retirer l’urgence' : 'Marquer urgente',
+          l.urgente_manuelle ? (l.urgente_par ? 'Marquée par ' + l.urgente_par : null) : 'Passe en tête du groupe et dans la bulle rouge de la logistique')},
+        'Urgente');
+      u.addEventListener('click', function (ev) { ev.stopPropagation(); marquerUrgente(l, !l.urgente_manuelle, u); });
+      out.unshift(u);
+    }
+    return out;
+  }
+
+  async function marquerUrgente(l, oui, bouton) {
+    if (bouton) bouton.disabled = true;
+    try {
+      await api('/api/adv/prepa/urgence/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {urgente: oui}});
+      await charger(); S.carnet = null; render();
+      toast(oui ? 'Préparation marquée urgente.' : 'Urgence retirée.');
+    } catch (e) {
+      toast(e.message, 'danger');
+      if (bouton) bouton.disabled = false;
+    }
   }
 
   // Une préparation = UNE ligne, une valeur par colonne, sans sous-texte :
@@ -699,10 +723,12 @@
       l.expedition ? dateFr(l.expedition) : 'Non datée');
 
     var manuel = l.priorite_manuelle !== null && l.priorite_manuelle !== undefined;
-    var rangEl = h('div', {className: 'adv-rang' + (manuel ? ' manuel' : ''),
-      'data-tip': tip(l.cle + '|rang', manuel ? 'Ordre fixé à la main' : 'Ordre automatique',
-        manuel ? (l.priorite_par ? 'Par ' + l.priorite_par : '') + (l.priorite_le ? ' le ' + dateFr(l.priorite_le) : '') : 'Par date d’expédition',
-        ctx && DROITS.adv ? 'Glisser la ligne ou utiliser ↑ ↓ pour changer l’ordre' : null)}, String(rang));
+    var rangEl = h('div', {className: 'adv-rang' + (manuel ? ' manuel' : '') + (l.urgence ? ' urgente' : ''),
+      'data-tip': l.urgence
+        ? tip(l.cle + '|rang', 'Urgente', l.urgence, ctx && DROITS.adv ? 'Glisser la ligne ou utiliser ↑ ↓ pour changer l’ordre' : null)
+        : tip(l.cle + '|rang', manuel ? 'Ordre fixé à la main' : 'Ordre automatique',
+          manuel ? (l.priorite_par ? 'Par ' + l.priorite_par : '') + (l.priorite_le ? ' le ' + dateFr(l.priorite_le) : '') : 'Par date d’expédition',
+          ctx && DROITS.adv ? 'Glisser la ligne ou utiliser ↑ ↓ pour changer l’ordre' : null)}, String(rang));
     var cellRang = h('div', {className: 'c-rang'}, rangEl);
     if (ctx && DROITS.adv) {
       var fleche = function (sens, lib) {
@@ -713,7 +739,7 @@
       cellRang.appendChild(h('div', {className: 'adv-fleches'}, fleche(-1, 'Monter'), fleche(1, 'Descendre')));
     }
 
-    var ligne = h('div', {className: 'adv-carte' + (l.retard ? ' retard' : ''), 'data-cle': l.cle,
+    var ligne = h('div', {className: 'adv-carte' + (l.retard ? ' retard' : '') + (l.urgence ? ' urgente' : ''), 'data-cle': l.cle,
         onClick: function () { ouvrirFiche(l.cle); }},
       cellRang,
       h('div', {className: 'c-client', text: l.client}),

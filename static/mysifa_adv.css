@@ -124,9 +124,10 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-noeud.non{background:var(--card);color:var(--danger);border:2px solid var(--danger)}
 .adv-noeud.sans_objet{background:var(--card);color:var(--muted);border:2px dashed var(--border)}
 .adv-noeud.probable{background:var(--card);color:var(--success);border:2px dashed var(--success)}
-/* Jauge : Stock et Prod en cours se remplissent de bas en haut (--p, en %). */
+/* Jauge : Stock et Prod en cours se remplissent de gauche à droite (--p, en %),
+   dans le sens de la frise. */
 .adv-noeud.jauge,.fi-etape .fi-rond.jauge{background:var(--card);color:var(--warn);border:2px solid var(--warn)}
-.adv-noeud.jauge::before,.fi-etape .fi-rond.jauge::before{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(to top,var(--warn) calc(var(--p) * 1%),transparent calc(var(--p) * 1%));opacity:.4;z-index:-1}
+.adv-noeud.jauge::before,.fi-etape .fi-rond.jauge::before{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(to right,var(--warn) calc(var(--p) * 1%),transparent calc(var(--p) * 1%));opacity:.4;z-index:-1}
 .adv-noeud.force::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
 .adv-table td.des{max-width:210px;overflow:hidden}
 .adv-table td.des .des-l{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;margin-top:1px}
@@ -163,6 +164,10 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-rang{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--text2)}
 /* Rang fixé à la main par l'ADV : il se distingue de l'ordre automatique. */
 .adv-rang.manuel{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+/* Préparation urgente (marquée par l'ADV ou expédition imminente). */
+.adv-rang.urgente{background:var(--danger);border-color:var(--danger);color:white}
+.adv-btn-urgence{background:var(--bg);color:var(--danger);border:1px solid var(--border)}
+.adv-btn-urgence.on{background:var(--danger);border-color:var(--danger);color:white}
 .adv-fleches{display:flex;flex-direction:column;gap:1px;opacity:0;transition:opacity .12s}
 .adv-carte:hover .adv-fleches,.adv-carte:focus-within .adv-fleches{opacity:1}
 @media(hover:none){.adv-fleches{opacity:1}}
