@@ -640,6 +640,7 @@
       await api('/api/adv/prepa/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {statut: statut}});
       toast('Prépa ' + l.numero + ' · ' + l.ligne + ' : ' + (LIB_PREPA[statut] || statut).toLowerCase() + '.');
       var y = (document.querySelector('.main') || {}).scrollTop;
+      var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
       await charger();
       // L'autre onglet se relira à son ouverture : sa prépa est périmée.
       if (S.onglet === 'prepa') S.carnet = null; else S.prepa = null;
@@ -649,6 +650,8 @@
       if (modalOuverte()) { fermerFiche(true); ouvrirFiche(l.cle, true); }
       var mn = document.querySelector('.main');
       if (mn && y) mn.scrollTop = y;
+      var tw = document.querySelector('.adv-table-wrap');
+      if (tw && yt) tw.scrollTop = yt;
     } catch (e) {
       toast(e.message, 'danger');
       if (bouton) bouton.disabled = false;
@@ -683,7 +686,10 @@
     if (bouton) bouton.disabled = true;
     try {
       await api('/api/adv/prepa/urgence/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {urgente: oui}});
+      var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
       await charger(); S.carnet = null; render();
+      var tw = document.querySelector('.adv-table-wrap');
+      if (tw && yt) tw.scrollTop = yt;
       toast(oui ? 'Préparation marquée urgente.' : 'Urgence retirée.');
     } catch (e) {
       toast(e.message, 'danger');
@@ -702,7 +708,7 @@
     var uniteReelle = (st.unite || 'étiquette');
     var sortie = st.sortie_prod || 0;     // stock « probable » : sortie de production
     var manque = l.groupe !== 'attente' && st.alloue + sortie < l.reste ? l.reste - st.alloue - sortie : 0;
-    var aPrep = h('div', {className: 'c-num c-fort c-aprep' + (l.groupe === 'attente' ? ' c-fab' : (manque ? ' adv-date-tard' : '')),
+    var aPrep = h('td', {className: 'c-num c-fort c-aprep' + (l.groupe === 'attente' ? ' c-fab' : (manque ? ' adv-date-tard' : '')),
         'data-l': l.groupe === 'attente' ? 'À produire' : 'À préparer',
         'data-tip': l.groupe === 'attente'
           ? tip(l.cle + '|aprep', 'À produire', l.fin_prod ? 'Fin de prod ' + dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' ' + heure(l.fin_prod) : '') : l.etapes.prod.detail)
@@ -735,7 +741,7 @@
     if (l.prepa.statut !== 'a_preparer' && l.prepa.maj_par) {
       notesQuand.push((LIB_PREPA[l.prepa.statut] || '') + ' · ' + l.prepa.maj_par + ' ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le));
     }
-    var quand = h('div', {className: 'c-quand' + (l.retard ? ' adv-date-retard' : ''),
+    var quand = h('td', {className: 'c-quand' + (l.retard ? ' adv-date-retard' : ''),
       'data-tip': tip(l.cle + '|quand', 'Expédition ' + (dateLongue(l.expedition) || 'non datée') + (l.retard ? ' · en retard' : ''),
         notesQuand[0] || null, notesQuand[1] || null)},
       l.expedition ? dateFr(l.expedition) : 'Non datée');
@@ -747,28 +753,29 @@
         : tip(l.cle + '|rang', manuel ? 'Ordre fixé à la main' : 'Ordre automatique',
           manuel ? (l.priorite_par ? 'Par ' + l.priorite_par : '') + (l.priorite_le ? ' le ' + dateFr(l.priorite_le) : '') : 'Par date d’expédition',
           ctx && DROITS.adv ? 'Glisser la ligne ou utiliser ↑ ↓ pour changer l’ordre' : null)}, String(rang));
-    var cellRang = h('div', {className: 'c-rang'}, rangEl);
+    var celRang = h('div', {className: 'adv-rang-cel'}, rangEl);
+    var cellRang = h('td', {className: 'c-rang'}, celRang);
     if (ctx && DROITS.adv) {
       var fleche = function (sens, lib) {
         var cible = ctx.index + sens;
         return h('button', {type: 'button', className: 'adv-fleche', 'aria-label': lib, disabled: cible < 0 || cible >= ctx.lignes.length,
           onClick: function (ev) { ev.stopPropagation(); deplacerPrepa(ctx.lignes, ctx.index, cible); }}, sens < 0 ? '↑' : '↓');
       };
-      cellRang.appendChild(h('div', {className: 'adv-fleches'}, fleche(-1, 'Monter'), fleche(1, 'Descendre')));
+      celRang.appendChild(h('div', {className: 'adv-fleches'}, fleche(-1, 'Monter'), fleche(1, 'Descendre')));
     }
 
-    var ligne = h('div', {className: 'adv-carte' + (l.retard ? ' retard' : '') + (l.urgence ? ' urgente' : ''), 'data-cle': l.cle,
+    var ligne = h('tr', {className: 'adv-pl' + (l.retard ? ' retard' : '') + (l.urgence ? ' urgente' : ''), 'data-cle': l.cle,
         onClick: function () { ouvrirFiche(l.cle); }},
       cellRang,
-      h('div', {className: 'c-client', text: l.client}),
-      h('div', {className: 'c-cde adv-mono', text: l.numero + '-L' + l.ligne}),
-      h('div', {className: 'c-ref adv-mono', text: l.article, 'data-tip': tip(l.cle + '|ref', l.article, l.designation)}),
-      h('div', {className: 'c-num c-qte', 'data-l': 'Commandé · ' + accord(uniteReelle, l.qte)}, fN(l.qte)),
-      h('div', {className: 'c-unite', 'data-l': 'Unité', text: accord(uniteReelle, l.qte)}),
-      h('div', {className: 'c-num c-stk' + (st.alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, st.alloue ? fN(st.alloue) : '—'),
+      h('td', {className: 'c-client'}, h('div', {className: 'c-client-t', text: l.client, title: l.client})),
+      h('td', {className: 'c-cde adv-mono', text: l.numero + '-L' + l.ligne}),
+      h('td', {className: 'c-ref adv-mono', text: l.article, 'data-tip': tip(l.cle + '|ref', l.article, l.designation)}),
+      h('td', {className: 'c-num c-qte', 'data-l': 'Commandé · ' + accord(uniteReelle, l.qte)}, fN(l.qte)),
+      h('td', {className: 'c-unite', 'data-l': 'Unité', text: accord(uniteReelle, l.qte)}),
+      h('td', {className: 'c-num c-stk' + (st.alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, st.alloue ? fN(st.alloue) : '—'),
       aPrep,
-      empl, quand,
-      h('div', {className: 'adv-actions'}, boutonsPrepa(l)));
+      h('td', {className: 'c-empl'}, empl), quand,
+      h('td', {className: 'c-act'}, h('div', {className: 'adv-actions'}, boutonsPrepa(l))));
 
     // Glisser-déposer, dans le groupe seulement : on ne change pas une
     // préparation de groupe en la déplaçant (le groupe dit où elle en est).
@@ -781,7 +788,7 @@
       });
       ligne.addEventListener('dragend', function () {
         S.prepaDrag = null;
-        document.querySelectorAll('.adv-carte.attrapee, .adv-carte.cible-haut, .adv-carte.cible-bas').forEach(function (x) {
+        document.querySelectorAll('.adv-pl.attrapee, .adv-pl.cible-haut, .adv-pl.cible-bas').forEach(function (x) {
           x.classList.remove('attrapee', 'cible-haut', 'cible-bas');
         });
       });
@@ -817,6 +824,7 @@
     ordre.splice(vers, 0, cle);
     var envoi = ordre.slice(0, Math.max(de, vers) + 1);
     var y = (document.querySelector('.main') || {}).scrollTop;
+    var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
     try {
       await api('/api/adv/prepa/ordre', {method: 'PUT', body: {lignes: envoi}});
       await charger();
@@ -824,16 +832,30 @@
       render();
       var mn = document.querySelector('.main');
       if (mn && y) mn.scrollTop = y;
+      var tw = document.querySelector('.adv-table-wrap');
+      if (tw && yt) tw.scrollTop = yt;
     } catch (e) { toast(e.message, 'danger'); }
   }
 
-  function entetePrepa(groupe) {
-    return h('div', {className: 'adv-carte adv-carte-tete', 'aria-hidden': 'true'},
-      h('div', {text: '#'}), h('div', {text: 'Client'}), h('div', {text: 'Commande'}), h('div', {text: 'Réf produit'}),
-      h('div', {className: 'c-num', text: 'Commandé'}), h('div', {text: 'Unité'}), h('div', {className: 'c-num', text: 'En stock'}),
-      h('div', {className: 'c-num', text: groupe === 'attente' ? 'À produire' : 'À préparer'}),
-      h('div', {text: groupe === 'attente' ? '' : 'Où prélever'}),
-      h('div', {text: 'Expédition'}), h('div'));
+  // Un seul en-tête pour toute la liste, collé en haut quand elle défile.
+  // Dans « En attente de production », la colonne « À préparer » donne ce qui
+  // reste à produire (en orange, détail au survol).
+  function entetePrepa() {
+    var th = function (t, cls) { return h('th', {className: cls || null, text: t}); };
+    return h('thead', {}, h('tr', {},
+      th('#', 'c-rang'), th('Client'), th('Commande'), th('Réf produit'), th('Commandé', 'num'), th('Unité'),
+      th('En stock', 'num'), th('À préparer', 'num'), th('Où prélever'), th('Expédition'), th('', 'c-act')));
+  }
+
+  // Bascule Préparations / Historique, en tête de l'onglet : toujours au même
+  // endroit, quelle que soit la vue.
+  function sousOngletsPrepa(c) {
+    var b = function (sous, lib) {
+      return h('button', {type: 'button', className: 'adv-sous-btn' + (S.sous === sous ? ' active' : ''),
+        'aria-pressed': S.sous === sous ? 'true' : 'false', onClick: function () { if (S.sous !== sous) allerSous(sous); }}, lib);
+    };
+    c.appendChild(h('div', {className: 'adv-sous', role: 'group', 'aria-label': 'Vue de la Prépa'},
+      b(null, 'Préparations'), b('historique', 'Historique')));
   }
 
   // Liste des préparations (sous = null) ou historique : charge ce qui manque.
@@ -852,6 +874,7 @@
   // l'onglet (si elle est encore au carnet).
   function renderHistorique(c) {
     var d = S.historique || {};
+    sousOngletsPrepa(c);
     c.appendChild(h('div', {className: 'adv-tete'},
       h('div', {}, h('h1', {text: 'Historique des préparations'}),
         h('div', {className: 'adv-maj', text: 'Passées « Prête » ces ' + S.histoJours + ' derniers jours, la plus récente en tête'})),
@@ -859,7 +882,7 @@
         return h('button', {type: 'button', className: 'adv-puce' + (S.histoJours === n ? ' active' : ''),
           onClick: async function () { S.histoJours = n; S.charge = false; render(); await charger(); render(); }}, n + ' jours');
       }),
-      h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { allerSous(null); }}, '← Préparations'))));
+      h('button', {type: 'button', className: 'btn btn-petit', onClick: async function () { await charger(); render(); toast('Historique actualisé.'); }}, 'Actualiser'))));
     if (avertissements(c, d)) return;
     var lignes = d.lignes || [];
     if (!lignes.length) {
@@ -895,6 +918,7 @@
   function renderPrepa(c) {
     if (S.sous === 'historique') { renderHistorique(c); return; }
     var d = S.prepa || {};
+    sousOngletsPrepa(c);
     var tete = h('div', {className: 'adv-tete'},
       h('div', {}, h('h1', {text: 'Préparations'}),
         h('div', {className: 'adv-maj'}, h('span', {className: 'adv-rvgi'}),
@@ -912,9 +936,6 @@
             toast('Ordre automatique rétabli.');
           } catch (e) { toast(e.message, 'danger'); }
         }}, 'Ordre automatique') : null,
-      h('button', {type: 'button', className: 'btn btn-petit',
-        'data-tip': tip('btn-historique', 'Historique', 'Les préparations déjà faites, même parties : les retrouver et corriger leur statut.'),
-        onClick: function () { allerSous('historique'); }}, 'Historique'),
       h('button', {type: 'button', className: 'btn btn-petit', onClick: async function () { await charger(); render(); toast('Préparations actualisées.'); }}, 'Actualiser')));
     c.appendChild(tete);
     if (avertissements(c, d)) return;
@@ -944,19 +965,19 @@
     ['en_cours', 'preparable', 'partiel'].forEach(function (g) {
       lignes.filter(function (l) { return l.groupe === g; }).forEach(function (l) { rangs[l.cle] = ++rang; });
     });
-    // Une seule grille pour tous les groupes : en-têtes et lignes partagent
-    // les mêmes colonnes (subgrid, voir mysifa_adv.css), d'un groupe à l'autre.
-    var liste = h('div', {className: 'adv-prepa-liste'});
-    c.appendChild(liste);
+    // Un vrai tableau : un seul en-tête, un <tbody> par groupe ouvert par sa
+    // ligne titre. Les colonnes tombent d'elles-mêmes sous leur en-tête.
+    var table = h('table', {className: 'adv-table adv-prepa-table'}, entetePrepa());
     groupes.forEach(function (g) {
       if (S.groupe !== 'tous' && S.groupe !== g.cle) return;
       var ls = lignes.filter(function (l) { return l.groupe === g.cle; });
       if (!ls.length) return;
-      var bloc = h('div', {className: 'adv-groupe'}, h('h2', {}, g.label, h('span', {className: 'n', text: String(ls.length)})),
-        entetePrepa(g.cle));
-      ls.forEach(function (l, i) { bloc.appendChild(cartePrepa(l, rangs[l.cle] || '·', {lignes: ls, index: i})); });
-      liste.appendChild(bloc);
+      var corps = h('tbody', {className: 'adv-pl-bloc'},
+        h('tr', {className: 'adv-pl-groupe'}, h('td', {colspan: '11'}, g.label, h('span', {className: 'n', text: String(ls.length)}))));
+      ls.forEach(function (l, i) { corps.appendChild(cartePrepa(l, rangs[l.cle] || '·', {lignes: ls, index: i})); });
+      table.appendChild(corps);
     });
+    c.appendChild(h('div', {className: 'adv-table-wrap adv-prepa-wrap'}, table));
   }
 
   /* ── Mise en forme conditionnelle ───────────────────────────── */
