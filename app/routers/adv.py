@@ -83,6 +83,15 @@ def prepa(request: Request, horizon: Optional[int] = None):
     return data
 
 
+@router.get("/api/adv/prepa/historique")
+def historique_prepa(request: Request, jours: int = 30):
+    """Les préparations passées « Prête » ces derniers jours, même parties."""
+    _exiger(request, ROLES_ADV_PREPA)
+    if jours not in adv.HISTORIQUE_JOURS:
+        jours = 30
+    return _servir(adv.historique_prepa, jours)
+
+
 class PrepaIn(BaseModel):
     statut: str
     note: Optional[str] = None

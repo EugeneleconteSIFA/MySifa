@@ -1039,6 +1039,85 @@ def prepa(aujourdhui: Optional[date] = None, horizon: Optional[int] = None) -> D
     return base
 
 
+HISTORIQUE_JOURS = (7, 30, 90)
+MAX_HISTORIQUE = 500
+
+
+def historique_prepa(jours: int = 30, aujourdhui: Optional[date] = None) -> Dict[str, Any]:
+    """Les préparations déjà faites : passées « Prête » ces `jours` derniers jours.
+
+    Une prépa prête quitte l'onglet Prépa dès que son départ est parti, ou que
+    la ligne sort du carnet RVGI (livrée, soldée). L'historique la garde, avec
+    ce qu'elle est devenue, pour qu'on puisse la retrouver et corriger son
+    statut. `adv_prepas` ne garde que le dernier état d'une ligne : une prépa
+    remise « à préparer » sort de l'historique et revient dans l'onglet.
+    """
+    base = construire(aujourdhui)
+    jours = max(1, min(int(jours or 30), 366))
+    j = date.fromisoformat(base["aujourdhui"])
+    sortie: Dict[str, Any] = {"present": base["present"], "indispo": base["indispo"],
+                              "aujourdhui": base["aujourdhui"], "jours": jours, "lignes": []}
+    if not base["present"]:
+        return sortie
+    depuis = (j - timedelta(days=jours)).isoformat()
+    carnet = {l["cle"]: l for l in base["lignes"]}
+    with miroir.get_erp_db(avec_mysifa=True) as conn:
+        if not _table(conn, "adv_prepas"):
+            return sortie
+        prepas = _lignes(conn, """
+            SELECT numero, ligne, statut, maj_le, maj_par FROM mysifa.adv_prepas
+             WHERE statut = 'prete' AND maj_le >= ?
+          ORDER BY maj_le DESC LIMIT ?""", (depuis, MAX_HISTORIQUE))
+        # Les lignes sorties du carnet : ce que le miroir en sait encore.
+        hors = {}
+        unites = {}
+        for p in prepas:
+            cle = cle_ligne(p["numero"], p["ligne"])
+            if cle in carnet:
+                continue
+            try:
+                num = int(str(p["numero"]).strip())
+            except ValueError:
+                continue
+            r = _lignes(conn, """
+                SELECT e.rs AS client, l.code1 AS code1, l.code2 AS code2,
+                       l.des1 AS designation, l.qte AS qte, l.amje AS amje
+                  FROM cde_ligne l LEFT JOIN cde_entete e ON e.numero = l.numero
+                 WHERE l.numero = ? AND l.ligne = ? LIMIT 1""", (num, int(p["ligne"])))
+            if r:
+                r[0]["article"] = _reference(r[0]["code1"], r[0]["code2"])
+                hors[cle] = r[0]
+                unites[r[0]["article"]] = None
+        if unites and _table(conn, "produits"):
+            for r in _lignes(conn, "SELECT reference, unite FROM mysifa.produits"):
+                ref = _ref_norm(r["reference"])
+                if ref in unites and (unites[ref] is None or str(r["reference"]).strip() == ref):
+                    unites[ref] = r["unite"]
+
+    for p in prepas:
+        cle = cle_ligne(p["numero"], p["ligne"])
+        l = carnet.get(cle)
+        if l:
+            if groupe_prepa(l) == "pretes":
+                dep = l["etapes"]["depart"]
+                situation = ("attente_depart", "En attente de départ"
+                             + (" · " + dep["detail"] if dep["calcul"] in ("oui", "en_cours") else ""))
+            else:
+                situation = ("parti", l["etapes"]["depart"]["detail"])
+            info = {"client": l["client"], "article": l["article"], "designation": l["designation"],
+                    "qte": l["qte"], "unite": l["stock"].get("unite"), "expedition": l["expedition"]}
+        else:
+            r = hors.get(cle) or {}
+            situation = ("sortie", "Sortie du carnet RVGI (livrée ou soldée)")
+            info = {"client": (r.get("client") or "").strip(), "article": r.get("article") or "",
+                    "designation": (r.get("designation") or "").strip(), "qte": _f(r.get("qte")),
+                    "unite": unites.get(r.get("article")), "expedition": _jour(r.get("amje"))}
+        sortie["lignes"].append(dict(info, cle=cle, numero=str(p["numero"]), ligne=int(p["ligne"]),
+                                     statut=p["statut"], prete_le=p["maj_le"], prete_par=p["maj_par"],
+                                     situation=situation[0], situation_label=situation[1]))
+    return sortie
+
+
 def aujourdhui_paris() -> date:
     return datetime.now(_PARIS).date()
 
