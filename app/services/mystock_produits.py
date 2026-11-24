@@ -24,7 +24,9 @@ silencieusement amputé passerait pour un prix bas.
 
 from __future__ import annotations
 
+import re
 import sqlite3
+from collections import Counter
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
@@ -55,6 +57,175 @@ def _f(v: Any, defaut: Optional[float] = None) -> Optional[float]:
         return float(v)
     except (TypeError, ValueError):
         return defaut
+
+
+# ─── Libellé commercial, désignation et code proposés ────────────────────────
+#
+# Un commercial ne cherche pas « P1203 » ou « 2028Y » : il cherche un adhésif
+# permanent. Ce nom existe déjà en base, c'est la sous-catégorie de la matière
+# dans MyStock (« Permanent », « Thermique Pro », « Enlevable »). Il sert de
+# libellé dans la liste des produits et de brique à la désignation proposée.
+# Une matière pas encore classée retombe sur sa désignation.
+
+# Un grammage (« 70 g/m² », « 58-60 g/m² », « 70gsm ») ou une épaisseur
+# (« 95 µm ») lu dans la désignation d'une matière.
+_RE_GRAMMAGE = re.compile(
+    r"(\d+(?:[.,]\d+)?(?:\s*-\s*\d+(?:[.,]\d+)?)?)\s*(g/m²|g/m2|gsm|g\b|µm|μm|micro)",
+    re.IGNORECASE,
+)
+
+
+def libelle_commercial(sous_categorie: Any, designation: Any, reference: Any = None) -> str:
+    """Le nom qu'un commercial reconnaît : la sous-catégorie, sinon la désignation."""
+    for v in (sous_categorie, designation, reference):
+        t = str(v or "").strip()
+        if t:
+            return t
+    return ""
+
+
+def grammage_matiere(designation: Any, reference: Any = None) -> Optional[str]:
+    """« 70g », « 58-60g », « 95µm » : ce que la matière dit de son poids.
+
+    Lu dans la désignation, puis la référence. Ni le frontal ni la glassine,
+    achetés au m², ne portent de grammage saisi : sans ce repli, « Thermique
+    Pro » en 70 et en 105 g/m² seraient indiscernables dans la liste.
+    """
+    for v in (designation, reference):
+        m = _RE_GRAMMAGE.search(str(v or ""))
+        if m:
+            nombre = re.sub(r"\s+", "", m.group(1)).replace(",", ".")
+            unite = m.group(2).lower()
+            return nombre + ("µm" if unite in ("µm", "μm", "micro") else "g")
+    return None
+
+
+def _fmt_g(v: Any) -> Optional[str]:
+    g = _f(v)
+    if not g or g <= 0:
+        return None
+    return f"{g:g}g"
+
+
+def _brique(c: dict) -> str:
+    """Un composant dans la désignation : son libellé, puis son grammage.
+
+    Le grammage saisi sur le produit l'emporte (c'est lui qui distingue un
+    Permanent 19g d'un Permanent 22g) ; à défaut, celui de la matière. Quand le
+    libellé est déjà la désignation complète, elle porte son grammage : on ne
+    le répète pas.
+    """
+    lib = c.get("libelle_commercial") or c.get("reference") or ""
+    g = _fmt_g(c.get("grammage_gsm"))
+    if not g and c.get("sous_categorie"):
+        g = c.get("grammage_matiere")
+    if g:
+        nombre = re.escape(g.rstrip("gµm"))
+        if not re.search(rf"(?<![\d.]){nombre}(?![\d.])", lib):
+            return f"{lib} {g}"
+    return lib
+
+
+def designation_auto(composants: list[dict]) -> str:
+    """« Thermique Pro 70g · Permanent 22g, Glassine 58-60g ».
+
+    Même ordre que les désignations saisies à la main jusqu'ici : frontal et
+    adhésif liés par « · », puis la glassine et les autres matières.
+    """
+    par_role = {c.get("role"): c for c in composants if c.get("role") != ROLE_AUTRE}
+    tete = [_brique(par_role[r]) for r in ("FRONTAL", "ADHESIF") if r in par_role]
+    suite = [_brique(par_role[r]) for r in ("SILICONE", "GLASSINE") if r in par_role]
+    suite += [_brique(c) for c in composants if c.get("role") == ROLE_AUTRE]
+    morceaux = [" · ".join(x for x in tete if x)] if tete else []
+    morceaux += [x for x in suite if x]
+    return ", ".join(x for x in morceaux if x)
+
+
+def infos_declinaisons(conn: sqlite3.Connection, composants: list[dict]) -> list[dict]:
+    """Les composants d'une saisie, complétés de ce que la désignation demande."""
+    ids = sorted({int(c["declinaison_id"]) for c in composants})
+    if not ids:
+        return []
+    rows = conn.execute(
+        f"""SELECT d.id, mp.reference, mp.designation, mp.sous_categorie, mp.sous_section
+              FROM mp_matiere_declinaison d
+              JOIN matieres_premieres mp ON mp.id = d.matiere_id
+             WHERE d.id IN ({",".join("?" * len(ids))})""",
+        ids,
+    ).fetchall()
+    par_id = {int(r["id"]): r for r in rows}
+    out = []
+    for c in composants:
+        r = par_id.get(int(c["declinaison_id"]))
+        if not r:
+            continue
+        out.append({
+            **c,
+            "reference": r["reference"],
+            "sous_categorie": r["sous_categorie"],
+            "sous_section": r["sous_section"],
+            "libelle_commercial": libelle_commercial(r["sous_categorie"], r["designation"], r["reference"]),
+            "grammage_matiere": grammage_matiere(r["designation"], r["reference"]),
+        })
+    return out
+
+
+_RE_CODE = re.compile(r"^(.*?)(\d+)$")
+
+
+def code_propose(
+    conn: sqlite3.Connection,
+    composants: list[dict],
+    exclure_produit_id: Optional[int] = None,
+) -> str:
+    """Le prochain code libre dans la famille du frontal.
+
+    Rien n'est figé dans le code : préfixe et largeur sont ceux des codes déjà
+    en base (« 886-0001 »), et chaque famille de support (la sous-section du
+    frontal : Thermiques, Couché…) occupe un bloc de centaines qu'on lit dans
+    les produits existants. Un nouveau produit prend le premier numéro libre
+    après le plus haut de son bloc ; une famille sans produit, ou un bloc
+    plein, part après le plus haut code de la base. Vide quand aucun code
+    existant n'a de forme reconnaissable — la saisie reste alors à la main.
+    """
+    rows = conn.execute(
+        """SELECT p.id, p.code, mp.sous_section
+             FROM mp_produit p
+             LEFT JOIN mp_produit_composant c ON c.produit_id = p.id AND c.role = 'FRONTAL'
+             LEFT JOIN mp_matiere_declinaison d ON d.id = c.declinaison_id
+             LEFT JOIN matieres_premieres mp ON mp.id = d.matiere_id"""
+    ).fetchall()
+    lus = []
+    for r in rows:
+        m = _RE_CODE.match(str(r["code"] or "").strip())
+        if m:
+            lus.append((m.group(1), len(m.group(2)), int(m.group(2)), r["sous_section"], r["id"]))
+    if not lus:
+        return ""
+    prefixe, largeur = Counter((x[0], x[1]) for x in lus).most_common(1)[0][0]
+    utilises = {x[2] for x in lus if x[0] == prefixe and x[1] == largeur}
+    candidats = [x for x in lus if x[0] == prefixe and x[1] == largeur and x[4] != exclure_produit_id]
+    plafond = 10 ** largeur
+
+    famille = None
+    for c in infos_declinaisons(conn, [c for c in composants if c.get("role") == "FRONTAL"]):
+        famille = c.get("sous_section")
+    nums = [x[2] for x in candidats if famille and x[3] == famille]
+    n = None
+    if nums:
+        bloc = Counter(v // 100 for v in nums).most_common(1)[0][0]
+        n = max(v for v in nums if v // 100 == bloc) + 1
+        while n in utilises and n // 100 == bloc:
+            n += 1
+        if n // 100 != bloc:
+            n = None
+    if n is None:
+        n = max(utilises) + 1
+        while n in utilises:
+            n += 1
+    if n >= plafond:
+        return ""
+    return prefixe + str(n).zfill(largeur)
 
 
 def normaliser_composants(composants: Any) -> tuple[list[dict], Optional[str]]:
@@ -127,6 +298,7 @@ def _lire_composants(conn: sqlite3.Connection, produit_id: int) -> list[dict]:
         """SELECT c.declinaison_id, c.role, c.ordre,
                   c.grammage_gsm, c.perte_pct, d.price_basis,
                   mp.reference, mp.designation, mp.categorie, mp.sous_section,
+                  mp.sous_categorie,
                   l.valeur_mm, l.label AS laize_label,
                   g.valeur_gsm, g.label AS grammage_label
              FROM mp_produit_composant c
@@ -158,6 +330,13 @@ def _lire_composants(conn: sqlite3.Connection, produit_id: int) -> list[dict]:
                 # vélin) : la liste des produits le montre en badge, c'est ce
                 # qui distingue deux étiquettes à l'œil.
                 "sous_section": r["sous_section"],
+                # Le nom commercial (« Permanent » plutôt que « 2028Y ») et le
+                # grammage que la matière annonce : la liste des produits les
+                # affiche, la désignation proposée les assemble.
+                "sous_categorie": r["sous_categorie"],
+                "libelle_commercial": libelle_commercial(
+                    r["sous_categorie"], r["designation"], r["reference"]),
+                "grammage_matiere": grammage_matiere(r["designation"], r["reference"]),
                 "libelle": libelle,
                 # Ce que le produit consomme, et le poids qui en découle. Le
                 # poids est calculé ici plutôt qu'à l'écran : deux endroits qui
@@ -302,6 +481,17 @@ def creer_produit(
 ) -> dict:
     code = (code or "").strip()
     designation = (designation or "").strip()
+    propres, err = normaliser_composants(composants)
+    if err:
+        return {"ok": False, "reason": err}
+    err = composants_existent(conn, propres)
+    if err:
+        return {"ok": False, "reason": err}
+    # Laissés vides, code et désignation se déduisent de la composition.
+    if not code:
+        code = code_propose(conn, propres)
+    if not designation:
+        designation = designation_auto(infos_declinaisons(conn, propres))
     if not code:
         return {"ok": False, "reason": "code obligatoire"}
     if not designation:
@@ -310,12 +500,6 @@ def creer_produit(
         "SELECT 1 FROM mp_produit WHERE code=? COLLATE NOCASE", (code,)
     ).fetchone():
         return {"ok": False, "reason": f"le code « {code} » existe déjà"}
-    propres, err = normaliser_composants(composants)
-    if err:
-        return {"ok": False, "reason": err}
-    err = composants_existent(conn, propres)
-    if err:
-        return {"ok": False, "reason": err}
     marge = _f(custom_margin_pct)
     if marge is not None and (marge < 0 or marge > 1000):
         return {"ok": False, "reason": "marge hors limites"}

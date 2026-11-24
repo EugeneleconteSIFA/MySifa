@@ -175,6 +175,7 @@
       // « list » = une ligne par déclinaison.
       truck: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
       lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+      search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
       list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     };
     return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
@@ -741,6 +742,7 @@
       tri("matieres"); cols("matieres");
     } else if (r === "products") {
       if (S.filters.prodTab && S.filters.prodTab !== "mystock") p.onglet = S.filters.prodTab;
+      if (S.filters.msProdVue === "liste") p.vue = "liste";
       tri("produits"); cols("produits");
     }
     if (_ficheUrl && document.getElementById("ft-back")) p.fiche = _ficheUrl;
@@ -765,6 +767,7 @@
       const q = ou("ref", ""); if (q !== undefined) S.filters.msQ = q;
     } else if (r === "products") {
       const o = ou("onglet", "mystock"); if (o !== undefined && ["mystock", "couts"].includes(o)) S.filters.prodTab = o;
+      const vu = ou("vue", "tuiles"); if (vu !== undefined && ["tuiles", "liste"].includes(vu)) S.filters.msProdVue = vu;
     }
     const table = r === "products" ? "produits" : "matieres";
     if (u.has("tri") || complet) {
@@ -2447,7 +2450,8 @@
       actifs.every((c) => {
         const v = c.filtreVal ? c.filtreVal(l) : c.val(l);
         const f = colFiltre(table, c.cle);
-        if (c.filtre === "choix") return String(v == null ? "" : v) === f;
+        // Plusieurs valeurs cochées (« Permanent|Enlevable ») s'additionnent.
+        if (c.filtre === "choix") return String(f).split("|").includes(String(v == null ? "" : v));
         // Sans accents ni casse : « velin » trouve « Vélin ».
         return sansAccents(v).includes(sansAccents(f));
       })
@@ -2469,7 +2473,7 @@
      Un menu par colonne aurait été plus compact, mais il cache l'état : on ne
      voit plus qu'un filtre est posé, et on cherche longtemps pourquoi la liste
      est vide. Les champs restent donc visibles, et un filtre actif se teinte. */
-  function enTetesTriables(table, colonnes, lignesSource) {
+  function enTetesTriables(table, colonnes, lignesSource, opts) {
     const t = triEtat(table);
     const libelles = colonnes.map((c) => {
       if (!c.val) return `<th${c.style ? ` style="${c.style}"` : ""}>${c.titre || ""}</th>`;
@@ -2500,6 +2504,9 @@
         value="${escAttr(v)}" placeholder="filtrer"/></th>`;
     }).join("");
 
+    // La vitrine des produits filtre par son panneau de critères : une
+    // seconde rangée de filtres dirait la même chose, moins bien.
+    if (opts && opts.sansFiltres) return `<thead><tr>${libelles}</tr></thead>`;
     return `<thead><tr>${libelles}</tr><tr class="th-filtres">${filtres}</tr></thead>`;
   }
 
@@ -4663,7 +4670,10 @@
   }
 
   function defaultMsProductForm() {
-    return { code: "", designation: "", roles: {}, autres: [], custom_margin_pct: "" };
+    // Code et désignation suivent la composition tant qu'on ne les a pas
+    // saisis soi-même (codeAuto / designationAuto).
+    return { code: "", designation: "", roles: {}, autres: [], custom_margin_pct: "",
+             codeAuto: true, designationAuto: true };
   }
 
   async function loadMsDeclinaisons() {
@@ -4674,7 +4684,8 @@
   async function loadMsProductsList() {
     const params = new URLSearchParams();
     params.set("with_cost", "true");
-    if (S.filters.msProdQ) params.set("q", S.filters.msProdQ);
+    // Pas de `q` : la vitrine cherche dans le navigateur, sur les libellés
+    // commerciaux comme sur les références.
     const data = await api("/api/pricing/mystock/produits?" + params.toString());
     S.msProducts = data.produits || [];
   }
@@ -4721,6 +4732,10 @@
       roles,
       autres,
       custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
+      // Un produit enregistré garde son code. Sa désignation suit la
+      // composition seulement si elle est encore celle qu'elle donnerait.
+      codeAuto: false,
+      designationAuto: !!p.designation_proposee && p.designation === p.designation_proposee,
     };
     S.msProdPreview = p.cost || null;
     S.msProdErreur = p.cout_erreur || null;
@@ -4773,6 +4788,11 @@
             ? `<button type="button" class="icon-btn" data-msp-del="${opts.del}" title="Retirer cette matière">${icon("trash", 15)}</button>`
             : ""}
         </div>
+        ${d ? `<div class="msp-fourn">Fournisseur principal ${d.fournisseur_nom
+              ? `<strong>${escHtml(d.fournisseur_nom)}</strong>`
+              : '<span class="msp-conso-manque">aucun — le prix de cette matière n\'est rattaché à personne</span>'}
+            ${d.libelle_commercial ? `<span class="msp-fourn-lib" title="Libellé commercial, repris dans la désignation">${escHtml(d.libelle_commercial)}</span>` : ""}
+          </div>` : ""}
         ${conso}
       </div>`;
   }
@@ -4795,6 +4815,19 @@
       opts = `<option value="${escAttr(selectedId)}" selected>${escHtml(lib)}</option>` + opts;
     }
     return `<option value="">— Aucun —</option>${opts}`;
+  }
+
+  /* Code ou désignation : rempli d'après la composition tant qu'on n'y a pas
+     touché. Taper dedans le fige ; « Recalculer » le rend à la composition. */
+  function mspChampAutoHtml(cle, libelle, valeur, auto, aide) {
+    return `<div class="field msp-auto${auto ? " is-auto" : ""}">
+        <label>${escHtml(libelle)}
+          ${auto
+            ? `<span class="msp-auto-tag" title="${escAttr(aide)}">automatique</span>`
+            : `<button type="button" class="msp-auto-raz" data-msp-auto="${cle}" title="${escAttr(aide)}">Recalculer</button>`}
+        </label>
+        <input id="msp-${cle}" value="${escAttr(valeur)}" placeholder="${auto ? "Choisissez les matières" : ""}"/>
+      </div>`;
   }
 
   function msProductFormHtml(isNew) {
@@ -4821,8 +4854,10 @@
       <div class="form-grid">
         <div class="form-card">
           <div class="field-row">
-            <div class="field"><label>Code</label><input id="msp-code" value="${escAttr(f.code)}"/></div>
-            <div class="field"><label>Désignation</label><input id="msp-designation" value="${escAttr(f.designation)}"/></div>
+            ${mspChampAutoHtml("code", "Code", f.code, f.codeAuto,
+              "Prochain code libre dans la famille du frontal (Thermiques, Couché…).")}
+            ${mspChampAutoHtml("designation", "Désignation", f.designation, f.designationAuto,
+              "Composée des libellés commerciaux des matières et du grammage saisi.")}
           </div>
           ${slots}
           <div class="form-section" style="margin-top:14px"><h3>Autres matières</h3>
@@ -5069,11 +5104,13 @@
         body: {
           composants: comps,
           custom_margin_pct: f.custom_margin_pct === "" ? null : parseFloat(f.custom_margin_pct),
+          produit_id: S.route && S.route.id ? S.route.id : null,
         },
       });
       if (serie !== mspApercuSerie) return;
       S.msProdPreview = r.cost || null;
       S.msProdErreur = r.cout_erreur || null;
+      appliquerPropositionsMsProduct(r);
     } catch (e) {
       if (serie !== mspApercuSerie) return;
       // Une composition refusée (grammage aberrant, rôle en double) n'efface
@@ -5153,10 +5190,28 @@
       marquerMsProdModifie();
       refreshMsProductPreview();
     };
-    ["msp-code", "msp-designation", "msp-margin"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.oninput = majAperçu;
+    const margin = document.getElementById("msp-margin");
+    if (margin) margin.oninput = majAperçu;
+    [["code", "codeAuto"], ["designation", "designationAuto"]].forEach(([cle, drapeau]) => {
+      const el = document.getElementById("msp-" + cle);
+      if (!el) return;
+      el.oninput = () => {
+        syncMsProductFromDom();
+        marquerMsProdModifie();
+        if (S.formMsProduct[drapeau]) {
+          // Le champ devient manuel : l'étiquette laisse place à « Recalculer ».
+          S.formMsProduct[drapeau] = false;
+          const wrap = el.closest(".msp-auto");
+          if (wrap) {
+            wrap.classList.remove("is-auto");
+            const tag = wrap.querySelector(".msp-auto-tag");
+            if (tag) tag.outerHTML = `<button type="button" class="msp-auto-raz" data-msp-auto="${cle}">Recalculer</button>`;
+            bindMspAutoRaz(isNew);
+          }
+        }
+      };
     });
+    bindMspAutoRaz(isNew);
     // Changer de matière rouvre la question du grammage : le bloc de
     // consommation apparaît, disparaît ou se vide selon la base d'achat, donc
     // on redessine plutôt que de rafraîchir le seul total.
@@ -5209,6 +5264,31 @@
     refreshMsProductPreview();
   }
 
+  function bindMspAutoRaz(isNew) {
+    document.querySelectorAll("[data-msp-auto]").forEach((b) => {
+      b.onclick = () => {
+        syncMsProductFromDom();
+        const cle = b.getAttribute("data-msp-auto");
+        S.formMsProduct[cle === "code" ? "codeAuto" : "designationAuto"] = true;
+        renderMsProductForm(isNew);
+      };
+    });
+  }
+
+  /* Pose le code et la désignation proposés par le serveur dans les champs
+     restés automatiques, sans redessiner : le focus reste où il est. */
+  function appliquerPropositionsMsProduct(r) {
+    const f = S.formMsProduct;
+    if (!f || !r) return;
+    [["code", "codeAuto", r.code_propose], ["designation", "designationAuto", r.designation_proposee]]
+      .forEach(([cle, drapeau, val]) => {
+        if (!f[drapeau] || val == null || val === "" || f[cle] === val) return;
+        f[cle] = val;
+        const el = document.getElementById("msp-" + cle);
+        if (el) el.value = val;
+      });
+  }
+
   async function saveMsProductForm(isNew) {
     syncMsProductFromDom();
     const f = S.formMsProduct;
@@ -5259,13 +5339,26 @@
     return (produit.composants || []).find((x) => x.role === role) || null;
   }
 
+  /* Le libellé commercial d'un composant : « Permanent », pas « 2028Y ».
+
+     Le commercial ne cherche pas une référence fournisseur, il cherche ce que
+     fait la matière. Le libellé vient de la sous-catégorie MyStock ; frontal et
+     glassine y ajoutent le grammage de la matière, sans quoi deux Thermique Pro
+     en 70 et en 105 g/m² seraient identiques. L'adhésif, lui, n'en prend pas :
+     son grammage est celui du produit et a sa propre colonne. */
+  function msProductCompTexte(produit, role) {
+    const c = msProductComp(produit, role);
+    if (!c) return "";
+    const lib = c.libelle_commercial || c.reference || "";
+    if (role !== "ADHESIF" && c.sous_categorie && c.grammage_matiere) return lib + " " + c.grammage_matiere;
+    return lib;
+  }
+
   function msProductCompLabel(produit, role) {
     const c = msProductComp(produit, role);
     if (!c) return '<span style="color:var(--muted)">—</span>';
-    // La référence seule : le grammage a sa propre colonne depuis le
-    // 31 août 2026, et l'écrire aux deux endroits ferait chercher lequel des
-    // deux fait foi le jour où ils diffèrent.
-    return escHtml(c.reference);
+    // La référence reste au survol : c'est elle qu'on cherche pour commander.
+    return `<span title="${escAttr("Référence : " + (c.reference || ""))}">${escHtml(msProductCompTexte(produit, role))}</span>`;
   }
 
   /** Le grammage d'adhésif que ce produit pose. */
@@ -5422,15 +5515,15 @@
     const glassine = msProductComp(p, "GLASSINE");
     const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
     const compo = [
-      frontal ? escHtml(frontal.reference) : '<span class="muted">sans frontal</span>',
+      frontal ? escHtml(msProductCompTexte(p, "FRONTAL")) : '<span class="muted">sans frontal</span>',
       adhesif
-        ? escHtml(adhesif.reference) + (gram != null
+        ? escHtml(msProductCompTexte(p, "ADHESIF")) + (gram != null
             ? ` <span class="msp-carte-gram">${escHtml(fmtNum(gram, 0, 1))} g/m²</span>`
             : ' <span class="muted" title="Adhésif au kilo sans grammage : ce composant compte pour 0">sans grammage</span>')
         : '<span class="muted">sans adhésif</span>',
     ].join(" · ");
     const bas = [
-      glassine ? escHtml(glassine.reference) : "sans glassine",
+      glassine ? escHtml(msProductCompTexte(p, "GLASSINE")) : "sans glassine",
       autres ? autres + " autre(s)" : "",
     ].filter(Boolean).join(" · ");
 
@@ -5461,52 +5554,235 @@
       </article>`;
   }
 
+  /* ── La vitrine des produits (24 novembre 2026) ──────────────────────────
+
+     Le commercial vient chercher un prix. Il sait ce qu'il veut vendre — un
+     thermique, un adhésif permanent, 22 g — pas sous quelle référence c'est
+     rangé. La liste se lit donc comme une boutique : les critères à gauche,
+     cochables, avec le nombre de produits que chacun laisse ; les produits en
+     tuiles, le prix de vente en gros.
+
+     Plusieurs cases d'un même critère s'additionnent (Permanent OU Enlevable),
+     deux critères se croisent (Thermiques ET Permanent). Le compte d'une case
+     dit ce qu'on obtiendrait en la cochant, compte tenu des autres critères :
+     une case à 0 est grisée, on sait d'avance qu'elle ne donnera rien.
+
+     Les cases cochées voyagent dans l'adresse comme les anciens filtres de
+     colonne (`f_adhesif=Permanent|Enlevable`) : un lien copié rouvre la même
+     sélection. Le tableau reste à un clic, pour qui veut comparer en lignes. */
+  const FACETTE_SEP = "|";
+  const FACETTE_VISIBLES = 6;
+
+  function facetteValeurs(table, cle) {
+    const f = colFiltre(table, cle);
+    return f ? String(f).split(FACETTE_SEP).filter(Boolean) : [];
+  }
+
+  function facetteBascule(table, cle, v) {
+    const vals = facetteValeurs(table, cle);
+    const i = vals.indexOf(v);
+    if (i >= 0) vals.splice(i, 1); else vals.push(v);
+    if (!S.colFiltres[table]) S.colFiltres[table] = {};
+    if (vals.length) S.colFiltres[table][cle] = vals.join(FACETTE_SEP);
+    else delete S.colFiltres[table][cle];
+  }
+
+  function facetteVal(col, l) {
+    const v = col.filtreVal ? col.filtreVal(l) : col.val(l);
+    return v == null ? "" : String(v);
+  }
+
+  /* Tout ce qu'un commercial peut taper : libellés commerciaux, références
+     techniques, code, désignation, support. Chaque mot doit se trouver
+     quelque part — « thermique 22 » trouve les thermiques en 22 g. */
+  function msProductTexteRecherche(p) {
+    const morceaux = [p.code, p.designation];
+    (p.composants || []).forEach((c) => {
+      morceaux.push(c.reference, c.designation, c.libelle_commercial, c.sous_section, c.grammage_matiere);
+      if (c.grammage_gsm) morceaux.push(String(c.grammage_gsm) + "g");
+    });
+    return sansAccents(morceaux.filter(Boolean).join(" "));
+  }
+
+  function msProductsRecherche(lignes) {
+    const mots = sansAccents(S.filters.msProdQ || "").trim().split(/\s+/).filter(Boolean);
+    if (!mots.length) return lignes;
+    return lignes.filter((p) => {
+      const t = msProductTexteRecherche(p);
+      return mots.every((m) => t.includes(m));
+    });
+  }
+
+  /** Combien de produits chaque case laisserait, les autres critères posés. */
+  function facetteComptes(col, lignes, facettes) {
+    const autres = facettes.filter((c) => c.cle !== col.cle);
+    const base = filtresAppliquer("produits", lignes, autres);
+    const n = new Map();
+    choixDeColonne(lignes, col).forEach((o) => n.set(o, 0));
+    base.forEach((l) => {
+      const v = facetteVal(col, l);
+      if (v) n.set(v, (n.get(v) || 0) + 1);
+    });
+    return n;
+  }
+
+  function facettesHtml(lignes, facettes) {
+    const ouvertDefaut = !prCartes();
+    const groupes = facettes.map((col) => {
+      const comptes = facetteComptes(col, lignes, facettes);
+      if (!comptes.size) return "";
+      const coches = facetteValeurs("produits", col.cle);
+      const opts = [...comptes.keys()].sort((a, b) =>
+        col.facetteTri ? col.facetteTri(a, b) : a.localeCompare(b, "fr", { numeric: true }));
+      const deplie = S.facettesDepliees && S.facettesDepliees[col.cle];
+      // Les cases cochées restent toujours visibles, même au-delà des six.
+      const visibles = deplie ? opts : opts.filter((o, i) => i < FACETTE_VISIBLES || coches.includes(o));
+      const cases = visibles.map((o) => {
+        const nb = comptes.get(o) || 0;
+        const on = coches.includes(o);
+        return `<label class="msp-fac-opt${on ? " on" : ""}${!nb && !on ? " vide" : ""}">
+            <input type="checkbox" data-fac="${escAttr(col.cle)}" value="${escAttr(o)}"${on ? " checked" : ""}/>
+            <span class="msp-fac-lib">${escHtml(col.optLabel ? col.optLabel(o) : o)}</span>
+            <span class="msp-fac-nb">${nb}</span>
+          </label>`;
+      }).join("");
+      const reste = opts.length - visibles.length;
+      const plus = reste > 0
+        ? `<button type="button" class="msp-fac-plus" data-fac-plus="${escAttr(col.cle)}">+ ${reste} autre(s)</button>`
+        : (deplie && opts.length > FACETTE_VISIBLES
+            ? `<button type="button" class="msp-fac-plus" data-fac-plus="${escAttr(col.cle)}">Réduire</button>` : "");
+      return `<details class="msp-fac"${ouvertDefaut || coches.length ? " open" : ""}>
+          <summary>${escHtml(col.facette || col.titre)}${coches.length ? ` <span class="msp-fac-badge">${coches.length}</span>` : ""}</summary>
+          <div class="msp-fac-corps">${cases}${plus}</div>
+        </details>`;
+    }).join("");
+    const nbActifs = facettes.reduce((a, c) => a + facetteValeurs("produits", c.cle).length, 0);
+    return `<aside class="msp-facettes" aria-label="Critères">
+        <div class="msp-fac-tete">
+          <span>Critères</span>
+          ${nbActifs ? '<button type="button" class="msp-fac-raz" data-fac-raz="1">Tout effacer</button>' : ""}
+        </div>
+        ${groupes}
+      </aside>`;
+  }
+
+  /** Les cases cochées en puces au-dessus des résultats, chacune retirable. */
+  function facettesPucesHtml(facettes) {
+    const puces = [];
+    facettes.forEach((col) => {
+      facetteValeurs("produits", col.cle).forEach((v) => {
+        puces.push(`<button type="button" class="msp-puce" data-fac-puce="${escAttr(col.cle)}" data-val="${escAttr(v)}"
+            title="Retirer ce critère">${escHtml(col.facette || col.titre)} : <strong>${escHtml(col.optLabel ? col.optLabel(v) : v)}</strong> <span aria-hidden="true">×</span></button>`);
+      });
+    });
+    return puces.join("");
+  }
+
+  /* Une tuile : ce que le produit EST, en libellés commerciaux, puis son prix
+     de vente — le chiffre qu'on vient chercher, seul en gros. Revient et marge
+     restent dessous, pour qui doit négocier. */
+  function msProductTuileHtml(p) {
+    const c = p.cost;
+    const open = !!S.expandedProd[p.id];
+    const gram = msProductGrammage(p);
+    const frontal = msProductComp(p, "FRONTAL");
+    const adhesif = msProductComp(p, "ADHESIF");
+    const glassine = msProductComp(p, "GLASSINE");
+    const autres = (p.composants || []).filter((x) => x.role === "AUTRE");
+    const vente = c ? parseFloat(c.sell_price_eur_m2) : null;
+    const refs = (p.composants || []).map((x) => x.reference).filter(Boolean).join(" · ");
+    return `<article class="msp-tuile${open ? " open" : ""}" data-msp-row="${p.id}" tabindex="0"
+        title="${escAttr((p.code || "") + " — " + (p.designation || "") + (refs ? "\nRéférences : " + refs : ""))}">
+        <div class="msp-tuile-tete">
+          ${msProductSupport(p)}
+          <span class="msp-tuile-code">${escHtml(p.code || "")}</span>
+        </div>
+        <div class="msp-tuile-titre">${frontal ? escHtml(msProductCompTexte(p, "FRONTAL")) : '<span class="muted">sans frontal</span>'}</div>
+        <div class="msp-tuile-adh">
+          ${adhesif ? escHtml(msProductCompTexte(p, "ADHESIF")) : '<span class="muted">sans adhésif</span>'}
+          ${adhesif ? (gram != null
+            ? `<span class="msp-tuile-gram">${escHtml(fmtNum(gram, 0, 1))} g/m²</span>`
+            : '<span class="msp-conso-manque" title="Adhésif au kilo sans grammage : ce composant compte pour 0">sans grammage</span>') : ""}
+        </div>
+        <div class="msp-tuile-sous">${glassine ? escHtml(msProductCompTexte(p, "GLASSINE")) : "sans glassine"}${
+          autres.length ? " · " + autres.length + " autre(s)" : ""}</div>
+        <div class="msp-tuile-prix">
+          <span class="msp-tuile-prix-lbl">Prix de vente</span>
+          <b>${vente != null ? escHtml(fmtEurM2(vente)) : "—"}</b>
+          <span class="msp-tuile-prix-det">${c
+            ? `revient ${escHtml(fmtEurM2(c.total_eur_per_m2))} · marge ${escHtml(fmtPct(c.margin_pct))}`
+            : escHtml(p.cout_erreur ? "calcul impossible" : "matières sans prix")}</span>
+        </div>
+        <div class="msp-tuile-act" onclick="event.stopPropagation()">
+          ${vente != null ? `<button type="button" class="btn btn-accent btn-sm" data-msp-copie="${p.id}" title="Copier le prix de vente">${icon("copy", 13)} Copier le prix</button>` : ""}
+          <button type="button" class="btn btn-soft btn-sm" data-ft-produit="${p.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>
+          ${S.canWrite ? actionBtn("data-msp-edit", p.id, "edit", "Modifier ce produit") : ""}
+          ${S.canWrite ? actionBtn("data-msp-dup", p.id, "copy", "Dupliquer — créer un produit similaire") : ""}
+        </div>
+        ${open ? `<div class="msp-tuile-detail" onclick="event.stopPropagation()">${msProductDetailCartesHtml(p)}</div>` : ""}
+      </article>`;
+  }
+
+  /* Ordre par défaut, sans tri choisi : comme un rayon, par support puis
+     frontal, adhésif et grammage — les produits voisins se suivent. */
+  function msProductsOrdreRayon(lignes) {
+    const cle = (p) => [msProductSupportTexte(p), msProductCompTexte(p, "FRONTAL"), msProductCompTexte(p, "ADHESIF")];
+    return [...lignes].sort((a, b) => {
+      const ka = cle(a), kb = cle(b);
+      for (let i = 0; i < ka.length; i++) {
+        const d = String(ka[i]).localeCompare(String(kb[i]), "fr", { numeric: true });
+        if (d) return d;
+      }
+      return (msProductGrammage(a) || 0) - (msProductGrammage(b) || 0);
+    });
+  }
+
+  const MSP_TRIS = [
+    { v: "", lib: "Par composition" },
+    { v: "vente:1", lib: "Prix croissant" },
+    { v: "vente:-1", lib: "Prix décroissant" },
+    { v: "marge:-1", lib: "Marge la plus forte" },
+  ];
+
   function renderMsProductsList() {
-    /* Code et désignation ont quitté le tableau (31 août 2026).
-
-       « 886-0001 » n'apprend rien qu'on cherche du regard. Et « Thermique
-       Pro 70g · Enlevable 22g, Jaune 60g standard » ne fait que recopier, en
-       prose et sur trois lignes, ce que les colonnes disent déjà en un coup
-       d'œil : c'est un produit fini, il EST sa composition. Les colonnes la
-       donnent mieux que sa phrase, et alignée d'une ligne à l'autre.
-
-       Ni l'un ni l'autre n'est perdu : la recherche en haut de page porte sur
-       le code ET la désignation, et la fiche montre les deux. */
+    /* Code et désignation ont quitté le tableau (31 août 2026) : le produit
+       EST sa composition, et les libellés commerciaux la disent mieux que sa
+       phrase. Ils restent cherchables et lisibles au survol. */
     const COLS = [
       { cle: "caret", titre: "", style: "width:28px" },
       { cle: "support", titre: "Support", style: "width:118px", filtre: "choix",
         val: msProductSupportTexte },
       { cle: "frontal", titre: "Frontal", filtre: "choix",
-        val: (p) => (msProductComp(p, "FRONTAL") || {}).reference || "" },
+        val: (p) => msProductCompTexte(p, "FRONTAL") },
       { cle: "adhesif", titre: "Adhésif", filtre: "choix",
-        val: (p) => (msProductComp(p, "ADHESIF") || {}).reference || "" },
-      // Le grammage d'adhésif a sa colonne : c'est LUI qui sépare quatre
-      // produits portant le même 2028Y, et le seul chiffre du tableau qui se
-      // corrige à la main quand un coût surprend. Filtre par choix — les
-      // grammages sont une poignée de valeurs discrètes, pas du texte libre.
-      { cle: "gram", titre: "Grammage", style: "width:104px", filtre: "choix",
+        val: (p) => msProductCompTexte(p, "ADHESIF") },
+      // Le grammage d'adhésif : c'est LUI qui sépare quatre produits portant
+      // le même adhésif. Une poignée de valeurs discrètes, triées en nombre.
+      { cle: "gram", titre: "Grammage", facette: "Grammage d'adhésif", style: "width:104px", filtre: "choix",
         val: msProductGrammage,
         filtreVal: (p) => { const g = msProductGrammage(p); return g == null ? "" : String(g); },
-        optLabel: (o) => `${o} g/m²` },
+        optLabel: (o) => `${o} g/m²`,
+        facetteTri: (a, b) => parseFloat(a) - parseFloat(b) },
       { cle: "glassine", titre: "Glassine", filtre: "choix",
-        val: (p) => (msProductComp(p, "GLASSINE") || {}).reference || "" },
+        val: (p) => msProductCompTexte(p, "GLASSINE") },
       { cle: "autres", titre: "Autres", style: "width:70px",
         val: (p) => (p.composants || []).filter((x) => x.role === "AUTRE").length },
       { cle: "vente", titre: "Prix de vente", val: (p) => (p.cost ? parseFloat(p.cost.sell_price_eur_m2) : null) },
       { cle: "marge", titre: "Marge", val: (p) => (p.cost ? parseFloat(p.cost.margin_pct) : null) },
       { cle: "act", titre: "", style: "width:150px" },
     ];
+    const FACETTES = COLS.filter((c) => c.filtre === "choix");
 
-    const filtres = filtresAppliquer("produits", S.msProducts, COLS);
-    const triees = triAppliquer("produits", filtres, COLS);
+    const cherchees = msProductsRecherche(S.msProducts);
+    const filtres = filtresAppliquer("produits", cherchees, FACETTES);
+    const triees = triEtat("produits") ? triAppliquer("produits", filtres, COLS) : msProductsOrdreRayon(filtres);
+    const vue = S.filters.msProdVue === "liste" && !prCartes() ? "liste" : "tuiles";
 
     const rows = triees
       .map((p) => {
         const c = p.cost;
         const open = !!S.expandedProd[p.id];
         const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
-        // Code et désignation restent à portée de survol : ils ont quitté les
-        // colonnes, pas la ligne.
         return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}"
             title="${escAttr((p.code || "") + " — " + (p.designation || ""))}">
             <td class="ms-caret">${open ? "▾" : "▸"}</td>
@@ -5532,44 +5808,122 @@
       })
       .join("");
 
-    const cartes = prCartes();
-    const corps = cartes
-      ? `<div class="msp-cartes">${
-          triees.map(msProductCarteHtml).join("")
-          || '<div class="msf-empty">Aucun produit pour ce filtre.</div>'}</div>`
-      : `<div class="table-wrap">
+    const vide = `<div class="msp-vide">
+        <strong>Aucun produit ne répond à ces critères.</strong>
+        <span>Retirez un critère ou effacez la recherche.</span>
+      </div>`;
+    const corps = vue === "liste"
+      ? `<div class="table-wrap">
           <table class="pr-table msp-table">
-            ${enTetesTriables("produits", COLS, S.msProducts)}
-            <tbody>${rows || '<tr><td colspan="10" class="empty">Aucun produit pour ce filtre.</td></tr>'}</tbody>
+            ${enTetesTriables("produits", COLS, S.msProducts, { sansFiltres: true })}
+            <tbody>${rows || '<tr><td colspan="10" class="empty">Aucun produit ne répond à ces critères.</td></tr>'}</tbody>
           </table>
-        </div>`;
+        </div>`
+      : (triees.length ? `<div class="msp-tuiles">${triees.map(msProductTuileHtml).join("")}</div>` : vide);
+
+    const t = triEtat("produits");
+    const triCourant = t ? `${t.cle}:${t.sens}` : "";
+    const triOpts = MSP_TRIS.map((o) =>
+      `<option value="${escAttr(o.v)}"${o.v === triCourant ? " selected" : ""}>${escHtml(o.lib)}</option>`).join("")
+      + (t && !MSP_TRIS.some((o) => o.v === triCourant) ? `<option value="${escAttr(triCourant)}" selected>Tri du tableau</option>` : "");
+    const puces = facettesPucesHtml(FACETTES);
 
     setContent(`
       <div class="pr-narrow pr-large">
-        ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`, productsTabsHtml())}
-        <div class="filters">
-          <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" title="Le code et la désignation ont quitté les colonnes : ils se cherchent ici, et se lisent au survol d'une ligne." value="${escAttr(S.filters.msProdQ)}"/>
-          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
+        ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`,
+          productsTabsHtml() + (S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""))}
+        <div class="msp-boutique">
+          ${facettesHtml(cherchees, FACETTES)}
+          <section class="msp-resultats">
+            <div class="msp-barre">
+              <div class="msp-recherche">
+                ${icon("search", 16)}
+                <input type="search" id="msp-q" placeholder="Thermique, permanent 22, 2028Y, 886-0012…"
+                  aria-label="Rechercher un produit" value="${escAttr(S.filters.msProdQ || "")}"/>
+              </div>
+              <label class="msp-tri">Trier <select id="msp-tri">${triOpts}</select></label>
+              ${prCartes() ? "" : `<div class="msp-vues" role="group" aria-label="Affichage">
+                <button type="button" class="${vue === "tuiles" ? "on" : ""}" data-msp-vue="tuiles" title="Tuiles">${icon("grid", 14)} Tuiles</button>
+                <button type="button" class="${vue === "liste" ? "on" : ""}" data-msp-vue="liste" title="Tableau">${icon("list", 14)} Tableau</button>
+              </div>`}
+            </div>
+            <div class="msp-compte">
+              <strong>${triees.length}</strong> produit(s)${triees.length !== S.msProducts.length ? ` sur ${S.msProducts.length}` : ""}
+              ${puces ? `<span class="msp-puces">${puces}</span>` : ""}
+            </div>
+            ${corps}
+          </section>
         </div>
-        ${corps}
-        ${filtresActifsHtml("produits", COLS, S.msProducts.length, triees.length)}
       </div>
     `);
 
     bindEnTetes("produits", renderMsProductsList);
-    bindRaz("produits", renderMsProductsList);
     bindProductsTabs();
+
+    // Cocher, décocher, retirer une puce, tout effacer : on redessine, la
+    // position de défilement reste où elle était.
+    const redessiner = () => {
+      const y = window.scrollY;
+      renderMsProductsList();
+      window.scrollTo(0, y);
+    };
+    document.querySelectorAll("[data-fac]").forEach((cb) => {
+      cb.onchange = () => { facetteBascule("produits", cb.getAttribute("data-fac"), cb.value); redessiner(); };
+    });
+    document.querySelectorAll("[data-fac-puce]").forEach((b) => {
+      b.onclick = () => { facetteBascule("produits", b.getAttribute("data-fac-puce"), b.getAttribute("data-val")); redessiner(); };
+    });
+    document.querySelectorAll("[data-fac-plus]").forEach((b) => {
+      b.onclick = () => {
+        const k = b.getAttribute("data-fac-plus");
+        S.facettesDepliees = S.facettesDepliees || {};
+        S.facettesDepliees[k] = !S.facettesDepliees[k];
+        redessiner();
+      };
+    });
+    const raz = document.querySelector("[data-fac-raz]");
+    if (raz) raz.onclick = () => { S.colFiltres.produits = {}; redessiner(); };
+
+    // La recherche filtre à la frappe, dans le navigateur : 50 produits ne
+    // méritent pas un aller-retour, et le champ garde son curseur.
     const q = document.getElementById("msp-q");
     if (q) {
-      q.oninput = (e) => {
+      q.oninput = () => {
         clearTimeout(S.debounceMsProd);
-        S.debounceMsProd = setTimeout(async () => {
-          S.filters.msProdQ = e.target.value;
-          await loadMsProductsList();
-          renderMsProductsList();
-        }, 300);
+        S.debounceMsProd = setTimeout(() => {
+          const pos = q.selectionStart;
+          S.filters.msProdQ = q.value;
+          redessiner();
+          const neuf = document.getElementById("msp-q");
+          if (neuf) { neuf.focus(); try { neuf.setSelectionRange(pos, pos); } catch (e) {} }
+        }, 150);
       };
     }
+    const tri = document.getElementById("msp-tri");
+    if (tri) {
+      tri.onchange = () => {
+        const [cle, sens] = tri.value.split(":");
+        S.tri.produits = cle ? { cle: cle, sens: parseInt(sens, 10) === -1 ? -1 : 1 } : null;
+        redessiner();
+      };
+    }
+    document.querySelectorAll("[data-msp-vue]").forEach((b) => {
+      b.onclick = () => { S.filters.msProdVue = b.getAttribute("data-msp-vue"); redessiner(); };
+    });
+    document.querySelectorAll("[data-msp-copie]").forEach((b) => {
+      b.onclick = async () => {
+        const p = S.msProducts.find((x) => String(x.id) === b.getAttribute("data-msp-copie"));
+        if (!p || !p.cost) return;
+        const txt = fmtEurM2(p.cost.sell_price_eur_m2);
+        try {
+          await navigator.clipboard.writeText(txt);
+          showToast("Prix copié : " + txt, "success");
+        } catch (e) {
+          showToast("Copie refusée par le navigateur — prix : " + txt, "info");
+        }
+      };
+    });
+
     const nouveau = document.getElementById("btn-new-msprod");
     if (nouveau) {
       nouveau.onclick = () => {
@@ -5577,15 +5931,17 @@
         navigate("/pricing/mystock/produit/new");
       };
     }
-    // La ligne déplie le détail ; l'édition passe par son bouton. Comme dans
-    // la liste des matières MyStock, pour ne pas avoir deux gestes différents
-    // d'un onglet à l'autre.
-    document.querySelectorAll("[data-msp-row]").forEach((tr) => {
-      tr.onclick = () => {
-        const id = tr.getAttribute("data-msp-row");
+    // La tuile (ou la ligne) déplie le détail ; l'édition passe par son bouton.
+    document.querySelectorAll("[data-msp-row]").forEach((el) => {
+      const bascule = () => {
+        const id = el.getAttribute("data-msp-row");
         S.expandedProd[id] = !S.expandedProd[id];
-        renderMsProductsList();
+        redessiner();
       };
+      el.onclick = bascule;
+      if (el.tagName === "ARTICLE") {
+        el.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); bascule(); } };
+      }
     });
     bindFichesTechniques();
     document.querySelectorAll("[data-msp-edit]").forEach((b) => {
@@ -5608,13 +5964,17 @@
           if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = slot;
           else autres.push(slot);
         });
+        // Code et désignation repartent de la composition : le prochain code
+        // libre de la famille, et la désignation qu'appellent les matières.
         S.formMsProduct = {
-          code: src.code + "-copie",
-          designation: src.designation + " (copie)",
+          code: "",
+          designation: "",
           roles,
           autres,
           custom_margin_pct:
             src.custom_margin_pct != null ? String(src.custom_margin_pct) : "",
+          codeAuto: true,
+          designationAuto: true,
         };
         S.msProdLabels = mspLabelsDepuis(src.composants);
         S.msProdPrerempli = true;

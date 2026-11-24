@@ -846,6 +846,23 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
    et c'est précisément ce qui le rend dangereux. On le dit sur la ligne. */
 .msp-conso-manque{font-size:10px;font-weight:700;color:var(--warn,#d97706)}
 .msp-conso-nul{margin-top:8px;font-size:11px;color:var(--muted)}
+/* Le fournisseur principal sous la matière choisie : c'est son tarif qui fait
+   le coût, donc on doit savoir chez qui l'on achète avant d'enregistrer. Le
+   libellé commercial suit, tel qu'il entre dans la désignation. */
+.msp-fourn{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;
+  font-size:12px;color:var(--muted)}
+.msp-fourn strong{color:var(--text);font-weight:700}
+.msp-fourn-lib{margin-left:auto;font-size:11px;font-weight:700;padding:1px 8px;
+  border-radius:999px;background:var(--accent-bg);color:var(--accent)}
+
+/* Code et désignation déduits de la composition : l'étiquette dit qu'ils
+   suivent, « Recalculer » les y ramène une fois retouchés à la main. */
+.msp-auto label{display:flex;align-items:center;gap:6px}
+.msp-auto-tag{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--accent)}
+.msp-auto-raz{border:1px solid var(--border);background:var(--bg);border-radius:999px;
+  padding:1px 8px;font:inherit;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer}
+.msp-auto-raz:hover{background:var(--accent-bg)}
 
 /* ── « Ce qui fait bouger ce coût » — fiche produit MyStock ─────────────────
    La multiplication en toutes lettres : prix au kilo × poids posé = coût. Le
@@ -1241,3 +1258,88 @@ td.msp-actions > *:first-child{margin-left:0}
 /* Produits : le prix de vente est LE chiffre de la ligne. */
 td.msp-vente{font-size:15px;font-weight:800;color:var(--accent)}
 .msp-totaux strong{font-size:16px;color:var(--accent)}
+
+/* ── Vitrine des produits : critères à gauche, tuiles au centre ─────────────
+   Le commercial vient chercher un prix. Les critères se cochent comme sur un
+   site marchand, chacun avec le nombre de produits qu'il laisse ; le prix de
+   vente est le seul chiffre en gros de la tuile. */
+.msp-boutique{display:grid;grid-template-columns:240px minmax(0,1fr);gap:18px;align-items:start}
+.msp-facettes{position:sticky;top:76px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:6px 0 8px;max-height:calc(100vh - 96px);overflow:auto}
+.msp-fac-tete{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 6px;
+  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.msp-fac-raz{border:1px solid var(--border);background:var(--bg);border-radius:999px;padding:2px 9px;
+  font:inherit;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--accent);cursor:pointer}
+.msp-fac{border-top:1px solid var(--border);padding:0 14px}
+.msp-fac summary{list-style:none;cursor:pointer;padding:10px 0 8px;font-size:13px;font-weight:700;
+  color:var(--text);display:flex;align-items:center;gap:6px}
+.msp-fac summary::-webkit-details-marker{display:none}
+.msp-fac summary::after{content:"▸";margin-left:auto;color:var(--muted);font-size:11px}
+.msp-fac[open] summary::after{content:"▾"}
+.msp-fac-badge{font-size:10px;font-weight:800;padding:0 6px;border-radius:999px;
+  background:var(--accent);color:var(--card)}
+.msp-fac-corps{display:flex;flex-direction:column;gap:1px;padding-bottom:10px}
+.msp-fac-opt{display:flex;align-items:center;gap:8px;padding:4px 6px;margin:0 -6px;border-radius:7px;
+  font-size:13px;color:var(--text2);cursor:pointer}
+.msp-fac-opt:hover{background:var(--bg)}
+.msp-fac-opt input{accent-color:var(--accent);margin:0;flex:none}
+.msp-fac-opt.on{color:var(--text);font-weight:700}
+.msp-fac-opt.vide{opacity:.45}
+.msp-fac-lib{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msp-fac-nb{font-size:11px;font-variant-numeric:tabular-nums;color:var(--muted);
+  background:var(--bg);border-radius:999px;padding:0 7px}
+.msp-fac-opt.on .msp-fac-nb{background:var(--accent-bg);color:var(--accent)}
+.msp-fac-plus{align-self:flex-start;margin-top:4px;border:0;background:var(--bg);border-radius:999px;
+  padding:2px 10px;font:inherit;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer}
+
+.msp-resultats{min-width:0}
+.msp-barre{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.msp-recherche{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;padding:0 12px;color:var(--muted)}
+.msp-recherche:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.msp-recherche input{flex:1;border:0;background:transparent;color:var(--text);font-size:15px;
+  padding:11px 0;outline:none;min-width:0}
+.msp-tri{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:700}
+.msp-vues{display:flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2px}
+.msp-vues button{display:flex;align-items:center;gap:5px;border:0;background:var(--card);color:var(--text2);
+  font:inherit;font-size:12px;font-weight:700;padding:6px 10px;border-radius:8px;cursor:pointer}
+.msp-vues button.on{background:var(--accent-bg);color:var(--accent)}
+.msp-compte{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:13px;color:var(--muted)}
+.msp-compte > strong{font-size:18px;color:var(--text)}
+.msp-puces{display:flex;gap:6px;flex-wrap:wrap}
+.msp-puce{border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);border-radius:999px;
+  padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}
+.msp-puce strong{font-weight:800}
+.msp-puce:hover{filter:brightness(1.08)}
+
+.msp-tuiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.msp-tuile{display:flex;flex-direction:column;gap:4px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.msp-tuile:hover,.msp-tuile:focus-visible{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+.msp-tuile.open{grid-column:1/-1;border-color:var(--accent)}
+.msp-tuile-tete{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px}
+.msp-tuile-code{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.msp-tuile-titre{font-size:16px;font-weight:800;color:var(--text);line-height:1.25}
+.msp-tuile-adh{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:14px;font-weight:700;color:var(--text2)}
+.msp-tuile-gram{font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;
+  background:var(--accent-bg);color:var(--accent)}
+.msp-tuile-sous{font-size:12px;color:var(--muted)}
+.msp-tuile-prix{display:flex;flex-direction:column;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+.msp-tuile-prix-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.msp-tuile-prix b{font-size:22px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.2}
+.msp-tuile-prix-det{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.msp-tuile-act{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;cursor:default}
+.msp-tuile-act .btn-accent{flex:1;justify-content:center}
+.msp-tuile-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);cursor:default}
+.msp-vide{display:flex;flex-direction:column;gap:4px;align-items:center;text-align:center;padding:40px 16px;
+  background:var(--card);border:1px dashed var(--border);border-radius:12px;color:var(--muted);font-size:13px}
+.msp-vide strong{color:var(--text);font-size:14px}
+
+@media (max-width:900px){
+  .msp-boutique{grid-template-columns:1fr}
+  .msp-facettes{position:static;max-height:none}
+}
+@media (max-width:700px){
+  .msp-tuiles{grid-template-columns:1fr}
+  .msp-recherche{min-width:0;flex-basis:100%}
+}

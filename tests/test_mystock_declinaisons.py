@@ -895,8 +895,9 @@ with dbmod.get_db() as conn:
     print("\n--- garde-fous du produit ---")
     check("code déjà pris refusé",
           PROD.creer_produit(conn, code="ms-1", designation="Doublon")["ok"], False)
-    check("code vide refusé",
-          PROD.creer_produit(conn, code="  ", designation="X")["ok"], False)
+    # Un code vide ne se refuse plus : il se déduit des codes existants.
+    check("code vide : le suivant des codes existants est proposé",
+          PROD.code_propose(conn, []), "MS-2")
     check("désignation vide refusée",
           PROD.creer_produit(conn, code="MS-2", designation="")["ok"], False)
     check("deux matières pour le même rôle refusées",

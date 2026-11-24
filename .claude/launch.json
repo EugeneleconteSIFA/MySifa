@@ -30,6 +30,18 @@
         "8011"
       ],
       "port": 8011
+    },
+    {
+      "name": "maquette-vitrine",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8023",
+        "--directory",
+        "/private/tmp/claude-501/-Users-eugeneleconte--claude-spares-spare-DTiRYL/8add4bd7-eb55-4025-a0c7-17368e35e8ec/scratchpad/maquette"
+      ],
+      "port": 8023
     }
   ]
 }
