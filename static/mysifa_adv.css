@@ -148,10 +148,70 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 #adv-tip .tip-n{color:var(--muted);margin-top:4px;font-size:11px}
 
 /* ── Prépa ── */
+/* Planning de prépa : la frise des semaines, comme le planning machine. Par
+   semaine, un titre, les en-têtes de jour, puis une barre où chaque jour est
+   un segment et chaque préparation un bloc coloré (même client, même teinte,
+   tirée des cinq couleurs du thème). Le jour choisi filtre le tableau. */
+.pf{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px 16px;margin-bottom:14px}
+.pf-tete{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pf-titre{font-size:17px;font-weight:800;color:var(--text)}
+.pf-espace{flex:1}
+.pf-sans-date{font-size:13px;color:var(--muted);font-weight:600}
+.pf-groupe{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.pf-gbtn{padding:7px 14px;border:0;border-left:1px solid var(--border);background:var(--card);color:var(--text2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+.pf-gbtn:first-child{border-left:0}
+.pf-gbtn:hover:not(:disabled){background:var(--bg)}
+.pf-gbtn.active{background:var(--accent-bg);color:var(--accent)}
+.pf-gbtn:disabled{opacity:.4;cursor:default}
+.pf-semaine{margin-top:16px}
+.pf-sem{font-size:15.5px;font-weight:800;color:var(--text);margin-bottom:6px}
+.pf-sem.courante{color:var(--accent)}
+.pf-jours,.pf-barre{display:flex}
+.pf-jh{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 4px 7px;border:0;border-bottom:2px solid var(--border);background:var(--card);color:var(--text2);font-family:inherit;cursor:pointer}
+.pf-jh:hover:not(:disabled){color:var(--accent)}
+.pf-jh-lib{font-size:15px;font-weight:800}
+.pf-jh-n{font-size:12.5px;font-weight:700;color:var(--muted)}
+.pf-jh.today{color:var(--accent);border-bottom-color:var(--accent)}
+.pf-jh.choisi{background:var(--accent-bg);color:var(--accent);border-bottom-color:var(--accent);border-radius:8px 8px 0 0}
+.pf-jh.passe{opacity:.5;cursor:default}
+.pf-barre{margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:5px 0;height:108px}
+.pf-seg{flex:1 1 0;min-width:0;display:flex;gap:4px;padding:0 4px;border-left:1px solid var(--border)}
+.pf-seg:first-child{border-left:0}
+.pf-seg.passe{opacity:.5}
+.pf-seg.choisi{background:var(--accent-bg)}
+.pf-seg.cible{box-shadow:inset 0 0 0 2px var(--accent);background:var(--accent-bg)}
+.pf-bloc{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:6px;border-radius:7px;border:1px solid transparent;color:var(--text);text-align:center;overflow:hidden;cursor:pointer}
+.pf-bloc.c1{background:color-mix(in srgb,var(--c1) 32%,var(--card))}
+.pf-bloc.c2{background:color-mix(in srgb,var(--c2) 32%,var(--card))}
+.pf-bloc.c3{background:color-mix(in srgb,var(--c3) 32%,var(--card))}
+.pf-bloc.c4{background:color-mix(in srgb,var(--c4) 32%,var(--card))}
+.pf-bloc.c5{background:color-mix(in srgb,var(--c5) 32%,var(--card))}
+.pf-bloc:hover{border-color:var(--text2)}
+.pf-cli{max-width:100%;font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-l2,.pf-l3{max-width:100%;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.pf-l3{font-weight:500}
+.pf-l3.retard{color:var(--danger);font-weight:700}
+.pf-badge{max-width:100%;margin-top:4px;padding:2px 9px;border-radius:6px;background:var(--danger);color:white;font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-badge.partiel{background:var(--warn)}
+.pf-badge.faite{background:var(--success)}
+.pf-bloc.urgente{box-shadow:inset 0 0 0 2px var(--danger)}
+.pf-bloc.partiel{background-image:repeating-linear-gradient(135deg,transparent 0 7px,color-mix(in srgb,var(--warn) 20%,transparent) 7px 14px)}
+.pf-bloc.faite{opacity:.5}
+/* Bloc étroit : le client seul, à la verticale. */
+.pf-bloc.etroit{padding:6px 2px}
+.pf-bloc.etroit .pf-l2,.pf-bloc.etroit .pf-l3,.pf-bloc.etroit .pf-badge{display:none}
+.pf-bloc.etroit .pf-cli{writing-mode:vertical-rl;transform:rotate(180deg);max-height:100%;font-size:12.5px}
+.pf-bloc[draggable=true]{cursor:grab}
+.pf-bloc.attrapee{opacity:.4}
+/* Téléphone : la frise devient un sélecteur de jour (en-têtes et compteurs),
+   le tableau en dessous liste les préparations du jour choisi. */
+@media(max-width:560px){.pf{padding:10px}.pf-barre{display:none}.pf-titre{width:100%}
+.pf-jh-lib{font-size:12.5px}.pf-jh-n{font-size:11.5px}.pf-gbtn{padding:6px 10px;font-size:13px}}
+
 /* Onglets de la Prépa : un groupe à la fois, avec son compteur ;
    l'historique, dernier onglet, se range à droite. */
 .adv-ongl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.adv-ongl-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer}
+.adv-ongl-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer}
 .adv-ongl-btn:hover{background:var(--bg)}
 .adv-ongl-btn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .adv-ongl-btn .n{font-size:12px;font-weight:800;min-width:22px;text-align:center;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--text2)}
@@ -162,8 +222,8 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
    quand la liste défile. Les colonnes tombent d'elles-mêmes sous leur
    en-tête, quelle que soit la largeur des valeurs. */
 .adv-prepa-wrap{max-height:calc(100vh - 300px)}
-.adv-prepa-table th{cursor:default;background:var(--bg);color:var(--text2);font-size:11px;font-weight:800;letter-spacing:.3px;padding:11px 8px;border-bottom:2px solid var(--border)}
-.adv-prepa-table td{padding:8px;font-size:13px}
+.adv-prepa-table th{cursor:default;background:var(--bg);color:var(--text2);font-size:12px;font-weight:800;letter-spacing:.3px;padding:11px 9px;border-bottom:2px solid var(--border)}
+.adv-prepa-table td{padding:10px 9px;font-size:15px}
 .adv-prepa-table .num,.adv-prepa-table .c-num{text-align:right;font-variant-numeric:tabular-nums}
 /* Poignée de glisser-déposer (ADV). */
 .adv-prepa-table .c-poignee{width:1%;padding-right:0;color:var(--muted);cursor:grab}
@@ -173,9 +233,11 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-empl .adv-empl-plus{background:var(--card);border-style:dashed;color:var(--text2)}
 .adv-pl .c-client{font-weight:800}
 /* Une cellule de tableau ignore max-width : le plafond va sur son contenu. */
-.adv-pl .c-client-t{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adv-pl .c-client-t{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(min-width:1700px){.adv-pl .c-client-t{max-width:320px}}
-.adv-pl .c-cde,.adv-pl .c-ref{font-size:12.5px}
+.adv-pl .c-cde,.adv-pl .c-ref{font-size:14px}
+.adv-prepa-table .adv-empl span{font-size:13px;padding:3px 8px}
+.adv-prepa-table .btn-petit{font-size:13.5px}
 .adv-pl .c-ref{color:var(--text2)}
 .adv-pl .c-empl{white-space:normal;min-width:120px}
 .adv-pl .c-act{width:1%}
@@ -222,8 +284,9 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 /* Écran étroit : chaque ligne redevient une carte. Client et boutons en tête,
    puis commande / réf / expédition, puis les quantités avec leur libellé,
    puis les emplacements ; l'en-tête des colonnes disparaît. En dessous de
-   1280 px, le tableau (996 px au plus serré) ne tient plus à côté du menu. */
-@media(max-width:1280px){
+   1380 px, le tableau (1 090 px au plus serré, police agrandie) ne tient plus
+   à côté du menu. */
+@media(max-width:1380px){
 .adv-prepa-wrap{background:transparent;border:0;border-radius:0;max-height:none;overflow:visible}
 .adv-prepa-table,.adv-prepa-table tbody{display:block}
 .adv-prepa-table thead{display:none}
@@ -260,6 +323,9 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-pl .c-quand{grid-column:4}
 .adv-pl .c-empl{grid-column:2/5}
 .adv-ongl-btn{padding:7px 11px;font-size:13px}
+/* Police agrandie partout, sauf sur téléphone où trois chiffres se partagent la largeur. */
+.adv-prepa-table tbody tr.adv-pl td{font-size:13.5px}
+.adv-prepa-table tbody tr.adv-pl td.c-cde,.adv-prepa-table tbody tr.adv-pl td.c-ref{font-size:12px}
 .adv-ongl-btn.histo{margin-left:0}
 }
 .adv-empl{display:flex;gap:5px;flex-wrap:wrap}

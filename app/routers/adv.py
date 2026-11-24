@@ -15,6 +15,7 @@ dans `rvgi_rattachements` : l'id du miroir change à chaque synchro.
 import json
 import re
 import time
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -190,6 +191,46 @@ def marquer_urgente(numero: str, ligne: int, body: UrgenceIn, request: Request):
                objet="Préparation %s-L%d · %s" % (numero, ligne, "marquée urgente" if body.urgente else "urgence retirée"),
                request=request)
     return {"ok": True, "urgente": bool(body.urgente)}
+
+
+class JourPrepaIn(BaseModel):
+    jour: Optional[str] = None          # « AAAA-MM-JJ » ; None : jour calculé
+
+
+_RE_JOUR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+@router.put("/api/adv/prepa/jour/{numero}/{ligne}")
+def fixer_jour_prepa(numero: str, ligne: int, body: JourPrepaIn, request: Request):
+    """Planning de prépa : l'ADV déplace une préparation sur un autre jour."""
+    user = _exiger(request, ROLES_ADV)
+    numero, ligne = _cle(numero, ligne)
+    jour = (body.jour or "").strip() or None
+    if jour:
+        try:
+            if not _RE_JOUR.match(jour):
+                raise ValueError
+            date.fromisoformat(jour)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Jour invalide — format AAAA-MM-JJ.")
+        if jour < adv.aujourdhui_paris().isoformat():
+            raise HTTPException(status_code=400, detail="Jour passé — une préparation se planifie à partir d'aujourd'hui.")
+    with get_db() as conn:
+        avant = conn.execute("SELECT jour FROM adv_prepa_jours WHERE numero=? AND ligne=?",
+                             (numero, ligne)).fetchone()
+        if jour:
+            conn.execute("""
+                INSERT INTO adv_prepa_jours (numero, ligne, jour, maj_le, maj_par) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(numero, ligne) DO UPDATE SET jour=excluded.jour, maj_le=excluded.maj_le, maj_par=excluded.maj_par
+            """, (numero, ligne, jour, adv.maintenant(), _nom(user)))
+        else:
+            conn.execute("DELETE FROM adv_prepa_jours WHERE numero=? AND ligne=?", (numero, ligne))
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="adv",
+               objet="Préparation %s-L%d · jour %s" % (numero, ligne, jour or "calculé"),
+               detail={"avant": avant["jour"] if avant else None, "apres": jour},
+               request=request)
+    return {"ok": True, "jour": jour}
 
 
 @router.put("/api/adv/prepa/ordre")

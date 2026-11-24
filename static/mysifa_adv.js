@@ -27,7 +27,15 @@
   var ONGLETS = DROITS.adv ? ['commandes', 'prepa'] : ['prepa'];
   var FILTRES = ['tous', 'retard', 'semaine', 'pretes'].concat(ETAPES.map(function (e) { return 'etape_' + e.cle; }));
   var TRIS = ['commande', 'client', 'article', 'qte', 'stock', 'a_fabriquer', 'expedition', 'livraison', 'fin_prod'];
-  var HORIZONS = [7, 14, 21, 30];
+  // Vue du planning de prépa (mêmes clés que le planning machine) ; elle fixe
+  // aussi jusqu'où lire les préparations, en jours.
+  var VUES_PREPA = {
+    '1w': {sem: 1, jours: 14, lib: 'Semaine'},
+    '2w': {sem: 2, jours: 21, lib: '2 semaines'},
+    '4w': {sem: 4, jours: 35, lib: '4 semaines'}
+  };
+  // Anciennes adresses en jours (`horizon=7`…) : la vue la plus proche.
+  var VUE_DES_JOURS = {7: '1w', 14: '1w', 21: '2w', 30: '4w'};
   var GROUPES = ['tous', 'preparable', 'en_cours', 'partiel', 'attente', 'pretes'];
   var HISTO_JOURS = [7, 30, 90];         // mêmes valeurs que adv.HISTORIQUE_JOURS
   // Onglets de la Prépa : un groupe (ou deux) par onglet, puis l'historique.
@@ -52,8 +60,12 @@
     colDrag: null,
     ficheEtape: null,            // étape dépliée pour correction dans la fiche
     prepaDrag: null,             // préparation en cours de déplacement
-    horizon: BOOT.horizon || 21,
+    horizon: 21,                 // jours lus, suivant la vue (VUES_PREPA)
     groupe: 'preparable',        // onglet de la Prépa (voir ONGLETS_PREPA)
+    jour: null,                  // jour du planning de prépa : null = aujourd'hui, 'tous', ou AAAA-MM-JJ
+    vue: '2w',                   // planning de prépa : '1w', '2w', '4w'
+    semaine: null,               // lundi de la première semaine affichée (null : la semaine en cours)
+    friseDrag: null,             // préparation glissée dans la frise
     sous: null,                  // 'historique' : les préparations déjà faites
     histoJours: 30,
     historique: null,
@@ -185,13 +197,18 @@
     if (t || complet) S.tri = t || 'expedition';
     var s = u.get('sens', null, ['asc', 'desc']);
     if (s || complet) S.sens = s || 'asc';
-    var hz = parseInt(u.get('horizon', ''), 10);
-    if (HORIZONS.indexOf(hz) !== -1) S.horizon = hz; else if (complet) S.horizon = BOOT.horizon || 21;
+    var hz = u.get('horizon', null);
+    var vue = VUES_PREPA[hz] ? hz : VUE_DES_JOURS[parseInt(hz, 10)];
+    if (vue || complet) { S.vue = vue || '2w'; S.horizon = VUES_PREPA[S.vue].jours; }
+    var sem = u.get('semaine', null);
+    if (sem || complet) S.semaine = /^\d{4}-\d{2}-\d{2}$/.test(sem || '') ? lundiDe(sem) : null;
     var g = u.get('groupe', null, GROUPES);
     if (g || complet) S.groupe = ONGLET_DU_GROUPE[g] || 'preparable';
     S.sous = S.onglet === 'prepa' && u.get('sous', null, ['historique']) ? 'historique' : null;
     var pe = u.get('periode', null, HISTO_JOURS.map(function (n) { return 'last' + n; }));
     if (pe || complet) S.histoJours = pe ? parseInt(pe.slice(4), 10) : 30;
+    var jr = u.get('jour', null);
+    if (jr || complet) S.jour = jr === 'tous' || /^\d{4}-\d{2}-\d{2}$/.test(jr || '') ? jr : null;
     var l = u.get('ligne', null);
     S.ligne = (l && /^\d{1,12}-\d{1,4}$/.test(l)) ? l : null;
     S.reglages = (DROITS.adv && S.onglet === 'commandes' && !S.ligne)
@@ -205,11 +222,15 @@
       if (S.tri !== 'expedition') p.tri = S.tri;
       if (S.sens !== 'asc') p.sens = S.sens;
     } else {
-      if (S.horizon !== (BOOT.horizon || 21)) p.horizon = String(S.horizon);
+      if (S.vue !== '2w') p.horizon = S.vue;
+      if (S.semaine && !S.sous) p.semaine = S.semaine;
       if (S.sous) {
         p.sous = S.sous;
         if (S.histoJours !== 30) p.periode = 'last' + S.histoJours;
-      } else if (S.groupe !== 'preparable') p.groupe = S.groupe;
+      } else {
+        if (S.groupe !== 'preparable') p.groupe = S.groupe;
+        if (S.jour) p.jour = S.jour;
+      }
     }
     if (S.ligne) p.ligne = S.ligne;
     else if (S.reglages) p.reglages = S.reglages;
@@ -286,6 +307,7 @@
       renderCommandes(c);
     } else {
       renderPrepa(c);
+      ajusterBlocsFrise();          // la page est en place : les blocs ont leur largeur
     }
     if (focus) {
       var q = document.getElementById('adv-q');
@@ -883,8 +905,11 @@
       var g = groupes.find(function (x) { return x.cle === cle; });
       return g ? g.lignes : 0;
     };
+    var jour = jourActif();
     var nb = function (o) {
-      return groupes ? o.groupes.reduce(function (s, g) { return s + n(g); }, 0) : null;
+      if (!groupes) return null;
+      if (jour) return (S.prepa.lignes || []).filter(function (l) { return o.groupes.indexOf(l.groupe) !== -1 && duJour(l, jour); }).length;
+      return o.groupes.reduce(function (s, g) { return s + n(g); }, 0);
     };
     var bouton = function (cle, lib, compte, actif, onClick, cls) {
       return h('button', {type: 'button', className: 'adv-ongl-btn' + (cls ? ' ' + cls : '') + (actif ? ' active' : ''),
@@ -961,10 +986,201 @@
         corps)));
   }
 
+  /* ── Planning de prépa : la frise des semaines, comme le planning machine ── */
+
+  var JOURS_COURTS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  var JOURS_LONGS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  function isoJour(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function dateIso(iso) { var p = String(iso).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function decaler(iso, n) { var d = dateIso(iso); d.setDate(d.getDate() + n); return isoJour(d); }
+  function lundiDe(iso) { var d = dateIso(iso); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return isoJour(d); }
+  function numSemaine(iso) {
+    var d = dateIso(iso);
+    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+    var j4 = new Date(d.getFullYear(), 0, 4);
+    return 1 + Math.round(((d - j4) / 86400000 - 3 + (j4.getDay() + 6) % 7) / 7);
+  }
+  function jourCourt(iso) { var d = dateIso(iso); return JOURS_COURTS[d.getDay()] + ' ' + dateFr(iso).slice(0, 5); }
+  function jourLong(iso) { var d = dateIso(iso); return JOURS_LONGS[d.getDay()] + ' ' + dateFr(iso).slice(0, 5); }
+  // Aujourd'hui selon le serveur (heure de Paris), à défaut selon le poste.
+  function aujourdhuiPrepa() { return (S.prepa && S.prepa.aujourdhui) || isoJour(new Date()); }
+  // Le jour dont le tableau montre les préparations — null : tous les jours.
+  function jourActif() { return S.jour === 'tous' ? null : (S.jour || aujourdhuiPrepa()); }
+  // Une préparation à faire ce jour-là (les prêtes comptent : c'est le travail du jour).
+  function duJour(l, jour) { return !jour || l.jour_prepa === jour; }
+  // Même client, même couleur, d'une semaine à l'autre : une des cinq teintes du thème.
+  function teinteClient(nom) {
+    var x = 0;
+    String(nom || '').split('').forEach(function (ch) { x = (x * 31 + ch.charCodeAt(0)) >>> 0; });
+    return 'c' + (1 + x % 5);
+  }
+
+  function choisirJour(jour) {
+    S.jour = jour === aujourdhuiPrepa() ? null : jour;
+    render();
+    var tw = document.querySelector('.adv-table-wrap');
+    if (tw) tw.scrollTop = 0;
+  }
+
+  async function deplacerJour(cle, jour) {
+    var l = ligneParCle(cle);
+    if (!l || l.jour_prepa === jour) return;
+    try {
+      await api('/api/adv/prepa/jour/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {jour: jour}});
+      var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
+      await charger(); S.carnet = null; render();
+      var tw = document.querySelector('.adv-table-wrap');
+      if (tw && yt) tw.scrollTop = yt;
+      toast('Préparation ' + l.numero + '-L' + l.ligne + ' déplacée au ' + jourLong(jour) + '.');
+    } catch (e) { toast(e.message, 'danger'); }
+  }
+
+  var SOURCES_JOUR = {
+    manuel: function (l) { return 'Jour fixé à la main' + (l.jour_manuel_par ? ' par ' + l.jour_manuel_par : ''); },
+    enlevement: function () { return 'Veille de l’enlèvement prévu dans MyExpé'; },
+    expedition: function () { return 'Veille de l’expédition'; }
+  };
+
+  // Une préparation dans la frise, comme un dossier du planning machine :
+  // client en gros, quantité et référence, date d'expédition ; le reste au
+  // survol. Trop étroit, le bloc ne garde que le client, à la verticale.
+  function blocFrise(l) {
+    var cls = 'pf-bloc ' + teinteClient(l.client) + (l.groupe === 'pretes' ? ' faite' : l.groupe === 'partiel' ? ' partiel' : '')
+      + (l.urgence ? ' urgente' : '');
+    var etat = l.groupe === 'pretes' ? 'Prête' : l.groupe === 'partiel' ? 'Stock partiel'
+      : l.groupe === 'en_cours' ? 'En cours de préparation' : 'À préparer';
+    var b = h('div', {className: cls, 'data-cle': l.cle,
+      'data-tip': tip(l.cle + '|pf', l.client,
+        l.numero + '-L' + l.ligne + ' · ' + l.article + ' · ' + qteU(l, l.reste) + '\n' + etat
+          + (l.expedition ? ' · expédition ' + dateFr(l.expedition) : '') + (l.urgence ? '\n' + l.urgence : ''),
+        (SOURCES_JOUR[l.jour_source] ? SOURCES_JOUR[l.jour_source](l) : '')
+          + (DROITS.adv && l.groupe !== 'pretes' ? ' · glisser sur un autre jour pour la déplacer' : '')),
+      onClick: function () { ouvrirFiche(l.cle); }},
+      h('div', {className: 'pf-cli', text: l.client}),
+      h('div', {className: 'pf-l2', text: qteU(l, l.reste) + ' · ' + l.article}),
+      h('div', {className: 'pf-l3' + (l.retard ? ' retard' : ''), text: l.expedition ? 'à expédier le ' + dateFr(l.expedition).slice(0, 5) : 'expédition non datée'}),
+      l.urgence ? h('div', {className: 'pf-badge', text: 'Urgente'})
+        : l.groupe === 'partiel' ? h('div', {className: 'pf-badge partiel', text: 'Stock partiel'})
+        : l.groupe === 'pretes' ? h('div', {className: 'pf-badge faite', text: 'Prête'}) : null);
+    if (DROITS.adv && l.groupe !== 'pretes') {
+      b.setAttribute('draggable', 'true');
+      b.addEventListener('dragstart', function (ev) {
+        S.friseDrag = l.cle;
+        b.classList.add('attrapee');
+        try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', l.cle); } catch (e) {}
+      });
+      b.addEventListener('dragend', function () {
+        S.friseDrag = null;
+        b.classList.remove('attrapee');
+        document.querySelectorAll('.pf-seg.cible').forEach(function (x) { x.classList.remove('cible'); });
+      });
+    }
+    return b;
+  }
+
+  // Une semaine : son titre, une ligne d'en-têtes de jour, puis une barre où
+  // chaque jour est un segment et chaque préparation un bloc. En-têtes et
+  // segments se partagent la largeur de la même façon : ils tombent l'un
+  // sous l'autre.
+  function semaineFrise(lundi, lignes, auj, actif) {
+    var jours = [];
+    for (var i = 0; i < 7; i++) {
+      var j = decaler(lundi, i);
+      var ls = lignes.filter(function (l) { return l.jour_prepa === j; });
+      if (i < 5 || ls.length) jours.push({jour: j, lignes: ls});
+    }
+    var etat = function (x) {
+      return (x.jour === auj ? ' today' : '') + (x.jour === actif ? ' choisi' : '') + (x.jour < auj ? ' passe' : '');
+    };
+    var entetes = h('div', {className: 'pf-jours'}, jours.map(function (x) {
+      var aFaire = x.lignes.filter(function (l) { return l.groupe !== 'pretes'; }).length;
+      return h('button', {type: 'button', className: 'pf-jh' + etat(x), disabled: x.jour < auj,
+        'aria-pressed': x.jour === actif ? 'true' : 'false',
+        onClick: function () { choisirJour(x.jour === actif ? auj : x.jour); }},
+        h('span', {className: 'pf-jh-lib', text: jourCourt(x.jour)}),
+        h('span', {className: 'pf-jh-n', text: aFaire ? aFaire + ' à faire' : x.lignes.length ? 'fait' : '—'}));
+    }));
+    var barre = h('div', {className: 'pf-barre'}, jours.map(function (x) {
+      var seg = h('div', {className: 'pf-seg' + etat(x), 'data-jour': x.jour}, x.lignes.map(blocFrise));
+      if (DROITS.adv && x.jour >= auj) {
+        seg.addEventListener('dragover', function (ev) {
+          if (!(S.friseDrag || S.prepaDrag)) return;
+          ev.preventDefault();
+          seg.classList.add('cible');
+        });
+        seg.addEventListener('dragleave', function (ev) { if (!seg.contains(ev.relatedTarget)) seg.classList.remove('cible'); });
+        seg.addEventListener('drop', function (ev) {
+          var cle = S.friseDrag || (S.prepaDrag && S.prepaDrag.cle);
+          seg.classList.remove('cible');
+          if (!cle) return;
+          ev.preventDefault();
+          S.friseDrag = null; S.prepaDrag = null;
+          deplacerJour(cle, x.jour);
+        });
+      }
+      return seg;
+    }));
+    return h('div', {className: 'pf-semaine'},
+      h('div', {className: 'pf-sem' + (lundi === lundiDe(auj) ? ' courante' : ''),
+        text: 'S' + numSemaine(lundi) + ' — ' + dateFr(lundi).slice(0, 5) + ' au ' + dateFr(decaler(lundi, 4)).slice(0, 5)}),
+      entetes, barre);
+  }
+
+  // Le planning de prépa : une, deux ou quatre semaines, comme le planning
+  // machine. Un clic sur un jour filtre le tableau ; l'ADV glisse une
+  // préparation (de la frise ou du tableau) sur un autre jour pour la déplacer.
+  function frisePrepa(c, d) {
+    var auj = aujourdhuiPrepa();
+    var actif = jourActif();
+    var courant = lundiDe(auj);
+    var lundi0 = S.semaine && S.semaine > courant ? S.semaine : courant;
+    var lignes = (d.lignes || []).filter(function (l) { return l.jour_prepa && l.groupe !== 'attente'; });
+    var sansDate = (d.lignes || []).filter(function (l) { return !l.jour_prepa && l.groupe !== 'attente' && l.groupe !== 'pretes'; }).length;
+    var vue = VUES_PREPA[S.vue];
+    var changerVue = async function (v) { S.vue = v; S.horizon = VUES_PREPA[v].jours; S.charge = false; render(); await charger(); render(); };
+    var aller = function (lundi) { S.semaine = lundi > courant ? lundi : null; render(); };
+    var outils = h('div', {className: 'pf-tete'},
+      h('div', {className: 'pf-titre', text: 'Planning de prépa'}),
+      h('span', {className: 'pf-espace'}),
+      sansDate ? h('span', {className: 'pf-sans-date', text: sansDate + ' sans date d’expédition'}) : null,
+      h('div', {className: 'pf-groupe'}, Object.keys(VUES_PREPA).map(function (v) {
+        return h('button', {type: 'button', className: 'pf-gbtn' + (S.vue === v ? ' active' : ''), onClick: function () { if (S.vue !== v) changerVue(v); }},
+          VUES_PREPA[v].lib);
+      })),
+      h('div', {className: 'pf-groupe'},
+        h('button', {type: 'button', className: 'pf-gbtn', 'aria-label': 'Semaine précédente', disabled: lundi0 <= courant,
+          onClick: function () { aller(decaler(lundi0, -7)); }}, '◀'),
+        h('button', {type: 'button', className: 'pf-gbtn' + (lundi0 === courant ? ' active' : ''), onClick: function () { aller(courant); }}, 'actuelle'),
+        h('button', {type: 'button', className: 'pf-gbtn', 'aria-label': 'Semaine suivante', onClick: function () { aller(decaler(lundi0, 7)); }}, '▶')),
+      h('button', {type: 'button', className: 'adv-puce' + (actif ? '' : ' active'),
+        onClick: function () { S.jour = actif ? 'tous' : null; render(); }}, 'Tous les jours'));
+    var semaines = [];
+    for (var w = 0; w < vue.sem; w++) semaines.push(semaineFrise(decaler(lundi0, 7 * w), lignes, auj, actif));
+    c.appendChild(h('div', {className: 'pf'}, outils, semaines));
+  }
+
+  // Un bloc trop étroit ne garde que le client, à la verticale (comme le
+  // planning machine). La largeur dépend de l'écran : on la mesure.
+  function ajusterBlocsFrise() {
+    document.querySelectorAll('.pf-bloc').forEach(function (b) { b.classList.toggle('etroit', b.clientWidth < 92); });
+  }
+  var _ajusteFrise = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(_ajusteFrise);
+    _ajusteFrise = setTimeout(ajusterBlocsFrise, 120);
+  });
+
   var VIDES_PREPA = {
     preparable: 'Rien à préparer sur les %n prochains jours.',
     partiel: 'Aucune ligne en stock partiel sur les %n prochains jours.',
     pretes: 'Aucune préparation prête en attente de départ.'
+  };
+  var VIDES_JOUR = {
+    preparable: 'Rien à préparer le %j.',
+    partiel: 'Aucune ligne en stock partiel le %j.',
+    pretes: 'Aucune préparation prête le %j.'
   };
 
   function renderPrepa(c) {
@@ -975,11 +1191,7 @@
           return h('button', {type: 'button', className: 'adv-puce' + (S.histoJours === n ? ' active' : ''),
             onClick: async function () { S.histoJours = n; S.charge = false; render(); await charger(); render(); }}, n + ' jours');
         }))]
-      : [h('div', {className: 'adv-puces'}, HORIZONS.map(function (n) {
-          return h('button', {type: 'button', className: 'adv-puce' + (S.horizon === n ? ' active' : ''),
-            onClick: async function () { S.horizon = n; S.charge = false; render(); await charger(); render(); }}, n + ' jours');
-        })),
-        DROITS.adv && d.ordre_manuel ? h('button', {type: 'button', className: 'btn btn-petit',
+      : [DROITS.adv && d.ordre_manuel ? h('button', {type: 'button', className: 'btn btn-petit',
           'data-tip': tip('btn-ordre-auto', 'Revenir à l’ordre automatique', 'Retire tous les rangs fixés à la main : la Prépa se range de nouveau par date d’expédition.'),
           onClick: async function () {
             try {
@@ -997,14 +1209,17 @@
         h('button', {type: 'button', className: 'btn btn-petit', onClick: async function () {
           await charger(); render(); toast(histo ? 'Historique actualisé.' : 'Préparations actualisées.');
         }}, 'Actualiser'))));
+    if (!histo && d.lignes) frisePrepa(c, d);
     ongletsPrepa(c);
     if (avertissements(c, d)) return;
     if (histo) { tableHistorique(c, d); return; }
 
     var onglet = ONGLETS_PREPA.find(function (o) { return o.cle === S.groupe; }) || ONGLETS_PREPA[0];
-    var ls = (d.lignes || []).filter(function (l) { return onglet.groupes.indexOf(l.groupe) !== -1; });
+    var jour = jourActif();
+    var ls = (d.lignes || []).filter(function (l) { return onglet.groupes.indexOf(l.groupe) !== -1 && duJour(l, jour); });
     if (!ls.length) {
-      c.appendChild(h('div', {className: 'adv-vide', text: VIDES_PREPA[onglet.cle].replace('%n', S.horizon)}));
+      c.appendChild(h('div', {className: 'adv-vide', text: jour ? VIDES_JOUR[onglet.cle].replace('%j', jourLong(jour))
+        : VIDES_PREPA[onglet.cle].replace('%n', S.horizon)}));
       return;
     }
     // Le rang suit l'ordre de travail dans l'onglet ; une prépa prête n'en a pas.

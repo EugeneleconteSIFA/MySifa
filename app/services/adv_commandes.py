@@ -459,6 +459,14 @@ def _urgences(conn) -> Dict[str, Dict[str, Any]]:
             for r in _lignes(conn, "SELECT * FROM mysifa.adv_urgences")}
 
 
+def _jours_prepa(conn) -> Dict[str, Dict[str, Any]]:
+    """Jour de préparation fixé à la main par l'ADV dans le planning de prépa."""
+    if not _table(conn, "adv_prepa_jours"):
+        return {}
+    return {cle_ligne(r["numero"], r["ligne"]): r
+            for r in _lignes(conn, "SELECT * FROM mysifa.adv_prepa_jours")}
+
+
 def _forcages(conn) -> Dict[str, Dict[str, Dict[str, Any]]]:
     out: Dict[str, Dict[str, Dict[str, Any]]] = {}
     if not _table(conn, "adv_forcages"):
@@ -764,6 +772,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         prepas = _prepas(conn)
         priorites = _priorites(conn)
         urgences = _urgences(conn)
+        jours_prepa = _jours_prepa(conn)
         repiquages_adv = _repiquages(conn)
         forcages = _forcages(conn)
 
@@ -773,6 +782,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         p = prepas.get(cle)
         pr = priorites.get(cle)
         ur = urgences.get(cle)
+        jp = jours_prepa.get(cle)
         l = {
             "cle": cle,
             "numero": str(b["numero"]),
@@ -802,6 +812,8 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "urgente_manuelle": bool(ur),
             "urgente_par": (ur or {}).get("maj_par"),
             "urgente_le": (ur or {}).get("maj_le"),
+            "jour_manuel": (jp or {}).get("jour"),
+            "jour_manuel_par": (jp or {}).get("maj_par"),
         }
         lignes.append(l)
 
@@ -1002,6 +1014,36 @@ def badges(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "retard": c["retard"]["lignes"], "semaine": c["semaine"]["lignes"]}
 
 
+def jour_ouvre_avant(j: date) -> date:
+    """Le jour ouvré (lundi → vendredi) qui précède `j`."""
+    j -= timedelta(days=1)
+    while j.weekday() >= 5:
+        j -= timedelta(days=1)
+    return j
+
+
+def jour_prepa(l: Dict[str, Any], aujourdhui: date) -> Tuple[Optional[str], str]:
+    """Le jour où préparer la ligne, et d'où il vient.
+
+    Fixé à la main par l'ADV (planning de prépa), sinon le jour ouvré qui
+    précède le prochain enlèvement MyExpé, sinon celui qui précède
+    l'expédition. Ce qui tombe avant aujourd'hui — retard, ou jour fixé
+    dépassé — se fait aujourd'hui. Sans aucune date : None.
+    """
+    j = aujourdhui.isoformat()
+    if l.get("jour_manuel"):
+        return max(l["jour_manuel"], j), "manuel"
+    enlev = sorted(d["date_enlevement"] for d in (l.get("departs") or [])
+                   if d.get("date_enlevement") and not d.get("parti_le") and d["date_enlevement"] >= j)
+    if enlev:
+        base, source = enlev[0], "enlevement"
+    elif l.get("expedition"):
+        base, source = l["expedition"], "expedition"
+    else:
+        return None, "sans_date"
+    return max(jour_ouvre_avant(date.fromisoformat(base)).isoformat(), j), source
+
+
 def prepa(aujourdhui: Optional[date] = None, horizon: Optional[int] = None) -> Dict[str, Any]:
     """Les préparations à faire, dans l'ordre où les faire."""
     base = construire(aujourdhui)
@@ -1016,11 +1058,12 @@ def prepa(aujourdhui: Optional[date] = None, horizon: Optional[int] = None) -> D
         # Ce qui est engagé, ou placé à la main par l'ADV, reste visible quelle
         # que soit la date ; le reste suit l'horizon.
         if (g not in ("en_cours", "pretes") and l["priorite_manuelle"] is None
-                and not l["urgente_manuelle"]
+                and not l["urgente_manuelle"] and not l.get("jour_manuel")
                 and l["expedition"] and l["expedition"] > limite):
             continue
         l["groupe"] = g
         l["urgence"] = urgence(l, g, j)
+        l["jour_prepa"], l["jour_source"] = jour_prepa(l, j)
         lignes.append(l)
     # L'ordre fixé par l'ADV d'abord, puis les lignes marquées urgentes, puis
     # la date d'expédition.
