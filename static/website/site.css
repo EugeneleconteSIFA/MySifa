@@ -309,7 +309,6 @@ p{margin:0}
 .eng .lg img{max-height:64px;max-width:100%;width:auto;object-fit:contain}
 .eng b{font-size:14.5px;display:block;font-weight:600}
 .eng span{font-size:13px;color:var(--text2);line-height:1.45}
-.eng .st{display:inline-block;align-self:flex-start;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;padding:2px 8px;background:rgba(251,191,36,.14);color:var(--amber)}
 .env-sub{display:flex;justify-content:space-between;align-items:end;gap:20px;margin:72px 0 22px;flex-wrap:wrap}
 .env-sub h3{font-size:26px}
 
@@ -566,3 +565,28 @@ p{margin:0}
 .legal-doc .prose ul+p,.legal-doc .prose p+ul{margin-top:14px}
 .legal-doc .prose a{color:var(--accent)}
 .legal-doc .prose .maj{margin-top:40px;font-size:14px;color:var(--muted)}
+/* Schéma : bobine en coupe (page Produits) */
+:root{--mandrin:#B98B5E}
+.coupe{display:grid;grid-template-columns:1fr 1.1fr;gap:20px;align-items:stretch;margin:6px 0 34px}
+.coupe figure{margin:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 14px;box-shadow:var(--sh);display:flex;flex-direction:column;justify-content:space-between}
+.coupe svg{width:100%;height:auto;display:block;font-family:var(--font-text);overflow:visible}
+.coupe figcaption{font-size:13px;color:var(--muted);margin-top:10px;letter-spacing:.02em}
+.coupe .t{fill:var(--text);font-size:14px;font-weight:600}
+.coupe .s{fill:var(--muted);font-size:12px}
+.coupe .ld{stroke:var(--muted);stroke-width:1;fill:none}
+.coupe .dot{fill:var(--muted)}
+.coupe .cote{stroke:var(--text2);stroke-width:1;fill:none}
+.coupe .rappel{stroke:var(--border2);stroke-width:1;stroke-dasharray:3 3;fill:none}
+.coupe .loupe{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:4 3}
+.coupe .c-mand{fill:var(--mandrin)}
+.coupe .c-vide{fill:var(--card);stroke:var(--border2)}
+.coupe .r-sup{fill:none;stroke:var(--support);stroke-width:2.2}
+.coupe .r-fr{fill:none;stroke:var(--frontal);stroke-width:4.1}
+.coupe .f-sup{fill:var(--support)}
+.coupe .f-fr{fill:var(--frontal);stroke:var(--border2);stroke-width:.6}
+.coupe .f-fr2{fill:var(--frontal);stroke:var(--border2)}
+.coupe .f-ver{fill:var(--accent-bg);stroke:var(--accent);stroke-width:.8}
+.coupe .f-adh{fill:var(--adhesif)}
+.coupe .f-sil{fill:var(--silicone)}
+.coupe .imp-c{fill:var(--cmy-c)}.coupe .imp-m{fill:var(--cmy-m)}.coupe .imp-y{fill:var(--cmy-y)}.coupe .imp-k{fill:var(--cmy-k)}
+@media (max-width:860px){.coupe{grid-template-columns:1fr}}

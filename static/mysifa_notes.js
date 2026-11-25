@@ -370,6 +370,7 @@
     var chemin = ancetres(n).map(titre).join(' / ');
     if (n.partagee && n.racine_partage) chemin = 'Partagée par ' + (n.proprietaire || 'un collègue');
     return '<button type="button" class="nt-carte" data-id="' + n.id + '">' +
+      (!n.partagee ? '<span class="nt-carte-suppr" role="button" tabindex="0" data-act="suppr-carte" title="Mettre à la corbeille" aria-label="Mettre à la corbeille">' + ICONE_CORBEILLE + '</span>' : '') +
       '<span class="nt-carte-titre">' + esc(titre(n)) + '</span>' +
       (chemin ? '<span class="nt-carte-chemin">' + esc(chemin) + '</span>' : '') +
       '<span class="nt-carte-extrait">' + (n.extrait ? esc(n.extrait) : '<em>Note vide</em>') + '</span>' +
@@ -1080,6 +1081,12 @@
       if (act === 'quitter') return quitterPartage();
       if (act === 'sous' && S.courante) return creerNote(S.courante.id);
       if (act === 'supprimer' && S.courante) return supprimer(S.courante.id);
+      if (act === 'suppr-carte') {
+        e.preventDefault();
+        e.stopPropagation();
+        var c = a.closest('.nt-carte');
+        return c && supprimer(Number(c.dataset.id));
+      }
       var ligne = e.target.closest('.nt-ligne');
       if (act === 'restaurer' && ligne) return restaurer(Number(ligne.dataset.id));
       if (act === 'purger' && ligne) return purger(Number(ligne.dataset.id));

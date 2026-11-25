@@ -90,6 +90,12 @@ html body .msb-nav .nav-btn.nt-nouvelle:hover{filter:brightness(1.08)}
 .nt-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-width:1080px;margin:0 auto}
 .nt-carte{display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px 15px;min-height:132px;background:var(--card);border:1px solid var(--border);border-radius:12px;color:var(--text);cursor:pointer;font-family:inherit;transition:border-color .15s,transform .15s}
 .nt-carte:hover{border-color:var(--accent);transform:translateY(-1px)}
+.nt-carte{position:relative}
+.nt-carte-suppr{position:absolute;top:8px;right:8px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;color:var(--muted);opacity:0;transition:opacity .15s,color .15s,background .15s}
+.nt-carte:hover .nt-carte-suppr,.nt-carte:focus-within .nt-carte-suppr,.nt-carte-suppr:focus{opacity:1}
+.nt-carte-suppr:hover{color:var(--danger);background:var(--danger-bg,var(--bg))}
+.nt-carte:has(.nt-carte-suppr) .nt-carte-titre{padding-right:26px}
+@media (hover:none){.nt-carte-suppr{opacity:1}}
 .nt-carte-titre{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nt-carte-chemin{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nt-carte-extrait{font-size:12.5px;color:var(--text2);line-height:1.45;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}

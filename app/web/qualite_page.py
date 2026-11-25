@@ -3436,6 +3436,25 @@ function _sdToggleSections(){
   }
 }
 
+// Inclusion d'une section dans le PDF, à l'image de _skipped côté serveur :
+// une section « defaut_exclue » (Contact alimentaire) n'entre que cochée
+// (include === true) ; une sous-section suit son parent.
+function _sdSecIncluse(s, ov){
+  const o = ov[s.id] || {};
+  if(s.removable){
+    if(s.defaut_exclue ? o.include !== true : o.include === false) return false;
+  }
+  if(s.parent){
+    const p = (S._sifaGen.sections||[]).find(x => x.id === s.parent);
+    if(p) return _sdSecIncluse(p, ov);
+  }
+  return true;
+}
+function _sdSecModifiee(s, ov){
+  const o = ov[s.id] || {};
+  return o.include === false || o.include === true || !!o.custom_body;
+}
+
 function _sdRenderSections(){
   if(!S._sifaGen) return;
   const list = document.getElementById('sd-sec-list');
@@ -3444,11 +3463,7 @@ function _sdRenderSections(){
   const ov = S._sifaGen.sections_overrides || {};
   // Compter modifs
   let modifs = 0;
-  sections.forEach(s => {
-    const o = ov[s.id] || {};
-    if(o.include === false) modifs++;
-    else if(o.custom_body) modifs++;
-  });
+  sections.forEach(s => { if(_sdSecModifiee(s, ov)) modifs++; });
   if(count) count.textContent = modifs ? `— ${modifs} personnalisation${modifs>1?'s':''}` : '';
   if(!list) return;
   if(!sections.length){
@@ -3457,7 +3472,7 @@ function _sdRenderSections(){
   }
   list.innerHTML = sections.map(s => {
     const o = ov[s.id] || {};
-    const included = o.include !== false;
+    const included = _sdSecIncluse(s, ov);
     const hasCustom = !!(o.custom_body && String(o.custom_body).trim());
     const bodyVal = hasCustom ? o.custom_body : (s.default_body || '');
     const flags = [];
@@ -3466,7 +3481,7 @@ function _sdRenderSections(){
     return `<div class="sd-sec-item ${included?'':'excluded'}" id="sd-sec-${escAttr(s.id)}">
       <div class="sd-sec-hd">
         <label class="sd-sec-chk ${s.removable?'':'disabled'}">
-          <input type="checkbox" ${included?'checked':''} ${s.removable?'':'disabled'} onchange="_sdSecToggle('${escAttr(s.id)}', this.checked)">
+          <input type="checkbox" ${(s.removable ? included : true)?'checked':''} ${s.removable?'':'disabled'} onchange="_sdSecToggle('${escAttr(s.id)}', this.checked)">
           <span class="sd-sec-title">${escHtml(s.title)}</span>
         </label>
         <div class="sd-sec-flags">${flags.join('')}</div>
@@ -3487,10 +3502,12 @@ function _sdSecToggle(secId, included){
   if(!S._sifaGen) return;
   if(!S._sifaGen.sections_overrides) S._sifaGen.sections_overrides = {};
   const o = S._sifaGen.sections_overrides[secId] || {};
-  if(included){
+  const sec = (S._sifaGen.sections||[]).find(s => s.id === secId);
+  const exclueParDefaut = !!(sec && sec.defaut_exclue);
+  if(included === !exclueParDefaut){
     delete o.include;
   } else {
-    o.include = false;
+    o.include = included;
   }
   if(Object.keys(o).length === 0){
     delete S._sifaGen.sections_overrides[secId];
@@ -3528,11 +3545,8 @@ function _sdSecBody(secId, txt){
     const count = document.getElementById('sd-sec-count');
     if(!count) return;
     let modifs = 0;
-    (S._sifaGen.sections||[]).forEach(s => {
-      const oo = (S._sifaGen.sections_overrides||{})[s.id] || {};
-      if(oo.include === false) modifs++;
-      else if(oo.custom_body) modifs++;
-    });
+    const ovc = S._sifaGen.sections_overrides || {};
+    (S._sifaGen.sections||[]).forEach(s => { if(_sdSecModifiee(s, ovc)) modifs++; });
     count.textContent = modifs ? `— ${modifs} personnalisation${modifs>1?'s':''}` : '';
     // Marquer le bouton édité
     const btn = document.querySelector('#sd-sec-'+secId+' .sd-sec-edit-btn');
