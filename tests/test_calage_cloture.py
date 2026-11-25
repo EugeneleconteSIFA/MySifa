@@ -449,6 +449,35 @@ class TestCalageCloture(unittest.TestCase):
         self.assertEqual(a["rows"][a["debut"]]["id"], s02)
         self.assertNotIn(s02_annule, [r["id"] for r in a["rows"]])
 
+    # ── 10b. Un 89 suivi d'un autre dossier borne le passage ─────────────
+    def test_10b_reprise_apres_autre_dossier(self):
+        from app.services import calage_cloture
+        from database import get_db
+
+        # Premier passage, arrêté au 89 sans clôture ; un autre dossier tourne.
+        self._saisie("01", 0)
+        s02_ancien = self._saisie("02", 1)
+        self._saisie("03", 60)
+        self._saisie("89", 62)
+        self._saisie("01", 70, dossier="AUTRE-DOS")
+        self._saisie("89", 90, dossier="AUTRE-DOS")
+        # Reprise : calage, relève d'équipe (89 puis 01 du même dossier), production.
+        self._saisie("01", 120)
+        s02 = self._saisie("02", 121)
+        self._saisie("89", 170)
+        self._saisie("01", 171)
+        self._saisie("02", 172)
+        s03 = self._saisie("03", 245)
+        with get_db() as conn:
+            a = calage_cloture._analyser(conn, DOSSIER, MACHINE_NOM, datetime.now())
+            p = calage_cloture.proposer(conn, DOSSIER, MACHINE_NOM, datetime.now())
+        # Le calage proposé est celui de la reprise, relève comprise.
+        self.assertEqual(a["rows"][a["debut"]]["id"], s02)
+        self.assertEqual(a["rows"][a["fin"]]["id"], s03)
+        self.assertNotIn(s02_ancien, [r["id"] for r in a["rows"]])
+        self.assertEqual(p["debut_calage"], _iso(self.t0 + timedelta(minutes=121)))
+        self.assertEqual(p["fin_calage"], _iso(self.t0 + timedelta(minutes=245)))
+
     # ── 9. Objectifs devis du pied de page de la saisie ──────────────────
     def test_9_devis_saisie(self):
         from database import get_db
