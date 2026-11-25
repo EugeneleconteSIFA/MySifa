@@ -3968,7 +3968,7 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
             tpl_defaults = {}
         representant = (body.representant or "").strip() or None
         try:
-            from app.services.sifa_doc_pdf import build_template_pdf
+            from app.services.sifa_doc_pdf import build_template_pdf, SectionsIncompletes
             pdf_bytes = build_template_pdf(
                 template["code"],
                 client_nom=client_nom,
@@ -3980,6 +3980,8 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
                 template_default_overrides=tpl_defaults or None,
                 representant=representant,
             )
+        except SectionsIncompletes as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
 
@@ -4105,7 +4107,7 @@ def sifa_docs_edit_version(vid: int, body: SifaDocVersionEditBody, request: Requ
 
         fours = _fournisseurs_for_pdf(conn, body.fournisseurs_ids)
         try:
-            from app.services.sifa_doc_pdf import build_template_pdf
+            from app.services.sifa_doc_pdf import build_template_pdf, SectionsIncompletes
             pdf_bytes = build_template_pdf(
                 template["code"],
                 client_nom=client_nom,
@@ -4117,6 +4119,8 @@ def sifa_docs_edit_version(vid: int, body: SifaDocVersionEditBody, request: Requ
                 template_default_overrides=tpl_defaults or None,
                 representant=representant,
             )
+        except SectionsIncompletes as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
 
@@ -4195,7 +4199,7 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
                 representant_val = v["representant"]
             except Exception:
                 representant_val = None
-            from app.services.sifa_doc_pdf import build_template_pdf
+            from app.services.sifa_doc_pdf import build_template_pdf, SectionsIncompletes
             pdf_bytes = build_template_pdf(
                 template["code"],
                 client_nom=v["client_nom"],
@@ -4207,6 +4211,8 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
                 template_default_overrides=tpl_defaults or None,
                 representant=(representant_val or None),
             )
+        except SectionsIncompletes as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération : {e}")
 
@@ -4291,6 +4297,7 @@ def sifa_docs_preview_template(code: str, request: Request):
             date_emission_iso=_today(),
             validite_mois=int(template["validite_mois"] or 12),
             template_default_overrides=tpl_defaults or None,
+            brouillon=True,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur preview : {e}")
