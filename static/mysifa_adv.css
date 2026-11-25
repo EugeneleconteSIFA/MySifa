@@ -326,6 +326,7 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 /* Police agrandie partout, sauf sur téléphone où trois chiffres se partagent la largeur. */
 .adv-prepa-table tbody tr.adv-pl td{font-size:13.5px}
 .adv-prepa-table tbody tr.adv-pl td.c-cde,.adv-prepa-table tbody tr.adv-pl td.c-ref{font-size:12px}
+.adv-prepa-table tbody tr.adv-pl td.c-quand{font-size:12.5px}
 .adv-ongl-btn.histo{margin-left:0}
 }
 .adv-empl{display:flex;gap:5px;flex-wrap:wrap}
@@ -399,7 +400,7 @@ td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--
 .adv-modal .m-pied{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 
 /* ── Fiche d'une ligne ── */
-.adv-modal.adv-fiche{width:min(1020px,100%);padding:0;background:var(--bg)}
+.adv-modal.adv-fiche{width:min(860px,100%);padding:0;background:var(--bg)}
 .adv-fiche .fi-tete{display:flex;justify-content:space-between;gap:16px;padding:20px 22px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
 .adv-fiche .fi-titre{min-width:0}
 .adv-fiche h3{font-size:20px;font-weight:800;letter-spacing:-.2px}
@@ -411,8 +412,13 @@ td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--
 .adv-fiche .fi-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .adv-fiche .fi-chaine{margin:16px 22px 0}
 .adv-fiche h4{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:0 0 12px}
-.adv-fiche .fi-grille{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 22px 0}
-@media(max-width:760px){.adv-fiche .fi-grille{grid-template-columns:1fr}}
+/* Une seule colonne, l'essentiel en haut (préparation, puis la chaîne) :
+   deux colonnes débordaient dès qu'une puce longue (« Sortie prod · dossier
+   … ») imposait sa largeur. minmax(0,1fr) : aucun contenu n'élargit la fiche. */
+.adv-fiche .fi-grille{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:14px 22px 0}
+.adv-fiche .adv-sortie-prod{white-space:normal}
+.adv-fiche .fi-livrer{font-size:13.5px;line-height:1.45;color:var(--text)}
+.adv-fiche .fi-livrer div:first-child{font-weight:700}
 .adv-fiche .m-pied{padding:16px 22px 20px;margin-top:0;justify-content:space-between;align-items:center}
 
 /* Frise de la chaîne de valeur */
@@ -508,3 +514,52 @@ td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--
 .adv-histo-statut{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 8px;color:var(--text);font-size:12.5px;font-family:inherit;cursor:pointer}
 .adv-histo-statut:focus{outline:none;border-color:var(--accent)}
 .adv-histo-statut:disabled{opacity:.5;cursor:default}
+
+/* ── Envois : les lignes qui partent ensemble (Prépa) ── */
+.adv-prepa-table tbody tr.adv-envoi td{background:var(--bg)}
+.adv-prepa-table tbody tr.adv-envoi:hover td{background:var(--accent-bg)}
+.adv-prepa-table tbody tr.adv-envoi{cursor:pointer}
+.adv-envoi .adv-envoi-caret{display:inline-block;margin-left:4px;color:var(--text2);font-size:13px;transition:transform .15s}
+.adv-envoi.ouvert .adv-envoi-caret{transform:rotate(90deg)}
+.adv-envoi .adv-envoi-n{font-weight:700;color:var(--text2)}
+/* Ligne d'envoi sur fond gris : son bouton reprend le fond de carte. */
+.adv-envoi .btn{background:var(--card)}
+.adv-envoi .btn:hover{background:var(--accent-bg)}
+.adv-prepa-table tbody tr.adv-enfant td.c-client{padding-left:26px}
+.adv-prepa-table tbody tr.adv-enfant.replie{display:none !important}
+.adv-prepa-table tbody tr.adv-enfant td{border-bottom-style:dashed}
+@media(max-width:1380px){.adv-prepa-table tbody tr.adv-envoi{background:var(--bg)}
+.adv-prepa-table tbody tr.adv-enfant{border-left:3px solid var(--accent)}
+.adv-prepa-table tbody tr.adv-enfant td.c-client{padding-left:0}}
+
+/* ── Ordre d'expédition (aperçu imprimable) ── */
+.adv-modal.adv-ordre{width:min(900px,100%);padding:24px 26px}
+.od-tete{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid var(--text)}
+.od-org{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.adv-ordre h3{font-size:22px;font-weight:800;margin-top:2px}
+.od-date{font-size:15px;font-weight:700;margin-top:4px}
+.od-infos{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));gap:14px 18px;padding:16px 0;border-bottom:1px solid var(--border)}
+.od-l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.od-v{font-size:14px;font-weight:600}
+.od-rs{font-size:16px;font-weight:800}
+.od-adr{font-size:14px;line-height:1.45}
+@media(max-width:760px){.od-infos{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.od-dest{grid-column:1/-1}}
+.od-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
+.od-table th{text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:8px 8px;border-bottom:2px solid var(--border)}
+.od-table td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+.od-table .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700}
+.od-table .od-des{color:var(--text2)}
+.od-table .od-empl{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+.od-total{margin-top:12px;font-size:14px;font-weight:800;text-align:right}
+@media(max-width:640px){.od-table{font-size:12.5px}.od-table .od-des{display:none}}
+/* Impression : l'ordre seul, à plat, en noir sur blanc. */
+@media print{
+body>*:not(#mroot){display:none !important}
+#mroot .adv-voile{position:static;background:none;padding:0;display:block}
+.adv-modal.adv-ordre{width:100%;max-height:none;overflow:visible;border:0;padding:0;background:white;color:black}
+.adv-ordre .od-ecran{display:none !important}
+.adv-ordre .od-tete{border-bottom-color:black}
+.adv-ordre .od-l,.adv-ordre .od-org,.od-table th,.od-table .od-des{color:dimgray}
+.od-table th,.od-table td,.od-infos{border-color:silver}
+}
+

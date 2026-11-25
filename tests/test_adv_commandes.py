@@ -529,6 +529,26 @@ check("le jour fixé par l'ADV remonte dans la Prépa",
 check("chaque ligne de la Prépa a un jour (ou None sans date)",
       all("jour_prepa" in l for l in par_p.values()), True)
 
+# ── 10. Adresse de livraison : ce qui part ensemble ─────────────────────────
+print("\nAdresse de livraison")
+check("sans adresse dans le miroir : clé vide",
+      [l["destination"]["cle"] for l in adv.construire()["lignes"]][:1], [""])
+m = sqlite3.connect(miroir.ERP_MIRROR_DB)
+for c in adv.ADRESSE_LIVRAISON:
+    m.execute("ALTER TABLE cde_ligne ADD COLUMN %s TEXT" % c)
+m.execute("UPDATE cde_ligne SET lrs='CLIENT B', ladr1='1 rue des Lilas', lcp='69007', lville='LYON', lpays='FR' WHERE numero=9930002")
+m.execute("UPDATE cde_ligne SET lrs='client  b', ladr1='1 RUE DES LILAS', lcp='69007', lville='Lyon', lpays='FR' WHERE numero=9930002 AND ligne=2")
+m.commit()
+m.close()
+par_d = {l["cle"]: l for l in adv.construire()["lignes"]}
+dest = par_d["9930002-1"]["destination"]
+check("adresse de la ligne lue dans cde_ligne", (dest["rs"], dest["adr1"], dest["cp"], dest["ville"], dest["pays"]),
+      ("CLIENT B", "1 rue des Lilas", "69007", "LYON", "FR"))
+check("même adresse à la casse et aux espaces près : même clé",
+      par_d["9930002-1"]["destination"]["cle"] == par_d["9930002-2"]["destination"]["cle"] != "", True)
+check("autre commande sans adresse : clé différente",
+      par_d["9930001-1"]["destination"]["cle"] != dest["cle"], True)
+
 print()
 if ko:
     print(f"test_adv_commandes : {ko} échec(s)")

@@ -131,6 +131,18 @@ def cle_ligne(numero: Any, ligne: Any) -> str:
 
 # ── Le carnet RVGI ───────────────────────────────────────────────────────────
 
+ADRESSE_LIVRAISON = ("lrs", "ladr1", "ladr2", "lcp", "lville", "lpays")
+
+
+def destination(b: Dict[str, Any]) -> Dict[str, Any]:
+    """L'adresse de livraison d'une ligne, et sa clé : deux lignes qui ont la
+    même clé partent au même endroit (casse et espaces ignorés)."""
+    v = {c: " ".join(str(b.get("liv_" + c) or "").split()) for c in ADRESSE_LIVRAISON}
+    cle = "|".join(v[c].upper() for c in ADRESSE_LIVRAISON)
+    return {"rs": v["lrs"], "adr1": v["ladr1"], "adr2": v["ladr2"], "cp": v["lcp"],
+            "ville": v["lville"], "pays": v["lpays"], "cle": cle if cle.strip("|") else ""}
+
+
 def _carnet_rvgi(conn, sch) -> List[Dict[str, Any]]:
     produit = tdb._ligne_produit("l")
     ouvert = ("l.qtep > 0 AND COALESCE(l.lpos, 0) = %d AND %s AND %s"
@@ -138,6 +150,11 @@ def _carnet_rvgi(conn, sch) -> List[Dict[str, Any]]:
     vref = "COALESCE(NULLIF(TRIM(l.vref),''), e.vref)" if sch.a("cde_ligne", "vref") else (
         "e.vref" if sch.a("cde_entete", "vref") else "''")
     amjc = "e.amjc" if sch.a("cde_entete", "amjc") else "NULL"
+    # Adresse de livraison de la LIGNE (une commande peut partir à plusieurs
+    # adresses) : ce qui part ensemble = même date, même adresse.
+    adresse = ", ".join(
+        ("l.%s AS liv_%s" % (c, c)) if sch.a("cde_ligne", c) else ("NULL AS liv_%s" % c)
+        for c in ADRESSE_LIVRAISON)
     # Déjà livré : les lignes de BL qui reportent cette ligne de commande
     # (colonnes de report explicites, jamais le numéro seul), BL vivant.
     if sch.a("liv_ligne", "numcde", "lignecde", "qte"):
@@ -150,10 +167,10 @@ def _carnet_rvgi(conn, sch) -> List[Dict[str, Any]]:
                %s AS ref_client, %s AS creee_le,
                l.code1 AS code1, l.code2 AS code2, l.des1 AS designation,
                l.qte AS qte, l.qtep AS qtep, %s AS livre,
-               l.amje AS amje, l.amjl AS amjl, l.orig AS origine
+               l.amje AS amje, l.amjl AS amjl, l.orig AS origine, %s
           FROM cde_ligne l JOIN cde_entete e ON e.numero = l.numero
          WHERE %s
-    """ % (vref, amjc, livre, ouvert))
+    """ % (vref, amjc, livre, adresse, ouvert))
 
 
 def _deja_livres(conn, sch, refs: set) -> set:
@@ -789,6 +806,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "ligne": int(b["ligne"] or 0),
             "client": (b.get("client") or "").strip(),
             "ref_client": (b.get("ref_client") or "").strip() or None,
+            "destination": destination(b),
             "creee_le": _jour(b.get("creee_le")),
             "article": b["article"],
             "designation": (b.get("designation") or "").strip(),
