@@ -674,11 +674,17 @@
 
   /* ── Onglet Prépa ───────────────────────────────────────────── */
 
-  async function changerPrepa(l, statut, bouton) {
+  // Statut de préparation d'une ou plusieurs lignes (un envoi entier).
+  async function changerPrepa(ls, statut, bouton) {
+    ls = [].concat(ls);
     if (bouton) bouton.disabled = true;
     try {
-      await api('/api/adv/prepa/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {statut: statut}});
-      toast('Prépa ' + l.numero + ' · ' + l.ligne + ' : ' + (LIB_PREPA[statut] || statut).toLowerCase() + '.');
+      for (var i = 0; i < ls.length; i++) {
+        await api('/api/adv/prepa/' + encodeURIComponent(ls[i].numero) + '/' + ls[i].ligne, {method: 'PUT', body: {statut: statut}});
+      }
+      var lib = (LIB_PREPA[statut] || statut).toLowerCase();
+      toast(ls.length > 1 ? 'Envoi ' + ls[0].numero + ' · ' + ls.length + ' lignes : ' + lib + '.'
+        : 'Prépa ' + ls[0].numero + ' · ' + ls[0].ligne + ' : ' + lib + '.');
       var y = (document.querySelector('.main') || {}).scrollTop;
       var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
       await charger();
@@ -687,7 +693,7 @@
       // L'historique se relira à son ouverture (il recharge aussi la Prépa).
       if (!S.sous) S.historique = null;
       render();
-      if (modalOuverte()) { fermerFiche(true); ouvrirFiche(l.cle, true); }
+      if (modalOuverte() && S.ligne) { fermerFiche(true); ouvrirFiche(S.ligne, true); }
       var mn = document.querySelector('.main');
       if (mn && y) mn.scrollTop = y;
       var tw = document.querySelector('.adv-table-wrap');
@@ -695,45 +701,77 @@
     } catch (e) {
       toast(e.message, 'danger');
       if (bouton) bouton.disabled = false;
+      await charger(); render();
     }
   }
 
-  function boutonsPrepa(l) {
-    var s = l.prepa.statut;
-    var b = function (lib, statut, cls) {
-      var el = h('button', {type: 'button', className: 'btn btn-petit' + (cls ? ' ' + cls : ''),
-        onClick: function (ev) { ev.stopPropagation(); changerPrepa(l, statut, el); }}, lib);
+  var ICONES_ACTION = {
+    // Ordre d'expé : le bordereau qui part (feuille, ses lignes, une flèche de sortie).
+    ordre: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l4 4v5"/><path d="M14 3v4h4"/><path d="M8 9.5h6M8 13h4"/><path d="M14.5 18h6.5M18.5 15.5 21 18l-2.5 2.5"/></svg>',
+    urgente: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4 2 18.2A2 2 0 0 0 3.7 21h16.6a2 2 0 0 0 1.7-2.8L13.7 4a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9.5" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    prete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+  };
+
+  // Les trois gestes d'une ligne, ou d'un envoi (ses lignes ensemble) :
+  // l'ordre d'expé, l'urgence (ADV) et « Prête ». Dans le tableau, des icônes
+  // (libellé au survol) ; dans la fiche (`libelles`), icône et libellé.
+  function boutonsPrepa(ls, opts) {
+    ls = [].concat(ls);
+    opts = opts || {};
+    var l0 = ls[0];
+    var cleTip = (ls.length > 1 ? 'env|' : '') + l0.cle;
+    var toutesPretes = ls.every(function (l) { return l.prepa.statut === 'prete'; });
+    var aFaire = ls.filter(function (l) { return l.prepa.statut !== 'prete'; });
+    var toutesUrgentes = ls.every(function (l) { return l.urgente_manuelle; });
+    var pour = ls.length > 1 ? ' (' + ls.length + ' lignes)' : '';
+    var bouton = function (cle, cls, lib, titre, texte, onClick) {
+      var el = h('button', {type: 'button', className: 'btn btn-petit adv-act-btn ' + cls + (opts.libelles ? '' : ' btn-ico'),
+          'aria-label': lib, 'data-tip': tip(cleTip + '|' + cle + (opts.libelles ? '|fi' : ''), titre, texte)},
+        h('span', {className: 'ico', html: ICONES_ACTION[cle]}), opts.libelles ? h('span', {text: lib}) : null);
+      el.addEventListener('click', function (ev) { ev.stopPropagation(); onClick(el); });
       return el;
     };
-    // Un seul geste : « Prête ». Une prépa déjà prête peut être remise à préparer.
-    if (s === 'prete') return [b('Remettre à préparer', 'a_preparer')];
-    var out = [b('Prête', 'prete', 'btn-accent')];
+    var out = [bouton('ordre', 'adv-btn-ordre', 'Ordre d’expé', 'Ordre d’expé',
+      'Tout ce qui part ce jour-là à cette adresse, prêt à imprimer', function () { ouvrirOrdre(l0.cle); })];
     // L'ADV marque une préparation urgente : elle passe en tête de son groupe
     // et compte dans la bulle rouge de la tuile « Prépa » du portail.
     if (DROITS.adv) {
-      var u = h('button', {type: 'button', className: 'btn btn-petit adv-btn-urgence' + (l.urgente_manuelle ? ' on' : ''),
-        'aria-pressed': l.urgente_manuelle ? 'true' : 'false',
-        'data-tip': tip(l.cle + '|urg', l.urgente_manuelle ? 'Retirer l’urgence' : 'Marquer urgente',
-          l.urgente_manuelle ? (l.urgente_par ? 'Marquée par ' + l.urgente_par : null) : 'Passe en tête du groupe et dans la bulle rouge de la logistique')},
-        'Urgente');
-      u.addEventListener('click', function (ev) { ev.stopPropagation(); marquerUrgente(l, !l.urgente_manuelle, u); });
-      out.unshift(u);
+      var u = bouton('urgente', 'adv-btn-urgence' + (toutesUrgentes ? ' on' : ''), toutesUrgentes ? 'Retirer l’urgence' : 'Urgente',
+        toutesUrgentes ? 'Retirer l’urgence' + pour : 'Marquer urgente' + pour,
+        toutesUrgentes ? (l0.urgente_par ? 'Marquée par ' + l0.urgente_par : null) : 'Passe en tête du groupe et dans la bulle rouge de la logistique',
+        function (el) { marquerUrgente(ls, !toutesUrgentes, el); });
+      u.setAttribute('aria-pressed', toutesUrgentes ? 'true' : 'false');
+      if (toutesPretes) u.disabled = true;
+      out.push(u);
     }
+    // Un seul geste : « Prête ». Une prépa déjà prête peut être remise à préparer.
+    var p = bouton('prete', 'btn-accent adv-btn-prete' + (toutesPretes ? ' on' : ''), toutesPretes ? 'Remettre à préparer' : 'Prête',
+      toutesPretes ? 'Prête' + pour : 'Marquer prête' + pour,
+      toutesPretes ? 'Cliquer pour remettre à préparer' : null,
+      function (el) { changerPrepa(toutesPretes ? ls : aFaire, toutesPretes ? 'a_preparer' : 'prete', el); });
+    p.setAttribute('aria-pressed', toutesPretes ? 'true' : 'false');
+    out.push(p);
     return out;
   }
 
-  async function marquerUrgente(l, oui, bouton) {
+  async function marquerUrgente(ls, oui, bouton) {
+    ls = [].concat(ls);
     if (bouton) bouton.disabled = true;
     try {
-      await api('/api/adv/prepa/urgence/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'PUT', body: {urgente: oui}});
+      for (var i = 0; i < ls.length; i++) {
+        await api('/api/adv/prepa/urgence/' + encodeURIComponent(ls[i].numero) + '/' + ls[i].ligne, {method: 'PUT', body: {urgente: oui}});
+      }
       var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
       await charger(); S.carnet = null; render();
+      if (modalOuverte() && S.ligne) { fermerFiche(true); ouvrirFiche(S.ligne, true); }
       var tw = document.querySelector('.adv-table-wrap');
       if (tw && yt) tw.scrollTop = yt;
-      toast(oui ? 'Préparation marquée urgente.' : 'Urgence retirée.');
+      toast((ls.length > 1 ? 'Envoi ' + ls[0].numero + ' (' + ls.length + ' lignes) ' : 'Préparation ')
+        + (oui ? 'marqué' + (ls.length > 1 ? '' : 'e') + ' urgent' + (ls.length > 1 ? '' : 'e') + '.' : ': urgence retirée.'));
     } catch (e) {
       toast(e.message, 'danger');
       if (bouton) bouton.disabled = false;
+      await charger(); render();
     }
   }
 
@@ -1251,8 +1289,7 @@
         sortie ? h('span', {className: 'adv-sortie-prod'}, h('b', {text: 'Sortie prod'}), ' · ' + fN(sortie)) : null,
         nbEmpl ? h('span', {}, h('b', {text: String(nbEmpl)}), ' emplacement' + (nbEmpl > 1 ? 's' : '')) : null)),
       h('td', {className: 'c-quand' + (retard ? ' adv-date-retard' : '')}, l0.expedition ? dateFr(l0.expedition) : 'Non datée'),
-      h('td', {className: 'c-act'}, h('div', {className: 'adv-actions'},
-        h('button', {type: 'button', className: 'btn btn-petit', onClick: function (ev) { ev.stopPropagation(); ouvrirOrdre(l0.cle); }}, 'Ordre d’expé'))));
+      h('td', {className: 'c-act'}, h('div', {className: 'adv-actions'}, boutonsPrepa(ls))));
   }
 
   var VIDES_PREPA = {
@@ -1851,12 +1888,11 @@
       h('div', {className: 'fi-prepa'},
         h('span', {className: 'adv-badge ' + ({prete: 'ok', en_cours: 'warn'}[l.prepa.statut] || ''), text: LIB_PREPA[l.prepa.statut] || l.prepa.statut}),
         l.prepa.maj_par ? h('span', {className: 'adv-muet', text: l.prepa.maj_par + ' · ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)}) : null,
-        h('div', {className: 'fi-prepa-b'}, boutonsPrepa(l))),
+        h('div', {className: 'fi-prepa-b'}, boutonsPrepa(l, {libelles: true}))),
       h('div', {className: 'fi-sous-t', text: 'Où prélever' + (st.connu ? ' · ' + qteU(l, st.total) + ' en stock pour l’article' : '')}),
       empl,
       h('div', {className: 'fi-sous-t', text: 'Livrer à'}),
-      h('div', {className: 'fi-livrer'}, adresseLivraison(l)),
-      h('div', {className: 'fi-prepa-b'}, h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { ouvrirOrdre(l.cle); }}, 'Ordre d’expé')));
+      h('div', {className: 'fi-livrer'}, adresseLivraison(l)));
 
     // ── Production et départs ──
     var STATUT_DOS = {attente: ['En attente', ''], en_cours: ['En cours', 'warn'], termine: ['Terminé', 'ok']};
