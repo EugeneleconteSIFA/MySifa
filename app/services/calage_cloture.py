@@ -123,7 +123,29 @@ def _debut_perimetre(conn, no_dossier: str, machine: str, avant_id: Optional[int
               AND date_operation > COALESCE(?, '')""",
         (no_dossier, machine, derniere_cloture),
     ).fetchone()
-    return row[0] if row else None
+    depuis = row[0] if row else None
+    if not depuis:
+        return None
+
+    # Un « 89 » sans clôture suivi d'un AUTRE dossier sur la machine borne
+    # aussi le passage : le dossier a quitté la machine, il reviendra avec un
+    # nouveau calage. Un 89 suivi directement d'un 01 du même dossier est une
+    # relève d'équipe, le passage continue. Cas réel : 9932723 - L1, Cohésio 2,
+    # arrêté au 89 le 21/10 et repris le 25/11 — le calage proposé était celui
+    # du 21/10 et la production affichée 745 h.
+    debut = depuis
+    apres_fin = coupe = False
+    for r in _saisies_machine(conn, machine, depuis):
+        if avant_id and r["id"] == avant_id:
+            continue
+        dossier_r = str(r["no_dossier"] or "").strip()
+        if _meme_dossier(r, no_dossier):
+            if coupe:
+                debut, coupe = r["date_operation"], False
+            apres_fin = _code(r) == CODE_FIN_DOS
+        elif dossier_r and apres_fin:
+            coupe = True
+    return debut
 
 
 def _analyser(conn, no_dossier: str, machine: str, maintenant: datetime,
