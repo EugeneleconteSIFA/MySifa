@@ -358,32 +358,77 @@ body.palette-foret{--adv-cours:var(--c4)}
 
 /* ── Mise en forme conditionnelle ── */
 /* La valeur colorée passe dans une pastille teintée ; une étape (déjà en
-   pastille) reçoit un anneau de la couleur de la règle. */
+   pastille) reçoit un anneau de la couleur de la règle. Une règle peut aussi
+   teinter toute la ligne (tr.mef-ligne). */
 .mef-p{display:inline-block;padding:2px 8px;border-radius:8px;font-weight:700;max-width:100%}
-/* Rouge en pastille PLEINE, les autres teintées : rouge et orange se
-   distinguent par la forme, pas seulement par une teinte voisine. */
-td.mef-danger .mef-p{background:var(--danger);color:white}
-td.mef-warn .mef-p{background:color-mix(in srgb,var(--warn) 17%,transparent);color:var(--warn)}
-td.mef-ok .mef-p{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
-td.mef-accent .mef-p{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
-td.mef-neutre .mef-p{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
+/* Tons du thème. Rouge en pastille PLEINE, les autres teintées : rouge et
+   orange se distinguent par la forme, pas seulement par une teinte voisine. */
+.mef-danger>.mef-p{background:var(--danger);color:white}
+.mef-warn>.mef-p{background:color-mix(in srgb,var(--warn) 17%,transparent);color:var(--warn)}
+.mef-ok>.mef-p{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.mef-accent>.mef-p{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.mef-neutre>.mef-p{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
+.mef-r-texte.mef-danger>.mef-p{background:none;color:var(--danger)}
+.mef-r-texte.mef-warn>.mef-p{background:none;color:var(--warn)}
+.mef-r-texte.mef-ok>.mef-p{background:none;color:var(--success)}
+.mef-r-texte.mef-accent>.mef-p{background:none;color:var(--accent)}
+.mef-r-texte.mef-neutre>.mef-p{background:none;color:var(--text2)}
 td.mef .mef-p .adv-muet,td.mef .mef-p .des-l{color:inherit;opacity:.75}
 td.etape.mef-danger .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--danger)}
 td.etape.mef-warn .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--warn)}
 td.etape.mef-ok .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--success)}
 td.etape.mef-accent .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent)}
 td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--muted)}
+
+/* Palette élargie : teinte (--mef-h, --mef-c posés par la page depuis
+   ADV_MEF_TEINTES) x nuance (mef-n1 pâle, n2 moyen, n3 soutenu). La clarté
+   suit le mode : fonds sombres en sombre, clairs en clair. Soutenu = fond plein,
+   texte blanc dans les deux modes. */
+:root{--mef-f1:.34;--mef-f2:.45;--mef-f3:.58;--mef-x1:.88;--mef-x2:.94;--mef-r1:.27;--mef-r2:.34;--mef-r3:.42;
+  --mef-t1:.86;--mef-t2:.78;--mef-t3:.70}
+body.light{--mef-f1:.95;--mef-f2:.88;--mef-f3:.56;--mef-x1:.42;--mef-x2:.34;--mef-r1:.97;--mef-r2:.93;--mef-r3:.87;
+  --mef-t1:.66;--mef-t2:.54;--mef-t3:.42}
+.mef-n1{--mef-lf:var(--mef-f1);--mef-kf:.35;--mef-lx:var(--mef-x1);--mef-lr:var(--mef-r1);--mef-lt:var(--mef-t1)}
+.mef-n2{--mef-lf:var(--mef-f2);--mef-kf:.7;--mef-lx:var(--mef-x2);--mef-lr:var(--mef-r2);--mef-lt:var(--mef-t2)}
+.mef-n3{--mef-lf:var(--mef-f3);--mef-kf:1;--mef-lx:1;--mef-lr:var(--mef-r3);--mef-lt:var(--mef-t3)}
+.mef-t>.mef-p{background:oklch(var(--mef-lf) calc(var(--mef-c) * var(--mef-kf)) var(--mef-h));
+  color:oklch(var(--mef-lx) var(--mef-c) var(--mef-h))}
+.mef-t.mef-n3>.mef-p{color:white}
+.mef-t.mef-r-texte>.mef-p{background:none;color:oklch(var(--mef-lt) var(--mef-c) var(--mef-h))}
+td.etape.mef-t .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px oklch(var(--mef-f3) var(--mef-c) var(--mef-h))}
+
+/* Toute la ligne : un voile (box-shadow, pour passer aussi sous la première
+   colonne collante), ou le texte coloré. */
+.adv-table tr.mef-ligne.mef-t>td{box-shadow:inset 0 0 0 999px oklch(var(--mef-lr) calc(var(--mef-c) * .6) var(--mef-h))}
+.adv-table tr.mef-ligne.mef-danger>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--danger) 16%,transparent)}
+.adv-table tr.mef-ligne.mef-warn>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--warn) 14%,transparent)}
+.adv-table tr.mef-ligne.mef-ok>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--success) 13%,transparent)}
+.adv-table tr.mef-ligne.mef-accent>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--accent) 13%,transparent)}
+.adv-table tr.mef-ligne.mef-neutre>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--muted) 16%,transparent)}
+.adv-table tr.mef-ligne.mef-r-texte>td{box-shadow:none}
+.adv-table tr.mef-ligne.mef-r-texte.mef-t>td{color:oklch(var(--mef-lt) var(--mef-c) var(--mef-h));font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-danger>td{color:var(--danger);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-warn>td{color:var(--warn);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-ok>td{color:var(--success);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-accent>td{color:var(--accent);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-neutre>td{color:var(--muted);font-weight:600}
+.adv-table tr.mef-ligne>td:first-child{background:var(--card)}
+
 .adv-tete-actions{display:flex;gap:8px;align-items:center}
 .btn.adv-btn-icone{padding:9px 11px}
 .adv-modal.adv-modal-large{width:min(1060px,100%)}
 .mef-liste{margin-top:14px;display:flex;flex-direction:column;gap:8px}
-.mef-regle{display:grid;grid-template-columns:22px 140px 140px minmax(280px,1fr) auto 56px auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
-@media(max-width:860px){.mef-regle{grid-template-columns:22px 1fr 1fr;}.mef-regle .mef-valeur,.mef-regle .mef-tons,.mef-regle .mef-ordre{grid-column:2/-1}}
-.mef-rang{font-size:12px;font-weight:800;color:var(--muted);text-align:center}
-.mef-valeur{display:flex;gap:6px;align-items:center;min-width:0}
+.mef-regle{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.mef-corps{display:flex;flex-direction:column;gap:8px;min-width:0}
+.mef-cond,.mef-effet{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.mef-cond>select{flex:0 1 170px;min-width:0}
+.mef-effet>select{flex:0 1 210px;min-width:0}
+.mef-regle select,.mef-regle input{background:var(--card)}
+.mef-mot{font-size:12px;font-weight:700;color:var(--muted);min-width:14px}
+.mef-rang{font-size:12px;font-weight:800;color:var(--muted);text-align:center;padding-top:8px}
+.mef-valeur{display:flex;gap:6px;align-items:center;min-width:0;flex:1 1 220px}
 .mef-valeur select,.mef-valeur input{min-width:0;flex:1 1 0}
 .mef-valeur input[type=number]{max-width:120px}
-.mef-tons{display:flex;gap:5px}
 .mef-ton{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;outline-offset:2px}
 .mef-ton.mef-danger{background:var(--danger)}
 .mef-ton.mef-warn{background:var(--warn)}
@@ -391,11 +436,54 @@ td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--
 .mef-ton.mef-accent{background:var(--accent)}
 .mef-ton.mef-neutre{background:var(--muted)}
 .mef-ton.actif{border-color:var(--text);box-shadow:0 0 0 2px var(--card) inset}
-.mef-n{font-size:11.5px;font-weight:700;text-align:right;white-space:nowrap}
+.mef-choix{display:inline-flex;align-items:center;gap:6px;padding:4px 8px 4px 5px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--text);cursor:pointer;font:inherit}
+.mef-choix:hover,.mef-choix.ouvert{border-color:var(--accent)}
+.mef-choix-f{font-size:10px;color:var(--muted)}
+.mef-ech-p>.mef-p{font-size:12px;padding:2px 9px}
+.mef-palette{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);max-width:100%}
+.mef-pal-l{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.mef-pal-theme{display:flex;gap:6px}
+.mef-pal-grille{display:grid;grid-template-columns:repeat(var(--mef-nb,14),minmax(0,26px));gap:4px;max-width:100%}
+.mef-ech{aspect-ratio:1;width:100%;min-width:0;border-radius:6px;border:2px solid transparent;cursor:pointer;padding:0;outline-offset:2px;
+  background:oklch(var(--mef-lf) calc(var(--mef-c) * var(--mef-kf)) var(--mef-h))}
+.mef-ech:hover{border-color:var(--muted)}
+.mef-ech.actif{border-color:var(--text);box-shadow:0 0 0 2px var(--card) inset}
+.mef-pal-rendus{display:flex;gap:6px;flex-wrap:wrap}
+.mef-pal-rendus .btn.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.mef-n{font-size:11.5px;font-weight:700;text-align:right;white-space:nowrap;margin-left:auto}
 .mef-ordre{display:flex;gap:4px}
 .mef-ordre .btn{padding:4px 9px;background:var(--card)}
+@media(max-width:700px){.mef-regle{grid-template-columns:22px minmax(0,1fr)}.mef-ordre{grid-column:2}}
 .mef-bas{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .mef-compte{font-size:12px}
+
+/* ── Infos de suivi ── */
+/* Un « ? » rond et jaune, quel que soit le thème : c'est un signal, comme un
+   panneau d'avertissement. Le « ? » est en ocre foncé (jamais noir) pour rester
+   lisible sur le jaune. */
+.adv-info{display:inline-flex;align-items:center;justify-content:center;flex:none;width:18px;height:18px;border-radius:50%;
+  background:oklch(.86 .17 92);color:oklch(.36 .08 70);border:1px solid oklch(.72 .16 80);
+  font:800 12px/1 system-ui,sans-serif;padding:0;cursor:pointer;vertical-align:middle;margin-left:6px}
+button.adv-info:hover{box-shadow:0 0 0 3px oklch(.86 .17 92 / .35)}
+.adv-info.vide{background:transparent;color:var(--muted);border:1px dashed var(--muted);visibility:hidden}
+.adv-table tbody tr:hover .adv-info.vide,.adv-info.vide:focus-visible{visibility:visible}
+.adv-info.vide:hover{color:oklch(.55 .14 80);border-color:oklch(.72 .16 80)}
+.adv-table td.c-commande{white-space:nowrap}
+.fi-infos h4{display:flex;align-items:center;gap:6px}
+.fi-infos h4 .adv-info{margin-left:0}
+.adv-fiche .fi-carte.fi-infos.avec{border-color:oklch(.78 .15 85);box-shadow:inset 3px 0 0 oklch(.82 .16 88)}
+.fi-info-saisie{display:flex;gap:8px;margin:8px 0 10px}
+.fi-info-champ{flex:1 1 auto;min-width:0;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 11px;color:var(--text);font:inherit}
+.fi-info-champ:focus{border-color:var(--accent);outline:none}
+.fi-infos-fil{display:flex;flex-direction:column;gap:8px}
+.fi-info{display:flex;gap:10px;align-items:flex-start}
+.fi-info .adv-info{margin:1px 0 0;cursor:default;width:16px;height:16px;font-size:11px}
+.fi-info-c{flex:1 1 auto;min-width:0}
+.fi-info-t{white-space:pre-wrap;overflow-wrap:anywhere}
+.fi-info-m{font-size:11.5px;margin-top:2px}
+.fi-info-suppr{flex:none;border:1px solid transparent;background:none;color:var(--muted);cursor:pointer;border-radius:7px;padding:2px 7px;font:inherit;font-size:12px}
+.fi-info-suppr:hover{border-color:var(--border);color:var(--danger)}
+.fi-info-suppr.confirmer{background:var(--danger);color:white;font-weight:700}
 
 /* ── Modale ── */
 .adv-voile{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px}

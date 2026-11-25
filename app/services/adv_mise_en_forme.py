@@ -1,7 +1,10 @@
 """ADV — règles de mise en forme conditionnelle du carnet.
 
 Une règle : une colonne, un opérateur, une cible (une valeur, une autre colonne
-du même type, ou « aujourd'hui ± N jours » pour une date) et un ton du thème.
+du même type, ou « aujourd'hui ± N jours » pour une date), ce qu'elle colore
+(la colonne de la condition, une autre colonne, ou toute la ligne), un ton
+(ton du thème, ou teinte x nuance de la palette élargie) et un rendu
+(pastille ou texte coloré).
 Les règles sont communes au service et s'évaluent dans l'ordre : la première
 qui s'applique à une cellule l'emporte. L'évaluation se fait dans le
 navigateur (static/mysifa_adv.js, `tonCellule`) — le serveur ne fait que
@@ -19,11 +22,14 @@ from datetime import date
 from typing import Any, Dict, List
 
 from config import (ADV_MEF_CIBLES, ADV_MEF_COLONNES, ADV_MEF_MAX_REGLES,
-                    ADV_MEF_OPERATEURS, ADV_MEF_TONS)
+                    ADV_MEF_NUANCES, ADV_MEF_OPERATEURS, ADV_MEF_RENDUS,
+                    ADV_MEF_TEINTES, ADV_MEF_TONS)
 
 TYPES = {k: t for k, _, t in ADV_MEF_COLONNES}
 LIBELLES = {k: l for k, l, _ in ADV_MEF_COLONNES}
-TONS = {k for k, _ in ADV_MEF_TONS}
+TONS = {k for k, _ in ADV_MEF_TONS} | {"%s-%s" % (t[0], n) for t in ADV_MEF_TEINTES for n, _ in ADV_MEF_NUANCES}
+RENDUS = {k for k, _ in ADV_MEF_RENDUS}
+LIGNE = "ligne"           # appliquer = toute la ligne
 CIBLES = {k for k, _ in ADV_MEF_CIBLES}
 ETATS_ETAPE = ("oui", "en_cours", "non", "sans_objet", "probable")
 SANS_CIBLE = ("vide", "non_vide")
@@ -37,6 +43,9 @@ def referentiel() -> Dict[str, Any]:
                        for t, ops in ADV_MEF_OPERATEURS.items()},
         "cibles": [{"cle": k, "label": l} for k, l in ADV_MEF_CIBLES],
         "tons": [{"cle": k, "label": l} for k, l in ADV_MEF_TONS],
+        "teintes": [{"cle": k, "label": l, "h": h, "c": c} for k, l, h, c in ADV_MEF_TEINTES],
+        "nuances": [{"cle": k, "label": l} for k, l in ADV_MEF_NUANCES],
+        "rendus": [{"cle": k, "label": l} for k, l in ADV_MEF_RENDUS],
         "max": ADV_MEF_MAX_REGLES,
     }
 
@@ -44,11 +53,17 @@ def referentiel() -> Dict[str, Any]:
 def lister(conn) -> List[Dict[str, Any]]:
     try:
         rows = conn.execute("""
-            SELECT id, ordre, colonne, operateur, cible, valeur, ton, maj_le, maj_par
-              FROM adv_mises_en_forme ORDER BY ordre, id""").fetchall()
+            SELECT * FROM adv_mises_en_forme ORDER BY ordre, id""").fetchall()
     except Exception:
         return []
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        d.setdefault("appliquer", "")
+        d["appliquer"] = d.get("appliquer") or ""
+        d["rendu"] = d.get("rendu") or "fond"
+        out.append(d)
+    return out
 
 
 class RegleInvalide(ValueError):
@@ -111,8 +126,16 @@ def valider(regles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 raise RegleInvalide("Règle %d : état inconnu." % i)
             if typ == "texte" and not valeur:
                 raise RegleInvalide("Règle %d : texte à chercher manquant." % i)
+        appliquer = str(r.get("appliquer") or "")
+        if appliquer == col:
+            appliquer = ""
+        if appliquer and appliquer != LIGNE and appliquer not in TYPES:
+            raise RegleInvalide("Règle %d : colonne à colorer inconnue." % i)
+        rendu = str(r.get("rendu") or "fond")
+        if rendu not in RENDUS:
+            raise RegleInvalide("Règle %d : rendu inconnu." % i)
         propres.append({"colonne": col, "operateur": op, "cible": cible,
-                        "valeur": valeur, "ton": ton})
+                        "valeur": valeur, "ton": ton, "appliquer": appliquer, "rendu": rendu})
     return propres
 
 
@@ -121,8 +144,10 @@ def enregistrer(conn, regles: List[Dict[str, Any]], quand: str, par: str) -> Lis
     conn.execute("DELETE FROM adv_mises_en_forme")
     for ordre, r in enumerate(regles):
         conn.execute("""
-            INSERT INTO adv_mises_en_forme (ordre, colonne, operateur, cible, valeur, ton, maj_le, maj_par)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (ordre, r["colonne"], r["operateur"], r["cible"], r["valeur"], r["ton"], quand, par))
+            INSERT INTO adv_mises_en_forme (ordre, colonne, operateur, cible, valeur, ton,
+                                            appliquer, rendu, maj_le, maj_par)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (ordre, r["colonne"], r["operateur"], r["cible"], r["valeur"], r["ton"],
+             r.get("appliquer") or "", r.get("rendu") or "fond", quand, par))
     conn.commit()
     return lister(conn)

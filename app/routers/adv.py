@@ -362,6 +362,53 @@ def forcer(numero: str, ligne: int, etape: str, body: ForcageIn, request: Reques
     return {"ok": True}
 
 
+# ── Informations de suivi d'une ligne ────────────────────────────────────────
+# L'ADV note pourquoi une ligne n'est pas partie, où elle en est. Tout le monde
+# les lit (la logistique dans Prépa) ; l'administration et la direction écrivent.
+
+INFO_MAX = 500
+
+
+class InfoIn(BaseModel):
+    texte: str
+
+
+@router.post("/api/adv/infos/{numero}/{ligne}")
+def ajouter_info(numero: str, ligne: int, body: InfoIn, request: Request):
+    user = _exiger(request, ROLES_ADV)
+    numero, ligne = _cle(numero, ligne)
+    texte = " ".join((body.texte or "").split())[:INFO_MAX]
+    if not texte:
+        raise HTTPException(status_code=400, detail="Info vide.")
+    quand = adv.maintenant()
+    with get_db() as conn:
+        cur = conn.execute("""INSERT INTO adv_infos (numero, ligne, texte, cree_le, cree_par, user_id)
+                              VALUES (?, ?, ?, ?, ?, ?)""",
+                           (numero, ligne, texte, quand, _nom(user), user.get("id")))
+        conn.commit()
+        info_id = cur.lastrowid
+    log_action(user=user, action="CREATE", module="adv",
+               objet="Info de suivi · commande %s ligne %s" % (numero, ligne),
+               detail={"apres": {"texte": texte}}, request=request)
+    return {"info": {"id": info_id, "texte": texte, "cree_le": quand, "cree_par": _nom(user)}}
+
+
+@router.delete("/api/adv/infos/{info_id}")
+def supprimer_info(info_id: int, request: Request):
+    user = _exiger(request, ROLES_ADV)
+    with get_db() as conn:
+        avant = conn.execute("SELECT * FROM adv_infos WHERE id=?", (info_id,)).fetchone()
+        if not avant:
+            raise HTTPException(status_code=404, detail="Info introuvable.")
+        conn.execute("DELETE FROM adv_infos WHERE id=?", (info_id,))
+        conn.commit()
+    log_action(user=user, action="DELETE", module="adv",
+               objet="Info de suivi · commande %s ligne %s" % (avant["numero"], avant["ligne"]),
+               detail={"avant": {"texte": avant["texte"], "cree_par": avant["cree_par"], "cree_le": avant["cree_le"]}},
+               request=request)
+    return {"ok": True}
+
+
 # ── Mise en forme conditionnelle du carnet ───────────────────────────────────
 
 @router.get("/api/adv/mises-en-forme")
@@ -388,7 +435,8 @@ def enregistrer_mises_en_forme(body: MisesEnFormeIn, request: Request):
         apres = mef.enregistrer(conn, regles, adv.maintenant(), _nom(user))
     log_action(user=user, action="UPDATE", module="adv",
                objet="Mise en forme du carnet · %d règle(s)" % len(apres),
-               detail={"avant": [{k: r[k] for k in ("colonne", "operateur", "cible", "valeur", "ton")} for r in avant],
+               detail={"avant": [{k: r.get(k) for k in ("colonne", "operateur", "cible", "valeur", "ton", "appliquer", "rendu")}
+                                 for r in avant],
                        "apres": regles},
                request=request)
     return {"regles": apres}
