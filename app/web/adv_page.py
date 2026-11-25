@@ -137,7 +137,7 @@ PAGE_HTML = (r"""<!DOCTYPE html>
 <div class="toast-wrap" id="toast-wrap"></div>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/mysifa_rvgi_synchro.js?v=1"></script>
-<script src="/static/mysifa_adv.js?v=21"></script>
+<script src="/static/mysifa_adv.js?v=22"></script>
 </body>
 </html>
 """)

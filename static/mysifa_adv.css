@@ -120,14 +120,21 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-noeud{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;vertical-align:middle;box-sizing:border-box}
 .adv-noeud svg{width:13px;height:13px}
 .adv-noeud.oui{background:var(--success);color:white}
-.adv-noeud.en_cours{background:var(--warn);color:white}
+.adv-noeud.en_cours{background:var(--adv-cours);color:white}
 .adv-noeud.non{background:var(--card);color:var(--danger);border:2px solid var(--danger)}
 .adv-noeud.sans_objet{background:var(--card);color:var(--muted);border:2px dashed var(--border)}
 .adv-noeud.probable{background:var(--card);color:var(--success);border:2px dashed var(--success)}
 /* Jauge : Stock et Prod en cours se remplissent de gauche à droite (--p, en %),
    dans le sens de la frise. */
-.adv-noeud.jauge,.fi-etape .fi-rond.jauge{background:var(--card);color:var(--warn);border:2px solid var(--warn)}
-.adv-noeud.jauge::before,.fi-etape .fi-rond.jauge::before{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(to right,var(--warn) calc(var(--p) * 1%),transparent calc(var(--p) * 1%));opacity:.4;z-index:-1}
+/* « En cours » (nœud et jauge) : une couleur du thème éloignée du rouge
+   (à faire) et du vert (fait). L'orange --warn est trop proche du rouge.
+   L'accent convient, sauf dans les palettes où il est chaud (Ambre, Forge,
+   Pivoine, Cocon, Braise : --warn y est bleu) ou vert (Forêt : --c4 violet). */
+body{--adv-cours:var(--accent)}
+body.palette-ambre,body.palette-forge,body.palette-pivoine,body.palette-cocon,body.palette-braise{--adv-cours:var(--warn)}
+body.palette-foret{--adv-cours:var(--c4)}
+.adv-noeud.jauge,.fi-etape .fi-rond.jauge{background:var(--card);color:var(--adv-cours);border:2px solid var(--adv-cours)}
+.adv-noeud.jauge::before,.fi-etape .fi-rond.jauge::before{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(to right,var(--adv-cours) calc(var(--p) * 1%),transparent calc(var(--p) * 1%));opacity:.4;z-index:-1}
 .adv-noeud.force::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
 .adv-table td.des{max-width:210px;overflow:hidden}
 .adv-table td.des .des-l{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;margin-top:1px}
@@ -353,7 +360,9 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 /* La valeur colorée passe dans une pastille teintée ; une étape (déjà en
    pastille) reçoit un anneau de la couleur de la règle. */
 .mef-p{display:inline-block;padding:2px 8px;border-radius:8px;font-weight:700;max-width:100%}
-td.mef-danger .mef-p{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+/* Rouge en pastille PLEINE, les autres teintées : rouge et orange se
+   distinguent par la forme, pas seulement par une teinte voisine. */
+td.mef-danger .mef-p{background:var(--danger);color:white}
 td.mef-warn .mef-p{background:color-mix(in srgb,var(--warn) 17%,transparent);color:var(--warn)}
 td.mef-ok .mef-p{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 td.mef-accent .mef-p{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
@@ -438,7 +447,7 @@ td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--
 .fi-etape::before{content:"";position:absolute;top:22px;left:-50%;width:100%;height:3px;background:var(--border);z-index:0}
 .fi-etape:first-child::before{display:none}
 .fi-etape.oui{--c:var(--success)}
-.fi-etape.en_cours{--c:var(--warn)}
+.fi-etape.en_cours{--c:var(--adv-cours)}
 .fi-etape.non{--c:var(--danger)}
 .fi-etape.oui::before{background:var(--success)}
 .fi-etape.cliquable{cursor:pointer}

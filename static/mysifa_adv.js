@@ -67,7 +67,7 @@
     semaine: null,               // lundi de la première semaine affichée (null : la semaine en cours)
     friseDrag: null,             // lignes de la commande glissée dans la frise
     ouverts: {},                 // envois dépliés dans le tableau (clé d'envoi → vrai)
-    ordre: null,                 // ordre d'expé ouvert : clé d'une de ses lignes
+    ordreExpe: null,             // ordre d'expé ouvert : clé d'une de ses lignes (S.ordre = colonnes du carnet)
     sous: null,                  // 'historique' : les préparations déjà faites
     histoJours: 30,
     historique: null,
@@ -216,7 +216,7 @@
     S.reglages = (DROITS.adv && S.onglet === 'commandes' && !S.ligne)
       ? u.get('reglages', null, ['mise_en_forme']) : null;
     var od = u.get('ordre', null);
-    S.ordre = (S.onglet === 'prepa' && !S.ligne && od && /^\d{1,12}-\d{1,4}$/.test(od)) ? od : null;
+    S.ordreExpe = (S.onglet === 'prepa' && !S.ligne && od && /^\d{1,12}-\d{1,4}$/.test(od)) ? od : null;
   }
   function ecrireUrl() {
     var p = {};
@@ -238,9 +238,9 @@
     }
     if (S.ligne) p.ligne = S.ligne;
     else if (S.reglages) p.reglages = S.reglages;
-    else if (S.ordre) p.ordre = S.ordre;
+    else if (S.ordreExpe) p.ordre = S.ordreExpe;
     var lieu = S.onglet === 'prepa' ? ':' + (S.sous || S.groupe) : '';
-    MySifaUrl.ecrire(p, {navigation: S.onglet + lieu + (S.ligne ? ':fiche' : S.reglages ? ':reglages' : S.ordre ? ':ordre' : '')});
+    MySifaUrl.ecrire(p, {navigation: S.onglet + lieu + (S.ligne ? ':fiche' : S.reglages ? ':reglages' : S.ordreExpe ? ':ordre' : '')});
   }
 
   /* ── Données ────────────────────────────────────────────────── */
@@ -323,8 +323,8 @@
     ecrireUrl();
     if (S.ligne && !modalOuverte()) ouvrirFiche(S.ligne, true);
     else if (S.reglages && !modalOuverte()) ouvrirReglages(true);
-    else if (S.ordre && !modalOuverte()) ouvrirOrdre(S.ordre, true);
-    if (!S.ligne && !S.reglages && !S.ordre && modalOuverte()) fermerFiche(true);
+    else if (S.ordreExpe && !modalOuverte()) ouvrirOrdre(S.ordreExpe, true);
+    if (!S.ligne && !S.reglages && !S.ordreExpe && modalOuverte()) fermerFiche(true);
   }
 
   // Date des données RVGI et « Mettre à jour » (static/mysifa_rvgi_synchro.js) :
@@ -462,7 +462,7 @@
         h('button', {type: 'button', className: 'btn adv-btn-icone', 'aria-label': 'Mise en forme conditionnelle',
           'data-tip': tip('btn-mef', 'Mise en forme conditionnelle', S.mef.length ? S.mef.length + ' règle(s) actives' : 'Aucune règle'),
           html: ICONE_REGLAGES, onClick: function () { ouvrirReglages(); }}),
-        S.ordre.length ? h('button', {type: 'button', className: 'btn btn-petit',
+        (S.ordre || []).length ? h('button', {type: 'button', className: 'btn btn-petit',
           'data-tip': tip('btn-ordre', 'Colonnes rangées à votre façon', 'Revenir à l’ordre par défaut'),
           onClick: function () { S.ordre = []; sauverOrdre(); render(); toast('Ordre des colonnes par défaut.'); }}, 'Ordre par défaut') : null,
         h('button', {type: 'button', className: 'btn', onClick: async function () { await charger(); render(); toast('Carnet actualisé.'); }}, 'Actualiser')));
@@ -1382,7 +1382,7 @@
     var o = lignesOrdre(cle);
     if (!o) {
       if (!S.prepa) return;                  // données pas encore là : render() rouvrira
-      S.ordre = null; ecrireUrl();
+      S.ordreExpe = null; ecrireUrl();
       toast('Cette ligne n’est plus dans la Prépa.', 'danger');
       return;
     }
@@ -1390,7 +1390,7 @@
     m.textContent = '';
     cacherTip();
     S.ligne = null; S.reglages = null;
-    S.ordre = cle;
+    S.ordreExpe = cle;
     if (!sansAdresse) ecrireUrl();
     var l = o.l, d = l.destination || {};
     var adresse = [d.adr1, d.adr2, [d.cp, d.ville].filter(Boolean).join(' ') + (d.pays ? ' (' + d.pays + ')' : '')]
@@ -1688,7 +1688,7 @@
     if (sansAdresse === true) return;
     S.ligne = null;
     S.reglages = null;
-    S.ordre = null;
+    S.ordreExpe = null;
     ecrireUrl();
   }
 
@@ -1758,7 +1758,7 @@
     m.textContent = '';
     cacherTip();
     S.reglages = null;
-    S.ordre = null;
+    S.ordreExpe = null;
     if (S.ligne !== cle) S.ficheEtape = null;
     if (!sansAdresse) { S.ligne = cle; ecrireUrl(); }
     else S.ligne = cle;
@@ -1975,7 +1975,7 @@
     var histo = S.onglet === 'prepa' && S.sous === 'historique';
     if (histo ? !S.historique || S.historique.jours !== S.histoJours
       : (S.onglet !== avant || !donnees() || (S.onglet === 'prepa' && hz !== S.horizon))) { await charger(); }
-    if (!S.ligne && !S.reglages && !S.ordre) fermerFiche(true);
+    if (!S.ligne && !S.reglages && !S.ordreExpe) fermerFiche(true);
     else if (modalOuverte()) fermerFiche(true);   // render() rouvrira la bonne
     render();
   });
