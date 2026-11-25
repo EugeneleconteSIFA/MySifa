@@ -60,6 +60,30 @@ def test_sous_page_servie(monkeypatch):
     assert '"BreadcrumbList"' in r.text
 
 
+def test_version_anglaise_servie_et_reliee(monkeypatch):
+    """Chaque page anglaise répond, pointe vers sa jumelle française et inversement."""
+    _connecte(monkeypatch)
+    c = _client()
+    fr = c.get("/website/produits/etiquettes-paravent/").text
+    en = c.get("/website/en/products/fanfold-labels/")
+    assert en.status_code == 200
+    assert '<html lang="en"' in en.text
+    lien_fr = 'hreflang="fr" href="https://www.sifapro.fr/produits/etiquettes-paravent/"'
+    lien_en = 'hreflang="en" href="https://www.sifapro.fr/en/products/fanfold-labels/"'
+    for page in (fr, en.text):
+        assert lien_fr in page and lien_en in page
+        assert 'class="lang-sw"' in page
+    assert 'href="./en/"' in c.get("/website/").text
+
+
+def test_blocs_partages_a_jour():
+    """Les blocs générés par tools/website_build.py sont à jour sur les 24 pages."""
+    import subprocess
+    r = subprocess.run([sys.executable, "tools/website_build.py", "--check"],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 def test_dossier_sans_barre_redirige(monkeypatch):
     _connecte(monkeypatch)
     r = _client().get("/website/contact", follow_redirects=False)

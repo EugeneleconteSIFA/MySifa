@@ -5,6 +5,9 @@ Tout utilisateur authentifié. Les pages servent à montrer la refonte du site
 public avant sa mise en ligne : elles restent derrière la connexion et ne
 sont pas indexées (meta robots + en-tête X-Robots-Tag).
 
+La version anglaise est sous /website/en/ (app/web/website/en/…), générée
+et reliée à la française par tools/website_build.py (clé « en » de site.json).
+
 Les pages vivent dans app/web/website/<chemin>/index.html, hors de /static,
 pour ne pas être lisibles sans session. Images, feuille de style et script
 partagés sont dans static/website/. Les liens entre pages sont relatifs :
