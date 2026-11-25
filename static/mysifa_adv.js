@@ -66,6 +66,8 @@
     vue: '2w',                   // planning de prépa : '1w', '2w', '4w'
     semaine: null,               // lundi de la première semaine affichée (null : la semaine en cours)
     friseDrag: null,             // lignes de la commande glissée dans la frise
+    ouverts: {},                 // envois dépliés dans le tableau (clé d'envoi → vrai)
+    ordre: null,                 // ordre d'expé ouvert : clé d'une de ses lignes
     sous: null,                  // 'historique' : les préparations déjà faites
     histoJours: 30,
     historique: null,
@@ -213,6 +215,8 @@
     S.ligne = (l && /^\d{1,12}-\d{1,4}$/.test(l)) ? l : null;
     S.reglages = (DROITS.adv && S.onglet === 'commandes' && !S.ligne)
       ? u.get('reglages', null, ['mise_en_forme']) : null;
+    var od = u.get('ordre', null);
+    S.ordre = (S.onglet === 'prepa' && !S.ligne && od && /^\d{1,12}-\d{1,4}$/.test(od)) ? od : null;
   }
   function ecrireUrl() {
     var p = {};
@@ -234,8 +238,9 @@
     }
     if (S.ligne) p.ligne = S.ligne;
     else if (S.reglages) p.reglages = S.reglages;
+    else if (S.ordre) p.ordre = S.ordre;
     var lieu = S.onglet === 'prepa' ? ':' + (S.sous || S.groupe) : '';
-    MySifaUrl.ecrire(p, {navigation: S.onglet + lieu + (S.ligne ? ':fiche' : S.reglages ? ':reglages' : '')});
+    MySifaUrl.ecrire(p, {navigation: S.onglet + lieu + (S.ligne ? ':fiche' : S.reglages ? ':reglages' : S.ordre ? ':ordre' : '')});
   }
 
   /* ── Données ────────────────────────────────────────────────── */
@@ -318,7 +323,8 @@
     ecrireUrl();
     if (S.ligne && !modalOuverte()) ouvrirFiche(S.ligne, true);
     else if (S.reglages && !modalOuverte()) ouvrirReglages(true);
-    if (!S.ligne && !S.reglages && modalOuverte()) fermerFiche(true);
+    else if (S.ordre && !modalOuverte()) ouvrirOrdre(S.ordre, true);
+    if (!S.ligne && !S.reglages && !S.ordre && modalOuverte()) fermerFiche(true);
   }
 
   // Date des données RVGI et « Mettre à jour » (static/mysifa_rvgi_synchro.js) :
@@ -1054,18 +1060,23 @@
       : l.groupe === 'en_cours' ? 'En cours de préparation' : 'À préparer';
   }
 
-  // Les lignes d'un jour, regroupées par commande, dans l'ordre de la première
-  // ligne de chaque commande.
-  function parCommande(lignes) {
+  // Ce qui part ensemble : même commande, même date d'expédition, même
+  // adresse de livraison (celle de la ligne dans RVGI). Un envoi = un bloc de
+  // la frise, une ligne repliable du tableau.
+  function cleEnvoi(l) {
+    return l.numero + '|' + (l.expedition || '') + '|' + ((l.destination && l.destination.cle) || '');
+  }
+  function parEnvoi(lignes) {
     var ordre = [], par = {};
     lignes.forEach(function (l) {
-      if (!par[l.numero]) { par[l.numero] = {numero: l.numero, lignes: []}; ordre.push(par[l.numero]); }
-      par[l.numero].lignes.push(l);
+      var k = cleEnvoi(l);
+      if (!par[k]) { par[k] = {cle: k, numero: l.numero, lignes: []}; ordre.push(par[k]); }
+      par[k].lignes.push(l);
     });
     return ordre;
   }
 
-  // Une commande dans la frise, comme un dossier du planning machine : client
+  // Un envoi dans la frise, comme un dossier du planning machine : client
   // en gros, puis la quantité et la référence (une ligne) ou le nombre de
   // lignes, puis la date d'expédition ; le détail ligne par ligne au survol.
   // Trop étroit, le bloc ne garde que le client, à la verticale.
@@ -1133,7 +1144,7 @@
         h('span', {className: 'pf-jh-n', text: aFaire ? aFaire + ' à faire' : x.lignes.length ? 'fait' : '—'}));
     }));
     var barre = h('div', {className: 'pf-barre'}, jours.map(function (x) {
-      var seg = h('div', {className: 'pf-seg' + etat(x), 'data-jour': x.jour}, parCommande(x.lignes).map(blocFrise));
+      var seg = h('div', {className: 'pf-seg' + etat(x), 'data-jour': x.jour}, parEnvoi(x.lignes).map(blocFrise));
       if (DROITS.adv && x.jour >= auj) {
         seg.addEventListener('dragover', function (ev) {
           if (!(S.friseDrag || S.prepaDrag)) return;
@@ -1202,6 +1213,48 @@
     _ajusteFrise = setTimeout(ajusterBlocsFrise, 120);
   });
 
+  // La ligne d'un envoi de plusieurs lignes : client, commande, totaux ; un
+  // clic l'ouvre ou la referme sur ses lignes. « Ordre d'expé » montre tout
+  // ce qui part ce jour-là à cette adresse.
+  function ligneEnvoi(g, ouvert, rang) {
+    var ls = g.lignes, l0 = ls[0];
+    var unites = ls.map(function (l) { return unite(l); }).filter(function (u, i, t) { return t.indexOf(u) === i; });
+    var somme = function (f) { return ls.reduce(function (s, l) { return s + (f(l) || 0); }, 0); };
+    var memeUnite = unites.length === 1;
+    var urgente = ls.some(function (l) { return l.urgence; });
+    var retard = ls.some(function (l) { return l.retard; });
+    var nbEmpl = somme(function (l) { return ((l.stock || {}).emplacements || []).length; });
+    var sortie = somme(function (l) { return (l.stock || {}).sortie_prod; });
+    var alloue = somme(function (l) { return (l.stock || {}).alloue; });
+    var basculer = function () {
+      S.ouverts[g.cle] = !S.ouverts[g.cle];
+      var yt = (document.querySelector('.adv-table-wrap') || {}).scrollTop;
+      render();
+      var tw = document.querySelector('.adv-table-wrap');
+      if (tw && yt) tw.scrollTop = yt;
+    };
+    return h('tr', {className: 'adv-pl adv-envoi' + (ouvert ? ' ouvert' : '') + (retard ? ' retard' : '') + (urgente ? ' urgente' : ''),
+        'aria-expanded': ouvert ? 'true' : 'false', onClick: basculer,
+        'data-tip': tip('envoi|' + g.cle, l0.client + ' · commande ' + l0.numero,
+          ls.length + ' lignes qui partent ensemble (même date, même adresse)', ouvert ? 'Cliquer pour replier' : 'Cliquer pour voir les lignes')},
+      DROITS.adv ? h('td', {className: 'c-poignee'}) : null,
+      h('td', {className: 'c-rang'}, h('div', {className: 'adv-rang-cel'},
+        h('div', {className: 'adv-rang' + (urgente ? ' urgente' : ''), text: String(rang)}),
+        h('span', {className: 'adv-envoi-caret', 'aria-hidden': 'true', text: '▸'}))),
+      h('td', {className: 'c-client'}, h('div', {className: 'c-client-t', text: l0.client, title: l0.client})),
+      h('td', {className: 'c-cde adv-mono', text: l0.numero}),
+      h('td', {className: 'c-ref adv-envoi-n', text: ls.length + ' lignes'}),
+      h('td', {className: 'c-num c-qte', 'data-l': 'Commandé'}, memeUnite ? qteU(l0, somme(function (l) { return l.qte; })) : '—'),
+      h('td', {className: 'c-num c-stk' + (alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, alloue && memeUnite ? fN(alloue) : '—'),
+      h('td', {className: 'c-num c-fort c-aprep', 'data-l': 'À préparer'}, memeUnite ? fN(somme(function (l) { return l.reste; })) : '—'),
+      h('td', {className: 'c-empl'}, h('div', {className: 'adv-empl'},
+        sortie ? h('span', {className: 'adv-sortie-prod'}, h('b', {text: 'Sortie prod'}), ' · ' + fN(sortie)) : null,
+        nbEmpl ? h('span', {}, h('b', {text: String(nbEmpl)}), ' emplacement' + (nbEmpl > 1 ? 's' : '')) : null)),
+      h('td', {className: 'c-quand' + (retard ? ' adv-date-retard' : '')}, l0.expedition ? dateFr(l0.expedition) : 'Non datée'),
+      h('td', {className: 'c-act'}, h('div', {className: 'adv-actions'},
+        h('button', {type: 'button', className: 'btn btn-petit', onClick: function (ev) { ev.stopPropagation(); ouvrirOrdre(l0.cle); }}, 'Ordre d’expé'))));
+  }
+
   var VIDES_PREPA = {
     preparable: 'Rien à préparer sur les %n prochains jours.',
     partiel: 'Aucune ligne en stock partiel sur les %n prochains jours.',
@@ -1253,11 +1306,110 @@
       return;
     }
     // Le rang suit l'ordre de travail dans l'onglet ; une prépa prête n'en a pas.
-    var corps = h('tbody', {}, ls.map(function (l, i) {
-      return cartePrepa(l, onglet.cle === 'pretes' ? '·' : i + 1, {lignes: ls, index: i, onglet: onglet.cle});
-    }));
+    // Les lignes qui partent ensemble se replient sous la ligne de leur envoi.
+    var rangDe = function (l) { return onglet.cle === 'pretes' ? '·' : ls.indexOf(l) + 1; };
+    var ctxDe = function (l) { return {lignes: ls, index: ls.indexOf(l), onglet: onglet.cle}; };
+    var corps = h('tbody', {});
+    parEnvoi(ls).forEach(function (g) {
+      if (g.lignes.length === 1) { corps.appendChild(cartePrepa(g.lignes[0], rangDe(g.lignes[0]), ctxDe(g.lignes[0]))); return; }
+      var ouvert = !!S.ouverts[g.cle];
+      corps.appendChild(ligneEnvoi(g, ouvert, rangDe(g.lignes[0])));
+      g.lignes.forEach(function (l) {
+        var tr = cartePrepa(l, rangDe(l), ctxDe(l));
+        tr.classList.add('adv-enfant');
+        if (!ouvert) tr.classList.add('replie');
+        corps.appendChild(tr);
+      });
+    });
     c.appendChild(h('div', {className: 'adv-table-wrap adv-prepa-wrap'},
       h('table', {className: 'adv-table adv-prepa-table'}, entetePrepa(), corps)));
+  }
+
+  /* ── Ordre d'expédition : ce qui part un jour pour une adresse ── */
+
+  // Toutes les lignes de la Prépa qui partent le même jour que `cle`, à la
+  // même adresse de livraison — toutes commandes confondues. Sans adresse
+  // connue dans RVGI, on s'en tient à la commande.
+  function lignesOrdre(cle) {
+    var tous = (S.prepa && S.prepa.lignes) || [];
+    var l = tous.find(function (x) { return x.cle === cle; });
+    if (!l) return null;
+    var dest = l.destination && l.destination.cle;
+    var ls = tous.filter(function (x) {
+      return x.expedition === l.expedition && (dest ? x.destination && x.destination.cle === dest : x.numero === l.numero);
+    }).sort(function (a, b) { return a.numero === b.numero ? a.ligne - b.ligne : (a.numero < b.numero ? -1 : 1); });
+    return {l: l, lignes: ls};
+  }
+
+  function ouvrirOrdre(cle, sansAdresse) {
+    var o = lignesOrdre(cle);
+    if (!o) {
+      if (!S.prepa) return;                  // données pas encore là : render() rouvrira
+      S.ordre = null; ecrireUrl();
+      toast('Cette ligne n’est plus dans la Prépa.', 'danger');
+      return;
+    }
+    var m = document.getElementById('mroot');
+    m.textContent = '';
+    cacherTip();
+    S.ligne = null; S.reglages = null;
+    S.ordre = cle;
+    if (!sansAdresse) ecrireUrl();
+    var l = o.l, d = l.destination || {};
+    var adresse = [d.adr1, d.adr2, [d.cp, d.ville].filter(Boolean).join(' ') + (d.pays ? ' (' + d.pays + ')' : '')]
+      .filter(function (x) { return x && x.trim(); });
+    var auj = aujourdhuiPrepa();
+    var deps = [];
+    o.lignes.forEach(function (x) {
+      (x.departs || []).forEach(function (dp) { if (!dp.parti_le && dp.date_enlevement && dp.date_enlevement >= auj) deps.push(dp); });
+    });
+    deps.sort(function (a, b) { return a.date_enlevement < b.date_enlevement ? -1 : 1; });
+    var dep = deps[0];
+    var commandes = o.lignes.map(function (x) { return x.numero; }).filter(function (n, i, t) { return t.indexOf(n) === i; });
+    var ouPrelever = function (x) {
+      var st = x.stock || {};
+      var t = (st.emplacements || []).map(function (e) { return e.emplacement + ' · ' + fN(e.quantite); });
+      if (st.sortie_prod) t.push('Sortie prod · ' + fN(st.sortie_prod));
+      return t.join(', ') || '—';
+    };
+    var info = function (lib, val) { return h('div', {className: 'od-info'}, h('div', {className: 'od-l', text: lib}), h('div', {className: 'od-v', text: val})); };
+    var fermer = function () { fermerFiche(); };
+    var corps = h('tbody', {}, o.lignes.map(function (x) {
+      return h('tr', {},
+        h('td', {className: 'adv-mono', text: x.numero + '-L' + x.ligne}),
+        h('td', {className: 'adv-mono', text: x.ref_client || '—'}),
+        h('td', {className: 'adv-mono', text: x.article}),
+        h('td', {className: 'od-des', text: x.designation || ''}),
+        h('td', {className: 'num', text: qteU(x, x.reste)}),
+        h('td', {className: 'od-empl', text: ouPrelever(x)}),
+        h('td', {text: etatLigne(x)}));
+    }));
+    var modal = h('div', {className: 'adv-modal adv-ordre', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ordre d’expédition'},
+      h('div', {className: 'od-tete'},
+        h('div', {},
+          h('div', {className: 'od-org', text: BOOT.org || ''}),
+          h('h3', {text: 'Ordre d’expédition'}),
+          h('div', {className: 'od-date', text: l.expedition ? 'Expédition le ' + dateLongue(l.expedition) : 'Expédition non datée'})),
+        h('button', {type: 'button', className: 'fi-fermer od-ecran', 'aria-label': 'Fermer', onClick: fermer, html:
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'})),
+      h('div', {className: 'od-infos'},
+        h('div', {className: 'od-info od-dest'}, h('div', {className: 'od-l', text: 'Destinataire'}),
+          h('div', {className: 'od-v od-rs', text: d.rs || l.client}),
+          adresse.length ? adresse.map(function (x) { return h('div', {className: 'od-adr', text: x}); })
+            : h('div', {className: 'od-adr adv-muet', text: 'Adresse de livraison absente de RVGI'})),
+        info('Client', l.client),
+        info('Transport', dep ? (dep.transporteur || 'Transporteur à préciser') + ' · enlèvement le ' + dateFr(dep.date_enlevement) : 'Aucun enlèvement prévu dans MyExpé'),
+        info('Commande' + (commandes.length > 1 ? 's' : ''), commandes.join(', '))),
+      h('table', {className: 'od-table'},
+        h('thead', {}, h('tr', {}, ['Cde-L', 'Réf client', 'Réf produit', 'Désignation', 'Quantité', 'Où prélever', 'État'].map(function (t) {
+          return h('th', {className: t === 'Quantité' ? 'num' : null, text: t});
+        }))), corps),
+      h('div', {className: 'od-total', text: o.lignes.length + ' ligne' + (o.lignes.length > 1 ? 's' : '') + ' · ' + commandes.length + ' commande' + (commandes.length > 1 ? 's' : '')}),
+      h('div', {className: 'm-pied od-ecran'},
+        h('button', {type: 'button', className: 'btn', onClick: fermer}, 'Fermer'),
+        h('button', {type: 'button', className: 'btn btn-accent', onClick: function () { window.print(); }}, 'Imprimer')));
+    var voile = h('div', {className: 'adv-voile', onClick: function (ev) { if (ev.target === voile) fermerFiche(); }}, modal);
+    m.appendChild(voile);
   }
 
   /* ── Mise en forme conditionnelle ───────────────────────────── */
@@ -1499,6 +1651,7 @@
     if (sansAdresse === true) return;
     S.ligne = null;
     S.reglages = null;
+    S.ordre = null;
     ecrireUrl();
   }
 
@@ -1547,6 +1700,15 @@
     return n > 0 ? 'dans ' + n + ' j' : 'il y a ' + (-n) + ' j';
   }
 
+  // L'adresse de livraison d'une ligne (RVGI), sur une ou deux lignes.
+  function adresseLivraison(l) {
+    var d = l.destination || {};
+    var lignes = [d.rs, [d.adr1, d.adr2].filter(Boolean).join(', '), [d.cp, d.ville].filter(Boolean).join(' ') + (d.pays ? ' (' + d.pays + ')' : '')]
+      .filter(function (x) { return x && x.trim(); });
+    return lignes.length ? lignes.map(function (x) { return h('div', {text: x}); })
+      : h('div', {className: 'adv-muet', text: 'Adresse absente de RVGI'});
+  }
+
   function ouvrirFiche(cle, sansAdresse) {
     var l = ligneParCle(cle);
     if (!l) {
@@ -1559,6 +1721,7 @@
     m.textContent = '';
     cacherTip();
     S.reglages = null;
+    S.ordre = null;
     if (S.ligne !== cle) S.ficheEtape = null;
     if (!sansAdresse) { S.ligne = cle; ecrireUrl(); }
     else S.ligne = cle;
@@ -1677,7 +1840,9 @@
       // Stock « probable » : la production finie n'est pas entrée dans MyStock.
       var puceSortie = h('span', {className: 'adv-sortie-prod',
           'data-tip': tip(l.cle + '|fisortie', 'Sortie de production', l.etapes.stock.detail)},
-        h('b', {text: 'Sortie prod'}), ' · ' + fN(st.sortie_prod) + ((st.dossiers_prod || []).length ? ' · dossier ' + st.dossiers_prod.join(', ') : ''));
+        h('b', {text: 'Sortie prod'}), ' · ' + fN(st.sortie_prod) + ((st.dossiers_prod || []).length
+          ? ' · ' + (st.dossiers_prod.length > 1 ? st.dossiers_prod.length + ' dossiers' : 'dossier ' + st.dossiers_prod[0]) : ''));
+      if ((st.dossiers_prod || []).length > 1) puceSortie.setAttribute('data-tip', tip(l.cle + '|fisortie', 'Sortie de production', l.etapes.stock.detail, 'Dossiers ' + st.dossiers_prod.join(', ')));
       if (empl) empl.appendChild(puceSortie);
       else empl = h('div', {className: 'adv-empl'}, puceSortie);
     }
@@ -1688,7 +1853,10 @@
         l.prepa.maj_par ? h('span', {className: 'adv-muet', text: l.prepa.maj_par + ' · ' + dateFr(l.prepa.maj_le) + ' ' + heure(l.prepa.maj_le)}) : null,
         h('div', {className: 'fi-prepa-b'}, boutonsPrepa(l))),
       h('div', {className: 'fi-sous-t', text: 'Où prélever' + (st.connu ? ' · ' + qteU(l, st.total) + ' en stock pour l’article' : '')}),
-      empl);
+      empl,
+      h('div', {className: 'fi-sous-t', text: 'Livrer à'}),
+      h('div', {className: 'fi-livrer'}, adresseLivraison(l)),
+      h('div', {className: 'fi-prepa-b'}, h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { ouvrirOrdre(l.cle); }}, 'Ordre d’expé')));
 
     // ── Production et départs ──
     var STATUT_DOS = {attente: ['En attente', ''], en_cours: ['En cours', 'warn'], termine: ['Terminé', 'ok']};
@@ -1742,8 +1910,9 @@
 
     var modal = h('div', {className: 'adv-modal adv-fiche', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ligne ' + l.numero + ' · ' + l.ligne},
       tete,
-      h('div', {className: 'fi-carte fi-chaine'}, h('h4', {text: 'Chaîne de valeur'}), frise, correction),
-      h('div', {className: 'fi-grille'}, quantites, echeances, prepa, suivi),
+      h('div', {className: 'fi-grille'}, prepa,
+        h('div', {className: 'fi-carte'}, h('h4', {text: 'Chaîne de valeur'}), frise, correction),
+        quantites, echeances, suivi),
       h('div', {className: 'm-pied'}, liens, h('button', {type: 'button', className: 'btn', onClick: fermer}, 'Fermer')));
     var voile = h('div', {className: 'adv-voile', onClick: function (ev) { if (ev.target === voile) fermerFiche(); }}, modal);
     m.appendChild(voile);
@@ -1770,7 +1939,7 @@
     var histo = S.onglet === 'prepa' && S.sous === 'historique';
     if (histo ? !S.historique || S.historique.jours !== S.histoJours
       : (S.onglet !== avant || !donnees() || (S.onglet === 'prepa' && hz !== S.horizon))) { await charger(); }
-    if (!S.ligne && !S.reglages) fermerFiche(true);
+    if (!S.ligne && !S.reglages && !S.ordre) fermerFiche(true);
     else if (modalOuverte()) fermerFiche(true);   // render() rouvrira la bonne
     render();
   });
