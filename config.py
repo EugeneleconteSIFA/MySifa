@@ -794,7 +794,11 @@ ADV_MEF_COLONNES = (
     ("expedition", "Expédition", "date"),
     ("livraison", "Livraison", "date"),
     ("fin_prod", "Fin de prod", "date"),
-) + tuple(("etape_" + k, v, "etat") for k, v in ADV_ETAPES)
+) + tuple(("etape_" + k, v, "etat") for k, v in ADV_ETAPES) + (
+    # Pas une colonne du carnet : la dernière info de suivi de la ligne, pour
+    # « si Info de suivi n'est pas vide, colorer la ligne ».
+    ("info", "Info de suivi", "texte"),
+)
 ADV_MEF_OPERATEURS = {
     "nombre": (("gt", ">"), ("ge", "≥"), ("lt", "<"), ("le", "≤"), ("eq", "="), ("ne", "≠"),
                ("vide", "est vide"), ("non_vide", "n'est pas vide")),
@@ -810,6 +814,21 @@ ADV_MEF_CIBLES = (("valeur", "une valeur"), ("colonne", "une autre colonne"),
                   ("aujourdhui", "aujourd'hui ± jours"))
 ADV_MEF_TONS = (("danger", "Rouge"), ("warn", "Orange"), ("ok", "Vert"),
                 ("accent", "Bleu"), ("neutre", "Gris"))
+# Palette élargie : une teinte (angle et saturation OKLCH) x une nuance x un
+# rendu. Les tons ci-dessus suivent la palette du thème ; ceux-ci gardent leur
+# teinte, et leur clarté suit le mode clair / sombre (mysifa_adv.css). Le ton
+# d'une règle s'écrit « <teinte>-<nuance> » : rouge-2, vert-1…
+ADV_MEF_TEINTES = (
+    ("rouge", "Rouge", 25, 0.19), ("orange", "Orange", 50, 0.17),
+    ("ambre", "Ambre", 75, 0.16), ("jaune", "Jaune", 98, 0.16),
+    ("citron", "Vert citron", 125, 0.17), ("vert", "Vert", 150, 0.16),
+    ("emeraude", "Émeraude", 170, 0.13), ("turquoise", "Turquoise", 195, 0.12),
+    ("ciel", "Bleu ciel", 230, 0.13), ("bleu", "Bleu", 262, 0.17),
+    ("indigo", "Indigo", 285, 0.17), ("violet", "Violet", 305, 0.17),
+    ("rose", "Rose", 345, 0.17), ("gris", "Gris", 260, 0.0),
+)
+ADV_MEF_NUANCES = (("1", "Pâle"), ("2", "Moyen"), ("3", "Soutenu"))
+ADV_MEF_RENDUS = (("fond", "Pastille"), ("texte", "Texte coloré"))
 ADV_MEF_MAX_REGLES = 40
 
 # Type de poste (machines.type), réglé dans Paramètres › Machines : la logique

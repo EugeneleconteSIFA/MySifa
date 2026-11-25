@@ -476,6 +476,18 @@ def _urgences(conn) -> Dict[str, Dict[str, Any]]:
             for r in _lignes(conn, "SELECT * FROM mysifa.adv_urgences")}
 
 
+def _infos(conn) -> Dict[str, List[Dict[str, Any]]]:
+    """Informations de suivi notées par l'ADV, la plus récente en tête."""
+    if not _table(conn, "adv_infos"):
+        return {}
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for r in _lignes(conn, """SELECT id, numero, ligne, texte, cree_le, cree_par
+                                 FROM mysifa.adv_infos ORDER BY cree_le DESC, id DESC"""):
+        out.setdefault(cle_ligne(r["numero"], r["ligne"]), []).append(
+            {"id": r["id"], "texte": r["texte"], "cree_le": r["cree_le"], "cree_par": r["cree_par"]})
+    return out
+
+
 def _jours_prepa(conn) -> Dict[str, Dict[str, Any]]:
     """Jour de préparation fixé à la main par l'ADV dans le planning de prépa."""
     if not _table(conn, "adv_prepa_jours"):
@@ -789,6 +801,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         prepas = _prepas(conn)
         priorites = _priorites(conn)
         urgences = _urgences(conn)
+        infos = _infos(conn)
         jours_prepa = _jours_prepa(conn)
         repiquages_adv = _repiquages(conn)
         forcages = _forcages(conn)
@@ -832,6 +845,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
             "urgente_le": (ur or {}).get("maj_le"),
             "jour_manuel": (jp or {}).get("jour"),
             "jour_manuel_par": (jp or {}).get("maj_par"),
+            "infos": infos.get(cle, []),
         }
         lignes.append(l)
 

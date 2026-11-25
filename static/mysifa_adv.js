@@ -420,7 +420,8 @@
         if (v !== 'non' && v !== 'en_cours') return false;
       }
       if (q) {
-        var hay = norm([l.numero, l.client, l.article, l.designation, l.ref_client].join(' '));
+        var hay = norm([l.numero, l.client, l.article, l.designation, l.ref_client]
+          .concat((l.infos || []).map(function (x) { return x.texte; })).join(' '));
         if (hay.indexOf(q) === -1) return false;
       }
       return true;
@@ -508,9 +509,43 @@
   //
   // Les colonnes sont décrites une fois ici ; leur ORDRE appartient à chaque
   // personne (glisser un en-tête, enregistré en base par /api/adv/preferences).
+  /* ── Informations de suivi ──────────────────────────────────── */
+
+  // Le « ? » jaune d'une ligne qui a une info de suivi (survol : la dernière,
+  // clic : la fiche, sur le fil des infos). Sans info, l'ADV voit au survol de
+  // la ligne un « ? » en pointillé pour en ajouter une.
+  function iconeInfo(l) {
+    var infos = l.infos || [];
+    if (!infos.length && !DROITS.adv) return null;
+    var d = infos[0];
+    var b = h('button', {type: 'button', className: 'adv-info' + (infos.length ? '' : ' vide'),
+      'aria-label': infos.length ? 'Info de suivi : ' + d.texte : 'Ajouter une info de suivi',
+      'data-tip': infos.length
+        ? tip(l.cle + '|info', 'Info de suivi', d.texte,
+            (d.cree_par ? d.cree_par + ' · ' : '') + dateFr(d.cree_le) + (heure(d.cree_le) ? ' à ' + heure(d.cree_le) : '')
+            + (infos.length > 1 ? ' · ' + (infos.length - 1) + ' autre' + (infos.length > 2 ? 's' : '') + ' dans la fiche' : ''))
+        : tip(l.cle + '|info', 'Ajouter une info de suivi', 'Pourquoi la ligne n’est pas partie, où elle en est.'),
+      onClick: function (ev) { ev.stopPropagation(); S.focusInfo = true; ouvrirFiche(l.cle); }}, '?');
+    return b;
+  }
+  async function ajouterInfo(l, texte) {
+    var r = await api('/api/adv/infos/' + encodeURIComponent(l.numero) + '/' + l.ligne, {method: 'POST', body: {texte: texte}});
+    majInfos(l.cle, function (infos) { return [r.info].concat(infos); });
+  }
+  async function supprimerInfo(l, id) {
+    await api('/api/adv/infos/' + id, {method: 'DELETE'});
+    majInfos(l.cle, function (infos) { return infos.filter(function (x) { return x.id !== id; }); });
+  }
+  // Le carnet et la Prépa portent chacun leur copie de la ligne.
+  function majInfos(cle, fn) {
+    [S.carnet, S.prepa].forEach(function (d) {
+      ((d && d.lignes) || []).forEach(function (x) { if (x.cle === cle) x.infos = fn(x.infos || []); });
+    });
+  }
+
   var COLONNES = [
     {cle: 'commande', famille: 'id', label: 'Commande', tri: 'commande', td: function (l) {
-      return h('td', {className: 'adv-mono'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne}));
+      return h('td', {className: 'adv-mono c-commande'}, h('span', {className: 'cde-t'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne})), iconeInfo(l));
     }},
     {cle: 'client', famille: 'id', label: 'Client', tri: 'client', td: function (l) {
       return h('td', {className: 'client', text: l.client});
@@ -640,6 +675,8 @@
     var tbody = h('tbody');
     lignes.forEach(function (l) {
       var tr = h('tr', {onClick: function () { ouvrirFiche(l.cle); }});
+      var rgLigne = S.mef.length ? regleLigne(l) : null;
+      if (rgLigne) { tr.classList.add('mef-ligne'); habiller(tr, rgLigne); }
       cols.forEach(function (c, i) {
         var td = c.td(l);
         if (separee(cols, i)) td.classList.add('sep');
@@ -651,9 +688,10 @@
           if (cols[i - 1] && cols[i - 1].etape) td.classList.add('lien-g');
           if (cols[i + 1] && cols[i + 1].etape) td.classList.add('lien-d', 'suiv-' + etat(cols[i + 1]));
         }
-        var ton = S.mef.length ? tonCellule(l, c.cle) : null;
-        if (ton) {
-          td.classList.add('mef', 'mef-' + ton);
+        var rg = S.mef.length ? regleCellule(l, c.cle) : null;
+        if (rg) {
+          td.classList.add('mef');
+          habiller(td, rg);
           // Hors étapes (déjà en pastille), la valeur passe dans une pastille
           // teintée : on voit la règle sans perdre la lecture de la colonne.
           if (!c.etape) {
@@ -853,7 +891,7 @@
       DROITS.adv ? h('td', {className: 'c-poignee', 'aria-hidden': 'true', html: ICONE_POIGNEE}) : null,
       cellRang,
       h('td', {className: 'c-client'}, h('div', {className: 'c-client-t', text: l.client, title: l.client})),
-      h('td', {className: 'c-cde adv-mono', text: l.numero + '-L' + l.ligne}),
+      h('td', {className: 'c-cde adv-mono'}, h('span', {text: l.numero + '-L' + l.ligne}), (l.infos || []).length ? iconeInfo(l) : null),
       h('td', {className: 'c-ref adv-mono', text: l.article, 'data-tip': tip(l.cle + '|ref', l.article, l.designation)}),
       h('td', {className: 'c-num c-qte', 'data-l': 'Commandé'}, qteU(l, l.qte)),
       h('td', {className: 'c-num c-stk' + (st.alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, st.alloue ? fN(st.alloue) : '—'),
@@ -1473,6 +1511,7 @@
       case 'expedition': return l.expedition;
       case 'livraison': return l.livraison;
       case 'fin_prod': return l.fin_prod ? String(l.fin_prod).slice(0, 10) : null;
+      case 'info': return (l.infos && l.infos[0]) ? l.infos[0].texte : null;
       default:
         if (col.indexOf('etape_') === 0) { var e = l.etapes[col.slice(6)]; return e ? e.valeur : null; }
         return null;
@@ -1510,31 +1549,53 @@
       default: return false;
     }
   }
-  // La première règle qui s'applique à la cellule l'emporte.
-  function tonCellule(l, col, regles) {
+  // Ce que colore une règle : la colonne de sa condition (appliquer vide),
+  // une autre colonne, ou toute la ligne. La première qui s'applique l'emporte.
+  function regleCellule(l, col, regles) {
     var rs = regles || S.mef;
     for (var i = 0; i < rs.length; i++) {
-      if (rs[i].colonne === col && regleVraie(rs[i], l)) return rs[i].ton;
+      if ((rs[i].appliquer || rs[i].colonne) === col && regleVraie(rs[i], l)) return rs[i];
     }
     return null;
   }
-  function libRegle(rg) {
-    var typ = TYPE_COL[rg.colonne];
-    var op = (REF.operateurs[typ] || []).find(function (o) { return o.cle === rg.operateur; });
-    var txt = (LIB_COL[rg.colonne] || rg.colonne) + ' ' + (op ? op.label : rg.operateur);
-    if (rg.operateur === 'vide' || rg.operateur === 'non_vide') return txt;
-    if (rg.cible === 'colonne') return txt + ' ' + (LIB_COL[rg.valeur] || rg.valeur);
-    if (rg.cible === 'aujourdhui') {
-      var n = parseInt(rg.valeur, 10) || 0;
-      return txt + ' aujourd’hui' + (n ? (n > 0 ? ' + ' : ' − ') + Math.abs(n) + ' j' : '');
+  function regleLigne(l) {
+    for (var i = 0; i < S.mef.length; i++) {
+      if (S.mef[i].appliquer === 'ligne' && regleVraie(S.mef[i], l)) return S.mef[i];
     }
-    if (typ === 'etat') return txt + ' ' + (ETATS[rg.valeur] || rg.valeur);
-    if (typ === 'date') return txt + ' ' + dateLongue(rg.valeur);
-    return txt + ' ' + rg.valeur;
+    return null;
+  }
+  // Ton « rouge-2 » de la palette élargie : teinte (angle, saturation) et nuance.
+  var TEINTES = {};
+  (REF.teintes || []).forEach(function (t) { TEINTES[t.cle] = t; });
+  function teinteDe(ton) {
+    var m = /^([a-z]+)-([123])$/.exec(ton || '');
+    var t = m && TEINTES[m[1]];
+    return t ? {h: t.h, c: t.c, n: m[2], label: t.label} : null;
+  }
+  // Pose sur une cellule, une ligne ou un échantillon les classes du ton et du
+  // rendu ; la couleur elle-même est calculée par mysifa_adv.css.
+  function habiller(el, rg) {
+    var t = teinteDe(rg.ton);
+    if (t) {
+      el.classList.add('mef-t', 'mef-n' + t.n);
+      el.style.setProperty('--mef-h', String(t.h));
+      el.style.setProperty('--mef-c', String(t.c));
+    } else el.classList.add('mef-' + rg.ton);
+    el.classList.add('mef-r-' + (rg.rendu || 'fond'));
+    return el;
+  }
+  function libTon(ton) {
+    var t = teinteDe(ton);
+    if (t) {
+      var n = (REF.nuances || []).find(function (x) { return x.cle === t.n; });
+      return t.label + (n ? ' · ' + n.label.toLowerCase() : '');
+    }
+    var o = REF.tons.find(function (x) { return x.cle === ton; });
+    return o ? o.label + ' (thème)' : ton;
   }
 
   function regleParDefaut() {
-    return {colonne: 'a_fabriquer', operateur: 'gt', cible: 'valeur', valeur: '0', ton: 'warn'};
+    return {colonne: 'a_fabriquer', operateur: 'gt', cible: 'valeur', valeur: '0', ton: 'warn', appliquer: '', rendu: 'fond'};
   }
   function ciblesPour(typ) {
     if (typ === 'nombre') return ['valeur', 'colonne'];
@@ -1559,15 +1620,17 @@
     if (!sansAdresse) ecrireUrl();
     // Copie de travail : rien n'est appliqué au carnet avant « Enregistrer ».
     var E = S.mef.map(function (r) {
-      return {colonne: r.colonne, operateur: r.operateur, cible: r.cible || 'valeur', valeur: r.valeur || '', ton: r.ton};
+      return {colonne: r.colonne, operateur: r.operateur, cible: r.cible || 'valeur', valeur: r.valeur || '',
+              ton: r.ton, appliquer: r.appliquer || '', rendu: r.rendu || 'fond'};
     });
+    var palette = -1;                 // règle dont la palette est dépliée
     var liste = h('div', {className: 'mef-liste'});
     var pied = h('div', {className: 'mef-compte adv-muet'});
     var lignes = (S.carnet && S.carnet.lignes) || [];
 
-    function nbCellules(rg) {
+    function nbLignes(rg) {
       var n = 0;
-      lignes.forEach(function (l) { if (tonCellule(l, rg.colonne, [rg]) ) n++; });
+      lignes.forEach(function (l) { if (regleVraie(rg, l)) n++; });
       return n;
     }
     function select(options, valeur, onChange, label) {
@@ -1580,24 +1643,68 @@
       el.addEventListener('change', function () { onChange(el.value); });
       return el;
     }
+    // Ce qu'on peut colorer : la colonne de la condition si elle est affichée,
+    // toute la ligne, ou une autre colonne du carnet.
+    function optionsAppliquer(rg) {
+      var o = [];
+      if (COL_PAR_CLE[rg.colonne]) o.push({cle: '', label: 'cette colonne'});
+      o.push({cle: 'ligne', label: 'toute la ligne'});
+      colonnesOrdonnees().forEach(function (c) {
+        if (c.cle !== rg.colonne) o.push({cle: c.cle, label: 'la colonne ' + c.label});
+      });
+      return o;
+    }
+    function echantillon(rg) {
+      return habiller(h('span', {className: 'mef-ech-p'}, h('span', {className: 'mef-p', text: 'Aa'})), rg);
+    }
+    function dessinerPalette(rg, i) {
+      var choisir = function (ton) { return function () { rg.ton = ton; palette = -1; dessiner(); }; };
+      var theme = h('div', {className: 'mef-pal-theme'}, REF.tons.map(function (t) {
+        return h('button', {type: 'button', className: 'mef-ton mef-' + t.cle + (rg.ton === t.cle ? ' actif' : ''),
+          'aria-label': t.label + ' (thème)', 'data-tip': tip('mef-ton|' + i + '|' + t.cle, t.label, 'Suit la palette du thème'),
+          onClick: choisir(t.cle)});
+      }));
+      var grille = h('div', {className: 'mef-pal-grille', role: 'radiogroup', 'aria-label': 'Teinte et nuance'});
+      grille.style.setProperty('--mef-nb', String((REF.teintes || []).length));
+      (REF.nuances || []).forEach(function (n) {
+        (REF.teintes || []).forEach(function (t) {
+          var ton = t.cle + '-' + n.cle;
+          var b = habiller(h('button', {type: 'button', className: 'mef-ech' + (rg.ton === ton ? ' actif' : ''),
+            role: 'radio', 'aria-checked': rg.ton === ton ? 'true' : 'false', 'aria-label': t.label + ' · ' + n.label,
+            'data-tip': tip('mef-ech|' + i + '|' + ton, t.label, n.label), onClick: choisir(ton)}), {ton: ton, rendu: 'fond'});
+          grille.appendChild(b);
+        });
+      });
+      var rendus = h('div', {className: 'mef-pal-rendus', role: 'radiogroup', 'aria-label': 'Rendu'}, (REF.rendus || []).map(function (r) {
+        return h('button', {type: 'button', className: 'btn btn-petit' + (rg.rendu === r.cle ? ' actif' : ''),
+          role: 'radio', 'aria-checked': rg.rendu === r.cle ? 'true' : 'false',
+          onClick: function () { rg.rendu = r.cle; dessiner(); }}, r.label);
+      }));
+      return h('div', {className: 'mef-palette'},
+        h('div', {className: 'mef-pal-l', text: 'Thème'}), theme,
+        h('div', {className: 'mef-pal-l', text: 'Palette · une colonne par teinte, du pâle au soutenu'}), grille,
+        h('div', {className: 'mef-pal-l', text: 'Rendu'}), rendus);
+    }
     function dessiner() {
       liste.textContent = '';
       if (!E.length) {
-        liste.appendChild(h('div', {className: 'adv-vide', text: 'Aucune règle. Exemple : « À fabriquer > 0 » en orange, « Fin de prod après Expédition » en rouge.'}));
+        liste.appendChild(h('div', {className: 'adv-vide', text: 'Aucune règle. Exemples : « À fabriquer > 0 » en orange ; si « Expédition avant aujourd’hui », colorer toute la ligne en rouge pâle.'}));
       }
       E.forEach(function (rg, i) {
         var typ = TYPE_COL[rg.colonne];
         var sansCible = rg.operateur === 'vide' || rg.operateur === 'non_vide';
         var compte = h('span', {className: 'mef-n adv-muet'});
-        function majCompte() { compte.textContent = nbCellules(rg) + ' cell.'; }
+        function majCompte() { var n = nbLignes(rg); compte.textContent = n + ' ligne' + (n > 1 ? 's' : ''); }
         var colSel = select(REF.colonnes, rg.colonne, function (v) {
           rg.colonne = v;
           var t = TYPE_COL[v];
           rg.operateur = (REF.operateurs[t] || [])[0].cle;
           rg.cible = 'valeur';
           rg.valeur = valeurParDefaut(t, 'valeur');
+          if (rg.appliquer === v) rg.appliquer = '';
+          if (!rg.appliquer && !COL_PAR_CLE[v]) rg.appliquer = 'ligne';
           dessiner();
-        }, 'Colonne');
+        }, 'Colonne de la condition');
         var opSel = select(REF.operateurs[typ] || [], rg.operateur, function (v) { rg.operateur = v; dessiner(); }, 'Condition');
         var zoneValeur = h('div', {className: 'mef-valeur'});
         if (!sansCible) {
@@ -1623,35 +1730,39 @@
           zoneValeur.appendChild(champ);
           if (rg.cible === 'aujourdhui') zoneValeur.appendChild(h('span', {className: 'adv-muet', text: 'jours'}));
         }
-        var tons = h('div', {className: 'mef-tons', role: 'radiogroup', 'aria-label': 'Couleur'});
-        REF.tons.forEach(function (t) {
-          tons.appendChild(h('button', {type: 'button', className: 'mef-ton mef-' + t.cle + (rg.ton === t.cle ? ' actif' : ''),
-            role: 'radio', 'aria-checked': rg.ton === t.cle ? 'true' : 'false', 'aria-label': t.label,
-            'data-tip': tip('mef-ton|' + i + '|' + t.cle, t.label),
-            onClick: function () { rg.ton = t.cle; dessiner(); }}));
-        });
+        var applSel = select(optionsAppliquer(rg), rg.appliquer || '', function (v) { rg.appliquer = v; }, 'Colorer');
+        var choix = h('button', {type: 'button', className: 'mef-choix' + (palette === i ? ' ouvert' : ''),
+          'aria-expanded': palette === i ? 'true' : 'false', 'aria-label': 'Couleur : ' + libTon(rg.ton),
+          'data-tip': tip('mef-choix|' + i, 'Couleur', libTon(rg.ton) + ' · ' + ((REF.rendus || []).find(function (r) { return r.cle === rg.rendu; }) || {label: ''}).label),
+          onClick: function () { palette = palette === i ? -1 : i; dessiner(); }},
+          echantillon(rg), h('span', {className: 'mef-choix-f', text: '▾'}));
         var bouger = function (d) {
           return function () {
             var j = i + d;
             if (j < 0 || j >= E.length) return;
             var x = E[i]; E[i] = E[j]; E[j] = x;
+            if (palette === i) palette = j; else if (palette === j) palette = i;
             dessiner();
           };
         };
         liste.appendChild(h('div', {className: 'mef-regle'},
           h('span', {className: 'mef-rang', text: String(i + 1)}),
-          colSel, opSel, zoneValeur, tons, compte,
+          h('div', {className: 'mef-corps'},
+            h('div', {className: 'mef-cond'}, h('span', {className: 'mef-mot', text: 'Si'}), colSel, opSel, zoneValeur),
+            h('div', {className: 'mef-effet'}, h('span', {className: 'mef-mot', text: 'colorer'}), applSel,
+              h('span', {className: 'mef-mot', text: 'en'}), choix, compte),
+            palette === i ? dessinerPalette(rg, i) : null),
           h('div', {className: 'mef-ordre'},
             h('button', {type: 'button', className: 'btn btn-petit', 'aria-label': 'Monter', disabled: i === 0, onClick: bouger(-1)}, '↑'),
             h('button', {type: 'button', className: 'btn btn-petit', 'aria-label': 'Descendre', disabled: i === E.length - 1, onClick: bouger(1)}, '↓'),
             h('button', {type: 'button', className: 'btn btn-petit', 'aria-label': 'Supprimer la règle',
-              onClick: function () { E.splice(i, 1); dessiner(); }}, '×'))));
+              onClick: function () { E.splice(i, 1); palette = -1; dessiner(); }}, '×'))));
         majCompte();
       });
-      pied.textContent = E.length + ' / ' + REF.max + ' règles · la première qui s’applique à une cellule l’emporte';
+      pied.textContent = E.length + ' / ' + REF.max + ' règles · la première qui s’applique à une cellule (ou à la ligne) l’emporte';
       ajout.disabled = E.length >= REF.max;
     }
-    var ajout = h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { E.push(regleParDefaut()); dessiner(); }}, '+ Ajouter une règle');
+    var ajout = h('button', {type: 'button', className: 'btn btn-petit', onClick: function () { E.push(regleParDefaut()); palette = -1; dessiner(); }}, '+ Ajouter une règle');
     var enregistrer = h('button', {type: 'button', className: 'btn btn-accent', onClick: async function () {
       enregistrer.disabled = true;
       try {
@@ -1668,7 +1779,7 @@
     }}, 'Enregistrer');
     var modal = h('div', {className: 'adv-modal adv-modal-large', role: 'dialog', 'aria-modal': 'true'},
       h('h3', {text: 'Mise en forme conditionnelle'}),
-      h('div', {className: 'm-sous', text: 'Colore une cellule du carnet quand sa valeur remplit la condition. Règles communes à tout le service.'}),
+      h('div', {className: 'm-sous', text: 'Colore une cellule, une autre colonne ou toute la ligne quand la condition est remplie. Règles communes à tout le service.'}),
       liste,
       h('div', {className: 'mef-bas'}, ajout, pied),
       h('div', {className: 'm-pied'},
@@ -1940,18 +2051,76 @@
     }
     var suivi = h('div', {className: 'fi-carte'}, h('h4', {text: 'Production et départs'}), repBloc, rangees);
 
+    // ── Infos de suivi : le fil, la plus récente en tête ──
+    var infos = l.infos || [];
+    var champInfo = null;
+    var filInfos = h('div', {className: 'fi-infos-fil'});
+    if (!infos.length) filInfos.appendChild(h('div', {className: 'adv-muet', text: DROITS.adv ? 'Aucune info. Notez ici pourquoi la ligne n’est pas partie, où elle en est.' : 'Aucune info de suivi.'}));
+    infos.forEach(function (x) {
+      var suppr = null;
+      if (DROITS.adv) {
+        // Deux temps : le premier clic demande confirmation, le second supprime.
+        suppr = h('button', {type: 'button', className: 'fi-info-suppr', 'aria-label': 'Supprimer cette info', text: '×'});
+        suppr.addEventListener('click', async function () {
+          if (!suppr.classList.contains('confirmer')) {
+            suppr.classList.add('confirmer'); suppr.textContent = 'Supprimer ?';
+            setTimeout(function () { if (suppr.isConnected) { suppr.classList.remove('confirmer'); suppr.textContent = '×'; } }, 4000);
+            return;
+          }
+          suppr.disabled = true;
+          try { await supprimerInfo(l, x.id); toast('Info supprimée.'); render(); fermerFiche(true); ouvrirFiche(l.cle, true); }
+          catch (e) { toast(e.message, 'danger'); suppr.disabled = false; }
+        });
+      }
+      filInfos.appendChild(h('div', {className: 'fi-info'},
+        h('span', {className: 'adv-info', 'aria-hidden': 'true', text: '?'}),
+        h('div', {className: 'fi-info-c'},
+          h('div', {className: 'fi-info-t', text: x.texte}),
+          h('div', {className: 'fi-info-m adv-muet', text: (x.cree_par || '') + (x.cree_par ? ' · ' : '') + dateFr(x.cree_le) + (heure(x.cree_le) ? ' à ' + heure(x.cree_le) : '')})),
+        suppr));
+    });
+    var saisieInfo = null;
+    if (DROITS.adv) {
+      champInfo = h('input', {type: 'text', maxlength: '500', className: 'fi-info-champ',
+        placeholder: 'Ex. attente retour BAT client, palette bloquée, transporteur relancé…', 'aria-label': 'Nouvelle info de suivi'});
+      var ajoutInfo = h('button', {type: 'button', className: 'btn btn-accent btn-petit', text: 'Ajouter'});
+      var envoyer = async function () {
+        var t = champInfo.value.trim();
+        if (ajoutInfo.disabled) return;           // envoi déjà en cours
+        if (!t) { champInfo.focus(); return; }
+        ajoutInfo.disabled = true; champInfo.readOnly = true;
+        try {
+          await ajouterInfo(l, t);
+          toast('Info ajoutée.');
+          render(); fermerFiche(true); S.focusInfo = true; ouvrirFiche(l.cle, true);
+        } catch (e) { toast(e.message, 'danger'); ajoutInfo.disabled = false; champInfo.readOnly = false; }
+      };
+      ajoutInfo.addEventListener('click', envoyer);
+      champInfo.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); envoyer(); } });
+      saisieInfo = h('div', {className: 'fi-info-saisie'}, champInfo, ajoutInfo);
+    }
+    var carteInfos = h('div', {className: 'fi-carte fi-infos' + (infos.length ? ' avec' : '')},
+      h('h4', {}, h('span', {className: 'adv-info', 'aria-hidden': 'true', text: '?'}), ' Infos de suivi',
+        infos.length ? h('span', {className: 'adv-muet', text: ' · ' + infos.length}) : null),
+      saisieInfo, filInfos);
+
     var liens = h('div', {className: 'adv-liens'},
       DROITS.adv ? h('a', {className: 'btn btn-petit', href: '/erp#/commandes?q=' + encodeURIComponent(l.numero)}, 'Commande dans l’ERP') : null,
       st.connu ? h('a', {className: 'btn btn-petit', href: '/stock?ref=' + encodeURIComponent(l.article)}, 'Article dans MyStock') : null);
 
     var modal = h('div', {className: 'adv-modal adv-fiche', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ligne ' + l.numero + ' · ' + l.ligne},
       tete,
-      h('div', {className: 'fi-grille'}, prepa,
+      h('div', {className: 'fi-grille'}, carteInfos, prepa,
         h('div', {className: 'fi-carte'}, h('h4', {text: 'Chaîne de valeur'}), frise, correction),
         quantites, echeances, suivi),
       h('div', {className: 'm-pied'}, liens, h('button', {type: 'button', className: 'btn', onClick: fermer}, 'Fermer')));
     var voile = h('div', {className: 'adv-voile', onClick: function (ev) { if (ev.target === voile) fermerFiche(); }}, modal);
     m.appendChild(voile);
+    if (S.focusInfo) {
+      S.focusInfo = false;
+      if (champInfo) requestAnimationFrame(function () { champInfo.focus(); });
+      else carteInfos.scrollIntoView({block: 'nearest'});
+    }
   }
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && modalOuverte()) fermerFiche(); });
 

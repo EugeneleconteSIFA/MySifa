@@ -549,6 +549,55 @@ check("même adresse à la casse et aux espaces près : même clé",
 check("autre commande sans adresse : clé différente",
       par_d["9930001-1"]["destination"]["cle"] != dest["cle"], True)
 
+# ── 11. Infos de suivi ──────────────────────────────────────────────────────
+print("\nInfos de suivi")
+check("sans table : aucune info, pas d'erreur", par_d["9930001-1"]["infos"], [])
+_migrer("2026_11_25_adv_infos.py")
+b = sqlite3.connect(miroir.DB_PATH)
+b.executemany("INSERT INTO adv_infos(numero, ligne, texte, cree_le, cree_par) VALUES (?,?,?,?,?)", [
+    ("9930001", 1, "Attente retour BAT client", jour(-1), "ADV"),
+    ("9930001", 1, "BAT reçu, production lancée", jour(0), "ADV"),
+    ("9930002", 2, "Palette bloquée", jour(0), "ADV"),
+])
+b.commit()
+b.close()
+par_i = {l["cle"]: l for l in adv.construire()["lignes"]}
+check("le fil d'une ligne, le plus récent en tête",
+      [x["texte"] for x in par_i["9930001-1"]["infos"]], ["BAT reçu, production lancée", "Attente retour BAT client"])
+check("l'info reste sur SA ligne", ([x["texte"] for x in par_i["9930002-2"]["infos"]], par_i["9930002-1"]["infos"]),
+      (["Palette bloquée"], []))
+check("la Prépa porte aussi les infos",
+      all("infos" in l for l in adv.prepa(horizon=30)["lignes"]), True)
+
+# ── 12. Mise en forme : autre colonne, ligne, palette élargie ───────────────
+print("\nMise en forme : colorer ailleurs, palette")
+r2 = mef.valider([
+    {"colonne": "expedition", "operateur": "lt", "cible": "aujourdhui", "valeur": "0", "ton": "rouge-1", "appliquer": "ligne"},
+    {"colonne": "etape_bat", "operateur": "eq", "valeur": "non", "ton": "violet-3", "appliquer": "client", "rendu": "texte"},
+    {"colonne": "qte", "operateur": "gt", "valeur": "0", "ton": "warn", "appliquer": "qte"},
+    {"colonne": "info", "operateur": "non_vide", "ton": "jaune-2", "appliquer": "ligne"},
+])
+check("appliquer / rendu normalisés (même colonne = vide)",
+      [(r["ton"], r["appliquer"], r["rendu"]) for r in r2],
+      [("rouge-1", "ligne", "fond"), ("violet-3", "client", "texte"), ("warn", "", "fond"), ("jaune-2", "ligne", "fond")])
+check("nuance hors palette refusée", refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "rouge-4"}), True)
+check("teinte inconnue refusée", refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "fuchsia-1"}), True)
+check("colonne à colorer inconnue refusée",
+      refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "warn", "appliquer": "x; DROP"}), True)
+check("rendu inconnu refusé", refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "warn", "rendu": "clignotant"}), True)
+ref = mef.referentiel()
+check("le référentiel sert teintes, nuances et rendus",
+      (len(ref["teintes"]) >= 12, [n["cle"] for n in ref["nuances"]], [r["cle"] for r in ref["rendus"]]),
+      (True, ["1", "2", "3"], ["fond", "texte"]))
+_migrer("2026_11_20_adv_mises_en_forme.py")
+_migrer("2026_11_25_adv_mef_appliquer.py")
+b = sqlite3.connect(miroir.DB_PATH)
+b.row_factory = sqlite3.Row
+relu = mef.enregistrer(b, r2, jour(0), "ADV")
+b.close()
+check("enregistrées puis relues avec leur cible et leur rendu",
+      [(r["ton"], r["appliquer"], r["rendu"]) for r in relu], [(r["ton"], r["appliquer"], r["rendu"]) for r in r2])
+
 print()
 if ko:
     print(f"test_adv_commandes : {ko} échec(s)")
