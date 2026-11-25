@@ -314,13 +314,25 @@ print("\n4 bis. Gel H-48 — le petit depart imminent demande une confirmation")
 
 ids = _base((10.0, 20.0, 20.0, 20.0))
 with get_db() as conn:
-    _depart(conn, ids[0], 1, 4.0)   # 4 palettes : hors contrainte transport
+    # Le camion doit etre DANS le gel (moins de 48 h avant sa limite) ET le
+    # dossier doit finir AVANT lui : depuis le 10/11/2026, un dossier qui
+    # finissait deja apres son camion ne demande plus de confirmation. Un
+    # enlevement « demain » ne tient les deux qu'avant l'heure limite du jour :
+    # passe cette heure, 10 h de production finissent demain apres la limite
+    # et le test echouait selon l'heure a laquelle il tournait (relevé le
+    # 25/11/2026 a 18 h). Apres l'heure limite, on prend apres-demain : la
+    # limite est alors a moins de 48 h, et 10 h tiennent dans la journee qui
+    # reste (machine ouverte 5 h-21 h).
+    h_lim = float(tp.charger_params(conn)["heure_limite"])
+    maintenant = datetime.now()
+    jours_gel = 1 if maintenant.hour + maintenant.minute / 60.0 < h_lim else 2
+    _depart(conn, ids[0], jours_gel, 4.0)   # 4 palettes : hors contrainte transport
     erreur = None
     try:
         P._garde_transport_reorder(conn, MACHINE_ID, list(reversed(ids)))
     except HTTPException as e:
         erreur = e
-vrai("enlevement demain : confirmation demandee", erreur is not None)
+vrai("enlevement imminent : confirmation demandee", erreur is not None)
 verifier("code HTTP 409", getattr(erreur, "status_code", None), 409)
 verifier("code de la regle", (getattr(erreur, "detail", None) or {}).get("code"), "gel_transport")
 vrai("le detail nomme le dossier",
