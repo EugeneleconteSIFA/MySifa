@@ -740,11 +740,19 @@ ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_AD
 ROLES_ERP = ROLES_ADMIN | {ROLE_EXPEDITION}
 
 # ADV (/adv) : le tableau de bord du carnet de commandes, côté administration
-# des ventes. Le tableau est ouvert à l'administration et à la direction ;
-# l'onglet Prépa l'est aussi à la logistique et à l'expédition, qui y passent
-# une préparation à « en cours » puis « prête ».
+# des ventes. Trois cercles (décision du 26/11/2026) :
+# - ROLES_ADV : l'administration et la direction PILOTENT — ordre de la Prépa,
+#   urgences, jour de prépa, forçages, repiquage, mise en forme ;
+# - ROLES_ADV_PREPA : qui passe une préparation « prête » (ADV, logistique,
+#   expédition) ;
+# - ROLES_ADV_CARNET : qui CONSULTE le carnet (onglet Commandes) — l'ADV, les
+#   commerciaux et l'expédition.
+# ROLES_ADV_LECTURE ouvre l'appli : tout rôle d'un des trois cercles. La
+# logistique n'a que l'onglet Prépa ; un commercial voit tout sans rien changer.
 ROLES_ADV = set(ROLES_ADMIN)
 ROLES_ADV_PREPA = ROLES_ADV | {ROLE_LOGISTIQUE, ROLE_EXPEDITION}
+ROLES_ADV_CARNET = ROLES_ADV | {ROLE_COMMERCIAL, ROLE_EXPEDITION}
+ROLES_ADV_LECTURE = ROLES_ADV_PREPA | ROLES_ADV_CARNET
 
 # Les cinq étapes de la chaîne d'une ligne de commande, dans l'ordre où elles
 # se franchissent, et les quatre états qu'une étape peut prendre.

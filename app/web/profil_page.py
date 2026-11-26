@@ -352,7 +352,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js?v=2"></script>
+<script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=21"></script>
 <script src="/static/chat_widget_v2.js?v=11"></script>

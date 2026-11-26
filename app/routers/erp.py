@@ -42,12 +42,12 @@ router = APIRouter(prefix="/api/erp", tags=["erp"])
 def miroir_etat(request: Request):
     """Date des données RVGI du miroir, et où en est la dernière demande de mise à jour.
 
-    Lu par le bandeau « Données RVGI du … » de l'ERP et de l'ADV (logistique et
-    expédition comprises, qui voient l'onglet Prépa).
+    Lu par le bandeau « Données RVGI du … » de l'ERP et de l'ADV (tous les
+    rôles qui ouvrent l'ADV, commerciaux et logistique compris).
     """
-    from config import ROLES_ADV_PREPA
+    from config import ROLES_ADV_LECTURE
     user = get_current_user(request)
-    if user.get("role") not in (ROLES_ERP | ROLES_ADV_PREPA):
+    if user.get("role") not in (ROLES_ERP | ROLES_ADV_LECTURE):
         raise HTTPException(status_code=403, detail="Accès refusé.")
     from app.routers import api_bridge
     from app.services import erp_synchro

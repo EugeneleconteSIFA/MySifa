@@ -598,6 +598,36 @@ b.close()
 check("enregistrées puis relues avec leur cible et leur rendu",
       [(r["ton"], r["appliquer"], r["rendu"]) for r in relu], [(r["ton"], r["appliquer"], r["rendu"]) for r in r2])
 
+# ── 13. Tolérance de quantité, lue sur l'OF ─────────────────────────────────
+print("\nTolérance de l'OF")
+check("pourcentage extrait du champ importé",
+      [adv.tolerance_pct(t) for t in ("0% Autres cartons", "10,5 % Autres cartons", "Autres cartons", None)],
+      [0.0, 10.5, None, None])
+check("sans table des OF : non renseignée",
+      {l["cle"]: l["tolerance"] for l in adv.construire()["lignes"]}.get("9930001-1"), None)
+b = sqlite3.connect(miroir.DB_PATH)
+b.executescript("""
+CREATE TABLE of_imports(id INTEGER PRIMARY KEY, of_numero TEXT, reference TEXT,
+    tolerance TEXT, invalide_at TEXT);
+INSERT INTO of_imports(id, of_numero, reference, tolerance, invalide_at) VALUES
+    (1, '9930001 - L1', '100/0001', '10% Autres cartons', NULL),
+    (2, '9930001', NULL, '0% Autres cartons', NULL),
+    (3, '9930002 - L2', NULL, '0 % Autres cartons', NULL),
+    (4, '9930002', '100/0001', '5%', '2026-11-01'),
+    (5, 'Rel 9930003', '999/0001', '0%', NULL),
+    (6, '9930003', '200/0002', 'Autres cartons', NULL);
+UPDATE planning_entries SET of_import_id = 1 WHERE id = 10;
+""")
+b.commit()
+b.close()
+tol = {l["cle"]: l["tolerance"] for l in adv.construire()["lignes"]}
+check("l'OF du dossier de la ligne l'emporte sur un OF plus récent",
+      tol["9930001-1"], {"pct": 10.0, "of": "9930001 - L1"})
+check("sans OF au dossier : l'OF qui cite la commande et sa ligne",
+      tol["9930002-2"], {"pct": 0.0, "of": "9930002 - L2"})
+check("OF invalidé ou d'une autre ligne : non renseignée", tol["9930002-1"], None)
+check("OF d'un autre article, ou sans pourcentage : non renseignée", tol["9930003-1"], None)
+
 print()
 if ko:
     print(f"test_adv_commandes : {ko} échec(s)")
