@@ -57,6 +57,9 @@ TOLERES = {
     # code ; la valeur pre-remplie est echappee par esc() dans area().
     "area(": "nom de champ du formulaire EUDR, valeur echappee dans area()",
     "champ('q_comment'": "libelle + champ du formulaire EUDR, valeur echappee dans area()",
+    # Fiche NC (qualite_nc_assets.py) : _ncChamp(libelle, champ, valeur, opts)
+    # echappe la valeur elle-meme (escHtml dans le textarea, escAttr dans l'input).
+    "_ncChamp(": "champ de la fiche NC, valeur echappee dans _ncChamp()",
     # Ternaires qui ne rendent qu'un signe ou un libelle ecrit dans le code.
     "(n.description||'').length>90?'…':''": "n'affiche qu'une ellipse",
     "(n.description||'').length>80?'…':''": "n'affiche qu'une ellipse",
