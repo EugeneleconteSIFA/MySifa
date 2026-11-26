@@ -707,3 +707,20 @@ table.adv-table{font-size:12px}
 .adv-table td.c-commande{position:sticky}
 .adv-table td.c-commande .adv-info.vide{position:absolute;right:2px;top:50%;margin:-9px 0 0}
 .adv-table th.etape{font-size:10px}
+
+/* Légende des pictos, au-dessus du tableau (Commandes et Prépa) : les pictos
+   des lignes en réduction, une phrase courte chacun. Discrète : elle se lit
+   une fois, puis on ne la regarde plus. */
+.adv-legende{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:6px 16px;margin:-2px 0 10px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.adv-leg{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.adv-noeud.mini{width:18px;height:18px}
+.adv-noeud.mini svg{width:10px;height:10px}
+.adv-noeud.mini.non,.adv-noeud.mini.sans_objet,.adv-noeud.mini.probable,.adv-noeud.mini.jauge{border-width:1.5px}
+.adv-noeud.mini.force::after{top:-3px;right:-3px;width:7px;height:7px}
+.adv-leg-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text2)}
+.adv-leg-btn svg{width:12px;height:12px;display:block}
+.adv-leg-btn.urgence{color:var(--danger)}
+.adv-leg-btn.urgence.on{background:var(--danger);border-color:var(--danger);color:white}
+.adv-leg-btn.prete{background:var(--accent);border-color:var(--accent);color:white}
+.adv-leg-btn.prete.on{background:var(--success);border-color:var(--success)}
+@media(max-width:560px){.adv-legende{justify-content:flex-start;gap:6px 12px;font-size:12px}}

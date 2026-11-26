@@ -409,6 +409,24 @@
     el.style.setProperty('--p', String(p));
   }
 
+  // Légende des pictos, en petit au-dessus du tableau : chaque picto est
+  // celui des lignes, en réduction, avec son sens en deux ou trois mots.
+  function legende(items) {
+    return h('div', {className: 'adv-legende', role: 'note', 'aria-label': 'Légende'},
+      items.filter(Boolean).map(function (it) {
+        return h('span', {className: 'adv-leg'}, it[0], h('span', {text: it[1]}));
+      }));
+  }
+  function noeudLegende(v, cls, p) {
+    var n = h('span', {className: 'adv-noeud mini ' + v + (cls ? ' ' + cls : ''), 'aria-hidden': 'true'});
+    n.innerHTML = ICONES_ETAT[v] || '';   // pictos SVG constants
+    if (p !== undefined) { n.classList.add('jauge'); n.style.setProperty('--p', String(p)); }
+    return n;
+  }
+  function boutonLegende(cle, cls) {
+    return h('span', {className: 'adv-leg-btn ' + cls, 'aria-hidden': 'true', html: ICONES_ACTION[cle]});
+  }
+
   function tuile(lib, val, sous, ton, actif, onClick, cle) {
     var attrs = {type: 'button', className: 'adv-tuile' + (ton ? ' ' + ton : '') + (actif ? ' active' : ''), onClick: onClick};
     return h('button', attrs, h('div', {className: 't-lib', text: lib}), h('div', {className: 't-val', text: String(val)}),
@@ -510,6 +528,14 @@
     });
     barre.appendChild(puces);
     c.appendChild(barre);
+    c.appendChild(legende([
+      [noeudLegende('oui'), 'Fait'],
+      [noeudLegende('en_cours', null, 50), 'En cours, rempli à la part faite'],
+      [noeudLegende('non'), 'À faire'],
+      [noeudLegende('sans_objet'), 'Sans objet'],
+      [noeudLegende('probable'), 'Production finie, pas encore en stock'],
+      [noeudLegende('sans_objet', 'force'), 'Fixé à la main par l’ADV']
+    ]));
     c.appendChild(h('div', {id: 'adv-table-hote'}));
     renderTableSeule();
   }
@@ -1416,6 +1442,13 @@
         : VIDES_PREPA[onglet.cle].replace('%n', S.horizon)}));
       return;
     }
+    c.appendChild(legende([
+      [boutonLegende('ordre', 'ordre'), 'Ordre d’expé à imprimer'],
+      DROITS.adv ? [boutonLegende('urgente', 'urgence'), 'Marquer urgente'] : null,
+      DROITS.adv ? [boutonLegende('urgente', 'urgence on'), 'Urgente : cliquer pour retirer'] : null,
+      DROITS.prepa ? [boutonLegende('prete', 'prete'), 'Marquer prête'] : null,
+      DROITS.prepa ? [boutonLegende('prete', 'prete on'), 'Prête : cliquer pour remettre à préparer'] : null
+    ]));
     // Le rang suit l'ordre de travail dans l'onglet ; une prépa prête n'en a pas.
     // Les lignes qui partent ensemble se replient sous la ligne de leur envoi.
     var rangDe = function (l) { return onglet.cle === 'pretes' ? '·' : ls.indexOf(l) + 1; };
