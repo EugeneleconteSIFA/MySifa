@@ -5412,6 +5412,14 @@ async function openAddDepuisOf(ofId){
     showToast(apiErrorMessage(e,"OF introuvable."),"danger");
     return;
   }
+  // Lien « depuis-of » rouvert alors que l'OF a déjà son dossier à produire
+  // (26/11/2026) : on n'en ouvre pas un second.
+  if(p&&p.dossier_existant){
+    showToast("Cet OF a déjà son dossier "+(p.dossier_existant.reference||"")+" au planning.","info");
+    if(p.dossier_existant.machine_id===MID){ try{ openEdit(p.dossier_existant.id); }catch(e){} }
+    return;
+  }
+  if(p&&p.bloque){ showToast("OF "+p.bloque+" : pas de nouveau dossier.","danger"); return; }
   _addTab='manual';
   _addOfFile=null;_addOfParsed=null;_addOfParsing=false;
   _addPrefill=p;

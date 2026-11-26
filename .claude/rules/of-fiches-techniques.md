@@ -570,6 +570,13 @@ dossiers le sont) sans scan, le clic dépose un PDF rattaché à CET OF
 ignoré). Un scan déjà reçu mais orphelin (« À rattacher ») redéposé ainsi est
 rattaché au lieu d'être refusé comme doublon. Test : `tests/test_of_scans.py`.
 
+**« Créer directement un dossier de prod »** (liste des OF, 26/11/2026). Le
+préremplissage (`/api/of/{id}/dossier-prefill`) dit d'abord ce que l'OF a déjà :
+`dossier_existant` (dossier à produire relié) → le bouton l'ouvre au planning,
+jamais de second dossier ; `bloque` (OF produit) → refus ; `correspondants`
+(`candidats()` hors dossiers reliés à un autre OF) → proposés à relier avant
+« Créer quand même ». Machine reconnue par `cle_machine` (« COHESIO 1 » = « Cohésio 1 »).
+
 **Numéros d'OF abrégés d'Access** (26/11/2026, `_of_tokens` de
 `of_import.py`). 387 OF de la prod portent plusieurs commandes dans leur
 numéro, souvent abrégées : « 9932913, 914, 915 et 916 », « 9932929-935-936 »,

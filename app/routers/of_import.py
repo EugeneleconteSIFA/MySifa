@@ -2900,14 +2900,39 @@ def of_dossier_prefill(of_id: int, request: Request):
             ).fetchone()
             fiche = dict(fiche) if fiche else None
 
+        # Machine reconnue malgré la casse et les accents : « COHESIO 1 »
+        # d'Access est « Cohésio 1 » au planning (26/11/2026 : 229 OF sur
+        # 1 153 seulement reconnus par égalité stricte).
+        from app.services.fiche_choix import cle_machine
         machine_id = None
         nom_machine = (of.get("machine") or "").strip()
         if nom_machine:
-            m = conn.execute(
-                "SELECT id FROM machines WHERE LOWER(TRIM(nom)) = LOWER(TRIM(?))",
-                (nom_machine,),
-            ).fetchone()
-            machine_id = m["id"] if m else None
+            cle = cle_machine(nom_machine)
+            for m in conn.execute("SELECT id, nom FROM machines ORDER BY COALESCE(actif,1) DESC, id"):
+                if cle and cle_machine(m["nom"]) == cle:
+                    machine_id = m["id"]
+                    break
+
+        # Ce que l'OF a déjà au planning, avant de proposer d'y créer un
+        # dossier (26/11/2026 : le bouton créait un doublon quand l'OF avait
+        # déjà son dossier à produire, puis le serveur refusait le lien).
+        from app.routers import of_planning as _op
+        existant = conn.execute(
+            "SELECT pe.id, pe.reference, pe.statut, pe.machine_id, m.nom AS machine "
+            "FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id "
+            "WHERE pe.statut IN ('attente','en_cours') AND (pe.of_import_id = ? OR pe.id IN "
+            "(SELECT planning_entry_id FROM planning_of_links WHERE of_import_id = ?)) "
+            "ORDER BY pe.id DESC LIMIT 1", (of_id, of_id)).fetchone()
+        etat = (_op.etat_des_of(conn, [of_id]) or {}).get(of_id) or {}
+        correspondants = []
+        if not existant and etat.get("etat") != "produit":
+            for d in _op.candidats(conn, None, of.get("of_numero"),
+                                   [{"numero": l["numero"], "ligne": l["ligne"]} for l in lignes])[:5]:
+                if d.get("of_import_id"):
+                    continue          # déjà relié à un autre OF : pas ce dossier-là
+                correspondants.append({"id": d["id"], "reference": d.get("reference"),
+                                       "machine_id": d.get("machine_id"), "machine": d.get("machine_nom"),
+                                       "statut": d.get("statut"), "raison": d.get("_raison")})
 
     largeur, hauteur = _format_lh(of.get("format"))
     client = next((l["vu_client"] for l in lignes if l.get("vu_client")), None)
@@ -2926,6 +2951,9 @@ def of_dossier_prefill(of_id: int, request: Request):
 
     return {
         "of_id": of_id,
+        "dossier_existant": (dict(existant) if existant else None),
+        "bloque": (etat.get("note") if etat.get("etat") == "produit" else None),
+        "correspondants": correspondants,
         "machine_id": machine_id,
         "machine": nom_machine or None,
         "fiche_id": (fiche.get("id") if fiche else None),
