@@ -679,3 +679,26 @@ body>*:not(#mroot){display:none !important}
 .adv-lien:hover{text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;color:var(--accent)}
 .mef-p .adv-lien:hover,.mef-ligne .adv-lien:hover{color:inherit}
 .adv-lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Carnet : toutes les colonnes tiennent dans l'écran (retour du 26/11) ── */
+/* Une zone de ~1 000 px doit tout montrer, sans défilement horizontal :
+   marges réduites, en-têtes sur deux lignes au besoin, étapes resserrées,
+   client tronqué (nom complet au survol). En dessous, le tableau défile. */
+.adv-table th{padding:8px 5px;white-space:normal;line-height:1.15;vertical-align:bottom;letter-spacing:.2px}
+.adv-table td{padding:7px 5px}
+.adv-table th.etape{padding:8px 1px;letter-spacing:0}
+.adv-table td.etape{padding:6px 1px}
+.adv-table td.client{max-width:none}
+.adv-table td.client .client-t{display:block;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+table.adv-table{font-size:12px}
+.adv-table th{font-size:10.5px}
+.adv-table td.des{max-width:none}
+.adv-table td.c-commande .adv-info{margin-left:4px}
+.adv-table th.etape,.adv-table td.etape{width:40px;min-width:40px;max-width:40px}
+.adv-table .adv-noeud{width:24px;height:24px}
+/* Le « ? » d'ajout (survol) ne réserve pas de place : il se pose sur la
+   marge droite de la cellule Commande. Le « ? » jaune d'une info, lui, garde
+   sa place. */
+.adv-table td.c-commande{position:sticky}
+.adv-table td.c-commande .adv-info.vide{position:absolute;right:2px;top:50%;margin:-9px 0 0}
+.adv-table th.etape{font-size:10px}
