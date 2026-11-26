@@ -133,6 +133,9 @@
     '.mrp.vue-autre .mrp-cherche,.mrp.vue-autre .mrp-sel,.mrp.vue-autre .mrp-corps,',
     '.mrp.vue-autre #mrp-choix,.mrp.vue-autre #mrp-refz,.mrp.vue-autre #mrp-ok,.mrp.vue-autre #mrp-avert{display:none !important}',
     '.mrp.a-vues .mrp-cherche{margin-top:12px;border-top:1px solid var(--border,#dcdfe4)}',
+    /* Même taille quelle que soit la vue : la fenêtre ne saute plus à la
+       bascule (retour du 26/11/2026). Les corps prennent la place libre. */
+    '.mrp.a-vues{height:min(780px,90vh)}',
     '.mrp-corps{flex:1;min-height:0;overflow-y:auto;padding:6px 0;background:var(--bg,#f6f7f9)}',
     '.mrp-msg{padding:34px 20px;text-align:center;color:var(--muted,#6b7280);font-size:13px}',
     '.mrp-piece{margin:8px 12px;border:1px solid var(--border,#dcdfe4);border-radius:11px;overflow:hidden;background:var(--card,#fff)}',
@@ -259,7 +262,7 @@
     '.mrp-introuvable:hover{background:rgba(245,158,11,.2)}',
     '@media (max-width:760px){',
     '  .mrp-l .des,.mrp-l .art{display:none}',
-    '  .mrp{max-height:100vh;height:100vh;border-radius:0}',
+    '  .mrp,.mrp.a-vues{max-height:100vh;height:100vh;border-radius:0}',
     '}'
   ].join('');
 
