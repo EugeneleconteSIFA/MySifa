@@ -625,7 +625,13 @@ def list_of_imports(request: Request):
                     o.nb_mandrins, o.nb_cartons, o.nb_tubes,
                     o.date_import, o.statut, o.pdf_filename, o.imported_by,
                     CASE WHEN pe.of_import_id IS NOT NULL THEN 1 ELSE 0 END AS lie,
-                    MAX(CASE WHEN pe.statut = 'termine' THEN 1 ELSE 0 END) AS termine,
+                    -- Terminé = TOUS ses dossiers le sont. Un OF repris par un
+                    -- nouveau dossier à produire n'attend pas encore de scan
+                    -- (Stock 1153/0027, 26/11/2026 : ancien dossier terminé,
+                    -- nouveau en attente).
+                    CASE WHEN COUNT(pe.id) > 0
+                         AND MIN(CASE WHEN pe.statut = 'termine' THEN 1 ELSE 0 END) = 1
+                         THEN 1 ELSE 0 END AS termine,
                     ({_SQL_DERNIER_SCAN}) AS scan_id
                 FROM of_imports o
                 LEFT JOIN planning_entries pe ON pe.of_import_id = o.id

@@ -5066,11 +5066,21 @@ function renderOfTab(){
       // Sans scan : signalé seulement quand l'OF est terminé au planning
       // (19/11/2026). 1 100 icônes grises ne disaient rien ; une icône vide
       // garde l'alignement de la colonne.
+      // Scan reçu : bouton plein (accent), il ouvre le PDF. Scan attendu :
+      // contour pointillé et grisé (retour du 26/11/2026 : en --warn, bleu
+      // dans Ambre, il ressemblait à un scan disponible), il cherche le scan
+      // de CET OF dans Scans d'OF au lieu d'ouvrir la page en général.
       row.scan_id
-        ? bouton('Scan de l\'OF terminé','file-text',()=>{window.open('/api/produits/documents/'+row.scan_id+'/pdf','_blank');})
+        ? h('button',{style:bStyle+';color:var(--accent);border-color:var(--accent);background:var(--accent-bg)',title:'Voir le scan de l\'OF terminé',
+            onClick:()=>{window.open('/api/produits/documents/'+row.scan_id+'/pdf','_blank');}},iconEl('file-text',13))
         : row.termine
-          ? h('button',{style:bStyle+';color:var(--warn);border-color:var(--warn)',title:'OF terminé, scan attendu. Ouvrir Scans d\'OF',
-              onClick:()=>{ set({page:'scans'}); nav(); }},iconEl('file-text',13))
+          ? h('button',{style:bStyle+';color:var(--muted);border-style:dashed;background:transparent',title:'OF terminé, scan pas encore reçu. Le chercher dans Scans d\'OF',
+              onClick:()=>{
+                const num=String(row.of_numero||'').trim();
+                set({page:'scans',scansSous:null,scansScan:null,scansRecherche:num});
+                nav();
+                toast('Aucun scan reçu pour l\'OF '+(num||'#'+row.id)+'. Déposé sans être reconnu, il attend dans « À rattacher ».','info');
+              }},iconEl('file-text',13))
           : h('span',{style:bStyle+';visibility:hidden;display:inline-flex','aria-hidden':'true'},iconEl('file-text',13)),
       // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
       // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
@@ -17979,8 +17989,13 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
         requestAnimationFrame(function(){
           // Onglet et scan choisi : repris de l'adresse, et remontés à chaque
           // rendu du module pour la tenir à jour.
+          // `scansRecherche` : posé par le bouton « scan attendu » d'un OF,
+          // consommé une fois (une saisie, pas un endroit : hors adresse).
+          // Un rendu remplacé entre-temps (contenant détaché) ne la consomme pas.
+          if(!_cible.isConnected) return;
+          const q=S.scansRecherche||''; S.scansRecherche=null;
           window.MySifaProduitMemoire.monterScansDans(_cible,
-            {onglet:S.scansSous, scan:S.scansScan},
+            {onglet:S.scansSous, scan:S.scansScan, q:q},
             function(e){ S.scansSous=e.onglet; S.scansScan=e.scan||null; prodSyncUrl(); });
         });
       }else{
