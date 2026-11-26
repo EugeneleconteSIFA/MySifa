@@ -577,6 +577,17 @@ jamais de second dossier ; `bloque` (OF produit) → refus ; `correspondants`
 (`candidats()` hors dossiers reliés à un autre OF) → proposés à relier avant
 « Créer quand même ». Machine reconnue par `cle_machine` (« COHESIO 1 » = « Cohésio 1 »).
 
+**Concordance OF ↔ dossier en continu** (26/11/2026). Les écarts produit, délai,
+laize et format entre un dossier À PRODUIRE et son OF de tête sont contrôlés à
+chaque affichage, plus seulement au moment de relier (`concordance_paires`,
+`concordance_dossiers`, `GET /api/of-planning/concordance?machine_id=`). Un champ
+vide du dossier n'est pas un écart (à compléter), une « référence » d'OF qui
+n'est pas une clé produit (« Stock 1153/0005 ») non plus. Affichage : pastille
+« OF » rouge sur le créneau et dans la liste du planning (`concBadgeHtml`),
+bandeau du panneau OF avec « Reporter les valeurs de l'OF sur le dossier »
+(route de l'étape Planning, action `relier`), mention « Écart : … » dans la
+colonne Dossier de la liste des OF. Tests : `TestConcordance`.
+
 **Numéros d'OF abrégés d'Access** (26/11/2026, `_of_tokens` de
 `of_import.py`). 387 OF de la prod portent plusieurs commandes dans leur
 numéro, souvent abrégées : « 9932913, 914, 915 et 916 », « 9932929-935-936 »,

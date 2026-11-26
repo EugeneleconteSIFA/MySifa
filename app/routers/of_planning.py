@@ -168,6 +168,95 @@ def ecarts(dossier: Dict[str, Any], vals: Dict[str, Any], conn=None) -> List[Dic
     return out
 
 
+# ── Concordance OF ↔ dossier, en continu (26/11/2026) ─────────────────────
+#
+# Les écarts n'étaient proposés qu'au moment de relier. Un OF corrigé ensuite
+# (délai, laize) ou relié au mauvais dossier (l'OF « 9932765 » de la commande
+# entière sur le dossier « 9932765 - L1 », produit 1411/0002 contre 1411/0001)
+# ne se voyait plus nulle part. Seuls les dossiers à produire sont contrôlés :
+# un dossier terminé n'est plus modifié depuis l'OF.
+
+CONTROLES = ("ref_produit", "date_livraison", "laize", "format")
+_CLE_PRODUIT_RE = re.compile(r"^\d{1,5}/\d{2,5}$")
+
+
+def concordance_paires(conn, paires: List[tuple]) -> Dict[tuple, List[Dict[str, Any]]]:
+    """{(dossier, OF): écarts} pour chaque paire qui se contredit. Un OF dont
+    la « référence » n'est pas une clé produit (« Stock 1153/0005 », rangé là
+    par Access) ne compte pas comme un produit différent."""
+    paires = [(int(e), int(o)) for e, o in paires if e and o]
+    if not paires:
+        return {}
+    eids = sorted({e for e, _ in paires})
+    oids = sorted({o for _, o in paires})
+    dossiers = {int(r["id"]): dict(r) for r in conn.execute(
+        "SELECT * FROM planning_entries WHERE statut IN ('attente','en_cours') AND id IN (%s)"
+        % ",".join("?" * len(eids)), eids)}
+    ofs = {int(r["id"]): dict(r) for r in conn.execute(
+        "SELECT * FROM of_imports WHERE id IN (%s)" % ",".join("?" * len(oids)), oids)}
+    out: Dict[tuple, List[Dict[str, Any]]] = {}
+    for e, o in paires:
+        d, of = dossiers.get(e), ofs.get(o)
+        if not d or not of:
+            continue
+        vals = valeurs_de_l_of(of)
+        if vals.get("ref_produit") and not _CLE_PRODUIT_RE.match(str(vals["ref_produit"])):
+            vals["ref_produit"] = None
+        # Un champ vide du dossier n'est pas une contradiction : il reste à
+        # compléter (l'étape Planning le propose), pas à signaler en rouge.
+        ecs = [x for x in ecarts(d, vals, conn) if x["champ"] in CONTROLES and x["avant"] != "vide"]
+        if ecs:
+            out[(e, o)] = ecs
+    return out
+
+
+def of_principal(conn, entry_ids: List[int]) -> Dict[int, int]:
+    """L'OF de tête de chaque dossier : premier lien, sinon `of_import_id`."""
+    if not entry_ids:
+        return {}
+    ph = ",".join("?" * len(entry_ids))
+    out: Dict[int, int] = {}
+    for r in conn.execute(
+            f"SELECT planning_entry_id AS e, of_import_id AS o FROM planning_of_links "
+            f"WHERE planning_entry_id IN ({ph}) ORDER BY position DESC, id DESC", entry_ids):
+        out[int(r["e"])] = int(r["o"])
+    for r in conn.execute(
+            f"SELECT id AS e, of_import_id AS o FROM planning_entries WHERE id IN ({ph}) AND of_import_id IS NOT NULL",
+            entry_ids):
+        out.setdefault(int(r["e"]), int(r["o"]))
+    return out
+
+
+def concordance_dossiers(conn, entry_ids: Optional[List[int]] = None) -> Dict[int, Dict[str, Any]]:
+    """{dossier: {of_id, of_numero, ecarts}} des dossiers à produire dont l'OF
+    de tête se contredit avec eux. Sans `entry_ids` : tous."""
+    if entry_ids is None:
+        entry_ids = [int(r["id"]) for r in conn.execute(
+            "SELECT id FROM planning_entries WHERE statut IN ('attente','en_cours')")]
+    tete = of_principal(conn, [int(i) for i in entry_ids])
+    res = concordance_paires(conn, list(tete.items()))
+    nums = {}
+    if res:
+        oids = sorted({o for _, o in res})
+        nums = {int(r["id"]): r["of_numero"] for r in conn.execute(
+            "SELECT id, of_numero FROM of_imports WHERE id IN (%s)" % ",".join("?" * len(oids)), oids)}
+    return {e: {"of_id": o, "of_numero": nums.get(o), "ecarts": ecs} for (e, o), ecs in res.items()}
+
+
+@router.get("/api/of-planning/concordance")
+def of_planning_concordance(request: Request, machine_id: Optional[int] = None):
+    """Les dossiers à produire qui contredisent leur OF (planning, liste)."""
+    get_current_user(request)
+    with get_db() as conn:
+        ids = None
+        if machine_id:
+            ids = [int(r["id"]) for r in conn.execute(
+                "SELECT id FROM planning_entries WHERE statut IN ('attente','en_cours') AND machine_id=?",
+                (machine_id,))]
+        res = concordance_dossiers(conn, ids)
+    return {"dossiers": {str(k): v for k, v in res.items()}}
+
+
 def candidats(conn, of_id: Optional[int], numero: Optional[str],
               commandes: List[Dict[str, Any]], depart: Optional[int] = None) -> List[Dict[str, Any]]:
     """Les dossiers qui correspondent à cet OF, le plus sûr d'abord.

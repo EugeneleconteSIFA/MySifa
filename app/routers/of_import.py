@@ -642,6 +642,17 @@ def list_of_imports(request: Request):
             params_rows,
         ).fetchall()
         dossiers = _dossiers_des_of(conn, [int(r["id"]) for r in rows])
+        # Écarts entre chaque OF et son dossier à produire (26/11/2026).
+        try:
+            from app.routers.of_planning import concordance_paires
+            conc = concordance_paires(conn, [(d["id"], o) for o, d in dossiers.items()
+                                             if d.get("statut") in ("attente", "en_cours")])
+            for o, d in dossiers.items():
+                ecs = conc.get((d["id"], o))
+                if ecs:
+                    d["ecarts"] = [{"libelle": e["libelle"], "avant": e["avant"], "apres": e["apres"]} for e in ecs]
+        except Exception:
+            pass
 
     return {
         "total":  total,
@@ -871,10 +882,24 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
         except Exception:
             fiche_accord = None
 
+    # L'OF actif et le dossier se contredisent-ils (produit, délai, laize,
+    # format) ? Contrôlé à chaque ouverture, pas seulement au moment de
+    # relier (26/11/2026).
+    concordance = None
+    if row:
+        try:
+            from app.routers.of_planning import concordance_paires
+            with get_db() as c5:
+                ecs = concordance_paires(c5, [(entry_id, row["id"])]).get((entry_id, row["id"]))
+            if ecs:
+                concordance = {"of_id": row["id"], "of_numero": row["of_numero"], "ecarts": ecs}
+        except Exception:
+            concordance = None
+
     base = {"entry_numero_of": numero_of, "ref_produit": ref_produit,
             "fiche_id": fiche_id, "ofs": ofs_list,
             "of_actif_id": row["id"] if row else None,
-            "fiche_accord": fiche_accord}
+            "fiche_accord": fiche_accord, "concordance": concordance}
 
     if not row:
         return {"linked": False, **base}

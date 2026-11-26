@@ -342,5 +342,51 @@ class TestCreerDossierDepuisOF(unittest.TestCase):
         self.assertEqual(p["machine_id"], self.machine)
 
 
+class TestConcordance(unittest.TestCase):
+    """OF et dossier à produire qui se contredisent, contrôlé en continu."""
+
+    def setUp(self):
+        with get_db() as conn:
+            self.machine = _preparer(conn)
+            conn.execute("DELETE FROM planning_of_links")
+            conn.execute("UPDATE planning_entries SET of_import_id=NULL")
+            # Dossier 1 (890/0017, délai 05/10, laize 440) relié à l'OF 10
+            # (délai 02/10, laize 450) : deux écarts.
+            conn.execute("UPDATE planning_entries SET of_import_id=10 WHERE id=1")
+            # OF de la commande entière, autre produit, sur un dossier de ligne.
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, statut) "
+                         "VALUES (11, '9932765', '1411/0002', 'en_attente')")
+            conn.execute("INSERT INTO planning_entries (id, machine_id, position, reference, numero_of, statut, ref_produit, of_import_id) "
+                         "VALUES (30, ?, 7, '9932765 - L1', '9932765 - L1', 'attente', '1411/0001', 11)", (self.machine,))
+            # « Stock … » rangé par Access dans la référence : pas un produit.
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, statut) "
+                         "VALUES (12, 'Stock 1153/0005', 'Stock 1153/0005', 'en_attente')")
+            conn.execute("INSERT INTO planning_entries (id, machine_id, position, reference, numero_of, statut, ref_produit, of_import_id) "
+                         "VALUES (31, ?, 8, 'Stock 1153/0005', 'Stock 1153/0005', 'attente', '1153/0005', 12)", (self.machine,))
+            # Dossier terminé : plus contrôlé.
+            conn.execute("UPDATE planning_entries SET of_import_id=11 WHERE id=2")
+            conn.commit()
+
+    def test_ecarts_releves(self):
+        with get_db() as conn:
+            res = op.concordance_dossiers(conn)
+        self.assertEqual(sorted(e["champ"] for e in res[1]["ecarts"]), ["date_livraison", "laize"])
+        self.assertEqual([e["champ"] for e in res[30]["ecarts"]], ["ref_produit"])
+        self.assertEqual(res[30]["of_numero"], "9932765")
+
+    def test_stock_et_termine_ignores(self):
+        with get_db() as conn:
+            res = op.concordance_dossiers(conn)
+        self.assertNotIn(31, res)
+        self.assertNotIn(2, res)
+
+    def test_report_supprime_l_ecart(self):
+        with get_db() as conn:
+            of = dict(conn.execute("SELECT * FROM of_imports WHERE id=10").fetchone())
+            op._relier(conn, None, {"nom": "Essai"}, "Essai", "2026-11-26T20:00:00", of, 1, ["date_livraison", "laize"])
+            res = op.concordance_dossiers(conn, [1])
+        self.assertNotIn(1, res)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

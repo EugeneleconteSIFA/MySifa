@@ -5033,7 +5033,12 @@ function ofCelluleDossier(row){
       title:'Ouvrir le dossier au planning',style:{textDecoration:'none',color:'var(--text)',display:'block',minWidth:'0'}},
       h('div',{style:{fontSize:'13px',fontWeight:'600',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},d.reference||'#'+d.id),
       h('div',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap'}},
-        (d.machine?d.machine+' · ':''),h('span',{style:{color:etat[1],fontWeight:'600'}},etat[0]))));
+        (d.machine?d.machine+' · ':''),h('span',{style:{color:etat[1],fontWeight:'600'}},etat[0])),
+      // L'OF et son dossier à produire se contredisent (26/11/2026).
+      (d.ecarts&&d.ecarts.length)?h('div',{
+        title:d.ecarts.map(e=>e.libelle+' : dossier '+e.avant+' · OF '+e.apres).join('\n'),
+        style:{fontSize:'11px',color:'var(--danger)',fontWeight:'700',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},
+        'Écart : '+d.ecarts.map(e=>e.libelle).join(', ')):null));
 }
 function renderOfTab(){
   const PAGE_SIZE=50;

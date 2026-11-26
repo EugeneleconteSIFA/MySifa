@@ -886,6 +886,16 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-accord-lignes{display:grid;grid-template-columns:auto 1fr 1fr;gap:2px 12px;margin-top:6px}
 .of-accord-lignes span{overflow-wrap:anywhere}
 .of-accord-lignes .tete{font-weight:700;opacity:.85}
+.of-conc{margin:10px 18px 0;padding:10px 14px;border-radius:10px;font-size:12.5px;line-height:1.5;
+  border:1px solid var(--danger);background:var(--card);color:var(--text);flex-shrink:0}
+.of-conc .of-accord-titre{color:var(--danger)}
+.of-conc-lignes{display:grid;grid-template-columns:auto 1fr 1fr auto;gap:2px 12px;margin-top:6px}
+.of-conc-lignes span{overflow-wrap:anywhere}
+.of-conc-lignes .tete{font-weight:700;color:var(--muted)}
+.of-conc-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.of-conc-actions button{padding:6px 12px;border-radius:8px;border:none;background:var(--accent);color:white;
+  font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.of-conc-actions button:disabled{opacity:.5;cursor:wait}
 .of-tab-btn .of-tab-alerte{display:inline-block;width:7px;height:7px;border-radius:50%;
   background:var(--danger);margin-left:6px;vertical-align:middle}
 /* ══════════════════════════════════════════════════════════════════════
@@ -1687,6 +1697,11 @@ async function load(){
     ]);
     S.machine = m;
     S.timeline = (tl && tl.slots) ? tl.slots : [];
+    // Dossiers qui contredisent leur OF : chargé à part, une panne n'empêche
+    // pas le planning de s'afficher.
+    apiAbs('/api/of-planning/concordance?machine_id='+encodeURIComponent(MID))
+      .then(r=>{ S.concordance=(r&&r.dossiers)||{}; render(); })
+      .catch(()=>{ S.concordance={}; });
     S.activeDossier = activeDoss;
     chargerDevisPlanning();
     if(showDossiers || loadEntriesForRO){
@@ -2705,7 +2720,7 @@ function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
       onclick="hideTip();ouvrirResumeDossier(${s.entry_id||idx});event.stopPropagation()">
       <div class="rail"></div>
       <div class="dur">${escHtml(dur)}</div>
-      <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
+      <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${concBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
       ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
       <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
       ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
@@ -3827,7 +3842,7 @@ function mkTL(mon,slots){
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}${relanceAnnulationHtml(s)}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${concBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}${relanceAnnulationHtml(s)}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -4938,6 +4953,17 @@ function gelLibelle(g){
   return "Dossier gelé"+fenetre+" — enlèvement le "+trFmtDate(g.date_enlevement)
     +(transp?(" · "+transp):"")+". Le repousser demande un motif.";
 }
+/* Dossier qui contredit son OF (produit, délai, laize, format) : pastille
+   « OF » rouge sur le créneau, le détail au survol ; le panneau OF du
+   dossier propose de reporter les valeurs (26/11/2026). */
+function concBadgeHtml(s){
+  const c=(S.concordance||{})[String(s&&(s.entry_id||s.id))];
+  if(!c||!(c.ecarts||[]).length) return "";
+  const tip="Écart avec l'OF "+(c.of_numero||"")+" : "+c.ecarts.map(e=>e.libelle+" "+e.avant+" (dossier) / "+e.apres+" (OF)").join(" · ");
+  return `<span class="slot-conc" title="${escAttr(tip)}"`
+    +` style="display:inline-flex;align-items:center;color:var(--danger);background:var(--card);border:1px solid var(--danger);`
+    +`border-radius:6px;padding:0 5px;margin:0 4px 0 6px;font-size:10px;font-weight:800;vertical-align:middle;line-height:15px">OF</span>`;
+}
 function gelBadgeHtml(s){
   const g=s&&s.gel;
   if(!g) return "";
@@ -5950,9 +5976,52 @@ async function openOfPreview(entryId){
     </div>
     ${tabsBar}
     ${accordHtml}
+    <div id="of-conc-zone">${data.concordance ? renderOfConcordance(entryId, data.concordance) : ''}</div>
     <div class="of-tab-pane" id="of-tab-pane-of">${ofTabContent}</div>
     <div class="of-tab-pane hidden" id="of-tab-pane-fiche">${ficheTabContent}</div>
   </div>`;
+}
+
+/* L'OF actif et ce dossier à produire se contredisent (produit, délai, laize,
+   format), contrôlé à chaque ouverture et plus seulement au moment de relier
+   (26/11/2026). Les valeurs reportables passent par la même route que
+   l'étape Planning de la fenêtre OF. */
+function renderOfConcordance(entryId, c){
+  const ecs = c.ecarts || [];
+  const reportables = ecs.filter(e => e.modifiable).map(e => e.champ);
+  const produit = ecs.some(e => e.champ === 'ref_produit');
+  const lignes = ecs.map(e => `<span>${escHtml(e.libelle)}</span><span>${escHtml(e.avant)}</span><span>${escHtml(e.apres)}</span>`+
+    `<span style="color:var(--muted)">${e.motif ? escHtml(e.motif) : ''}</span>`).join('');
+  const peut = (typeof IS_OF_ADMIN !== 'undefined' && IS_OF_ADMIN);
+  return `<div class="of-conc" role="alert">
+    <div class="of-accord-titre">L'OF ${escHtml(c.of_numero||'')} et ce dossier se contredisent</div>
+    <div class="of-conc-lignes">
+      <span class="tete"></span><span class="tete">Dossier</span><span class="tete">OF</span><span class="tete"></span>
+      ${lignes}
+    </div>
+    ${produit ? `<div style="margin-top:6px;color:var(--text2)">Produit différent : si ce n'est pas le bon OF, retirez-le (croix de son onglet) et reliez le bon.</div>` : ''}
+    ${peut && reportables.length ? `<div class="of-conc-actions">
+      <button type="button" onclick="planningReporterOf(${entryId}, ${Number(c.of_id)}, '${escAttr(reportables.join(','))}', this)">Reporter les valeurs de l'OF sur le dossier</button>
+      <span style="color:var(--muted)">${escHtml(ecs.filter(e => e.modifiable).map(e => e.libelle).join(', '))}</span>
+    </div>` : ''}
+  </div>`;
+}
+async function planningReporterOf(entryId, ofId, champs, btn){
+  if(btn) btn.disabled = true;
+  try{
+    const r = await fetch('/api/of/'+encodeURIComponent(ofId)+'/planning', {method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'relier', entry_id: entryId, champs: String(champs||'').split(',').filter(Boolean)})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.detail || 'Report impossible.');
+    const zone = document.getElementById('of-conc-zone');
+    if(zone) zone.innerHTML = '';
+    showToast(j.message || 'Valeurs reportées.', 'success');
+    try{ load(); }catch(e){}
+  }catch(e){
+    if(btn) btn.disabled = false;
+    showToast((e && e.message) || 'Report impossible.', 'danger');
+  }
 }
 
 function renderOfFicheAccord(a){
