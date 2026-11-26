@@ -2201,7 +2201,10 @@ function renderPersonList(){
     }
 
     // Pris du lundi au vendredi mais samedi libre : on peut l'ajouter pour le samedi.
-    const samediLibre=assignFullWeek&&!assignedHere&&!(busyMask&JOURS_BIT_SAMEDI)&&!congeCouvreSamedi(p.id,t.semaine);
+    // Lundi–vendredi entièrement pris (affectations et congés confondus) mais
+    // samedi libre : on peut l'ajouter pour le samedi.
+    const semainePrise=((busyMask|congeJoursBitmask(p.id,t.semaine))&JOURS_MASK_WEEK)===JOURS_FULL_WEEK;
+    const samediLibre=semainePrise&&!assignedHere&&!congeFullWeek&&!(busyMask&JOURS_BIT_SAMEDI)&&!congeCouvreSamedi(p.id,t.semaine);
     const blocked=assignedHere||congeFullWeek||(assignFullWeek&&!samediLibre);
     const warn=!blocked&&(congePartiel||assignPartiel||samediLibre);
     const freeMask=samediLibre?JOURS_BIT_SAMEDI:userFreeDaysMask(p.id,t.semaine);
@@ -2211,7 +2214,7 @@ function renderPersonList(){
 
     let titleTip='';
     if(assignedHere) titleTip='Déjà affecté sur ce poste / créneau';
-    else if(samediLibre) titleTip='Affecté du lundi au vendredi sur un autre poste — cliquer pour l\'ajouter le samedi';
+    else if(samediLibre) titleTip='Pris du lundi au vendredi (affectations ou congés) — cliquer pour l\'ajouter le samedi';
     else if(assignFullWeek) titleTip='Affecté toute la semaine sur un autre poste';
     else if(assignPartiel) titleTip='Affecté : '+assignJours.join(', ')+' — cliquer pour les autres jours';
     else if(congeFullWeek) titleTip='En congé toute la semaine';
@@ -2220,7 +2223,7 @@ function renderPersonList(){
 
     let statusHtml='<span class="rh-person-status ok">✓ Disponible</span>';
     if(assignedHere) statusHtml='<span class="rh-person-status blocked">Déjà sur ce poste</span>';
-    else if(samediLibre) statusHtml='<span class="rh-person-status warn">Affecté lun–ven · samedi libre</span>';
+    else if(samediLibre) statusHtml='<span class="rh-person-status warn">Pris lun–ven · samedi libre</span>';
     else if(assignFullWeek) statusHtml='<span class="rh-person-status blocked">Affecté — semaine entière</span>';
     else if(assignPartiel) statusHtml=`<span class="rh-person-status warn">Affecté : ${assignJours.join(', ')}</span>`;
     else if(congeFullWeek) statusHtml=`<span class="rh-person-status conge">Congé — semaine entière</span>`;

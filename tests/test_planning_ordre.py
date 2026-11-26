@@ -521,6 +521,23 @@ vrai("changer de machine passe par l'endpoint atomique", "/changer-machine`" in 
 vrai("plus aucune suppression dans confirmSwitch",
      "method:\"DELETE\"" not in bloc("async function confirmSwitch(", "// ── Modals ──"))
 
+# ── 6. Valider un dossier « a placer » ────────────────────────────────────
+# 26/11/2026 : deux dossiers ATELIER DU FROMAGE livrables mi-janvier, affiches
+# en fin de file tant qu'ils etaient « a placer », sont remontes debut decembre
+# une fois valides — ils avaient garde leur position de creation.
+print("\n6. Valider un dossier « a placer »")
+remplir()
+code, _ = appel(pl.update_entry, COH2, 292, body={"a_placer": 0})
+verifier("decocher « a placer » sur Evergreen : accepte", code, 200)
+verifier("Evergreen reste en fin de file, devant les dossiers encore a placer",
+         ordre(COH2)[0],
+         [551, 552, 566, 900, 520, 517, 466, 43, 541, 557, 543, 556, 574, 292, 573, 571])
+verifier("Evergreen n'est plus a placer", champ(292, "a_placer"), 0)
+code, _ = appel(pl.update_entry, COH2, 541, body={"a_placer": 0, "commentaire": "x"})
+verifier("modifier un dossier deja place ne le deplace pas",
+         ordre(COH2)[0],
+         [551, 552, 566, 900, 520, 517, 466, 43, 541, 557, 543, 556, 574, 292, 573, 571])
+
 try:
     DB_FILE.unlink()
 except OSError:

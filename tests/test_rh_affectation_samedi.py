@@ -9,6 +9,9 @@ Ce test verrouille :
 2. Lundi–vendredi pris, sans jours demandés : toujours refusé (409).
 3. Lundi–vendredi pris, jours demandés déjà occupés : refusé (409).
 4. Lundi–samedi pris : plus rien ne s'ajoute, même le samedi.
+5. CP le lundi et affecté du mardi au vendredi : le samedi passe sans
+   confirmation (le congé ne le touche pas) ; un jour du congé demande
+   toujours confirmation.
 """
 
 import asyncio
@@ -38,6 +41,10 @@ with get_db() as _c:
                    "VALUES ('samedi@local','Employé Samedi','x','fabrication',1,?)", (_now,)).lastrowid
     V = _c.execute("INSERT INTO users (email,nom,password_hash,role,actif,created_at) "
                    "VALUES ('samedi2@local','Employé Six Jours','x','fabrication',1,?)", (_now,)).lastrowid
+    W = _c.execute("INSERT INTO users (email,nom,password_hash,role,actif,created_at) "
+                   "VALUES ('samedi3@local','Employé CP Lundi','x','fabrication',1,?)", (_now,)).lastrowid
+    _c.execute("INSERT INTO rh_conges (user_id,date_debut,date_fin,nb_jours,type_conge,statut) "
+               "VALUES (?,'2026-11-23','2026-11-23',1,'CP','valide')", (W,))
     _c.commit()
 
 EDITEUR = {"id": 1, "nom": "Resp", "email": "resp@local", "role": "direction"}
@@ -92,6 +99,13 @@ st, _ = poser({"user_id": V, "semaine": SEM, "poste": "conducteur", "creneau": "
 check("lundi–samedi posé", st, 200)
 st, _ = poser({"user_id": V, "semaine": SEM, "poste": "conducteur", "creneau": "matin", "jours": 32})
 check("lundi–samedi pris : samedi refusé", st, 409)
+
+st, _ = poser({"user_id": W, "semaine": SEM, "poste": "tournant", "creneau": "journee", "jours": 30})
+check("CP lundi : mardi–vendredi posé", st, 200)
+st, d = poser({"user_id": W, "semaine": SEM, "poste": "conducteur", "creneau": "matin", "jours": 32})
+check("CP lundi : samedi accepté sans confirmation", (st, (d or {}).get("jours")), (200, 32))
+st, d = poser({"user_id": W, "semaine": SEM, "poste": "aide", "creneau": "aprem", "jours": 1})
+check("CP lundi : lundi demandé, confirmation demandée", (st, (d or {}).get("conflict_type")), (409, "conge"))
 
 print()
 if ECHECS:
