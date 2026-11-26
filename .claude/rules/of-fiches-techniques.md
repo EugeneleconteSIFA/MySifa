@@ -537,6 +537,16 @@ d'un dossier du planning » (`actionsExtra` du sélecteur RVGI,
 `/api/of/planning/{entry_id}` capterait). Une case de date vide n'affiche plus
 la date du jour grisée de Safari (`data-vide`), l'étape 2 dit « à choisir ».
 
+**Réservations « ???? »** (26/11/2026). Le planificateur réserve un créneau
+avant d'avoir le numéro en tapant « ???? » (ou « XXXXXXX ») comme référence :
+`reference_a_venir()` (motif `REFERENCE_A_VENIR_MOTIF` de `config.py`). Elles
+s'affichent « Réservation · numéro à venir », ne préremplissent pas le numéro
+d'OF (sinon l'OF naissait « ???? »), et l'étape 4 les retrouve par le dossier
+de départ (`dossier_depart`, raison « Dossier de départ »). Pour une réservation
+seulement, l'écart « Référence dossier » est proposé et coché : la référence
+prend le numéro de l'OF, refusé si un autre dossier à produire le porte. Un
+vrai numéro de dossier ne se renomme jamais depuis l'OF.
+
 **Numéros d'OF abrégés d'Access** (26/11/2026, `_of_tokens` de
 `of_import.py`). 387 OF de la prod portent plusieurs commandes dans leur
 numéro, souvent abrégées : « 9932913, 914, 915 et 916 », « 9932929-935-936 »,

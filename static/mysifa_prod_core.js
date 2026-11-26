@@ -1639,7 +1639,10 @@ async function openOfDepuisDossier(entryId){
   const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const dos=r.dossier||{};
   if(r.commande_retrouvee) toast('Commande '+r.commande_retrouvee+' retrouvée d\'après le numéro du dossier.','info');
-  const m={_commandes:(r.commandes||[]).map(l=>({numero:l.numero,ligne:l.ligne,qte:l.qte})),date_creation:iso,_dom:{}};
+  // `_dossierDepart` : l'étape 4 propose ce dossier même sans numéro ni
+  // commande en commun (réservation « ???? »).
+  const m={_commandes:(r.commandes||[]).map(l=>({numero:l.numero,ligne:l.ligne,qte:l.qte})),date_creation:iso,_dom:{},_dossierDepart:Number(entryId)||null};
+  if(dos.reservation) toast('Réservation sans numéro : saisissez le numéro de l\'OF, il remplacera « '+(dos.reference||'')+' » au planning.','info');
   if(dos.numero_of){ m.of_numero=dos.numero_of; m._dom['ofe-numero']=dos.numero_of; }
   if(dos.date_livraison){ m.delai_client=dos.date_livraison; m._dom['ofe-delai']=dos.date_livraison; }
   await openOfEditModal(m);
@@ -3510,7 +3513,8 @@ async function ofePlanCharger(m){
     r=await api('/api/of/planning/candidats',{method:'POST',body:JSON.stringify({
       of_id:m.id||null, of_numero:p.of_numero, reference:p.reference, delai_client:p.delai_client,
       laize:p.laize, format:p.format, machine:p.machine,
-      machine_fiche:(m._fiche&&m._fiche.machine)||null, commandes:m._commandes||[]})});
+      machine_fiche:(m._fiche&&m._fiche.machine)||null, commandes:m._commandes||[],
+      dossier_depart:m._dossierDepart||null})});
   }catch(e){ if(jeton===_ofePlanJeton){ m._plan={erreur:e.message||'Recherche impossible.'}; ofePlanPeindre(m); } return; }
   if(jeton!==_ofePlanJeton||S.ofEditModal!==m) return;
   const ancien=m._planChoix||null;
@@ -3568,8 +3572,12 @@ async function ofeChoisirDossier(){
   const fond=document.createElement('div');
   fond.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;box-sizing:border-box';
   const etat=d=>d.statut==='en_cours'?'en cours':(d.a_placer?'à placer':'en attente');
+  // Réservation (« ???? » tapé au planning) : le numéro est à venir.
+  const titre=d=>d.reservation
+    ?'Réservation · numéro à venir <span style="margin-left:4px;font-weight:500;color:var(--muted)">'+escHtml(d.reference||'')+'</span>'
+    :escHtml(d.reference||'#'+d.id);
   const ligne=d=>'<div role="option" tabindex="0" data-dossier="'+d.id+'" style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer">'+
-    '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+escHtml(d.reference||'#'+d.id)+
+    '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+titre(d)+
       (d.commande?' <span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">commande '+escHtml(d.commande)+'</span>':'')+'</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:2px">'+escHtml([d.ref_produit,d.client].filter(Boolean).join(' · ')||'—')+'</div></div>'+
     '<div style="font-size:12px;color:var(--text2);text-align:right;white-space:nowrap">'+escHtml([d.machine,etat(d)].filter(Boolean).join(' · '))+
@@ -3584,7 +3592,7 @@ async function ofeChoisirDossier(){
   const liste=fond.querySelector('[data-liste]'), q=fond.querySelector('[data-q]');
   const peindre=function(){
     const mots=q.value.toLowerCase().split(/\s+/).filter(Boolean);
-    const vus=items.filter(d=>{ const t=[d.reference,d.ref_produit,d.client,d.machine,d.commande].join(' ').toLowerCase(); return mots.every(w=>t.indexOf(w)>=0); });
+    const vus=items.filter(d=>{ const t=[d.reference,d.ref_produit,d.client,d.machine,d.commande,d.reservation?'réservation reservation':''].join(' ').toLowerCase(); return mots.every(w=>t.indexOf(w)>=0); });
     liste.innerHTML=vus.length?vus.map(ligne).join(''):'<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">'+(items.length?'Aucun dossier pour « '+escHtml(q.value)+' »':'Aucun dossier à produire sans OF.')+'</div>';
   };
   const fermer=function(){ fond.remove(); document.removeEventListener('keydown',clavier,true); };
@@ -3646,7 +3654,9 @@ function ofePlanHtml(m){
   if(lecture) h+='<div style="'+muted+';margin-bottom:6px">Le planning est réservé à la direction et à l\'administration : cette étape est en lecture seule.</div>';
   ds.forEach(function(d){
     const coche=c.action==='relier'&&c.entry_id===d.id;
-    h+='<label style="'+ligne+'">'+radio('relier:'+d.id,coche,lecture)+'<span><strong>'+(d.deja_relie?'Dossier relié ':'Relier au dossier ')+escHtml(d.reference||'')+'</strong>'+
+    h+='<label style="'+ligne+'">'+radio('relier:'+d.id,coche,lecture)+'<span><strong>'+(d.reservation
+        ?(d.deja_relie?'Réservation reliée':'Relier à la réservation')+(d.client?' '+escHtml(d.client):'')+' <span style="font-weight:500;color:var(--muted)">('+escHtml(d.reference||'')+')</span>'
+        :(d.deja_relie?'Dossier relié ':'Relier au dossier ')+escHtml(d.reference||''))+'</strong>'+
       ' <span style="color:var(--text2)">· '+escHtml(d.machine||'')+' · '+escHtml(etatDossier(d))+(d.date_livraison?' · livraison '+escHtml(d.date_livraison):'')+'</span>'+
       '<br><span style="'+muted+'">'+escHtml(d.raison)+(d.of_relie?' · actuellement relié à l\'OF '+escHtml(d.of_relie):'')+'</span></span></label>';
     if(coche&&d.apercu){

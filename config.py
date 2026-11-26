@@ -2366,3 +2366,8 @@ FAMILLES_MATIERE = {
 ACCORD_FORMAT_TOLERANCE_MM = float(os.getenv("ACCORD_FORMAT_TOLERANCE_MM", "1.5"))
 # Écart relatif toléré sur la quantité au mille.
 ACCORD_QAM_TOLERANCE = float(os.getenv("ACCORD_QAM_TOLERANCE", "0.01"))
+# Référence de dossier tapée au planning pour réserver un créneau avant
+# d'avoir le numéro (« ???? », « XXXXXXX ») : aucun chiffre, aucun mot.
+# Création d'OF : affichée « Réservation · numéro à venir », remplacée par le
+# numéro de l'OF quand on les relie.
+REFERENCE_A_VENIR_MOTIF = os.getenv("REFERENCE_A_VENIR_MOTIF", r"[\s?xX.*_#/\-]*")
