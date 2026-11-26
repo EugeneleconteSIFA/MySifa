@@ -1714,7 +1714,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.1"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
-<script src="/static/mysifa_rvgi_picker.js?v=17"></script>
+<script src="/static/mysifa_rvgi_picker.js?v=18"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=21"></script>
 <script src="/static/mysifa_humeur.js"></script>

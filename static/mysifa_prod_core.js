@@ -1849,6 +1849,25 @@ async function ofeChoisirCommandes(mDepart,premier){
   });
 }
 window.ofeChoisirCommandes = ofeChoisirCommandes;
+/* « Prendre à la place » : remplace la ligne de frais cochée par la ligne
+   produit de la même commande (26/11/2026). Le reste suit comme après le
+   sélecteur : numéro proposé, fiche, quantité, délai. */
+async function ofePrendreLigne(numero,ligne){
+  const m=S.ofEditModal;
+  if(!m) return;
+  const cle=x=>String(x.numero)+':'+(x.ligne==null?'':x.ligne);
+  const hors=new Set(((m._cmdInfo||{}).hors_produit||[]).map(cle));
+  const garde=(m._commandes||[]).filter(c=>!hors.has(cle(c)));
+  const neuve={numero:String(numero),ligne:ligne==null?null:Number(ligne),qte:null};
+  if(!garde.some(c=>cle(c)===cle(neuve))) garde.push(neuve);
+  captureSaisie('ofe-',m);
+  m._commandes=garde;
+  set({ofEditModal:m});
+  renderOfEditModal();
+  ofeProposerNumero(m);
+  await ofeDepuisCommandes(m);
+}
+window.ofePrendreLigne = ofePrendreLigne;
 
 async function ofeProposerNumero(m){
   const lignes=(m._commandes||[]).map(c=>c.numero+':'+(c.ligne==null?'':c.ligne)).join(',');
@@ -3215,9 +3234,24 @@ function ofeInfoFiche(m){
   if(r&&!r.article&&(m._commandes||[]).length){
     // Jamais de silence : sans article, la fenêtre resterait vide sans dire
     // pourquoi (constat du 15/11/2026 sur 9921842, commande supprimée).
-    h+=(r.articles||[]).length>1
-      ? '<div style="color:var(--danger)">· '+r.articles.length+' articles ('+escHtml(r.articles.join(', '))+') : un OF = un produit.</div>'
-      : '<div style="color:var(--danger)">· Aucune ligne de produit dans RVGI pour ces commandes.</div>';
+    // Et dire QUELLE ligne et laquelle prendre : « aucune ligne de produit »
+    // seul ne se comprenait pas (26/11/2026, 9912584 L2 « Frais d'outils »).
+    const lib=x=>x.numero+(x.ligne!=null?' L'+x.ligne:'');
+    const hors=r.hors_produit||[], autres=r.autres_produits||[];
+    if((r.articles||[]).length>1){
+      h+='<div style="color:var(--danger)">· '+r.articles.length+' articles ('+escHtml(r.articles.join(', '))+') : un OF = un produit.</div>';
+    }else if(hors.length){
+      h+='<div style="color:var(--danger)">· '+hors.map(x=>'<strong>'+escHtml(lib(x))+'</strong> ('+escHtml(x.designation||x.code||'')+')').join(', ')+
+        (hors.length>1?' ne sont pas des produits':' n\'est pas un produit')+' : un OF part d\'une ligne d\'étiquettes.</div>';
+      h+=autres.length
+        ?'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;color:var(--text2)">Prendre à la place : '+
+          autres.map(x=>'<button type="button" class="btn-sm" onclick="ofePrendreLigne('+escAttr(JSON.stringify(String(x.numero)))+','+(x.ligne==null?'null':Number(x.ligne))+')" '+
+            'style="padding:4px 10px;border:1px solid var(--accent);border-radius:999px;background:var(--card);color:var(--accent);font:inherit;font-size:12px;font-weight:700;cursor:pointer">'+
+            escHtml(lib(x))+' · '+escHtml(x.article)+(x.qte?' · '+escHtml(Number(x.qte).toLocaleString('fr-FR')):'')+'</button>').join('')+'</div>'
+        :'<div style="margin-top:4px;color:var(--text2)">Cette commande n\'a aucune ligne de produit : changez de commande, ou faites un OF sans commande.</div>';
+    }else{
+      h+='<div style="color:var(--danger)">· Commande introuvable dans le miroir RVGI : supprimée, ou saisie depuis le dernier relevé.</div>';
+    }
   }
   if(r&&r.article){
     const n=(r.fiches||[]).length;

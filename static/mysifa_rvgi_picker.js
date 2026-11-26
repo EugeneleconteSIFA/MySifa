@@ -155,6 +155,8 @@
     /* Déjà partie : un autre départ emporte cette ligne. Ce n'est pas un
        rattachement de production, la couleur est donc la sienne. */
     '.mrp-etiq.autre{background:rgba(248,113,113,.14);color:var(--danger,#dc2626)}',
+    '.mrp-etiq.frais{background:rgba(148,163,184,.2);color:var(--muted,#64748b)}',
+    '.mrp-l.frais .des,.mrp-l.frais .art,.mrp-l.frais .qte{color:var(--muted,#6b7280)}',
     '.mrp-sel{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--border,#dcdfe4)}',
     '.mrp-sel{min-height:41px;box-sizing:border-box}',
     '.mrp-sel .vide{font-size:12px;color:var(--muted,#6b7280)}',
@@ -662,7 +664,10 @@
           var k = cle(p, l);
           var c = etat.choix[k];
           var pris = (l.rattachement && l.rattachement.objets) || [];
-          h += '<div class="mrp-l' + (c ? ' coche' : '') + '" data-p="' + ip + '" data-l="' + il + '"' +
+          // Ligne de frais (outils, cliché, port) : pas un produit, un OF ne
+          // part pas de là (9912584 L2 cochée au lieu de la L1, 26/11/2026).
+          var frais = o.unProduit && mode === 'commande' && l.article && !estProduit(l.article);
+          h += '<div class="mrp-l' + (c ? ' coche' : '') + (frais ? ' frais' : '') + '" data-p="' + ip + '" data-l="' + il + '"' +
                ' tabindex="0" role="checkbox" aria-checked="' + (c ? 'true' : 'false') + '">' +
                '<input type="checkbox" data-coche="' + esc(k) + '"' + (c ? ' checked' : '') + '>' +
                '<span class="lg">' + (l.ligne != null ? 'L' + l.ligne : '') + '</span>' +
@@ -678,6 +683,7 @@
                 l.article !== produitCourant()
                  ? '<span class="mrp-etiq autre" title="Un OF ne couvre qu\'un produit : ' + esc(produitCourant()) + '">autre produit</span>'
                  : '') +
+               (frais ? '<span class="mrp-etiq frais" title="Ligne de frais, pas un produit : un OF part de la ligne des étiquettes">frais</span>' : '') +
                // Nommer QUI a déjà la ligne : « déjà pris » seul ne disait ni
                // par quoi, ni si c'était un problème.
                (pris.length

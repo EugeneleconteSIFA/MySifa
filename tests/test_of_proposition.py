@@ -331,6 +331,13 @@ INSERT INTO cde_ligne (numero, ligne, code1, code2, qte, amjl, amje, corbeille) 
 """)
 produits, totaux = ratt.lignes_de_produit(erp, ["9912584", "9932856"])
 verifier("9912584 : une seule ligne de produit", totaux.get("9912584"), 1)
+lu = op.lire_commandes([{"numero": "9912584", "ligne": 2}])
+verifier("L2 « frais d'outils » cochée : aucun article", lu["articles"], [])
+verifier("L2 signalée comme hors produit", [(x["numero"], x["ligne"]) for x in lu["hors_produit"]], [("9912584", 2)])
+verifier("L1 proposée à la place", [(x["numero"], x["ligne"], x["article"]) for x in lu["autres_produits"]],
+         [("9912584", 1, "571/0095")])
+lu = op.lire_commandes([{"numero": "9912584", "ligne": None}])
+verifier("commande entière : les frais ne sont pas signalés", lu["hors_produit"], [])
 verifier("9932856 : le cliché ne compte pas", ("9932856", 9) in produits, False)
 def numero(choix):
     nommees = [x for x in choix if x["ligne"] is None or (x["numero"], x["ligne"]) in produits]
