@@ -148,7 +148,8 @@ def _enrich_metrage(all_list: List[dict], dossier_times: List[dict]) -> List[dic
             continue
 
         key = (str(r.get("operateur") or "?"), _norm_date(dt_op), dos)
-        entry = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0})
+        entry = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0, "fins": 0})
+        entry["fins"] += 1
         entry["metrage_m"] += max(0.0, fin_ctr - debut_ctr)
         if r.get("quantite_traitee") is not None:
             entry["etiquettes"] = float(r["quantite_traitee"])
@@ -162,6 +163,9 @@ def _enrich_metrage(all_list: List[dict], dossier_times: List[dict]) -> List[dic
         row = dict(d)
         row["etiquettes"] = entry.get("etiquettes") or d.get("quantite_traitee") or 0
         row["metrage_m"] = round(float(entry.get("metrage_m", 0.0)), 1)
+        # Session cloturee (89 / 90 avec compteur) sans un metre d'ecart :
+        # le compteur de fin a ete recopie sur celui de debut.
+        row["compteur_inchange"] = bool(entry.get("fins")) and row["metrage_m"] <= 0
         enriched.append(row)
     return enriched
 
@@ -205,22 +209,56 @@ def _by_operation(rows: List[dict]) -> List[dict]:
     return sorted(out, key=lambda x: (-x["minutes"], x["code"]))
 
 
-def vitesse_plausible(metrage: float, minutes: float):
+def vitesse_plausible(metrage: float, minutes: float, compteur_inchange: bool = False):
     """Vitesse en m/min et drapeau d'aberration : (vitesse, aberrante).
 
     Un 03 et un 89 saisis a la meme minute laissent quelques secondes de
     production (312 m / 0,7 min = 445 m/min) ; un chiffre en trop au compteur
     donne des milliers de m/min. Au-dela du plafond machine, la vitesse ne
     vaut rien : 0 et `aberrante`, que les ecrans affichent « erreur saisie ».
+
+    `compteur_inchange` : la session est cloturee avec un compteur de fin egal
+    a celui de debut. Avec du temps de production, c'est un compteur recopie,
+    pas une vitesse nulle (dossier 9932723 - L1 du 25/11/2026 : 50 400
+    etiquettes declarees pour 0 m).
     """
     metrage = float(metrage or 0)
     minutes = float(minutes or 0)
     if minutes <= 0:
         return 0.0, False
+    if compteur_inchange and metrage <= 0:
+        return 0.0, True
     v = metrage / minutes
     if v > PROD_VITESSE_MAX_M_MIN:
         return 0.0, True
     return round(v, 3), False
+
+
+def _minutes_vitesse(d: dict) -> float:
+    return float(d.get("temps_prod_min") or 0) + float(d.get("temps_arret_min") or 0)
+
+
+def marquer_vitesse_sessions(sessions: List[dict]) -> None:
+    """Pose `vitesse_aberrante` sur chaque session, jugee seule."""
+    for d in sessions:
+        _v, d["vitesse_aberrante"] = vitesse_plausible(
+            d.get("metrage_m"), _minutes_vitesse(d), bool(d.get("compteur_inchange")))
+
+
+def vitesse_sessions(sessions: List[dict]):
+    """Vitesse d'un ensemble de sessions deja marquees : (vitesse, aberrante).
+
+    Les sessions aberrantes sont sorties du calcul, sinon une seule saisie
+    fausse emporte le total (2 501 m en 2 min 28 divises par les 42 min de
+    production de tout le dossier donnaient 59 m/min « plausibles »). Une
+    session sans temps de production ni d'arret ne pese pas. S'il ne reste
+    rien de sain alors qu'une session etait aberrante : erreur.
+    """
+    saines = [d for d in sessions if not d.get("vitesse_aberrante") and _minutes_vitesse(d) > 0]
+    v, aberr = vitesse_plausible(
+        sum(float(d.get("metrage_m") or 0) for d in saines),
+        sum(_minutes_vitesse(d) for d in saines))
+    return v, aberr or (not saines and any(d.get("vitesse_aberrante") for d in sessions))
 
 
 def _clean_operateur(name: str) -> str:
@@ -282,7 +320,8 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str,
 
     etiquettes = round(sum(float(d.get("etiquettes") or 0) for d in dossier_times), 1)
     metrage = round(sum(float(d.get("metrage_m") or 0) for d in dossier_times), 1)
-    vitesse, vitesse_aberrante = vitesse_plausible(metrage, prod + arret)
+    marquer_vitesse_sessions(dossier_times)
+    vitesse, vitesse_aberrante = vitesse_sessions(dossier_times)
 
     by_category = [
         {"category": "calage", "label": "Calage", "minutes": round(calage, 1)},

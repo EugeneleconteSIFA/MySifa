@@ -14623,6 +14623,8 @@ function vitSessions(rows){
   (rows||[]).forEach(r=>{
     const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
     if(r.vitesse_aberrante || vitCalc(r.metrage_m, den).err){ err = true; return; }
+    // Sans temps de production ni d'arrêt, la session ne pèse pas.
+    if(!(den > 0)) return;
     sain = true; m += Number(r.metrage_m||0); mn += den;
   });
   return (!sain && err) ? {v:null, err:true} : vitCalc(m, mn);
@@ -15608,13 +15610,13 @@ function _mpmListeSynthese(byDosNoRep){
   let items;
   if(axe === 'dossier'){
     items = _prodAggDossier(byDosNoRep).map(function(r){
-      const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
+      const no = String(r.no_dossier);
       return {
-        key: String(r.no_dossier),
+        key: no,
         titre: '#'+r.no_dossier,
         sous: prodSynthCleanClient(r.client) || '—',
         n: fN(r.metrage_m||0)+' m',
-        vit: vitEl(vitCalc(r.metrage_m, den)),
+        vit: vitEl(vitSessions(byDosNoRep.filter(function(x){ return String(x.no_dossier||'').trim() === no; }))),
       };
     });
   }else{
@@ -16725,7 +16727,9 @@ function renderProdKpis(){
           const no = String(r.no_dossier||'');
           return _psLigne({nom:no, dossier:no, sous:prodSynthCleanClient(r.client) || '—',
             cal:r.temps_calage_min, prd:r.temps_prod_min, arr:r.temps_arret_min, met:r.metrage_m,
-            vit:vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0)),
+            // Session par session : une saisie aberrante (compteur recopié,
+            // 89 juste après le 03) donne « erreur saisie », pas 0.00 m/min.
+            vit:vitSessions(byDosNoRep.filter(x=>String(x.no_dossier||'').trim()===no)),
             actif:no===actif, title:'Afficher la fiche du dossier',
             onClick:()=>{
               S.psSel = no; S.psLigne = null; render();

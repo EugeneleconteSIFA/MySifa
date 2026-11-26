@@ -768,14 +768,18 @@ async def create_conge(request: Request):
         # Conflits avec des affectations planning : jour par jour (masque
         # `jours` de l'affectation), pas à la semaine — une personne prévue du
         # lundi au mercredi peut poser son jeudi.
+        # Une absence imprévue (maladie, absence du jour) tombe forcément sur
+        # un jour planifié : le conflit demande confirmation (`force`), il ne
+        # bloque pas. La grille montre ensuite le poste vacant ces jours-là.
         conflits = jours_affectes_pendant(conn, int(user_id), d_deb, d_fin)
-        if conflits:
+        if conflits and not body.get("force"):
             detail = " ; ".join(f"{c['semaine']} ({', '.join(c['jours'])})" for c in conflits)
-            raise HTTPException(
-                409,
-                f"{user_row['nom']} est affecté(e) au planning sur ces jours : {detail}. "
-                f"Retirez ou ajustez ces affectations avant de saisir le congé.",
-            )
+            raise HTTPException(409, {
+                "message": (f"{user_row['nom']} est affecté(e) au planning sur ces jours : {detail}. "
+                            f"Enregistrer l'absence quand même ? Son poste apparaîtra vacant ces jours-là."),
+                "conflict_type": "planning",
+                "conflits": conflits,
+            })
 
         now = datetime.now().isoformat()
         cur = conn.execute(

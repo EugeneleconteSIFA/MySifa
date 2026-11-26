@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo as _ZoneInfo
 _TZ_PARIS = _ZoneInfo('Europe/Paris')
 from database import get_db
 from services.timings import compute_dossier_times
-from app.services.dossier_stats import vitesse_plausible
+from app.services.dossier_stats import marquer_vitesse_sessions, vitesse_sessions
 from app.services import machines_type as _mtype
 from config import PROD_VITESSE_MAX_M_MIN
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
@@ -766,7 +766,7 @@ def dashboard_production(
             fin_dt   = _norm_dt(dt_op)
             jour_iso = _norm_date(dt_op)
             key      = (op, jour_iso, dos)
-            entry    = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0})
+            entry    = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0, "fins": 0})
 
             # Compteur début : celui que porte la ligne d'annulation (90), sinon
             # le dernier 01 du dossier dont l'heure ≤ heure de cette fin.
@@ -783,6 +783,7 @@ def dashboard_production(
                 continue
 
             produit = max(0.0, float(r["metrage_reel"]) - debut_ctr)
+            entry["fins"] += 1
             entry["metrage_m"] += produit
             if r.get("quantite_traitee") is not None:
                 entry["etiquettes"] = float(r["quantite_traitee"])
@@ -798,6 +799,8 @@ def dashboard_production(
 
         d["etiquettes"] = entry.get("etiquettes") or d.get("quantite_traitee") or 0
         d["metrage_m"]  = round(entry.get("metrage_m", 0.0), 1)
+        # Cloturee sans un metre d'ecart : compteur de fin recopie sur le debut.
+        d["compteur_inchange"] = bool(entry.get("fins")) and d["metrage_m"] <= 0
         by_dossier.append(d)
 
     # ── Enrichir completed_dossiers avec le métrage produit ─────────────────
@@ -826,19 +829,8 @@ def dashboard_production(
     # Chaque ligne est jugee seule : une session a vitesse impossible (compteur
     # mal saisi, 03 et 89 a la meme minute) est marquee et sortie du calcul
     # des vitesses agregees, sinon un seul chiffre en trop fausse la periode.
-    for d in by_dossier:
-        _v, d["vitesse_aberrante"] = vitesse_plausible(
-            d.get("metrage_m"),
-            float(d.get("temps_prod_min") or 0) + float(d.get("temps_arret_min") or 0))
-
-    def _vitesse_saine(rows):
-        saines = [r for r in rows if not r.get("vitesse_aberrante")]
-        v, aberr = vitesse_plausible(
-            sum(float(r.get("metrage_m") or 0) for r in saines),
-            sum(float(r.get("temps_prod_min") or 0) + float(r.get("temps_arret_min") or 0)
-                for r in saines))
-        # Plus rien de sain a montrer alors que des lignes existent : erreur.
-        return v, aberr or (not saines and any(r.get("vitesse_aberrante") for r in rows))
+    marquer_vitesse_sessions(by_dossier)
+    _vitesse_saine = vitesse_sessions
 
     vitesse_m_min, vitesse_aberrante = _vitesse_saine(_by_dos_for_totals)
 

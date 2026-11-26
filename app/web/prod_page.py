@@ -143,7 +143,7 @@ __ARRIVEE_PLANNING__
 <!-- Export PDF des saisies par operateur et par session (appele par le core) -->
 <script src="/static/mysifa_saisies_pdf.js?v=1"></script>
 <!-- Panneau « Données de prod » d'un dossier (partage avec le destockage) -->
-<script src="/static/mysifa_donnees_prod.js?v=19"></script>
+<script src="/static/mysifa_donnees_prod.js?v=20"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/mysifa_confirm.js?v=4"></script>
@@ -154,7 +154,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_rent_tableau.js?v=7"></script>
 <!-- Rentabilite > lecture d'un devis : resultat, chaine du classeur, sensibilite -->
 <script src="/static/mysifa_rent_devis.js?v=3"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent32-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit4-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp61-rep2"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent32-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit5-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp61-rep2"></script>
 <!-- Repartir une fin de production sur plusieurs dossiers de la commande -->
 <script src="/static/mysifa_repartition.js?v=2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
