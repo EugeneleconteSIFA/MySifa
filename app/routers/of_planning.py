@@ -630,7 +630,18 @@ def of_dossiers_sans_of(request: Request):
                 WHERE pe.statut IN ('attente', 'en_cours') AND pe.of_import_id IS NULL
                   AND NOT EXISTS (SELECT 1 FROM planning_of_links l WHERE l.planning_entry_id = pe.id)
                 ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999') , pe.id""").fetchall()
+        # Un OF du même numéro existe parfois déjà sans être relié (9932957
+        # en trois lignes, 26/11/2026) : le dire avant qu'on en crée un second.
+        existants: Dict[int, List[Dict[str, Any]]] = {}
+        for r in rows:
+            m = _COMMANDE_RE.search("%s %s" % (r["numero_of"] or "", r["reference"] or ""))
+            if not m:
+                continue
+            existants[r["id"]] = [{"id": o["id"], "numero": o["of_numero"]} for o in conn.execute(
+                "SELECT id, of_numero FROM of_imports WHERE of_numero LIKE ? ORDER BY of_numero, id LIMIT 4",
+                ("%" + m.group(1) + "%",))]
     return {"items": [{
+        "of_existants": existants.get(r["id"]) or [],
         "id": r["id"], "reference": r["reference"], "ref_produit": r["ref_produit"], "client": r["client"],
         "reservation": reference_a_venir(r["reference"]), "machine": r["machine"], "statut": r["statut"], "a_placer": bool(int(r["a_placer"] or 0)),
         "livraison": _jour(r["date_livraison"]) or None, "debut": _heure(r["planned_start"]) or None,

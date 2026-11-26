@@ -547,6 +547,13 @@ seulement, l'écart « Référence dossier » est proposé et coché : la réfé
 prend le numéro de l'OF, refusé si un autre dossier à produire le porte. Un
 vrai numéro de dossier ne se renomme jamais depuis l'OF.
 
+**Une fenêtre, deux départs** (26/11/2026). « Créer un OF » ouvre le sélecteur
+RVGI avec une bascule en tête : « Depuis une commande » / « Depuis le planning »
+(option `vues` de `mysifa_rvgi_picker.js`, liste peinte par
+`ofeDossiersMonter`). Plus de seconde fenêtre par-dessus. La liste signale un
+dossier dont le numéro est déjà porté par un OF non relié (`of_existants` de
+`/api/of-planning/dossiers-sans-of`) : le relier plutôt qu'en créer un second.
+
 **Numéros d'OF abrégés d'Access** (26/11/2026, `_of_tokens` de
 `of_import.py`). 387 OF de la prod portent plusieurs commandes dans leur
 numéro, souvent abrégées : « 9932913, 914, 915 et 916 », « 9932929-935-936 »,
