@@ -701,11 +701,6 @@ table.adv-table{font-size:12px}
 .adv-table td.c-commande .adv-info{margin-left:4px}
 .adv-table th.etape,.adv-table td.etape{width:40px;min-width:40px;max-width:40px}
 .adv-table .adv-noeud{width:24px;height:24px}
-/* Le « ? » d'ajout (survol) ne réserve pas de place : il se pose sur la
-   marge droite de la cellule Commande. Le « ? » jaune d'une info, lui, garde
-   sa place. */
-.adv-table td.c-commande{position:sticky}
-.adv-table td.c-commande .adv-info.vide{position:absolute;right:2px;top:50%;margin:-9px 0 0}
 .adv-table th.etape{font-size:10px}
 /* Le client prend la place qui reste (et se tronque quand il en manque) :
    les autres colonnes gardent la largeur de leur contenu, l'article ne
@@ -719,7 +714,7 @@ table.adv-table{font-size:12px}
 .adv-table th.fin-sec,.adv-table td.fin-sec{padding-right:11px}
 .adv-table th:first-child,.adv-table td:first-child{padding-left:10px}
 /* Au-dela, le tableau ne s etire plus : sinon toute la place part dans Client. */
-table.adv-table{max-width:1120px}
+table.adv-table{max-width:1360px}
 .adv-table-wrap{width:fit-content;max-width:100%}
 
 /* Légende des pictos, au-dessus du tableau (Commandes et Prépa) : les pictos
@@ -738,3 +733,61 @@ table.adv-table{max-width:1120px}
 .adv-leg-btn.prete{background:var(--accent);border-color:var(--accent);color:white}
 .adv-leg-btn.prete.on{background:var(--success);border-color:var(--success)}
 @media(max-width:560px){.adv-legende{justify-content:flex-start;gap:6px 12px;font-size:12px}}
+
+/* ── Place (retour du 26/11) ──────────────────────────────────── */
+/* La légende prend la place de l'ancienne tuile « Prêtes à partir », en
+   colonne : la ligne qu'elle occupait sous la barre disparaît. */
+.adv-legende.adv-legende-tuile{flex-direction:column;align-items:flex-start;justify-content:center;flex-wrap:nowrap;gap:5px;margin:0;
+  padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--card);font-size:12px}
+.adv-legende-tuile .adv-leg{gap:8px}
+@media(max-width:768px){.adv-legende.adv-legende-tuile{padding:8px 10px;gap:4px;font-size:11.5px}.adv-legende-tuile .adv-leg{white-space:normal}}
+/* Recherche plus courte : elle tient sur la ligne des filtres d'étape. */
+.adv-recherche{flex:0 1 300px;max-width:300px}
+@media(max-width:768px){.adv-recherche{flex:1 1 100%;max-width:none}}
+
+/* Colonne Commentaire : la dernière info de suivi, tronquée ; le texte entier
+   au survol. */
+.adv-table td.c-com{min-width:210px;max-width:280px;white-space:nowrap;overflow:hidden}
+.adv-table td.c-com.avec{cursor:pointer}
+.adv-table td.c-com .com-t{display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
+  padding:2px 7px;border-radius:6px;background:oklch(.86 .17 92 / .22);color:var(--text)}
+.adv-table td.c-com.avec:hover .com-t{background:oklch(.86 .17 92 / .38)}
+.adv-table td.c-com .com-n{margin-left:5px;font-size:11px;font-weight:700;color:var(--muted);vertical-align:middle}
+.adv-table .com-ajout{visibility:hidden;border:1px dashed var(--border);background:transparent;color:var(--muted);border-radius:6px;
+  padding:2px 8px;font:inherit;font-size:11.5px;cursor:pointer}
+.adv-table tbody tr:hover .com-ajout,.adv-table .com-ajout:focus-visible{visibility:visible}
+.adv-table .com-ajout:hover{color:var(--text);border-color:var(--accent)}
+@media(hover:none){.adv-table .com-ajout{visibility:visible}}
+
+/* ── Prépa (retour du 26/11) ──────────────────────────────────── */
+/* Le tableau reprend toute la largeur : la règle « largeur du contenu » du
+   carnet ne vaut pas pour lui. */
+.adv-table-wrap.adv-prepa-wrap{width:auto}
+table.adv-table.adv-prepa-table{width:100%;max-width:none}
+/* Légende dans la rangée des onglets, poussée à droite, avant Historique. */
+.adv-ongl .adv-legende.adv-legende-ongl{margin:0 4px 0 auto;font-size:12px;gap:4px 12px}
+.adv-ongl .adv-legende-ongl + .adv-ongl-btn.histo{margin-left:0}
+/* Frise compacte : environ moitié moins haute. */
+.pf{padding:10px 14px 12px;margin-bottom:12px}
+.pf-titre{font-size:15px}
+.pf-gbtn{padding:5px 11px;font-size:13px}
+.pf-tete .adv-puce{padding:4px 10px;font-size:12.5px}
+.pf-semaine{margin-top:8px}
+.pf-sem{font-size:13px;margin-bottom:2px}
+.pf-jours,.pf-barre{gap:8px}
+.pf-jh{flex-direction:row;justify-content:center;gap:6px;padding:3px 4px 4px}
+.pf-jh-lib{font-size:13px}
+.pf-jh-n{font-size:11.5px}
+.pf-barre{margin-top:4px;height:70px}
+.pf-seg{padding:3px;gap:3px;border-radius:8px}
+.pf-bloc{padding:3px 5px;border-radius:6px}
+.pf-cli{font-size:12.5px}
+.pf-l2{display:none}
+.pf-l3{font-size:11px}
+.pf-badge{margin-top:2px;padding:1px 6px;font-size:9.5px}
+/* Bloc étroit : le client à l'horizontale sur trois lignes au plus — la
+   verticale ne laissait lire que cinq lettres à cette hauteur. */
+.pf-bloc.etroit{padding:3px 2px}
+.pf-bloc.etroit .pf-cli{writing-mode:horizontal-tb;transform:none;max-height:none;white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:auto;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;font-size:10.5px;line-height:1.15}
+@media(max-width:900px){.adv-ongl .adv-legende.adv-legende-ongl{flex-basis:100%;order:9;margin:4px 0 0;justify-content:flex-start}}
