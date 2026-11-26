@@ -425,7 +425,12 @@ async def create_planning(request: Request):
 
         unavailable_bits = (busy_bits | conge_day_bits) & JOURS_MASK_ALL
 
-        if is_full_assigned:
+        # Lundi–vendredi déjà pris : seul un jour encore libre demandé
+        # explicitement (le samedi, typiquement) peut s'ajouter.
+        libres_demandes = (
+            int(jours_req) & JOURS_MASK_ALL & ~busy_bits if jours_req is not None else 0
+        )
+        if is_full_assigned and not libres_demandes:
             raise HTTPException(
                 409,
                 f"{user_row['nom']} est déjà affecté toute la semaine. "
