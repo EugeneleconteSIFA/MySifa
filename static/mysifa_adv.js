@@ -220,7 +220,7 @@
     var pe = u.get('periode', null, HISTO_JOURS.map(function (n) { return 'last' + n; }));
     if (pe || complet) S.histoJours = pe ? parseInt(pe.slice(4), 10) : 30;
     var jr = u.get('jour', null);
-    if (jr || complet) S.jour = jr === 'tous' || /^\d{4}-\d{2}-\d{2}$/.test(jr || '') ? jr : null;
+    if (jr || complet) S.jour = /^\d{4}-\d{2}-\d{2}$/.test(jr || '') ? jr : null;
     var l = u.get('ligne', null);
     S.ligne = (l && /^\d{1,12}-\d{1,4}$/.test(l)) ? l : null;
     S.reglages = (DROITS.adv && S.onglet === 'commandes' && !S.ligne)
@@ -411,8 +411,8 @@
 
   // Légende des pictos, en petit au-dessus du tableau : chaque picto est
   // celui des lignes, en réduction, avec son sens en deux ou trois mots.
-  function legende(items) {
-    return h('div', {className: 'adv-legende', role: 'note', 'aria-label': 'Légende'},
+  function legende(items, cls) {
+    return h('div', {className: 'adv-legende' + (cls ? ' ' + cls : ''), role: 'note', 'aria-label': 'Légende'},
       items.filter(Boolean).map(function (it) {
         return h('span', {className: 'adv-leg'}, it[0], h('span', {text: it[1]}));
       }));
@@ -509,7 +509,15 @@
       tuile('Lignes à traiter', k.carnet.lignes, k.carnet.commandes + ' commandes', '', S.filtre === 'tous', basculer('tous')),
       tuile('En retard', k.retard.lignes, k.retard.commandes + ' commandes', k.retard.lignes ? 'danger' : '', S.filtre === 'retard', basculer('retard')),
       tuile('À expédier sous 7 jours', k.semaine.lignes, k.semaine.commandes + ' commandes', k.semaine.lignes ? 'warn' : '', S.filtre === 'semaine', basculer('semaine')),
-      tuile('Prêtes à partir', k.pretes.lignes, k.pretes.commandes + ' commandes', k.pretes.lignes ? 'ok' : '', S.filtre === 'pretes', basculer('pretes')));
+      // À la place de l'ancienne tuile « Prêtes à partir » : la légende des
+      // pictos, en colonne. Elle libère la ligne qu'elle prenait sous la barre.
+      legende([
+        [noeudLegende('oui'), 'Fait'],
+        [noeudLegende('en_cours', null, 50), 'En cours'],
+        [noeudLegende('non'), 'À faire'],
+        [noeudLegende('sans_objet'), 'Sans objet'],
+        [noeudLegende('sans_objet', 'force'), 'Fixé à la main par l’ADV']
+      ], 'adv-legende-tuile'));
     c.appendChild(tuiles);
 
     var barre = h('div', {className: 'adv-barre'});
@@ -528,14 +536,6 @@
     });
     barre.appendChild(puces);
     c.appendChild(barre);
-    c.appendChild(legende([
-      [noeudLegende('oui'), 'Fait'],
-      [noeudLegende('en_cours', null, 50), 'En cours, rempli à la part faite'],
-      [noeudLegende('non'), 'À faire'],
-      [noeudLegende('sans_objet'), 'Sans objet'],
-      [noeudLegende('probable'), 'Production finie, pas encore en stock'],
-      [noeudLegende('sans_objet', 'force'), 'Fixé à la main par l’ADV']
-    ]));
     c.appendChild(h('div', {id: 'adv-table-hote'}));
     renderTableSeule();
   }
@@ -602,7 +602,8 @@
 
   var COLONNES = [
     {cle: 'commande', famille: 'id', label: 'Commande', tri: 'commande', td: function (l) {
-      return h('td', {className: 'adv-mono c-commande'}, h('span', {className: 'cde-t'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne})), iconeInfo(l));
+      return h('td', {className: 'adv-mono c-commande'}, h('span', {className: 'cde-t'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne})),
+        (l.infos || []).length ? iconeInfo(l) : null);
     }},
     {cle: 'client', famille: 'id', label: 'Client', tri: 'client', td: function (l) {
       return h('td', {className: 'client', title: l.client}, h('span', {className: 'client-t', text: l.client}));
@@ -644,7 +645,29 @@
     return {cle: 'etape_' + e.cle, famille: 'etape', label: e.label, etape: true, td: function (l) {
       return h('td', {className: 'etape'}, noeudEtape(l, e.cle));
     }};
-  }));
+  })).concat([
+    {cle: 'commentaire', famille: 'note', label: 'Commentaire', td: celluleCommentaire}
+  ]);
+
+  // Dernière info de suivi de la ligne, en clair. Clic : la fiche, sur le fil
+  // des infos. Sans info, l'ADV voit « Ajouter » au survol de la ligne.
+  function celluleCommentaire(l) {
+    var infos = l.infos || [];
+    var ouvrir = function (ev) { ev.stopPropagation(); S.focusInfo = true; ouvrirFiche(l.cle); };
+    if (!infos.length) {
+      return h('td', {className: 'c-com'}, DROITS.adv
+        ? h('button', {type: 'button', className: 'com-ajout', onClick: ouvrir, 'aria-label': 'Ajouter une info de suivi'}, '+ Ajouter')
+        : null);
+    }
+    var d = infos[0];
+    return h('td', {className: 'c-com avec',
+      'data-tip': tip(l.cle + '|com', 'Info de suivi', d.texte,
+        (d.cree_par ? d.cree_par + ' · ' : '') + dateFr(d.cree_le) + (heure(d.cree_le) ? ' à ' + heure(d.cree_le) : '')
+        + (infos.length > 1 ? ' · ' + (infos.length - 1) + ' autre' + (infos.length > 2 ? 's' : '') + ' dans la fiche' : '')),
+      onClick: ouvrir},
+      h('span', {className: 'com-t', text: d.texte}),
+      infos.length > 1 ? h('span', {className: 'com-n', text: '+' + (infos.length - 1)}) : null);
+  }
   var COL_PAR_CLE = {};
   // Une barre verticale sépare deux familles de colonnes (dates, quantités,
   // étapes) — sauf après l'identité de la ligne, qui ouvre le tableau. Calculé
@@ -1154,7 +1177,10 @@
   // Aujourd'hui selon le serveur (heure de Paris), à défaut selon le poste.
   function aujourdhuiPrepa() { return (S.prepa && S.prepa.aujourdhui) || isoJour(new Date()); }
   // Le jour dont le tableau montre les préparations — null : tous les jours.
-  function jourActif() { return S.jour === 'tous' ? null : (S.jour || aujourdhuiPrepa()); }
+  // Tous par défaut (retour du 26/11 : avec « aujourd'hui » par défaut, les
+  // prépas des autres jours manquaient à la liste). Un clic sur un jour filtre,
+  // un second clic rend tous les jours. « tous » : forme des anciens liens.
+  function jourActif() { return S.jour && S.jour !== 'tous' ? S.jour : null; }
   // Une préparation à faire ce jour-là (les prêtes comptent : c'est le travail du jour).
   function duJour(l, jour) { return !jour || l.jour_prepa === jour; }
   // Même client, même couleur, d'une semaine à l'autre : une des cinq teintes du thème.
@@ -1165,7 +1191,7 @@
   }
 
   function choisirJour(jour) {
-    S.jour = jour === aujourdhuiPrepa() ? null : jour;
+    S.jour = jour && jour !== jourActif() ? jour : null;
     render();
     var tw = document.querySelector('.adv-table-wrap');
     if (tw) tw.scrollTop = 0;
@@ -1280,7 +1306,7 @@
       var aFaire = x.lignes.filter(function (l) { return l.groupe !== 'pretes'; }).length;
       return h('button', {type: 'button', className: 'pf-jh' + etat(x), disabled: x.jour < auj,
         'aria-pressed': x.jour === actif ? 'true' : 'false',
-        onClick: function () { choisirJour(x.jour === actif ? auj : x.jour); }},
+        onClick: function () { choisirJour(x.jour); }},
         h('span', {className: 'pf-jh-lib', text: jourCourt(x.jour)}),
         h('span', {className: 'pf-jh-n', text: aFaire ? aFaire + ' à faire' : x.lignes.length ? 'fait' : '—'}));
     }));
@@ -1337,7 +1363,7 @@
         h('button', {type: 'button', className: 'pf-gbtn' + (lundi0 === courant ? ' active' : ''), onClick: function () { aller(courant); }}, 'actuelle'),
         h('button', {type: 'button', className: 'pf-gbtn', 'aria-label': 'Semaine suivante', onClick: function () { aller(decaler(lundi0, 7)); }}, '▶')),
       h('button', {type: 'button', className: 'adv-puce' + (actif ? '' : ' active'),
-        onClick: function () { S.jour = actif ? 'tous' : null; render(); }}, 'Tous les jours'));
+        onClick: function () { choisirJour(null); }}, 'Tous les jours'));
     var semaines = [];
     for (var w = 0; w < vue.sem; w++) semaines.push(semaineFrise(decaler(lundi0, 7 * w), lignes, auj, actif));
     c.appendChild(h('div', {className: 'pf'}, outils, semaines));
@@ -1445,13 +1471,18 @@
         : VIDES_PREPA[onglet.cle].replace('%n', S.horizon)}));
       return;
     }
-    c.appendChild(legende([
-      [boutonLegende('ordre', 'ordre'), 'Ordre d’expé à imprimer'],
+    // La légende tient dans la rangée des onglets : une ligne de moins
+    // au-dessus du tableau. Libellés courts ; le détail est sur les boutons.
+    var leg = legende([
+      [boutonLegende('ordre', 'ordre'), 'Ordre d’expé'],
       DROITS.adv ? [boutonLegende('urgente', 'urgence'), 'Marquer urgente'] : null,
-      DROITS.adv ? [boutonLegende('urgente', 'urgence on'), 'Urgente : cliquer pour retirer'] : null,
+      DROITS.adv ? [boutonLegende('urgente', 'urgence on'), 'Urgente'] : null,
       DROITS.prepa ? [boutonLegende('prete', 'prete'), 'Marquer prête'] : null,
-      DROITS.prepa ? [boutonLegende('prete', 'prete on'), 'Prête : cliquer pour remettre à préparer'] : null
-    ]));
+      DROITS.prepa ? [boutonLegende('prete', 'prete on'), 'Prête'] : null
+    ], 'adv-legende-ongl');
+    var rangee = c.querySelector('.adv-ongl');
+    var histoBtn = rangee && rangee.querySelector('.histo');
+    if (histoBtn) rangee.insertBefore(leg, histoBtn); else c.appendChild(leg);
     // Le rang suit l'ordre de travail dans l'onglet ; une prépa prête n'en a pas.
     // Les lignes qui partent ensemble se replient sous la ligne de leur envoi.
     var rangDe = function (l) { return onglet.cle === 'pretes' ? '·' : ls.indexOf(l) + 1; };
