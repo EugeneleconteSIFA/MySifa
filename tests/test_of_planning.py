@@ -294,5 +294,53 @@ class TestReservation(unittest.TestCase):
         self.assertIn("9932501/L1", e["reference"]["motif"])
 
 
+class TestCreerDossierDepuisOF(unittest.TestCase):
+    """Bouton « Créer directement un dossier de prod » (26/11/2026)."""
+
+    def setUp(self):
+        from app.routers import of_import as oi
+        self.oi = oi
+        self._garde = oi._require_of_access
+        oi._require_of_access = lambda request: {"nom": "Essai"}
+        with get_db() as conn:
+            self.machine = _preparer(conn)
+            nom = conn.execute("SELECT nom FROM machines WHERE id=?", (self.machine,)).fetchone()["nom"]
+            # OF libre, machine écrite à la façon d'Access (majuscules, sans accent).
+            import unicodedata
+            brut = "".join(c for c in unicodedata.normalize("NFKD", nom) if not unicodedata.combining(c)).upper()
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, machine, statut) "
+                         "VALUES (40, '9932501/L1', '890/0017 - X', ?, 'en_attente')", (brut,))
+            conn.commit()
+
+    def tearDown(self):
+        self.oi._require_of_access = self._garde
+
+    def test_of_qui_a_deja_son_dossier(self):
+        with get_db() as conn:
+            conn.execute("UPDATE planning_entries SET of_import_id=10 WHERE id=1")
+            conn.commit()
+        p = self.oi.of_dossier_prefill(10, None)
+        self.assertEqual((p["dossier_existant"] or {}).get("id"), 1)
+        self.assertEqual(p["correspondants"], [])
+
+    def test_dossier_correspondant_propose(self):
+        # Dossier 1 libre de tout OF (le jeu le relie à l'OF 10 par son numéro).
+        with get_db() as conn:
+            conn.execute("DELETE FROM planning_of_links WHERE planning_entry_id=1")
+            conn.execute("UPDATE planning_entries SET of_import_id=NULL WHERE id=1")
+            conn.commit()
+        p = self.oi.of_dossier_prefill(40, None)
+        self.assertIsNone(p["dossier_existant"])
+        self.assertIn(1, [d["id"] for d in p["correspondants"]])
+
+    def test_dossier_relie_a_un_autre_of_ecarte(self):
+        p = self.oi.of_dossier_prefill(40, None)
+        self.assertNotIn(1, [d["id"] for d in p["correspondants"]])
+
+    def test_machine_reconnue_sans_accent(self):
+        p = self.oi.of_dossier_prefill(40, None)
+        self.assertEqual(p["machine_id"], self.machine)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

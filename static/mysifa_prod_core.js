@@ -2012,6 +2012,21 @@ async function ofCreerDossierProd(row){
     toast(e.message||'Pré-remplissage impossible.','error');
     return;
   }
+  const num=String(row.of_numero||'').trim()||('#'+row.id);
+  // 1. L'OF a déjà son dossier à produire : on l'ouvre, on n'en crée pas un
+  //    second (que le serveur refuserait ensuite de relier).
+  const ex=p&&p.dossier_existant;
+  if(ex){
+    toast('L\'OF '+num+' a déjà son dossier '+(ex.reference||'')+(ex.machine?' ('+ex.machine+')':'')+' : il s\'ouvre au planning.','info');
+    location.href='/planning?'+(ex.machine_id?'machine='+encodeURIComponent(ex.machine_id)+'&':'')+'dossier='+encodeURIComponent(ex.id);
+    return;
+  }
+  // 2. OF déjà produit : pas de nouveau dossier (règle des anciens OF).
+  if(p&&p.bloque){ toast('OF '+num+' '+p.bloque+' : pas de nouveau dossier.','error'); return; }
+  // 3. Des dossiers à produire lui correspondent (même numéro, même
+  //    commande) : relier passe avant créer.
+  const corr=(p&&p.correspondants)||[];
+  if(corr.length&&!(await ofChoisirAvantCreer(num,corr))) return;
   const sp=new URLSearchParams();
   if(p&&p.machine_id) sp.set('machine',String(p.machine_id));
   sp.set('depuis-of',String(row.id));
@@ -2021,6 +2036,35 @@ async function ofCreerDossierProd(row){
   location.href='/planning?'+sp.toString();
 }
 window.ofCreerDossierProd = ofCreerDossierProd;
+/* Avant de créer : les dossiers qui correspondent déjà à l'OF. Ouvrir l'un
+   d'eux mène à son panneau OF, où l'OF est proposé à relier. Rend true pour
+   « Créer quand même », false sinon. */
+function ofChoisirAvantCreer(num,corr){
+  return new Promise(function(fin){
+    const fond=document.createElement('div');
+    fond.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+    const etat=d=>d.statut==='en_cours'?'en cours':'en attente';
+    fond.innerHTML='<div role="dialog" aria-label="Dossiers existants" style="width:min(560px,100%);background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-sizing:border-box">'+
+      '<div style="font-size:15px;font-weight:700;color:var(--text)">'+(corr.length>1?corr.length+' dossiers correspondent':'Un dossier correspond')+' à l\'OF '+escHtml(num)+'</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin:4px 0 12px">Reliez l\'OF à ce dossier plutôt que d\'en créer un second.</div>'+
+      corr.map(d=>'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'+
+        '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+escHtml(d.reference||('#'+d.id))+'</div>'+
+        '<div style="font-size:12px;color:var(--muted)">'+escHtml([d.machine,etat(d),d.raison].filter(Boolean).join(' · '))+'</div></div>'+
+        '<a href="/planning?'+(d.machine_id?'machine='+encodeURIComponent(d.machine_id)+'&':'')+'of='+encodeURIComponent(d.id)+'" style="padding:7px 14px;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">Ouvrir pour relier</a></div>').join('')+
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap">'+
+        '<button type="button" data-annuler style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer">Annuler</button>'+
+        '<button type="button" data-creer style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font:inherit;font-size:13px;font-weight:600;cursor:pointer">Créer quand même un nouveau dossier</button>'+
+      '</div></div>';
+    const fermer=function(r){ fond.remove(); document.removeEventListener('keydown',clavier,true); fin(r); };
+    const clavier=function(e){ if(e.key==='Escape'){ e.stopPropagation(); fermer(false); } };
+    document.addEventListener('keydown',clavier,true);
+    fond.addEventListener('click',function(e){
+      if(e.target===fond||(e.target.closest&&e.target.closest('[data-annuler]'))) fermer(false);
+      else if(e.target.closest&&e.target.closest('[data-creer]')) fermer(true);
+    });
+    document.body.appendChild(fond);
+  });
+}
 
 /* Nouvel OF depuis une fiche technique (12/11/2026).
 
@@ -5111,7 +5155,11 @@ function renderOfTab(){
           : h('span',{style:bStyle+';visibility:hidden;display:inline-flex','aria-hidden':'true'},iconEl('file-text',13)),
       // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
       // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
-      bouton('Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),
+      // Un OF qui a déjà son dossier à produire l'ouvre, il n'en crée pas un
+      // second (26/11/2026).
+      bouton((row.dossier&&(row.dossier.statut==='attente'||row.dossier.statut==='en_cours'))
+        ? 'Ouvrir le dossier '+(row.dossier.reference||'')+' au planning'
+        : 'Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),
     ];
     // Mémoire produit : of_imports.reference EST la clé produit normalisée.
     // Quand Access a envoyé autre chose (le numéro d'OF), le bouton reste à sa
