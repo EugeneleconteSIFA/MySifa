@@ -734,6 +734,21 @@ body.light .btn-p{color:#fff}
   resize:none;outline:none;min-height:54px}
 .md--dossier .dossier-ta:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .md-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:28px}
+/* Croix de fermeture de toute fenêtre de modalHTML (26/11/2026 : sur
+   téléphone, seul « Annuler », tout en bas, fermait la fenêtre dossier). */
+.md-x{flex-shrink:0;width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text2);font-size:20px;line-height:1;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center}
+.md-x:hover{border-color:var(--danger);color:var(--danger)}
+@media (max-width:900px){
+  /* Fenêtre dossier : en-tête (titre, boutons, croix) et pied (Annuler,
+     Enregistrer) restent visibles pendant le défilement. */
+  .md.md--dossier{width:100%;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);padding:0 14px}
+  .md--dossier .md-hdr{position:sticky;top:0;z-index:3;background:var(--card);
+    margin:0 -14px 14px!important;padding:12px 14px 10px;border-bottom:1px solid var(--border)}
+  .md--dossier .md-acts{position:sticky;bottom:0;z-index:3;background:var(--card);
+    margin:16px -14px 0!important;padding:10px 14px max(10px, env(safe-area-inset-bottom));border-top:1px solid var(--border)}
+  .md--dossier .md-hdr h3{font-size:15px!important}
+}
 .btn-s{padding:10px 24px;background:transparent;color:var(--dim);border:1px solid var(--border2);
   border-radius:8px;cursor:pointer;font-size:14px;font-family:var(--mono)}
 .empty{text-align:center;padding:48px;color:var(--muted);font-size:14px;width:100%}
@@ -4786,9 +4801,12 @@ function durBar(v){return((v-MIND)/(MAXD-MIND)*100)+"%"}
 function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLeft="",compact=false,extraMdClass=""){
   const cls=`md${compact?' md--compact':''}${extraMdClass?(' '+extraMdClass):''}`;
   return`<div class="mo" onclick="if(event.target===this)closeM()"><div class="${cls}">
-    <div class="md-hdr" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap">
-      <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);line-height:1.3">${title}</h3>
-      ${headerAction?`<div style="flex-shrink:0">${headerAction}</div>`:""}
+    <div class="md-hdr" style="display:flex;align-items:flex-start;margin-bottom:24px;gap:12px">
+      <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);line-height:1.3">${title}</h3>
+        ${headerAction?`<div style="min-width:0;max-width:100%">${headerAction}</div>`:""}
+      </div>
+      <button type="button" class="md-x" aria-label="Fermer" title="Fermer" onclick="closeM()">×</button>
     </div>
     ${fields}
     <div class="md-acts" style="display:flex;align-items:center;justify-content:${footerLeft?"space-between":"flex-end"};gap:10px;flex-wrap:wrap">
