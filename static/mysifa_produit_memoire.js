@@ -2116,7 +2116,8 @@
   // Le contenant est fourni par l'appelant a chaque rendu : MyProd reconstruit
   // son DOM entierement, garder une reference d'un rendu a l'autre pointerait
   // sur un element detache.
-  // `init` : { onglet: 'scannes' | 'rattacher', scan: id } repris de l'adresse
+  // `init` : { onglet: 'scannes' | 'rattacher', scan: id } repris de l'adresse,
+  // `q` : recherche préremplie (« scan attendu » d'un OF, 26/11/2026)
   // de la page ; `surChange` est rappelé à chaque rendu avec le même objet.
   var scansSurChange = null;
   async function monterScansDans(contenant, init, surChange) {
@@ -2133,7 +2134,7 @@
     scansSurChange = typeof surChange === 'function' ? surChange : null;
     init = init || {};
     state = { tab: init.onglet === 'rattacher' ? 'rattacher' : 'scannes', data: null, mode: 'rattachement',
-              noDossier: null, docs: null, sel: init.scan ? Number(init.scan) : null, q: '' };
+              noDossier: null, docs: null, sel: init.scan ? Number(init.scan) : null, q: init.q || '' };
     await chargerScans();
   }
 
