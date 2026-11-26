@@ -108,6 +108,13 @@ son propre bloc). Il rattrape ce qu'un écran oublie, mais un écran neuf doit t
 de lui-même : pas de `min-width` fixe sur un conteneur de page, `flex-wrap` sur une
 rangée de boutons, un `overflow-x:auto` autour d'un tableau large.
 
+### Fenêtre ouverte : la page derrière ne défile pas
+`static/mysifa_fond_fige.js`, injecté partout par `main.py` (26/11/2026) : un défilement
+(molette, doigt) commencé dans un voile fixe couvrant la hauteur et au moins 60 % de la
+largeur ne sort jamais de ce voile. Les blocs défilants de la fenêtre défilent ; en butée,
+rien ne bouge. Une nouvelle fenêtre n'a rien à faire si son voile est un `position:fixed`
+plein écran. Un panneau latéral étroit (messagerie, assistant) n'est pas concerné.
+
 ### Écran de chargement sur téléphone
 `app/services/ecran_chargement.py`, posé en tête du `<head>` par `main.py` sur toutes les
 pages : logo et barre sur un dégradé du thème, à l'ouverture et entre deux applis. Il se
