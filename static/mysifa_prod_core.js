@@ -792,6 +792,7 @@
     const p = {
       'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
       'calendar': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+      'calendar-check': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/>',
       'trending-up': '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
       'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
       'user': '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
@@ -5157,9 +5158,13 @@ function renderOfTab(){
       // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
       // Un OF qui a déjà son dossier à produire l'ouvre, il n'en crée pas un
       // second (26/11/2026).
-      bouton((row.dossier&&(row.dossier.statut==='attente'||row.dossier.statut==='en_cours'))
-        ? 'Ouvrir le dossier '+(row.dossier.reference||'')+' au planning'
-        : 'Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),
+      // Déjà au planning : icône cochée en couleur d'accent, pour lire d'un
+      // coup d'œil quels OF ont leur dossier (26/11/2026).
+      (row.dossier&&(row.dossier.statut==='attente'||row.dossier.statut==='en_cours'))
+        ? h('button',{style:bStyle+';color:var(--accent);border-color:var(--accent);background:var(--accent-bg)',
+            title:'Déjà au planning : ouvrir le dossier '+(row.dossier.reference||''),
+            onClick:()=>ofCreerDossierProd(row)},iconEl('calendar-check',13))
+        : bouton('Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),
     ];
     // Mémoire produit : of_imports.reference EST la clé produit normalisée.
     // Quand Access a envoyé autre chose (le numéro d'OF), le bouton reste à sa
