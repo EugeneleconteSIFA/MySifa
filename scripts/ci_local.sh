@@ -158,6 +158,22 @@ fi
 # Un dossier temporaire propre a ce lancement : un chemin fixe dans /tmp
 # appartient au premier utilisateur qui l'a cree, et les lancements suivants
 # sous un autre compte echouaient en "Permission denied" sur TOUS les tests.
+# Le paquet manquant figure-t-il dans requirements.txt ? (nom du module de
+# premier niveau, compare sans casse, tirets et soulignes confondus ; les
+# quelques paquets dont le module porte un autre nom sont listes a la main).
+module_requis() {
+    local mod
+    mod=$(printf '%s' "$1" | sed -n "s/.*No module named '\([A-Za-z0-9_]*\).*/\1/p" | head -1)
+    [[ -z "$mod" ]] && return 0
+    case "$mod" in
+        PIL) mod=pillow ;; yaml) mod=pyyaml ;; dateutil) mod=python-dateutil ;;
+        multipart) mod=python-multipart ;; jose) mod=python-jose ;; dotenv) mod=python-dotenv ;;
+        fitz) mod=pymupdf ;; docx) mod=python-docx ;; pptx) mod=python-pptx ;; bs4) mod=beautifulsoup4 ;;
+    esac
+    mod=$(printf '%s' "$mod" | tr 'A-Z_' 'a-z-')
+    sed 's/[<>=!~;[ ].*//' requirements.txt | tr 'A-Z_' 'a-z-' | grep -qx "$mod"
+}
+
 DOSSIER=$(mktemp -d "${TMPDIR:-/tmp}/mysifa_ci.XXXXXX")
 trap 'rm -rf "$DOSSIER"' EXIT
 debut=$(date +%s)
@@ -176,10 +192,14 @@ for t in tests/test_*.py; do
     if [[ $code -eq 0 ]]; then
         echo "ok"
     elif [[ "$sortie" == *"No module named"* ]] \
-         && [[ ! "$sortie" =~ No\ module\ named\ \'(app|database|config|tools|scripts)([.\']) ]]; then
+         && [[ ! "$sortie" =~ No\ module\ named\ \'(app|database|config|tools|scripts)([.\']) ]] \
+         && module_requis "$sortie"; then
         # Paquet tiers pas installe sur ce poste : la CI GitHub, elle, installe
         # requirements.txt et reste juge. Un module DU PROJET introuvable reste
-        # un echec : c'est en general un renommage a moitie fait.
+        # un echec : c'est en general un renommage a moitie fait. Un paquet
+        # ABSENT de requirements.txt aussi (module_requis) : GitHub ne l'a pas
+        # non plus — le 26/11/2026, un test ecrit pour pytest passait ici pour
+        # « ignore » et cassait la CI de staging.
         echo "ignore (dependance absente de ce poste)"
     elif [[ "$sortie" == *"No such file or directory: 'node'"* ]] && ! command -v node >/dev/null 2>&1; then
         # Test qui execute du JavaScript avec Node : la CI GitHub l'a, le Mac
