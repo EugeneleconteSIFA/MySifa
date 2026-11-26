@@ -128,6 +128,7 @@
     '.mrp-vue-b .n{min-width:18px;padding:0 7px;border-radius:999px;font-size:11px;line-height:18px;text-align:center;',
     '  background:color-mix(in srgb,var(--accent,#2563eb) 14%,transparent);color:var(--accent,#2563eb)}',
     '.mrp-vue-b .n:empty{display:none}',
+    '.mrp-autre{overscroll-behavior:contain}',
     '.mrp-autre{display:none;flex:1;min-height:0;overflow-y:auto;background:var(--bg,#f6f7f9);margin-top:12px;border-top:1px solid var(--border,#dcdfe4)}',
     '.mrp.vue-autre .mrp-autre{display:block}',
     '.mrp.vue-autre .mrp-cherche,.mrp.vue-autre .mrp-sel,.mrp.vue-autre .mrp-corps,',
@@ -136,6 +137,8 @@
     /* Même taille quelle que soit la vue : la fenêtre ne saute plus à la
        bascule (retour du 26/11/2026). Les corps prennent la place libre. */
     '.mrp.a-vues{height:min(780px,90vh)}',
+    '.mrp-fond{overscroll-behavior:contain}',
+    '.mrp-corps{overscroll-behavior:contain}',
     '.mrp-corps{flex:1;min-height:0;overflow-y:auto;padding:6px 0;background:var(--bg,#f6f7f9)}',
     '.mrp-msg{padding:34px 20px;text-align:center;color:var(--muted,#6b7280);font-size:13px}',
     '.mrp-piece{margin:8px 12px;border:1px solid var(--border,#dcdfe4);border-radius:11px;overflow:hidden;background:var(--card,#fff)}',
@@ -482,12 +485,37 @@
         '</div>' +
       '</div>';
     document.body.appendChild(fond);
+    // La page derrière ne défile plus tant que la fenêtre est ouverte
+    // (retour du 26/11/2026) ; rendu à la fermeture, quelle qu'elle soit.
+    var html = document.documentElement, avantDefil = html.style.overflow;
+    html.style.overflow = 'hidden';
+    function rendreDefilement() { html.style.overflow = avantDefil; }
+    // Les pages défilent souvent dans un bloc à elles (`.main` de MyProd), que
+    // l'overflow du document n'arrête pas : la molette ne fait défiler que la
+    // liste de la fenêtre, et rien quand elle est en butée.
+    fond.addEventListener('wheel', function (e) {
+      var el = e.target;
+      while (el && el !== fond) {
+        var st = getComputedStyle(el).overflowY;
+        if ((st === 'auto' || st === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+          var bas = e.deltaY > 0;
+          if (bas ? el.scrollTop + el.clientHeight < el.scrollHeight - 1 : el.scrollTop > 0) return;
+          break;
+        }
+        el = el.parentElement;
+      }
+      e.preventDefault();
+    }, { passive: false });
+    fond.addEventListener('touchmove', function (e) {
+      if (!(e.target.closest && e.target.closest('.mrp-corps,.mrp-autre'))) e.preventDefault();
+    }, { passive: false });
 
     var $ = function (id) { return fond.querySelector('#' + id); };
     var corps = $('mrp-corps'), champ = $('mrp-q');
 
     function fermer() {
       fond.remove();
+      rendreDefilement();
       document.removeEventListener('keydown', auClavier);
       if (o.onFermer) o.onFermer();
     }
@@ -500,6 +528,7 @@
       b.addEventListener('click', function () {
         var a = (o.actionsExtra || [])[Number(b.getAttribute('data-extra'))];
         fond.remove();
+        rendreDefilement();
         document.removeEventListener('keydown', auClavier);
         if (a && a.onClick) a.onClick();
       });
