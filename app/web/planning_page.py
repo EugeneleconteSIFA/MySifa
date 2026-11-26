@@ -540,8 +540,9 @@ table.planning-of-table tr:last-child td{border-bottom:none}
 .sel-barre{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:500;display:flex;align-items:center;gap:12px;
   padding:8px 10px 8px 16px;border-radius:10px;background:var(--card);border:1px solid var(--accent);color:var(--text);
   font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
-.sel-barre button{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1}
-.sel-barre button:hover{color:var(--text);border-color:var(--accent)}
+.sel-barre button{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);border:none;color:var(--bg);
+  border-radius:7px;height:28px;padding:0 10px 0 8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit}
+.sel-barre button:hover{filter:brightness(1.12)}
 .sel-ghost{position:fixed;top:-100px;left:-100px;padding:6px 12px;border-radius:8px;background:var(--accent);color:var(--bg);font-size:12px;font-weight:700}
 .tr.drop-before{box-shadow:0 -3px 0 0 var(--accent) inset}
 .tr.drop-after{box-shadow:0 3px 0 0 var(--accent) inset}
@@ -3237,7 +3238,8 @@ function selMajBarre(){
     document.body.appendChild(bar);
   }
   bar.innerHTML=`<span>${n} dossier${n>1?"s":""} sélectionné${n>1?"s":""} · glisser pour déplacer le bloc</span>`+
-    `<button type="button" onclick="selVider()" title="Désélectionner (Échap)">×</button>`;
+    `<button type="button" onclick="selVider()" title="Désélectionner (Échap)">`+
+    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Désélectionner</button>`;
 }
 function selClic(ev, eid){
   selPrune();

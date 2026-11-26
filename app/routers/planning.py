@@ -2765,6 +2765,17 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
                          (_parse_a_placer(body.get("pour_repiquage"), default=0), entry_id))
         _poser_source_repiquage(conn, entry_id, body)
 
+        # Dossier « à placer » qui devient placé : il garde la place où la
+        # timeline l'affichait (fin de file), au lieu de reprendre la position
+        # qu'il avait à sa création. Observé le 26/11/2026 : deux dossiers
+        # livrables mi-janvier sont remontés début décembre, devant des
+        # dossiers bien plus urgents.
+        if "a_placer" in body and new_statut == "attente":
+            ap_avant = int(exd.get("a_placer") or 0)
+            ap_apres = _parse_a_placer(body.get("a_placer"), default=ap_avant)
+            if ap_avant == 1 and ap_apres == 0:
+                _garder_place_a_placer(conn, machine_id, entry_id, now)
+
         # Si un créneau planifié voit sa durée changer (donc planned_end bouge),
         # il faut pousser les dossiers suivants (non verrouillés) en invalidant
         # leurs dates; elles seront recalculées au prochain GET timeline.
@@ -3369,6 +3380,32 @@ def _index_placement(ids: List[int], statuts: Dict[int, str], apres_id: Optional
             "choisissez le dossier en cours ou un dossier en attente.",
         )
     return idx
+
+
+def _garder_place_a_placer(conn, machine_id: int, entry_id: int, now: str) -> None:
+    """Fige dans `position` l'ordre affiché par la timeline, le dossier validé
+    juste derrière les dossiers placés (là où il apparaissait).
+
+    Les dossiers « à placer » sont rendus en fin de file quelle que soit leur
+    position (_ordre_timeline) : écrire cet ordre ne déplace rien à l'écran.
+    """
+    rows = conn.execute(
+        """SELECT id, statut, a_placer FROM planning_entries
+           WHERE machine_id=? ORDER BY position ASC, id ASC""",
+        (machine_id,),
+    ).fetchall()
+    autres = [dict(r) for r in rows if int(r["id"]) != int(entry_id)]
+    principaux: List[int] = []
+    a_placer: List[int] = []
+    for e in autres:
+        st = (e.get("statut") or "attente").strip()
+        try:
+            ap = int(e.get("a_placer") or 0)
+        except (TypeError, ValueError):
+            ap = 0
+        (a_placer if (st == "attente" and ap == 1) else principaux).append(int(e["id"]))
+    _ecrire_ordre(conn, machine_id, principaux + [int(entry_id)] + a_placer, now)
+    _invalidate_attente_plans(conn, machine_id)
 
 
 def _ecrire_ordre(conn, machine_id: int, ids: List[int], now: str) -> None:

@@ -405,7 +405,9 @@ async def create_planning(request: Request):
                     f"({conge['date_debut']} → {conge['date_fin']}, {conge['type_conge']}). "
                     f"Impossible de l'affecter.",
                 )
-            elif not force:
+            elif not force and (jours_req is None or int(jours_req) & conge_day_bits):
+                # Jours demandés hors du congé (le samedi d'une semaine où il
+                # est absent le lundi) : rien à confirmer.
                 from fastapi.responses import JSONResponse
                 days_str = ", ".join(conge_days) if conge_days else conge["date_debut"]
                 return JSONResponse(
