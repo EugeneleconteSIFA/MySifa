@@ -719,6 +719,9 @@ _BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></scr
 # Téléphone : aucune page ne déborde en largeur. Toutes les pages, y compris celles
 # qui n'ont pas les boutons flottants (MyRH).
 _LARGEUR_TAG = b'<script src="/static/mysifa_largeur_mobile.js?v=7"></script>'
+# Une fenêtre ouverte ne fait plus défiler la page derrière elle (26/11/2026) :
+# toutes les pages, toutes leurs fenêtres, sans rien à ajouter page par page.
+_FOND_TAG = b'<script src="/static/mysifa_fond_fige.js?v=2" defer></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 _HEAD_OPEN_RE = re.compile(rb"<head(?:\s[^>]*)?>", re.IGNORECASE)
 
@@ -846,6 +849,8 @@ async def inject_tache_quick(request: Request, call_next):
     # Dans le <head> : la page est contenue dès sa construction, sans image trop large.
     if not p.startswith("/portail/") and not _vitrine and _LARGEUR_TAG not in body:
         _tete = _LARGEUR_TAG + _tete
+    if not p.startswith("/portail/") and not _vitrine and _FOND_TAG not in body:
+        _tete = _FOND_TAG + _tete
     # Écran de chargement sur téléphone : le premier élément du document, pour remplacer
     # la page blanche. Une réponse sans <head> n'est pas une page qu'on ouvre.
     if not p.startswith(("/portail/", "/api/", "/static/")) and not _vitrine and not KERNSE_THEME and _HEAD_OPEN_RE.search(body):
