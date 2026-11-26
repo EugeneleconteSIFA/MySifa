@@ -219,6 +219,23 @@ class TestPlanningDepuisOF(unittest.TestCase):
             self.assertIsNone(certain)             # jamais certain par le produit seul
             self.assertEqual([c["id"] for c in cands], [41])
 
+    def test_commande_retrouvee_par_le_numero_du_dossier(self):
+        lignes = [{"numero": "9932911", "ligne": 1, "qte": 100000, "article": "1068/0006", "client": "Maitre Coq"},
+                  {"numero": "9932911", "ligne": 2, "qte": 50000, "article": "1068/0007", "client": "Maitre Coq"}]
+        avant = op.ratt.chercher_commandes
+        op.ratt.chercher_commandes = lambda q, *a, **k: [{"numero": "9932911", "lignes": lignes}]
+        try:
+            l, num = op.commande_du_dossier({"numero_of": "9932911", "reference": "9932911", "ref_produit": "1068/0006"})
+            self.assertEqual((num, [x["ligne"] for x in l]), ("9932911", [1]))     # l'article du dossier
+            l, _ = op.commande_du_dossier({"numero_of": "9932911 ligne 2", "reference": "9932911 ligne 2"})
+            self.assertEqual([x["ligne"] for x in l], [2])                          # la ligne citée
+            l, num = op.commande_du_dossier({"numero_of": "9932911", "reference": "9932911", "ref_produit": "999/0001"})
+            self.assertEqual((l, num), ([], None))                                  # jamais au hasard
+            l, num = op.commande_du_dossier({"numero_of": "Stock 1153/0024", "reference": "Stock 1153/0024"})
+            self.assertEqual((l, num), ([], None))                                  # un stock n'a pas de commande
+        finally:
+            op.ratt.chercher_commandes = avant
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

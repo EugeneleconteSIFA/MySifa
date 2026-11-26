@@ -22,6 +22,7 @@ relié, jamais modifié : ce qui a été produit est produit.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -241,6 +242,9 @@ def _public(d: Dict[str, Any], vals: Dict[str, Any], of_id: Optional[int]) -> Di
         "raison": d["_raison"],
         "of_relie": d.get("of_relie") if (relie_ailleurs or (not of_id and d.get("of_import_id"))) else None,
         "deja_relie": bool(of_id) and d["_raison"] == "Relié à cet OF",
+        # Ce que l'OF peut reprendre du dossier quand il ne le porte pas
+        # (retour du 26/11/2026 : le délai du dossier n'arrivait pas à l'OF).
+        "delai_iso": str(d.get("date_livraison") or "")[:10] or None,
         "ecarts": ecarts(d, vals),
     }
 
@@ -538,6 +542,67 @@ def _horodatage(iso: Any) -> float:
         return 0.0
 
 
+# Un numéro de dossier SIFA EST souvent celui de la commande RVGI :
+# « 9932911 », « 9932891 ligne 1 », « 9932723 - L1 ». Les dossiers du planning
+# ne gardent presque jamais leur commande (4 sur 65 à produire au 26/11/2026).
+_COMMANDE_RE = re.compile(r"\b(99\d{5})\b")
+_LIGNE_RE = re.compile(r"(?:\bL|\bligne\s*)(\d{1,2})\b", re.IGNORECASE)
+
+
+def commande_du_dossier(d: Dict[str, Any]):
+    """(lignes, numéro) de la commande RVGI que le numéro du dossier désigne,
+    ([], None) sinon. Une ligne citée (« L1 », « ligne 2 ») est prise seule ;
+    sinon les lignes de l'article du dossier ; sinon la seule ligne s'il n'y
+    en a qu'une. Jamais un choix au hasard entre plusieurs articles. Les
+    dossiers « Stock … » et « Marché … » n'ont pas de commande."""
+    texte = "%s %s" % (d.get("numero_of") or "", d.get("reference") or "")
+    m = _COMMANDE_RE.search(texte)
+    if not m:
+        return [], None
+    numero = m.group(1)
+    try:
+        groupes = ratt.chercher_commandes(numero)
+    except Exception:
+        return [], None
+    g = next((g for g in groupes if str(g.get("numero")) == numero), None)
+    if not g or not g.get("lignes"):
+        return [], None
+    lignes = g["lignes"]
+    ml = _LIGNE_RE.search(texte)
+    if ml:
+        lignes = [l for l in lignes if str(l.get("ligne")) == ml.group(1)]
+    else:
+        cle = _cle_produit(d.get("ref_produit"))
+        memes = [l for l in lignes if cle and str(l.get("article") or "").strip().lower() == cle.lower()]
+        lignes = memes or (lignes if len(lignes) == 1 else [])
+    if not lignes:
+        return [], None
+    return ([{"numero": numero, "ligne": l.get("ligne"), "qte": l.get("qte"),
+              "vu_qte": l.get("qte"), "vu_article": l.get("article"), "vu_client": l.get("client"),
+              "confirme": True} for l in lignes], numero)
+
+
+@router.get("/api/of-planning/dossiers-sans-of")
+def of_dossiers_sans_of(request: Request):
+    """Les dossiers à produire qui n'ont pas d'OF : le point de départ
+    « Partir d'un dossier du planning » de « Créer un OF » (26/11/2026)."""
+    _require_of_access(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT pe.id, pe.reference, pe.numero_of, pe.ref_produit, pe.client, pe.statut,
+                      pe.a_placer, pe.date_livraison, pe.planned_start, m.nom AS machine
+                 FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id
+                WHERE pe.statut IN ('attente', 'en_cours') AND pe.of_import_id IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM planning_of_links l WHERE l.planning_entry_id = pe.id)
+                ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999') , pe.id""").fetchall()
+    return {"items": [{
+        "id": r["id"], "reference": r["reference"], "ref_produit": r["ref_produit"], "client": r["client"],
+        "machine": r["machine"], "statut": r["statut"], "a_placer": bool(int(r["a_placer"] or 0)),
+        "livraison": _jour(r["date_livraison"]) or None, "debut": _heure(r["planned_start"]) or None,
+        "commande": (_COMMANDE_RE.search("%s %s" % (r["numero_of"] or "", r["reference"] or "")) or [None, None])[1],
+    } for r in rows]}
+
+
 @router.get("/api/of/planning/dossier/{entry_id}")
 def of_depuis_dossier(entry_id: int, request: Request):
     """Ce qu'il faut pour ouvrir « Nouvel OF » sur ce dossier, et les OF
@@ -553,6 +618,9 @@ def of_depuis_dossier(entry_id: int, request: Request):
         d = dict(r)
         commandes = [{"numero": l["numero"], "ligne": l.get("ligne"), "qte": l.get("qte")}
                      for l in ratt.lister(conn, "dossier", entry_id, piece="commande")]
+        retrouvee = None
+        if not commandes:
+            commandes, retrouvee = commande_du_dossier(d)
         fiche = None
         if d.get("ref_produit"):
             try:
@@ -568,6 +636,7 @@ def of_depuis_dossier(entry_id: int, request: Request):
                     "date_livraison": str(d.get("date_livraison") or "")[:10] or None,
                     "client": d.get("client")},
         "commandes": commandes,
+        "commande_retrouvee": retrouvee,
         "fiche": ({"id": fiche["id"], "reference": fiche.get("reference")} if fiche else None),
         "suggestions": [dict(_ligne_of(o, o.get("_etat"), o["raison"]), dossiers=o.get("dossiers"))
                         for o in suggestions],
