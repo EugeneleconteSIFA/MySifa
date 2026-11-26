@@ -571,6 +571,11 @@ td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--
 .od-table .od-des{color:var(--text2)}
 .od-table .od-empl{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
 .od-total{margin-top:12px;font-size:14px;font-weight:800;text-align:right}
+/* Tolérance de l'OF : 0 % (quantité exacte) encadré, pour qu'il se voie
+   aussi sur la feuille imprimée en noir et blanc. */
+.od-tol{white-space:nowrap;font-variant-numeric:tabular-nums}
+.od-tol-v{font-weight:700}
+.od-tol-v.zero{display:inline-block;padding:1px 7px;border:2px solid currentColor;border-radius:6px;font-weight:800}
 @media(max-width:640px){.od-table{font-size:12.5px}.od-table .od-des{display:none}}
 /* Impression : l'ordre seul, à plat, en noir sur blanc. */
 @media print{

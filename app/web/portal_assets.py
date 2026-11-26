@@ -1930,14 +1930,14 @@ function renderPortal(){
     )});
   }
 
-  // ADV : carnet de commandes (ROLES_ADV) et onglet Prépa, ouvert aussi à la
-  // logistique et à l'expédition (ROLES_ADV_PREPA, config.py). Pour elles,
-  // l'appli s'appelle « Prépa » et s'ouvre sur les préparations.
-  // Bulle rouge (/api/adv/badges) : préparations urgentes pour la logistique,
-  // lignes à expédier en retard ou sous 7 jours pour l'administration.
-  if(isSuper || ['direction','administration','administration_ventes','administration_technique','logistique','expedition'].includes(urole)){
+  // ADV : ouverte à ROLES_ADV_LECTURE (config.py) — l'ADV, les commerciaux et
+  // l'expédition voient le carnet, la logistique n'a que l'onglet Prépa : pour
+  // elle, l'appli s'appelle « Prépa » et s'ouvre sur les préparations.
+  // Bulle rouge (/api/adv/badges) : préparations urgentes pour la logistique et
+  // l'expédition, lignes à expédier en retard ou sous 7 jours pour les autres.
+  if(isSuper || ['direction','administration','administration_ventes','administration_technique','logistique','expedition','commercial'].includes(urole)){
     const id='adv';
-    const prepaSeule=!isSuper && ['logistique','expedition'].includes(urole);
+    const prepaSeule=!isSuper && urole==='logistique';
     const advIcoEl=h('div',{className:'portal-app-icon'},iconEl('clipboard',28));
     advIcoEl.appendChild(h('span',{className:'portal-app-badge',id:'portal-adv-badge',style:{display:'none'}},'0'));
     tileSpecs.push({id,el:h('div',{

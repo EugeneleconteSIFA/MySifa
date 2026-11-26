@@ -828,7 +828,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js?v=2"></script>
+<script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>

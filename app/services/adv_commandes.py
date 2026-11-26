@@ -410,6 +410,68 @@ def _stock_probable(lignes: List[Dict[str, Any]], produites: Dict[str, float]) -
         l["a_fabriquer"] = 0.0
 
 
+# La tolérance de quantité est écrite sur l'OF (« Tolérance 0% »), pas dans
+# RVGI : aucune colonne de commande, de client ni de fiche de fabrication ne la
+# porte (relevé du 26/11/2026). L'import d'OF capte aussi le libellé qui suit
+# (« 0% Autres cartons ») : seul le pourcentage compte.
+_RE_TOLERANCE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
+
+
+def tolerance_pct(texte: Any) -> Optional[float]:
+    m = _RE_TOLERANCE.search(str(texte or ""))
+    return float(m.group(1).replace(",", ".")) if m else None
+
+
+def _ofs(conn) -> List[Dict[str, Any]]:
+    """Les OF qui portent une tolérance, avec les commandes qu'ils citent."""
+    if not _table(conn, "of_imports"):
+        return []
+    cols = _colonnes(conn, "of_imports")
+    if "tolerance" not in cols:
+        return []
+    invalide = "AND invalide_at IS NULL" if "invalide_at" in cols else ""
+    rows = _lignes(conn, """
+        SELECT id, of_numero, reference, tolerance FROM mysifa.of_imports
+         WHERE tolerance IS NOT NULL %s
+      ORDER BY id DESC""" % invalide)
+    sortie = []
+    for r in rows:
+        pct = tolerance_pct(r.get("tolerance"))
+        if pct is None:
+            continue
+        texte = str(r.get("of_numero") or "")
+        sortie.append({"id": r["id"], "of": texte.strip() or None, "pct": pct,
+                       "_numeros": set(_RE_COMMANDE.findall(texte)),
+                       "_lignes": {int(x) for x in _RE_LIGNE.findall(texte)},
+                       "_ref": _ref_norm(r.get("reference"))})
+    return sortie
+
+
+def _tolerance_de_ligne(l: Dict[str, Any], ds: List[Dict[str, Any]],
+                        ofs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """La tolérance de l'OF de la ligne : celui de ses dossiers d'abord, sinon
+    le plus récent des OF qui citent la commande, retenus comme les dossiers
+    (`_dossiers_de_ligne`) : l'article de l'OF doit être celui de la ligne,
+    ou, sans article, son « - L<n> » désigner cette ligne (ou aucune).
+    Aucun OF = non renseignée (None), ce qui n'est PAS une tolérance de 0 %."""
+    par_id = {o["id"]: o for o in ofs}
+    for d in ds:
+        o = par_id.get(d.get("of_import_id"))
+        if o:
+            return {"pct": o["pct"], "of": o["of"]}
+    lg = int(l["ligne"] or 0)
+    for o in ofs:
+        if str(l["numero"]) not in o["_numeros"]:
+            continue
+        if o["_ref"]:
+            if o["_ref"] != l["article"]:
+                continue
+        elif o["_lignes"] and lg not in o["_lignes"]:
+            continue
+        return {"pct": o["pct"], "of": o["of"]}
+    return None
+
+
 def _rattachements(conn) -> List[Dict[str, Any]]:
     if not _table(conn, "rvgi_rattachements"):
         return []
@@ -792,6 +854,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         jours_prepa = _jours_prepa(conn)
         repiquages_adv = _repiquages(conn)
         forcages = _forcages(conn)
+        ofs = _ofs(conn)
 
     lignes: List[Dict[str, Any]] = []
     for b in brutes:
@@ -878,6 +941,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         } for d in ds]
         l["repiquage"] = _repiquage_de_ligne(ds, repiquages_adv.get(l["cle"]))
         l["_ds_impression"] = [d for d in ds if not d.get("repiquage")]
+        l["tolerance"] = _tolerance_de_ligne(l, ds, ofs)
         fins = [x["fin"] for x in l["dossiers"] if x["fin"]]
         l["fin_prod"] = (max(fins)[:16] if fins else None)
         l["fin_prod_reelle"] = bool(l["dossiers"]) and all(x["fin_reelle"] for x in l["dossiers"])

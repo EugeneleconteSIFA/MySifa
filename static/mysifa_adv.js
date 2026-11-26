@@ -24,7 +24,10 @@
   var LIB_PREPA = {};
   (BOOT.statuts_prepa || []).forEach(function (e) { LIB_PREPA[e.cle] = e.label; });
 
-  var ONGLETS = DROITS.adv ? ['commandes', 'prepa'] : ['prepa'];
+  // Trois cercles (config.py) : `carnet` voit l'onglet Commandes (ADV,
+  // commerciaux, expédition), `prepa` passe une préparation « prête », `adv`
+  // pilote (ordre, urgences, jour de prépa, forçages, mise en forme).
+  var ONGLETS = DROITS.carnet ? ['commandes', 'prepa'] : ['prepa'];
   var FILTRES = ['tous', 'retard', 'semaine', 'pretes'].concat(ETAPES.map(function (e) { return 'etape_' + e.cle; }));
   var TRIS = ['commande', 'client', 'article', 'qte', 'stock', 'a_fabriquer', 'expedition', 'livraison', 'fin_prod'];
   // Vue du planning de prépa (mêmes clés que le planning machine) ; elle fixe
@@ -299,7 +302,7 @@
     });
     var sub = document.getElementById('mobile-sub');
     if (sub) sub.textContent = S.onglet === 'commandes' ? 'Commandes' : 'Prépa';
-    document.title = DROITS.adv ? (S.onglet === 'commandes' ? 'Commandes' : 'Prépa') + ' — ADV — MySifa' : 'Prépa — MySifa';
+    document.title = DROITS.carnet ? (S.onglet === 'commandes' ? 'Commandes' : 'Prépa') + ' — ADV — MySifa' : 'Prépa — MySifa';
     var c = document.getElementById('content');
     var focus = document.activeElement && document.activeElement.id === 'adv-q';
     var caret = focus ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
@@ -459,9 +462,9 @@
       h('div', {}, h('h1', {text: 'Carnet de commandes'}),
         h('div', {className: 'adv-maj adv-rvgi'})),
       h('div', {className: 'adv-tete-actions'},
-        h('button', {type: 'button', className: 'btn adv-btn-icone', 'aria-label': 'Mise en forme conditionnelle',
+        DROITS.adv ? h('button', {type: 'button', className: 'btn adv-btn-icone', 'aria-label': 'Mise en forme conditionnelle',
           'data-tip': tip('btn-mef', 'Mise en forme conditionnelle', S.mef.length ? S.mef.length + ' règle(s) actives' : 'Aucune règle'),
-          html: ICONE_REGLAGES, onClick: function () { ouvrirReglages(); }}),
+          html: ICONE_REGLAGES, onClick: function () { ouvrirReglages(); }}) : null,
         (S.ordre || []).length ? h('button', {type: 'button', className: 'btn btn-petit',
           'data-tip': tip('btn-ordre', 'Colonnes rangées à votre façon', 'Revenir à l’ordre par défaut'),
           onClick: function () { S.ordre = []; sauverOrdre(); render(); toast('Ordre des colonnes par défaut.'); }}, 'Ordre par défaut') : null,
@@ -745,6 +748,8 @@
       out.push(u);
     }
     // Un seul geste : « Prête ». Une prépa déjà prête peut être remise à préparer.
+    // Les commerciaux consultent : pas de bouton.
+    if (!DROITS.prepa) return out;
     var p = bouton('prete', 'btn-accent adv-btn-prete' + (toutesPretes ? ' on' : ''), toutesPretes ? 'Remettre à préparer' : 'Prête',
       toutesPretes ? 'Prête' + pour : 'Marquer prête' + pour,
       toutesPretes ? 'Cliquer pour remettre à préparer' : null,
@@ -1011,6 +1016,7 @@
       var sel = h('select', {className: 'adv-histo-statut', 'aria-label': 'Statut de la préparation ' + l.numero + '-L' + l.ligne},
         statuts.map(function (st) { return h('option', {value: st.cle, selected: st.cle === l.statut}, st.label); }));
       sel.addEventListener('change', function () { changerPrepa(l, sel.value, sel); });
+      if (!DROITS.prepa) sel = h('span', {text: LIB_PREPA[l.statut] || l.statut});
       return h('tr', {},
         h('td', {className: 'date'}, dateFr(l.prete_le), h('span', {className: 'adv-muet', text: heure(l.prete_le) ? ' ' + heure(l.prete_le) : ''})),
         h('td', {className: l.prete_par ? '' : 'adv-muet', text: l.prete_par || '—'}),
@@ -1409,6 +1415,17 @@
       if (st.sortie_prod) t.push('Sortie prod · ' + fN(st.sortie_prod));
       return t.join(', ') || '—';
     };
+    // Tolérance de quantité, lue sur l'OF (RVGI ne la porte pas). Sans OF
+    // trouvé : un tiret, jamais « 0 % » — ce n'est pas la même consigne.
+    var tolerance = function (x) {
+      var t = x.tolerance;
+      if (!t || t.pct === null || t.pct === undefined) {
+        return h('td', {className: 'od-tol adv-muet', text: '—', title: 'Tolérance non renseignée sur l’OF'});
+      }
+      return h('td', {className: 'od-tol', title: t.of ? 'OF ' + t.of : null},
+        h('span', {className: 'od-tol-v' + (Number(t.pct) === 0 ? ' zero' : ''),
+          text: String(t.pct).replace('.', ',') + ' %'}));
+    };
     var info = function (lib, val) { return h('div', {className: 'od-info'}, h('div', {className: 'od-l', text: lib}), h('div', {className: 'od-v', text: val})); };
     var fermer = function () { fermerFiche(); };
     var corps = h('tbody', {}, o.lignes.map(function (x) {
@@ -1418,6 +1435,7 @@
         h('td', {className: 'adv-mono', text: x.article}),
         h('td', {className: 'od-des', text: x.designation || ''}),
         h('td', {className: 'num', text: qteU(x, x.reste)}),
+        tolerance(x),
         h('td', {className: 'od-empl', text: ouPrelever(x)}),
         h('td', {text: etatLigne(x)}));
     }));
@@ -1438,7 +1456,7 @@
         info('Transport', dep ? (dep.transporteur || 'Transporteur à préciser') + ' · enlèvement le ' + dateFr(dep.date_enlevement) : 'Aucun enlèvement prévu dans MyExpé'),
         info('Commande' + (commandes.length > 1 ? 's' : ''), commandes.join(', '))),
       h('table', {className: 'od-table'},
-        h('thead', {}, h('tr', {}, ['Cde-L', 'Réf client', 'Réf produit', 'Désignation', 'Quantité', 'Où prélever', 'État'].map(function (t) {
+        h('thead', {}, h('tr', {}, ['Cde-L', 'Réf client', 'Réf produit', 'Désignation', 'Quantité', 'Tolérance', 'Où prélever', 'État'].map(function (t) {
           return h('th', {className: t === 'Quantité' ? 'num' : null, text: t});
         }))), corps),
       h('div', {className: 'od-total', text: o.lignes.length + ' ligne' + (o.lignes.length > 1 ? 's' : '') + ' · ' + commandes.length + ' commande' + (commandes.length > 1 ? 's' : '')}),
@@ -1941,7 +1959,7 @@
     var suivi = h('div', {className: 'fi-carte'}, h('h4', {text: 'Production et départs'}), repBloc, rangees);
 
     var liens = h('div', {className: 'adv-liens'},
-      DROITS.adv ? h('a', {className: 'btn btn-petit', href: '/erp#/commandes?q=' + encodeURIComponent(l.numero)}, 'Commande dans l’ERP') : null,
+      DROITS.erp ? h('a', {className: 'btn btn-petit', href: '/erp#/commandes?q=' + encodeURIComponent(l.numero)}, 'Commande dans l’ERP') : null,
       st.connu ? h('a', {className: 'btn btn-petit', href: '/stock?ref=' + encodeURIComponent(l.article)}, 'Article dans MyStock') : null);
 
     var modal = h('div', {className: 'adv-modal adv-fiche', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Ligne ' + l.numero + ' · ' + l.ligne},

@@ -25,7 +25,8 @@ from app.services import adv_commandes as adv
 from app.services import adv_mise_en_forme as mef
 from app.services.audit_service import log_action
 from services.auth_service import effective_role, get_current_user
-from config import ADV_ETATS, ADV_PREPA_STATUTS, ADV_REPIQUAGE_STATUTS, ROLES_ADV, ROLES_ADV_PREPA
+from config import (ADV_ETATS, ADV_PREPA_STATUTS, ADV_REPIQUAGE_STATUTS, ROLES_ADV, ROLES_ADV_CARNET,
+                    ROLES_ADV_LECTURE, ROLES_ADV_PREPA)
 from database import get_db
 
 router = APIRouter()
@@ -61,13 +62,24 @@ def _servir(fn, *args):
         raise HTTPException(status_code=503, detail=str(e))
 
 
+def droits_adv(role: Optional[str]) -> dict:
+    """Ce que la page montre à un rôle. Le serveur refuse de toute façon ce
+    que le rôle n'a pas le droit de faire : ceci ne sert qu'à l'affichage."""
+    return {"adv": role in ROLES_ADV, "prepa": role in ROLES_ADV_PREPA,
+            "carnet": role in ROLES_ADV_CARNET}
+
+
+def _droits(user: dict) -> dict:
+    return droits_adv(effective_role(user))
+
+
 @router.get("/api/adv/commandes")
 def commandes(request: Request):
-    # Le carnet complet est à l'ADV et à la direction ; la logistique et
-    # l'expédition n'ont que l'onglet Prépa (/api/adv/prepa).
-    user = _exiger(request, ROLES_ADV)
+    # Le carnet se consulte par l'ADV, les commerciaux et l'expédition ; la
+    # logistique n'a que l'onglet Prépa (/api/adv/prepa).
+    user = _exiger(request, ROLES_ADV_CARNET)
     data = _servir(adv.construire)
-    data["droits"] = {"adv": True, "prepa": True}
+    data["droits"] = _droits(user)
     # Les règles de couleur et l'ordre des colonnes de la personne voyagent
     # avec le carnet : une requête, pas trois.
     with get_db() as conn:
@@ -78,16 +90,16 @@ def commandes(request: Request):
 
 @router.get("/api/adv/prepa")
 def prepa(request: Request, horizon: Optional[int] = None):
-    user = _exiger(request, ROLES_ADV_PREPA)
+    user = _exiger(request, ROLES_ADV_LECTURE)
     data = _servir(adv.prepa, None, horizon)
-    data["droits"] = {"adv": effective_role(user) in ROLES_ADV, "prepa": True}
+    data["droits"] = _droits(user)
     return data
 
 
 @router.get("/api/adv/prepa/historique")
 def historique_prepa(request: Request, jours: int = 30):
     """Les préparations passées « Prête » ces derniers jours, même parties."""
-    _exiger(request, ROLES_ADV_PREPA)
+    _exiger(request, ROLES_ADV_LECTURE)
     if jours not in adv.HISTORIQUE_JOURS:
         jours = 30
     return _servir(adv.historique_prepa, jours)
@@ -153,7 +165,7 @@ def _badges_invalider():
 
 @router.get("/api/adv/badges")
 def badges(request: Request):
-    user = _exiger(request, ROLES_ADV_PREPA)
+    user = _exiger(request, ROLES_ADV_LECTURE)
     if not _badges_cache["data"] or time.time() - _badges_cache["t"] > _BADGES_TTL:
         try:
             _badges_cache["data"] = adv.badges()
@@ -161,9 +173,10 @@ def badges(request: Request):
             _badges_cache["data"] = {"present": False, "urgentes": 0, "retard": 0, "semaine": 0}
         _badges_cache["t"] = time.time()
     d = _badges_cache["data"]
-    # L'administration suit les expéditions (en retard + sous 7 jours) ; la
-    # logistique et l'expédition, les préparations urgentes.
-    if effective_role(user) in ROLES_ADV:
+    # L'administration et les commerciaux suivent les expéditions (en retard
+    # + sous 7 jours) ; la logistique et l'expédition, les préparations urgentes.
+    role = effective_role(user)
+    if role in ROLES_ADV or role not in ROLES_ADV_PREPA:
         return {"vue": "carnet", "nombre": d["retard"] + d["semaine"],
                 "retard": d["retard"], "semaine": d["semaine"]}
     return {"vue": "prepa", "nombre": d["urgentes"], "urgentes": d["urgentes"]}
@@ -366,7 +379,7 @@ def forcer(numero: str, ligne: int, etape: str, body: ForcageIn, request: Reques
 
 @router.get("/api/adv/mises-en-forme")
 def mises_en_forme(request: Request):
-    _exiger(request, ROLES_ADV)
+    _exiger(request, ROLES_ADV_CARNET)
     with get_db() as conn:
         return {"regles": mef.lister(conn), "referentiel": mef.referentiel()}
 
@@ -425,8 +438,9 @@ class OrdreIn(BaseModel):
 
 @router.put("/api/adv/preferences/colonnes")
 def enregistrer_ordre(body: OrdreIn, request: Request):
-    """L'ordre des colonnes de la personne connectée ; liste vide = ordre par défaut."""
-    user = _exiger(request, ROLES_ADV)
+    """L'ordre des colonnes de la personne connectée ; liste vide = ordre par défaut.
+    Une préférence d'affichage : ouverte à qui consulte le carnet."""
+    user = _exiger(request, ROLES_ADV_CARNET)
     ordre = _ordre_valide(body.ordre)
     with get_db() as conn:
         if ordre:
