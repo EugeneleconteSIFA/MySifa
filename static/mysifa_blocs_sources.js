@@ -578,7 +578,9 @@
         var ncs = Array.isArray(x[0]) ? x[0] : [];
         function n(st) { return ncs.filter(function (c) { return c.statut === st; }).length; }
         var v = {
-          ouvertes: ncs.length - n("cloturee"), "en-analyse": n("en_analyse"),
+          ouvertes: ncs.length - n("cloturee"),
+          "a-relancer": ncs.filter(function (c) { return c.a_relancer; }).length,
+          "en-analyse": n("en_analyse"),
           "action-corrective": n("action_corrective"), "en-verification": n("en_verification"),
           "non-lues": Number((x[1] || {}).nc_unread || 0)
         };
@@ -963,7 +965,8 @@
         return { lignes: l, total: l.length };
       });
     },
-    // Comme qualite_page.py (STATUTS, GRAVITES) : la plus grave puis la plus ancienne.
+    // Comme la liste des NC (qualite_nc_assets.py) : les NC à faire avancer d'abord,
+    // la plus en retard en tête, puis la plus grave.
     "qualite.nc.statuts": function (ctx) {
       return ctx.json("/api/qualite/nc").then(function (ncs) {
         var ST = { ouverte: "Ouverte", en_analyse: "En analyse", action_corrective: "Action corrective", en_verification: "En vérification" };
@@ -971,13 +974,16 @@
         var RANG = { critique: 0, majeure: 1, mineure: 2 };
         var l = (Array.isArray(ncs) ? ncs : []).filter(function (c) { return c.statut !== "cloturee"; });
         l.sort(function (a, b) {
-          return ((RANG[a.gravite] == null ? 3 : RANG[a.gravite]) - (RANG[b.gravite] == null ? 3 : RANG[b.gravite])) ||
+          return ((b.a_relancer ? 1 : 0) - (a.a_relancer ? 1 : 0)) ||
+            ((b.jours_sans_action || 0) - (a.jours_sans_action || 0)) * (a.a_relancer && b.a_relancer ? 1 : 0) ||
+            ((RANG[a.gravite] == null ? 3 : RANG[a.gravite]) - (RANG[b.gravite] == null ? 3 : RANG[b.gravite])) ||
             String(a.date_nc || a.created_at || "").localeCompare(String(b.date_nc || b.created_at || ""));
         });
         return {
           lignes: l.map(function (c) {
-            return { libelle: (c.numero ? c.numero + " — " : "") + (c.titre || ""),
-                     detail: [ST[c.statut] || c.statut, GR[c.gravite] || c.gravite, c.pilote_nom || ""].filter(Boolean).join(" · ") };
+            return { libelle: (c.client_fournisseur || c.titre || c.numero || "") + (c.ref_client ? " · " + c.ref_client : ""),
+                     detail: [c.a_relancer ? "À faire avancer · " + c.jours_sans_action + " j" : "",
+                              c.derniere_etape ? c.derniere_etape.texte : "", GR[c.gravite] || c.gravite].filter(Boolean).join(" · ") };
           }),
           total: l.length
         };

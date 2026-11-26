@@ -13,6 +13,7 @@ from config import APP_VERSION
 from app.web.qualite_ged_assets import GED_JS
 from app.web.qualite_fsc_assets import FSC_JS
 from app.web.qualite_eudr_assets import EUDR_JS
+from app.web.qualite_nc_assets import NC_CSS, NC_JS, NC_CREATE_MODAL
 
 ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_READONLY = {"commercial"}
@@ -55,6 +56,9 @@ def qualite_page(request: Request):
         .replace("__FSC_ASSETS__", FSC_JS)
         .replace("__EUDR_ASSETS__", EUDR_JS)
         .replace("__FORMULAIRES_ASSETS__", "")
+        .replace("__NC_CSS__", NC_CSS)
+        .replace("__NC_CREATE_MODAL__", NC_CREATE_MODAL)
+        .replace("__NC_JS__", NC_JS)
     )
     return HTMLResponse(
         content=html,
@@ -351,6 +355,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:999px;animation:sp 0.8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
+__NC_CSS__
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
@@ -416,72 +421,8 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
   </main>
 </div>
 
-<!-- Modal création NC -->
-<div class="modal-ov" id="create-modal" style="display:none" onclick="if(event.target===this)closeCreateModal()">
-  <div class="modal lg" onclick="event.stopPropagation()">
-    <button type="button" class="modal-close" onclick="closeCreateModal()">×</button>
-    <div class="modal-title">Nouvelle non-conformité</div>
-    <div class="form-grid">
-      <div>
-        <label class="form-label" for="c-titre">Titre court</label>
-        <input type="text" class="form-input" id="c-titre" placeholder="ex : Étiquettes décollées sur cartons">
-      </div>
-      <div>
-        <label class="form-label" for="c-ar">N° de commande (AR) — optionnel</label>
-        <input type="text" class="form-input" id="c-ar" placeholder="ex : 9930854">
-        <div class="form-hint">Si vide, un numéro NC-{ANNÉE}-{n°} sera attribué automatiquement.</div>
-      </div>
-      <div>
-        <label class="form-label">Type de NC</label>
-        <select class="form-select" id="c-type">
-          <option value="interne">Interne (production)</option>
-          <option value="client">Client (réclamation)</option>
-          <option value="fournisseur">Fournisseur</option>
-          <option value="logistique">Logistique / expédition</option>
-        </select>
-      </div>
-      <div>
-        <label class="form-label">Gravité</label>
-        <select class="form-select" id="c-gravite">
-          <option value="mineure">Mineure</option>
-          <option value="majeure">Majeure</option>
-          <option value="critique">Critique</option>
-        </select>
-      </div>
-      <div>
-        <label class="form-label" for="c-date">Date de la NC</label>
-        <input type="date" class="form-input" id="c-date">
-      </div>
-      <div>
-        <label class="form-label" for="c-service">Service concerné</label>
-        <input type="text" class="form-input" id="c-service" placeholder="ex : Production, ADV…">
-      </div>
-      <div class="col-2">
-        <label class="form-label" for="c-client">Nom client / fournisseur</label>
-        <input type="text" class="form-input" id="c-client" placeholder="ex : VOLAILLES REMI RAMON">
-      </div>
-      <div>
-        <label class="form-label" for="c-refclient">Référence client</label>
-        <input type="text" class="form-input" id="c-refclient">
-      </div>
-      <div>
-        <label class="form-label" for="c-dossier">Référence SIFA (dossier)</label>
-        <div style="display:flex;gap:6px">
-          <input type="text" class="form-input" id="c-dossier" placeholder="ex : 1153/0030">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="openDossierPicker('c-dossier')">Rechercher</button>
-        </div>
-      </div>
-      <div class="col-2">
-        <label class="form-label" for="c-desc">Description</label>
-        <textarea class="form-textarea" id="c-desc" rows="3" placeholder="Description détaillée de la non-conformité…"></textarea>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Annuler</button>
-      <button type="button" class="btn btn-accent" id="create-btn" onclick="submitCreate()">Créer la NC</button>
-    </div>
-  </div>
-</div>
+<!-- Modal création NC (app/web/qualite_nc_assets.py) -->
+__NC_CREATE_MODAL__
 
 <!-- Modal import xlsx -->
 <div class="modal-ov" id="import-modal" style="display:none" onclick="if(event.target===this)closeImportModal()">
@@ -538,7 +479,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/qualite_url.js?v=4"></script>
+<script src="/static/qualite_url.js?v=5"></script>
 <script>
 'use strict';
 
@@ -561,6 +502,9 @@ const S = {
   dpResults: [],
   delId: null,
   pendingSaveTimer: null,
+  ncArchives: false,          // liste : NC en cours (false) ou archives (true)
+  ncEditSuivi: null,          // id de l'étape de suivi en cours de modification
+  ncNouveauxFichiers: [],     // fichiers choisis dans la fenêtre de création
   // ── Audits client ─────────────────────────────────────────────
   audits: [],
   currentAudit: null,
@@ -728,14 +672,6 @@ async function loadUsers(){
     const r=await api('/api/qualite/users');
     if(r.ok) S.users=await r.json();
   }catch(e){}
-}
-async function loadNCs(){
-  try{
-    const r=await api('/api/qualite/nc');
-    if(!r.ok){showToast('Erreur de chargement','danger');return;}
-    S.ncs=await r.json();
-    if(S.view==='list') renderList();
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 async function loadAckServices(){
   try{
@@ -923,723 +859,7 @@ function setView(v, opts){
   closeSidebar();
 }
 
-function ackDotsHtml(nc){
-  // Rend 5 pastilles alignées : contour couleur si non vue, plein + coche si vue.
-  // Tooltip natif = "Service — pris en connaissance par X le JJ/MM/AAAA HH:MM" ou "Non vu".
-  if(!S.ackServices||!S.ackServices.length) return '';
-  const acks=nc.service_acks||{};
-  const parts=S.ackServices.map(function(s){
-    const a=acks[s.key];
-    const done=!!a;
-    const title=done
-      ? (s.label+' — pris en connaissance par '+(a.user_nom||'?')+' le '+fmtDateTime(a.ack_at))
-      : (s.label+' — non vu');
-    return '<span class="ack-dot'+(done?' done':'')+'" style="color:'+s.color+'" title="'+escAttr(title)+'"></span>';
-  }).join('');
-  return '<div class="ack-dots">'+parts+'</div>';
-}
-
-function ackLegendHtml(){
-  // Panneau latéral droit du tableau NC : légende + compteurs par service.
-  if(!S.ackServices||!S.ackServices.length) return '';
-  const total=S.ncs.length;
-  const counts={};
-  S.ackServices.forEach(function(s){counts[s.key]=0;});
-  S.ncs.forEach(function(n){
-    const acks=n.service_acks||{};
-    S.ackServices.forEach(function(s){if(acks[s.key])counts[s.key]++;});
-  });
-  const items=S.ackServices.map(function(s){
-    return ''
-      +'<div class="ack-legend-item">'
-      +  '<span class="ack-legend-dot" style="color:'+s.color+'"></span>'
-      +  '<span class="ack-legend-label">'+escHtml(s.label)+'</span>'
-      +  '<span class="ack-legend-count">'+counts[s.key]+'/'+total+'</span>'
-      +'</div>';
-  }).join('');
-  const meLbl=S.myAckService
-    ? 'Vous êtes rattaché au service : '+escHtml((S.ackServices.find(function(x){return x.key===S.myAckService;})||{}).label||S.myAckService)
-    : '';
-  const meBlock=meLbl?('<div class="ack-legend-me">'+meLbl+'</div>'):'';
-  return ''
-    +'<aside class="ack-legend">'
-    +  '<div class="ack-legend-title">Prise en connaissance</div>'
-    +  items
-    +  meBlock
-    +  '<div class="ack-legend-hint">Chaque service marque la NC comme lue depuis la fiche. La modification de champs sensibles (description, gravité, actions) réinitialise les pastilles.</div>'
-    +'</aside>';
-}
-
-function filteredNCs(){
-  let list=S.ncs;
-  if(S.filterStatut!=='all') list=list.filter(n=>n.statut===S.filterStatut);
-  if(S.filterType!=='all') list=list.filter(n=>n.type_nc===S.filterType);
-  if(S.filterGravite!=='all') list=list.filter(n=>n.gravite===S.filterGravite);
-  if(S.search.trim()){
-    const q=S.search.trim().toLowerCase();
-    list=list.filter(n=>(
-      (n.numero||'').toLowerCase().includes(q)||
-      (n.titre||'').toLowerCase().includes(q)||
-      (n.numero_ar||'').toLowerCase().includes(q)||
-      (n.numero_historique||'').toLowerCase().includes(q)||
-      (n.client_fournisseur||'').toLowerCase().includes(q)||
-      (n.no_dossier||'').toLowerCase().includes(q)||
-      (n.description||'').toLowerCase().includes(q)
-    ));
-  }
-  return list;
-}
-
-function renderList(){
-  const ae=document.activeElement;const fid=ae?.id;const cs=ae?.selectionStart;const ce=ae?.selectionEnd;
-  const counts={all:S.ncs.length};
-  STATUTS.forEach(s=>{counts[s.k]=S.ncs.filter(n=>n.statut===s.k).length;});
-  const list=filteredNCs();
-
-  const tabsHtml=`
-    <button type="button" class="stat-tab${S.filterStatut==='all'?' active':''}" onclick="setStatutFilter('all')">Tous<span class="stat-count">${counts.all}</span></button>
-    ${STATUTS.map(s=>`<button type="button" class="stat-tab${S.filterStatut===s.k?' active':''}" onclick="setStatutFilter('${s.k}')">${escHtml(s.label)}<span class="stat-count">${counts[s.k]||0}</span></button>`).join('')}
-  `;
-
-  let body;
-  if(!list.length){
-    body=`<div class="empty">
-      <div class="empty-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div>
-      <div class="empty-title">${S.search?'Aucun résultat pour « '+escHtml(S.search)+' »':'Aucune non-conformité'}</div>
-      <div class="empty-sub">${(!S.search&&S.filterStatut==='all'&&S.filterType==='all'&&S.filterGravite==='all')?'Créez la première NC avec le bouton ci-dessus.':''}</div>
-    </div>`;
-  } else {
-    const rows=list.map(n=>{
-      const unreadBadge=n.unread_count>0?`<span class="unread-pill">${n.unread_count}</span>`:'';
-      const dot=n.unread_count>0?'<span class="unread-dot"></span>':'';
-      const ref=[n.numero_ar?'AR '+n.numero_ar:'',n.numero_historique?'N° '+n.numero_historique:''].filter(Boolean).join(' · ');
-      return `<tr onclick="openDetail(${n.id})">
-        <td><div style="font-family:ui-monospace,monospace;font-weight:700;color:var(--accent);font-size:12px">${dot}${escHtml(n.numero||'')}</div>${ref?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${escHtml(ref)}</div>`:''}</td>
-        <td><div style="font-weight:600;color:var(--text);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(n.titre||'')}">${escHtml(n.titre||'—')}</div>${n.client_fournisseur?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(n.client_fournisseur)}</div>`:''}</td>
-        <td>${typeBadge(n.type_nc)}</td>
-        <td>${gravBadge(n.gravite)}</td>
-        <td>${statutBadge(n.statut)}</td>
-        <td>${ackDotsHtml(n)}</td>
-        <td><span style="color:var(--text2);font-size:12px">${escHtml(n.pilote_nom||'—')}</span></td>
-        <td><span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--text2)">${escHtml(fmtDate(n.date_nc))}</span></td>
-        <td style="color:var(--muted);font-size:11px;white-space:nowrap">${escHtml(relTime(n.updated_at))}${unreadBadge}</td>
-      </tr>`;
-    }).join('');
-    body=`<div class="list-with-legend">
-      <div class="table-wrap"><table>
-        <thead><tr><th>N°</th><th>Titre / Client</th><th>Type</th><th>Gravité</th><th>Statut</th><th>Prise en connaissance</th><th>Pilote</th><th>Date NC</th><th>Activité</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
-      ${ackLegendHtml()}
-    </div>`;
-  }
-
-  document.getElementById('content').innerHTML=`
-    <div class="page-header">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div>
-          <div class="page-title">Non-<span>conformités</span></div>
-          <div class="page-subtitle">Suivi des NC internes, clients, fournisseurs et logistiques</div>
-        </div>
-        <button type="button" class="qual-help-btn" data-guide="nc-list" onclick="openGuide('nc-list')" title="Guide Non-conformités" aria-label="Guide Non-conformités">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-        </button>
-      </div>
-      <div class="header-actions qual-write">
-        <button type="button" class="btn btn-ghost" onclick="openImportModal()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Importer xlsx
-        </button>
-        <button type="button" class="btn btn-accent" onclick="openCreateModal()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nouvelle NC
-        </button>
-      </div>
-    </div>
-    <div class="stat-tabs" data-bloc="qualite.nc.statuts"
-      data-bloc-valeur-ouvertes="${counts.all-(counts.cloturee||0)}"
-      data-bloc-valeur-en-analyse="${counts.en_analyse||0}"
-      data-bloc-valeur-action-corrective="${counts.action_corrective||0}"
-      data-bloc-valeur-en-verification="${counts.en_verification||0}"
-      data-bloc-valeur-non-lues="${S.unread||0}">${tabsHtml}</div>
-    <div class="toolbar">
-      <div class="search-wrap">
-        <span class="search-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-        <input type="text" id="search-input" class="search-input" placeholder="Rechercher (n°, AR, titre, client, description…)" value="${escAttr(S.search)}" oninput="onSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';onSearch('');}">
-      </div>
-      <select class="filter-select" onchange="setTypeFilter(this.value)">
-        <option value="all"${S.filterType==='all'?' selected':''}>Tous types</option>
-        ${TYPES.map(t=>`<option value="${t.k}"${S.filterType===t.k?' selected':''}>${escHtml(t.label)}</option>`).join('')}
-      </select>
-      <select class="filter-select" onchange="setGraviteFilter(this.value)">
-        <option value="all"${S.filterGravite==='all'?' selected':''}>Toutes gravités</option>
-        ${GRAVITES.map(g=>`<option value="${g.k}"${S.filterGravite===g.k?' selected':''}>${escHtml(g.label)}</option>`).join('')}
-      </select>
-    </div>
-    ${body}
-  `;
-
-  if(fid){const el=document.getElementById(fid);if(el){el.focus();if(cs!=null){try{el.setSelectionRange(cs,ce);}catch(e){}}}}
-}
-
-function setStatutFilter(s){S.filterStatut=s;renderList();}
-function setTypeFilter(t){S.filterType=t;renderList();}
-function setGraviteFilter(g){S.filterGravite=g;renderList();}
-function onSearch(v){S.search=v;renderList();}
-
-// ── Vue Détail ─────────────────────────────────────────────────────
-async function openDetail(id){
-  S.view='detail';S.detailTab='fiche';
-  try{
-    const r=await api('/api/qualite/nc/'+id);
-    if(!r.ok){showToast('NC introuvable','danger');return;}
-    S.current=await r.json();
-    document.getElementById('mobile-sub').textContent=S.current.numero||'Détail';
-    renderDetail();
-    await Promise.all([loadFiles(id),loadMessages(id)]);
-    renderDetail();
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-async function loadFiles(id){
-  try{const r=await api('/api/qualite/nc/'+id+'/fichiers');if(r.ok) S.currentFiles=await r.json();}catch(e){}
-}
-async function loadMessages(id){
-  try{const r=await api('/api/qualite/nc/'+id+'/messages');if(r.ok){S.currentMessages=await r.json();loadUnread();}}catch(e){}
-}
-
-function setDetailTab(t){S.detailTab=t;renderDetail();}
-
-function renderDetail(){
-  if(!S.current){document.getElementById('content').innerHTML='<div class="empty"><div class="spin"></div></div>';return;}
-  const ae=document.activeElement;const fid=ae?.id;const cs=ae?.selectionStart;const ce=ae?.selectionEnd;
-  const n=S.current;
-  const filesCount=S.currentFiles.length;
-  const msgsCount=S.currentMessages.length;
-
-  let tabBody='';
-  if(S.detailTab==='fiche') tabBody=renderFicheTab(n);
-  else if(S.detailTab==='fichiers') tabBody=renderFichiersTab(n);
-  else if(S.detailTab==='discussion') tabBody=renderDiscussionTab(n);
-
-  document.getElementById('content').innerHTML=`
-    <button type="button" class="detail-back" onclick="setView('list')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-      Retour à la liste
-    </button>
-    <div class="detail-header">
-      <div>
-        <div class="detail-title"><span class="detail-num">${escHtml(n.numero||'')}</span>${escHtml(n.titre||'')}</div>
-        <div class="detail-meta">
-          ${typeBadge(n.type_nc)} ${gravBadge(n.gravite)} ${statutBadge(n.statut)}
-          ${n.numero_ar?`<span style="font-size:11px;color:var(--muted)">AR ${escHtml(n.numero_ar)}</span>`:''}
-          ${n.numero_historique?`<span style="font-size:11px;color:var(--muted)">N° historique : ${escHtml(n.numero_historique)}</span>`:''}
-          ${n.no_dossier?`<span style="font-size:11px;color:var(--muted)">Dossier ${escHtml(n.no_dossier)}</span>`:''}
-        </div>
-      </div>
-      <div class="detail-actions">
-        <a class="btn btn-ghost btn-sm" href="/api/qualite/nc/${n.id}/pdf" target="_blank" rel="noopener">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Exporter PDF
-        </a>
-        <button type="button" class="btn btn-ghost btn-sm qual-write" onclick="openDelModal(${n.id})">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          Supprimer
-        </button>
-      </div>
-    </div>
-    <div class="detail-tabs">
-      <button type="button" class="detail-tab${S.detailTab==='fiche'?' active':''}" onclick="setDetailTab('fiche')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Fiche technique
-      </button>
-      <button type="button" class="detail-tab${S.detailTab==='fichiers'?' active':''}" onclick="setDetailTab('fichiers')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        Fichiers ${filesCount?`<span class="stat-count">${filesCount}</span>`:''}
-      </button>
-      <button type="button" class="detail-tab${S.detailTab==='discussion'?' active':''}" onclick="setDetailTab('discussion')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        Discussion ${msgsCount?`<span class="stat-count">${msgsCount}</span>`:''}
-      </button>
-    </div>
-    ${tabBody}
-  `;
-
-  if(fid){const el=document.getElementById(fid);if(el){el.focus();if(cs!=null){try{el.setSelectionRange(cs,ce);}catch(e){}}}}
-}
-
-function renderFicheTab(n){
-  const services=Array.isArray(n.services_impliques)?n.services_impliques:[];
-  const userOpts=S.users.map(u=>`<option value="${u.id}"${n.pilote_id==u.id?' selected':''}>${escHtml(u.nom)}</option>`).join('');
-  const emetteurOpts=S.users.map(u=>`<option value="${u.id}"${n.emetteur_id==u.id?' selected':''}>${escHtml(u.nom)}</option>`).join('');
-  const meIsAdmin = S.me && ['administration','administration_ventes','administration_technique','direction','superadmin'].includes(S.me.role);
-  return `
-    <div class="card">
-      <div class="card-title">Identification</div>
-      <div class="form-grid">
-        <div>
-          <label class="form-label">Titre</label>
-          <input type="text" class="form-input" data-field="titre" value="${escAttr(n.titre||'')}" onchange="saveField('titre',this.value)">
-        </div>
-        <div>
-          <label class="form-label">N° de commande (AR)</label>
-          <input type="text" class="form-input" data-field="numero_ar" value="${escAttr(n.numero_ar||'')}" onchange="saveField('numero_ar',this.value)">
-          <div class="form-hint">N° généré : <strong>${escHtml(n.numero||'')}</strong></div>
-        </div>
-        <div>
-          <label class="form-label">N° interne historique</label>
-          <input type="text" class="form-input" data-field="numero_historique" value="${escAttr(n.numero_historique||'')}" onchange="saveField('numero_historique',this.value)" placeholder="ex : 668608">
-        </div>
-        <div>
-          <label class="form-label">Type de NC</label>
-          <select class="form-select" data-field="type_nc" onchange="saveField('type_nc',this.value)">
-            ${TYPES.map(t=>`<option value="${t.k}"${n.type_nc===t.k?' selected':''}>${escHtml(t.label)}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Gravité</label>
-          <select class="form-select" data-field="gravite" onchange="saveField('gravite',this.value)">
-            ${GRAVITES.map(g=>`<option value="${g.k}"${n.gravite===g.k?' selected':''}>${escHtml(g.label)}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Statut</label>
-          <select class="form-select" data-field="statut" onchange="saveField('statut',this.value)">
-            ${STATUTS.map(s=>`<option value="${s.k}"${n.statut===s.k?' selected':''}>${escHtml(s.label)}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Date de la NC</label>
-          <input type="date" class="form-input" data-field="date_nc" value="${escAttr(n.date_nc||'')}" onchange="saveField('date_nc',this.value)">
-        </div>
-        <div>
-          <label class="form-label">Service concerné</label>
-          <input type="text" class="form-input" data-field="service_concerne" value="${escAttr(n.service_concerne||'')}" onchange="saveField('service_concerne',this.value)" placeholder="ex : Production, ADV…">
-        </div>
-        <div>
-          <label class="form-label">Émetteur</label>
-          <select class="form-select" data-field="emetteur_id" onchange="saveField('emetteur_id',this.value?parseInt(this.value):null)">
-            <option value="">—</option>
-            ${emetteurOpts}
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Pilote</label>
-          <select class="form-select" data-field="pilote_id" onchange="saveField('pilote_id',this.value?parseInt(this.value):null)">
-            <option value="">—</option>
-            ${userOpts}
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Objet</div>
-      <div class="form-grid">
-        <div>
-          <label class="form-label">Nom client / fournisseur</label>
-          <input type="text" class="form-input" data-field="client_fournisseur" value="${escAttr(n.client_fournisseur||'')}" onchange="saveField('client_fournisseur',this.value)">
-        </div>
-        <div>
-          <label class="form-label">Référence client</label>
-          <input type="text" class="form-input" data-field="ref_client" value="${escAttr(n.ref_client||'')}" onchange="saveField('ref_client',this.value)">
-        </div>
-        <div>
-          <label class="form-label">Référence SIFA (dossier)</label>
-          <div style="display:flex;gap:6px">
-            <input type="text" class="form-input" id="detail-dossier" data-field="no_dossier" value="${escAttr(n.no_dossier||'')}" onchange="saveField('no_dossier',this.value)" placeholder="ex : 1153/0030">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="openDossierPicker('detail-dossier')">Rechercher</button>
-          </div>
-        </div>
-        <div>
-          <label class="form-label">Descriptif produit</label>
-          <input type="text" class="form-input" data-field="descriptif_produit" value="${escAttr(n.descriptif_produit||'')}" onchange="saveField('descriptif_produit',this.value)">
-        </div>
-        <div>
-          <label class="form-label">Quantité concernée</label>
-          <input type="text" class="form-input" data-field="quantite_concernee" value="${escAttr(n.quantite_concernee||'')}" onchange="saveField('quantite_concernee',this.value)" placeholder="ex : 150 000 ex">
-        </div>
-        <div>
-          <label class="form-label">Coût estimé (€)</label>
-          <input type="number" step="0.01" class="form-input" data-field="cout_estime" value="${escAttr(n.cout_estime!=null?n.cout_estime:'')}" onchange="saveField('cout_estime',this.value===''?null:parseFloat(this.value))">
-        </div>
-        <div class="col-2">
-          <label class="form-label">Description de la non-conformité</label>
-          <textarea class="form-textarea" data-field="description" rows="3" onchange="saveField('description',this.value)">${escHtml(n.description||'')}</textarea>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Analyse & actions</div>
-      <div style="margin-bottom:14px">
-        <label class="form-label">Services impliqués</label>
-        <div class="chips-row">
-          ${SERVICES_5M.map(s=>`<button type="button" class="chip${services.includes(s)?' active':''}" onclick="toggleService('${escAttr(s)}')">${escHtml(s)}</button>`).join('')}
-        </div>
-      </div>
-      <div class="form-grid cols-1">
-        <div>
-          <label class="form-label">Analyse des causes (cause racine)</label>
-          <textarea class="form-textarea" data-field="analyse_causes" rows="3" onchange="saveField('analyse_causes',this.value)">${escHtml(n.analyse_causes||'')}</textarea>
-        </div>
-        <div>
-          <label class="form-label">Action corrective</label>
-          <textarea class="form-textarea" data-field="action_corrective" rows="3" onchange="saveField('action_corrective',this.value)">${escHtml(n.action_corrective||'')}</textarea>
-        </div>
-        <div>
-          <label class="form-label">Action préventive à mettre en place</label>
-          <textarea class="form-textarea" data-field="action_preventive" rows="3" onchange="saveField('action_preventive',this.value)">${escHtml(n.action_preventive||'')}</textarea>
-        </div>
-      </div>
-      <div class="form-grid" style="margin-top:14px">
-        <div>
-          <label class="form-label">Délai cible</label>
-          <input type="date" class="form-input" data-field="delai_cible" value="${escAttr(n.delai_cible||'')}" onchange="saveField('delai_cible',this.value)">
-        </div>
-        <div>
-          <label class="form-label">Date de clôture</label>
-          <input type="text" class="form-input" value="${escAttr(fmtDate(n.date_cloture))}" readonly>
-        </div>
-      </div>
-    </div>
-
-    ${ackCardHtml(n)}
-
-    <div class="card">
-      <div class="card-title">Validations</div>
-      <div class="valid-grid">
-        ${validBox('Direction Qualité', n.validation_qualite_nom, n.validation_qualite_at, 'qualite', meIsAdmin)}
-        ${validBox('Direction Industrielle', n.validation_industrielle_nom, n.validation_industrielle_at, 'industrielle', meIsAdmin)}
-      </div>
-    </div>
-  `;
-}
-
-function ackCardHtml(n){
-  // Carte affichée dans la fiche détail : une box par service avec l'état d'ack,
-  // et un bouton d'action pour le service du user courant.
-  if(!S.ackServices||!S.ackServices.length) return '';
-  const acks=n.service_acks||{};
-  const items=S.ackServices.map(function(s){
-    const a=acks[s.key];
-    const done=!!a;
-    const isMine=S.myAckService===s.key;
-    const sub=done
-      ? (escHtml(a.user_nom||'?')+' · '+escHtml(fmtDateTime(a.ack_at)))
-      : 'En attente';
-    return ''
-      +'<div class="ack-card-item'+(isMine?' mine':'')+'">'
-      +  '<span class="ack-dot'+(done?' done':'')+'" style="color:'+s.color+'"></span>'
-      +  '<div class="ack-card-info">'
-      +    '<div class="ack-card-label">'+escHtml(s.label)+'</div>'
-      +    '<div class="ack-card-sub">'+sub+'</div>'
-      +  '</div>'
-      +'</div>';
-  }).join('');
-  let actions='';
-  if(S.myAckService){
-    const mine=acks[S.myAckService];
-    if(mine){
-      actions=''
-        +'<div class="ack-card-actions">'
-        +  '<span style="font-size:12px;color:var(--ok);font-weight:600">✓ Vous avez pris connaissance de cette NC le '+escHtml(fmtDateTime(mine.ack_at))+'</span>'
-        +  '<button type="button" class="btn btn-ghost btn-sm" onclick="unackCurrentNC()">Retirer</button>'
-        +'</div>';
-    } else {
-      actions=''
-        +'<div class="ack-card-actions">'
-        +  '<button type="button" class="btn btn-accent btn-sm" onclick="ackCurrentNC()">Marquer comme lu</button>'
-        +  '<span style="font-size:11px;color:var(--muted)">au nom de votre service</span>'
-        +'</div>';
-    }
-  } else {
-    actions='<div class="ack-card-actions"><span style="font-size:11px;color:var(--muted)">Votre rôle n\'est pas rattaché à un service de prise en connaissance.</span></div>';
-  }
-  return ''
-    +'<div class="card">'
-    +  '<div class="card-title">Prise en connaissance par service</div>'
-    +  '<div class="ack-card-row">'+items+'</div>'
-    +  actions
-    +'</div>';
-}
-
-async function ackCurrentNC(){
-  if(!S.current) return;
-  try{
-    const r=await api('/api/qualite/nc/'+S.current.id+'/ack',{method:'POST'});
-    if(!r.ok){showToast('Erreur lors de la prise en connaissance','danger');return;}
-    const d=await r.json();
-    S.current=d;
-    // Mettre à jour la ligne correspondante dans la liste locale
-    const ix=S.ncs.findIndex(function(x){return x.id===d.id;});
-    if(ix>=0) S.ncs[ix]=d;
-    renderDetail();
-    showToast('Prise en connaissance enregistrée.','success');
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-
-async function unackCurrentNC(){
-  if(!S.current) return;
-  try{
-    const r=await api('/api/qualite/nc/'+S.current.id+'/ack',{method:'DELETE'});
-    if(!r.ok){showToast('Erreur','danger');return;}
-    const d=await r.json();
-    S.current=d;
-    const ix=S.ncs.findIndex(function(x){return x.id===d.id;});
-    if(ix>=0) S.ncs[ix]=d;
-    renderDetail();
-    showToast('Prise en connaissance retirée.','info');
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-
-function validBox(label, name, at, kind, canSign){
-  const signed=!!name;
-  return `<div class="valid-box${signed?' signed':''}">
-    <div class="valid-box-title">${escHtml(label)}</div>
-    ${signed?`<div class="valid-box-name">${escHtml(name)}</div><div class="valid-box-date">Signé le ${escHtml(fmtDateTime(at))}</div>`:'<div style="font-size:12px;color:var(--muted)">En attente de signature</div>'}
-    ${canSign?`<div class="valid-box-actions">${signed?`<button type="button" class="btn btn-ghost btn-sm" onclick="revokeValid('${kind}')">Retirer la signature</button>`:`<button type="button" class="btn btn-ok btn-sm" onclick="signValid('${kind}')">Signer</button>`}</div>`:''}
-  </div>`;
-}
-
-function toggleService(s){
-  if(!S.current) return;
-  const cur=Array.isArray(S.current.services_impliques)?S.current.services_impliques.slice():[];
-  const idx=cur.indexOf(s);
-  if(idx>=0) cur.splice(idx,1); else cur.push(s);
-  S.current.services_impliques=cur;
-  saveField('services_impliques', cur);
-  renderDetail();
-}
-
-let _saveTimers = {};
-function saveField(field, value){
-  if(S.isQualiteReadonly) return;
-  if(!S.current) return;
-  // Optimistic update
-  S.current[field]=value;
-  clearTimeout(_saveTimers[field]);
-  _saveTimers[field]=setTimeout(async()=>{
-    try{
-      const body={};body[field]=value;
-      const r=await api('/api/qualite/nc/'+S.current.id,{
-        method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
-      });
-      if(!r.ok){
-        const d=await r.json().catch(()=>({}));
-        showToast(d.detail||'Erreur de sauvegarde','danger');
-        return;
-      }
-      S.current=await r.json();
-      // Mise à jour discrète sans re-render complet pour ne pas perdre le focus
-      const idx=S.ncs.findIndex(x=>x.id===S.current.id);
-      if(idx>=0){
-        // Recharger la liste à la prochaine occasion
-        loadNCs();
-      }
-    }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-  }, 350);
-}
-
-async function signValid(kind){
-  if(S.isQualiteReadonly) return;
-  if(!S.current) return;
-  try{
-    const r=await api('/api/qualite/nc/'+S.current.id+'/valider',{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,revoke:false})
-    });
-    if(!r.ok){const d=await r.json().catch(()=>({}));showToast(d.detail||'Erreur','danger');return;}
-    S.current=await r.json();renderDetail();showToast('Signature enregistrée.','success');
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-async function revokeValid(kind){
-  if(S.isQualiteReadonly) return;
-  if(!S.current) return;
-  if(!confirm('Retirer la signature ?')) return;
-  try{
-    const r=await api('/api/qualite/nc/'+S.current.id+'/valider',{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,revoke:true})
-    });
-    if(!r.ok){const d=await r.json().catch(()=>({}));showToast(d.detail||'Erreur','danger');return;}
-    S.current=await r.json();renderDetail();showToast('Signature retirée.','info');
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-
-// ── Fichiers tab ───────────────────────────────────────────────────
-function renderFichiersTab(n){
-  const list=S.currentFiles||[];
-  const filesHtml=list.length?list.map(f=>{
-    const ext=(f.original_name||'').split('.').pop().toUpperCase();
-    const sizeKB=f.size_bytes?Math.round(f.size_bytes/1024):0;
-    return `<div class="file-row">
-      <div class="file-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-      <div style="flex:1;min-width:0">
-        <div class="file-name">${escHtml(f.original_name||'')}</div>
-        <div class="file-meta">${escHtml(ext)} · ${sizeKB} ko · Ajouté par ${escHtml(f.uploaded_by_nom||'?')} le ${escHtml(fmtDateTime(f.uploaded_at))}</div>
-      </div>
-      <div class="file-actions">
-        <a class="btn btn-ghost btn-sm" href="/api/qualite/nc/${n.id}/fichiers/${f.id}" target="_blank" rel="noopener">Ouvrir</a>
-        <button type="button" class="btn btn-ghost btn-sm qual-write" onclick="delFichier(${f.id})">Supprimer</button>
-      </div>
-    </div>`;
-  }).join(''):'<div class="empty" style="padding:30px"><div class="empty-title">Aucun fichier</div><div class="empty-sub">Ajoutez les pièces jointes (emails, PDF, photos, xlsx…) via la zone ci-dessus.</div></div>';
-
-  return `<div class="card">
-    <div class="card-title">Pièces jointes</div>
-    <label class="upload-zone qual-write" id="upload-zone" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, ${n.id})">
-      <div style="display:flex;justify-content:center;margin-bottom:10px">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-      </div>
-      <div style="font-size:13px">Glisser-déposer un fichier ici, ou cliquer pour choisir</div>
-      <div style="font-size:11px;margin-top:4px;opacity:.7">Email, PDF, image, Excel, Word…</div>
-      <input type="file" id="file-input" onchange="onFileInput(event, ${n.id})" multiple>
-    </label>
-    <div style="margin-top:16px">${filesHtml}</div>
-  </div>`;
-}
-
-function onDragOver(e){e.preventDefault();e.currentTarget.classList.add('drag');}
-function onDragLeave(e){e.currentTarget.classList.remove('drag');}
-async function onDrop(e, ncId){
-  e.preventDefault();e.currentTarget.classList.remove('drag');
-  const files=Array.from(e.dataTransfer.files||[]);
-  for(const f of files) await uploadFile(ncId, f);
-}
-async function onFileInput(e, ncId){
-  const files=Array.from(e.target.files||[]);
-  for(const f of files) await uploadFile(ncId, f);
-  e.target.value='';
-}
-async function uploadFile(ncId, file){
-  if(S.isQualiteReadonly) return;
-  try{
-    const fd=new FormData();fd.append('file', file);
-    const r=await api('/api/qualite/nc/'+ncId+'/fichiers',{method:'POST',body:fd});
-    if(!r.ok){const d=await r.json().catch(()=>({}));showToast(d.detail||'Échec import','danger');return;}
-    S.currentFiles=await r.json();
-    renderDetail();
-    showToast('Fichier ajouté.','success');
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-async function delFichier(fileId){
-  if(S.isQualiteReadonly) return;
-  if(!S.current) return;
-  if(!confirm('Supprimer ce fichier ?')) return;
-  try{
-    const r=await api('/api/qualite/nc/'+S.current.id+'/fichiers/'+fileId,{method:'DELETE'});
-    if(!r.ok){showToast('Erreur','danger');return;}
-    await loadFiles(S.current.id);renderDetail();showToast('Fichier supprimé.','info');
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-
-// ── Discussion tab ─────────────────────────────────────────────────
-function renderDiscussionTab(n){
-  const list=S.currentMessages||[];
-  const messagesHtml=list.length?list.map(m=>{
-    const author=m.author_nom||'?';
-    const role=m.author_role||'';
-    const attach=m.attachment_id&&m.attachment_name?
-      `<a class="msg-attach" href="/api/qualite/nc/${n.id}/fichiers/${m.attachment_id}" target="_blank" rel="noopener">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        ${escHtml(m.attachment_name)}
-      </a>`:'';
-    return `<div class="msg">
-      <div class="msg-avatar">${escHtml(initials(author))}</div>
-      <div class="msg-body">
-        <div class="msg-head">
-          <span class="msg-author">${escHtml(author)}</span>
-          ${role?`<span class="msg-role">${escHtml(role)}</span>`:''}
-          <span class="msg-time">${escHtml(relTime(m.created_at))}</span>
-        </div>
-        <div class="msg-text">${escHtml(m.body||'')}</div>
-        ${attach}
-      </div>
-    </div>`;
-  }).join(''):'<div class="empty" style="padding:30px"><div class="empty-title">Démarrez la discussion</div><div class="empty-sub">Notez les échanges, partagez le contexte et les décisions.</div></div>';
-
-  return `<div class="card">
-    <div class="card-title">Fil de discussion</div>
-    <div class="msg-list" id="msg-list">${messagesHtml}</div>
-    <div class="msg-input-wrap qual-write">
-      <textarea id="msg-input" class="msg-input" placeholder="Écrire un message…" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendMessage();}"></textarea>
-      <button type="button" class="btn btn-accent" onclick="sendMessage()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Envoyer
-      </button>
-    </div>
-    <div class="form-hint">Astuce : Ctrl + Entrée pour envoyer.</div>
-  </div>`;
-}
-
-async function sendMessage(){
-  if(S.isQualiteReadonly) return;
-  if(!S.current) return;
-  const inp=document.getElementById('msg-input');
-  const text=(inp?.value||'').trim();
-  if(!text){showToast('Message vide','danger');return;}
-  try{
-    const r=await api('/api/qualite/nc/'+S.current.id+'/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:text})
-    });
-    if(!r.ok){const d=await r.json().catch(()=>({}));showToast(d.detail||'Erreur envoi','danger');return;}
-    const msg=await r.json();
-    S.currentMessages.push(msg);
-    if(inp) inp.value='';
-    renderDetail();
-    setTimeout(()=>{const l=document.getElementById('msg-list');if(l) l.scrollTop=l.scrollHeight;},10);
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-
-// ── Création NC ────────────────────────────────────────────────────
-function openCreateModal(){
-  if(S.isQualiteReadonly) return;
-  document.getElementById('c-titre').value='';
-  document.getElementById('c-ar').value='';
-  document.getElementById('c-type').value='interne';
-  document.getElementById('c-gravite').value='mineure';
-  document.getElementById('c-date').value=new Date().toISOString().slice(0,10);
-  document.getElementById('c-service').value='';
-  document.getElementById('c-client').value='';
-  document.getElementById('c-refclient').value='';
-  document.getElementById('c-dossier').value='';
-  document.getElementById('c-desc').value='';
-  document.getElementById('create-modal').style.display='flex';
-  requestAnimationFrame(()=>document.getElementById('c-titre').focus());
-}
-function closeCreateModal(){document.getElementById('create-modal').style.display='none';}
-
-async function submitCreate(){
-  if(S.isQualiteReadonly) return;
-  const titre=document.getElementById('c-titre').value.trim();
-  if(!titre){showToast('Titre obligatoire','danger');return;}
-  const body={
-    titre,
-    numero_ar:document.getElementById('c-ar').value.trim()||null,
-    type_nc:document.getElementById('c-type').value,
-    gravite:document.getElementById('c-gravite').value,
-    date_nc:document.getElementById('c-date').value||null,
-    service_concerne:document.getElementById('c-service').value.trim()||null,
-    client_fournisseur:document.getElementById('c-client').value.trim()||null,
-    ref_client:document.getElementById('c-refclient').value.trim()||null,
-    no_dossier:document.getElementById('c-dossier').value.trim()||null,
-    description:document.getElementById('c-desc').value.trim()||null,
-  };
-  const btn=document.getElementById('create-btn');
-  btn.disabled=true;btn.textContent='Création…';
-  try{
-    const r=await api('/api/qualite/nc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r.ok){const d=await r.json().catch(()=>({}));showToast(d.detail||'Erreur','danger');btn.disabled=false;btn.textContent='Créer la NC';return;}
-    const nc=await r.json();
-    closeCreateModal();
-    showToast('NC créée : '+nc.numero,'success');
-    await loadNCs();
-    openDetail(nc.id);
-  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-  btn.disabled=false;btn.textContent='Créer la NC';
-}
+__NC_JS__
 
 // ── Import xlsx ────────────────────────────────────────────────────
 function openImportModal(){
@@ -5954,28 +5174,25 @@ function _qualiteGuides(){
     'nc-list': {
       steps: [
         {
-          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 C 6 8, 6 14, 12 22 C 18 14, 18 8, 12 2 Z"/><line x1="12" y1="8" x2="12" y2="14"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg>`,
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>`,
           title: "Non-conformités",
-          body: "Suivi centralisé des <strong>écarts qualité</strong> détectés en interne, chez les clients, chez les fournisseurs ou sur la logistique. Chaque NC est numérotée (NC-AAAA-XXXX) et suit un cycle de vie clair.",
-          illu: QUALITE_MOCKUPS.ncGrid,
+          body: "Une ligne par NC en cours : le <strong>client</strong>, le <strong>produit</strong> et la <strong>dernière étape</strong> du suivi, c'est-à-dire où on en est. Une NC dont rien n'a bougé depuis plus de 7 jours porte la mention <span class=\"qguide-tag\">À faire avancer</span> et remonte en tête de liste.",
           extra: _renderTaskSectionsFor('nc')
         },
         {
-          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="14" y2="14"/></svg>`,
-          title: "Types de NC & gravités",
-          body: `4 types : <span class="qguide-tag">interne</span> (écart production) · <span class="qguide-tag">client</span> (réclamation) · <span class="qguide-tag">fournisseur</span> (réception non conforme) · <span class="qguide-tag">logistique</span>. La gravité (mineure / majeure / critique) pilote les délais et alertes.`,
-          illu: QUALITE_MOCKUPS.ncTypesSeverites
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+          title: "Ouvrir une NC",
+          body: "Bouton <strong>Nouvelle NC</strong> : date, client, produit, observation, puis les <strong>photos et documents</strong> (boucle d'emails avec le client, bon de livraison…). Cochez <strong>Accusé de réception NC client envoyé</strong> dès que le client a reçu votre accusé de réception."
         },
         {
-          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
-          title: "Cycle de vie",
-          body: "Chaque NC passe par 5 statuts : <strong>Ouverte → En analyse → Action corrective → Vérification → Clôturée</strong>. Chaque étape trace la date + l'auteur pour audit et suivi qualité.",
-          illu: QUALITE_MOCKUPS.ncWorkflow
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>`,
+          title: "La fiche d'une NC",
+          body: "Cinq sections dans l'ordre : <strong>la NC</strong>, <strong>photos et documents</strong>, <strong>cause</strong>, <strong>actions correctives</strong>, et à droite le <strong>suivi</strong>. À chaque avancée, ajoutez une étape au suivi (date et ce qui a été fait) : c'est elle qui apparaît dans la liste. Le bouton <strong>Fiche PDF</strong> sort la NC complète, photos comprises, pour le client ou l'audit."
         },
         {
-          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
-          title: "Discussion & échanges",
-          body: "Chaque NC porte un <strong>fil de discussion</strong> intégré (onglet Discussion dans le détail) : commentaires horodatés, mentions, notifications aux personnes concernées. Toute la trace des échanges reste attachée à la NC."
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><line x1="10" y1="13" x2="14" y2="13"/></svg>`,
+          title: "Clôturer, archiver, rouvrir",
+          body: "Une NC réglée se ferme avec <strong>Clôturer et archiver</strong> : elle quitte la liste et rejoint les <strong>Archives</strong> (bouton en haut de la liste). Depuis les archives, <strong>Rouvrir la NC</strong> la remet en cours. Clôture et réouverture sont notées dans le suivi."
         },
       ]
     },

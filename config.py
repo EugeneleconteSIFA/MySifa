@@ -1145,6 +1145,10 @@ def nc_service_for_role(role, nc_service_override=None):
 
 # Champs de nc_dossiers dont la modification remet à zéro les acks de tous les services
 # (pertinent quand le contenu de fond change et doit être relu). Voir app/routers/qualite.py.
+# Non-conformités : une NC dont la dernière étape de suivi date de plus de N jours
+# est signalée « à faire avancer » dans la liste (MyQualité).
+NC_RELANCE_JOURS = int(os.getenv("NC_RELANCE_JOURS", "7"))
+
 NC_ACK_RESET_FIELDS = frozenset({
     "titre", "description", "analyse_causes",
     "action_corrective", "action_preventive",

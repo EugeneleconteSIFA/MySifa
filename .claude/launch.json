@@ -30,6 +30,27 @@
         "8011"
       ],
       "port": 8011
+    },
+    {
+      "name": "mysifa-adv-test",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-X",
+        "utf8",
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--port",
+        "8014",
+        "--app-dir",
+        "/Users/eugeneleconte/Documents/GitHub/MySifa/.claude/worktrees/rvgi-synchro"
+      ],
+      "cwd": "/Users/eugeneleconte/Documents/GitHub/MySifa/.claude/worktrees/rvgi-synchro",
+      "env": {
+        "DB_PATH": "/private/tmp/claude-501/-Users-eugeneleconte-Documents-GitHub-MySifa/7331c6b9-d2da-47af-b7c6-a356a5582b4e/scratchpad/mysifa_test.db",
+        "ERP_MIRROR_DB": "/private/tmp/claude-501/-Users-eugeneleconte-Documents-GitHub-MySifa/7331c6b9-d2da-47af-b7c6-a356a5582b4e/scratchpad/miroir_test.db"
+      },
+      "port": 8014
     }
   ]
 }
