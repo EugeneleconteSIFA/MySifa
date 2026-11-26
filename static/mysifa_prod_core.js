@@ -1772,11 +1772,21 @@ async function ofeChoisirCommandes(mDepart,premier){
     produit:/^\d+\/\d+$/.test(produit)?produit:null,
     unProduit:true,
     recherche:(produit&&!m.id?produit:(m.of_numero||'')).trim(),
-    titre:premier?'Nouvel OF — choisissez la ou les commandes':undefined,
+    titre:premier?'Nouvel OF':undefined,
     libelleRien:m.id?undefined:'OF de stock ou de marché (sans commande)',
     // Partir d'un dossier déjà au planning (26/11/2026) : sa commande, son
     // délai et sa fiche remplissent l'OF.
-    actionsExtra:(premier&&!m.id)?[{libelle:'Partir d\'un dossier du planning',onClick:function(){ ofeChoisirDossier(); }}]:undefined,
+    // Ou partir d'un dossier déjà au planning (bascule « Depuis le
+    // planning », 26/11/2026) : son délai, sa commande et sa fiche
+    // remplissent l'OF.
+    libelleVue:'Depuis une commande',
+    vues:(premier&&!m.id)?(function(){
+      let charge=null;
+      const lire=()=>charge||(charge=api('/api/of-planning/dossiers-sans-of'));
+      return [{libelle:'Depuis le planning',
+        compter:()=>lire().then(r=>((r&&r.items)||[]).length),
+        monter:(el,ctx)=>ofeDossiersMonter(el,ctx,lire())}];
+    })():undefined,
     onValider:function(res){
       if(!m.id && res && res.etat==='a_rattacher'){
         // OF sans commande (stock, marché, reliquat) : la fenêtre s'ouvre
@@ -3563,55 +3573,60 @@ function ofeMarquerDatesVides(){
     if(String(el.value||'').trim()) el.removeAttribute('data-vide'); else el.setAttribute('data-vide','');
   });
 }
-/* « Partir d'un dossier du planning » : les dossiers à produire sans OF. */
-async function ofeChoisirDossier(){
-  let r=null;
-  try{ r=await api('/api/of-planning/dossiers-sans-of'); }
-  catch(e){ toast(e.message||'Liste des dossiers indisponible.','error'); return; }
-  const items=(r&&r.items)||[];
-  const fond=document.createElement('div');
-  fond.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;box-sizing:border-box';
+/* « Depuis le planning » : les dossiers à produire sans OF, peints dans le
+   sélecteur de commandes (bascule en tête, 26/11/2026 — c'était une seconde
+   fenêtre par-dessus la première). `charge` : la promesse de la liste,
+   partagée avec le compteur de la bascule. */
+function ofeDossiersMonter(el,ctx,charge){
+  el.innerHTML='<div style="padding:12px 16px 0"><input type="search" data-q autocomplete="off" placeholder="Chercher (dossier, produit, client, machine)" style="width:100%;height:38px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:0 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none"></div>'+
+    '<div data-liste role="listbox" style="padding:10px 16px 14px"><div style="padding:30px;text-align:center;color:var(--muted);font-size:13px">Chargement des dossiers…</div></div>';
+  const liste=el.querySelector('[data-liste]'), q=el.querySelector('[data-q]');
   const etat=d=>d.statut==='en_cours'?'en cours':(d.a_placer?'à placer':'en attente');
+  const pastille='margin-left:6px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;';
   // Réservation (« ???? » tapé au planning) : le numéro est à venir.
   const titre=d=>d.reservation
     ?'Réservation · numéro à venir <span style="margin-left:4px;font-weight:500;color:var(--muted)">'+escHtml(d.reference||'')+'</span>'
     :escHtml(d.reference||'#'+d.id);
-  const ligne=d=>'<div role="option" tabindex="0" data-dossier="'+d.id+'" style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer">'+
+  const ligne=d=>{
+    const ofs=d.of_existants||[];
+    return '<div role="option" tabindex="0" data-dossier="'+d.id+'" class="ofe-dos-l" style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;margin-bottom:6px;border:1px solid '+(ofs.length?'var(--warn)':'var(--border)')+';border-radius:10px;background:var(--card);cursor:pointer">'+
     '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+titre(d)+
-      (d.commande?' <span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">commande '+escHtml(d.commande)+'</span>':'')+'</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-top:2px">'+escHtml([d.ref_produit,d.client].filter(Boolean).join(' · ')||'—')+'</div></div>'+
+      (d.commande?' <span style="'+pastille+'background:var(--bg);border:1px solid var(--border);color:var(--text2)">commande '+escHtml(d.commande)+'</span>':'')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-top:2px">'+escHtml([d.ref_produit,d.client].filter(Boolean).join(' · ')||'—')+'</div>'+
+    (ofs.length?'<div style="font-size:12px;color:var(--warn);margin-top:4px">Un OF porte déjà ce numéro sans être relié : '+
+      ofs.map(o=>'<a href="/prod?page=of&of='+encodeURIComponent(o.id)+'" target="_blank" rel="noopener" style="color:var(--warn);font-weight:700">'+escHtml(o.numero||'#'+o.id)+' ↗</a>').join(', ')+
+      ' — reliez-le plutôt que d\'en créer un second.</div>':'')+
+    '</div>'+
     '<div style="font-size:12px;color:var(--text2);text-align:right;white-space:nowrap">'+escHtml([d.machine,etat(d)].filter(Boolean).join(' · '))+
       (d.livraison?'<div style="color:var(--muted)">livraison '+escHtml(d.livraison)+'</div>':'')+'</div></div>';
-  fond.innerHTML='<div role="dialog" aria-label="Partir d\'un dossier du planning" style="width:min(720px,100%);max-height:84vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border)"><div><div style="font-size:15px;font-weight:700;color:var(--text)">Partir d\'un dossier du planning</div>'+
-      '<div style="font-size:12px;color:var(--muted);margin-top:2px">Dossiers à produire sans OF · '+items.length+'</div></div>'+
-      '<button type="button" data-fermer aria-label="Fermer" style="border:none;background:none;color:var(--muted);font-size:20px;cursor:pointer">×</button></div>'+
-    '<div style="padding:12px 18px 0"><input type="text" data-q placeholder="Chercher (dossier, produit, client, machine)" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none"></div>'+
-    '<div data-liste role="listbox" style="padding:12px 18px 16px;overflow-y:auto"></div></div>';
-  document.body.appendChild(fond);
-  const liste=fond.querySelector('[data-liste]'), q=fond.querySelector('[data-q]');
+  };
+  let items=[];
   const peindre=function(){
     const mots=q.value.toLowerCase().split(/\s+/).filter(Boolean);
     const vus=items.filter(d=>{ const t=[d.reference,d.ref_produit,d.client,d.machine,d.commande,d.reservation?'réservation reservation':''].join(' ').toLowerCase(); return mots.every(w=>t.indexOf(w)>=0); });
-    liste.innerHTML=vus.length?vus.map(ligne).join(''):'<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">'+(items.length?'Aucun dossier pour « '+escHtml(q.value)+' »':'Aucun dossier à produire sans OF.')+'</div>';
+    liste.innerHTML=vus.length?vus.map(ligne).join(''):'<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px">'+(items.length?'Aucun résultat pour « '+escHtml(q.value)+' »':'Aucun dossier à produire sans OF.')+'</div>';
   };
-  const fermer=function(){ fond.remove(); document.removeEventListener('keydown',clavier,true); };
-  const choisir=function(id){ fermer(); openOfDepuisDossier(Number(id)); };
-  const clavier=function(e){
-    if(e.key==='Escape'){ e.stopPropagation(); fermer(); }
-    else if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.getAttribute&&e.target.getAttribute('data-dossier')){ e.preventDefault(); choisir(e.target.getAttribute('data-dossier')); }
-  };
-  document.addEventListener('keydown',clavier,true);
-  fond.addEventListener('click',function(e){
-    if(e.target===fond||(e.target.closest&&e.target.closest('[data-fermer]'))){ fermer(); return; }
+  const choisir=function(id){ ctx.fermer(); openOfDepuisDossier(Number(id)); };
+  liste.addEventListener('click',function(e){
+    if(e.target.closest&&e.target.closest('a')) return;
     const l=e.target.closest&&e.target.closest('[data-dossier]');
     if(l) choisir(l.getAttribute('data-dossier'));
   });
+  liste.addEventListener('keydown',function(e){
+    const l=e.target&&e.target.getAttribute&&e.target.getAttribute('data-dossier');
+    if(l&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); choisir(l); }
+  });
   q.addEventListener('input',peindre);
-  peindre();
+  q.addEventListener('keydown',function(e){ if(e.key==='Escape'&&q.value){ e.stopPropagation(); q.value=''; peindre(); } });
   requestAnimationFrame(()=>q.focus());
+  charge.then(function(r){
+    items=(r&&r.items)||[];
+    ctx.sousTitre('Dossiers à produire sans OF relié · '+items.length);
+    peindre();
+  },function(e){
+    liste.innerHTML='<div style="padding:30px;text-align:center;color:var(--warn);font-size:13px">'+escHtml(e.message||'Liste des dossiers indisponible.')+'</div>';
+  });
 }
-window.ofeChoisirDossier = ofeChoisirDossier;
 /* Fiche contestée : elle ne correspond pas aux commandes cochées (cadre rouge
    de l'étape 2). Ses valeurs ne partent alors vers le dossier que cochées à
    la main (retour du 22/11/2026, dossier 9932911 : laize et format d'une
@@ -18186,7 +18201,7 @@ function kernseConnexion(){try{if(window.kernse)return window.kernse.track('conn
       },
       {
         title: 'Choisir les commandes',
-        body: `Cliquez sur une ligne pour la choisir, recliquez pour la retirer. Plusieurs lignes du <strong>même produit</strong> peuvent aller sur un seul OF : leurs quantités s'additionnent. Sur l'OF, la croix d'une ligne la retire. <span class="mguide-tag">OF sans commande</span> part d'une fiche seule.`,
+        body: `Cliquez sur une ligne pour la choisir, recliquez pour la retirer. Plusieurs lignes du <strong>même produit</strong> peuvent aller sur un seul OF : leurs quantités s'additionnent. Sur l'OF, la croix d'une ligne la retire. <span class="mguide-tag">OF sans commande</span> part d'une fiche seule. La bascule <span class="mguide-tag">Depuis le planning</span>, en tête de la fenêtre, part d'un dossier déjà au planning : son délai, sa commande et sa fiche remplissent l'OF.`,
         illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, system-ui, 'Segoe UI', sans-serif">
           <rect x="8" y="8" width="324" height="22" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="16" y="23" font-size="9" fill="var(--muted)">N° de commande, client, article…</text>
           <g font-size="8.5">

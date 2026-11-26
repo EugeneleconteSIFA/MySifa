@@ -58,8 +58,15 @@
      libelleRien libellé du bouton « Je ne trouve pas… » (« OF sans
                  commande » quand le sélecteur ouvre la création d'un OF)
      actionsExtra [{libelle, onClick}] : boutons de plus dans le pied, qui
-                 ferment le sélecteur puis appellent onClick (« Partir d'un
-                 dossier du planning » à la création d'un OF, 26/11/2026)
+                 ferment le sélecteur puis appellent onClick
+     vues        [{libelle, compter(), monter(el, ctx)}] : autres façons de
+                 partir, dans la MÊME fenêtre, choisies par une bascule en
+                 tête (« Depuis le planning » à la création d'un OF,
+                 26/11/2026 : une seconde fenêtre par-dessus la première
+                 n'était ni lisible ni pratique). `compter()` rend une
+                 promesse du nombre affiché sur la bascule ; `monter` peint
+                 la vue dans `el`, une seule fois, ctx = {fermer, sousTitre}
+     libelleVue  libellé de la vue commande quand `vues` est donné
      initial     lignes déjà rattachées, à re-cocher à l'ouverture.
                  SANS elles, valider après avoir coché une ligne
                  EFFACE les précédentes — l'enregistrement est un
@@ -95,7 +102,37 @@
     '.mrp-cherche input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--border,#dcdfe4);',
     '  border-radius:9px;background:var(--bg,#f6f7f9);color:inherit;font:inherit}',
     '.mrp-cherche input:focus{outline:none;border-color:var(--accent,#2563eb);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#2563eb) 15%,transparent)}',
-    '.mrp-bascule{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted,#6b7280);white-space:nowrap;cursor:pointer}',
+    '.mrp-cherche input{height:38px;box-sizing:border-box}',
+    /* « Inclure les soldées » : un interrupteur de la hauteur du champ, pas
+       une case perdue au bout de la ligne (retour du 26/11/2026). */
+    '.mrp-bascule{position:relative;display:inline-flex;align-items:center;gap:9px;height:38px;box-sizing:border-box;',
+    '  padding:0 12px;border:1px solid var(--border,#dcdfe4);border-radius:9px;background:var(--card,#fff);',
+    '  font-size:12.5px;font-weight:600;color:var(--text2,#374151);white-space:nowrap;cursor:pointer;user-select:none}',
+    '.mrp-bascule:hover{border-color:var(--accent,#2563eb)}',
+    '.mrp-bascule input{position:absolute;opacity:0;width:0;height:0;margin:0}',
+    '.mrp-bascule .pis{position:relative;flex:0 0 auto;width:30px;height:17px;border-radius:999px;',
+    '  background:var(--border,#dcdfe4);transition:background .15s}',
+    ".mrp-bascule .pis::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;",
+    '  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}',
+    '.mrp-bascule input:checked + .pis{background:var(--accent,#2563eb)}',
+    '.mrp-bascule input:checked + .pis::after{transform:translateX(13px)}',
+    '.mrp-bascule input:focus-visible + .pis{outline:2px solid var(--accent,#2563eb);outline-offset:2px}',
+    '.mrp-bascule.on{border-color:var(--accent,#2563eb);color:var(--accent,#2563eb)}',
+    /* Bascule entre les façons de partir (commande / planning). */
+    '.mrp-vues{display:flex;gap:4px;padding:4px;margin:12px 16px 0;width:fit-content;max-width:calc(100% - 32px);box-sizing:border-box;',
+    '  background:var(--bg,#f6f7f9);border:1px solid var(--border,#dcdfe4);border-radius:11px;flex-wrap:wrap}',
+    '.mrp-vue-b{display:inline-flex;align-items:center;gap:8px;border:none;background:none;padding:8px 16px;border-radius:8px;',
+    '  font:inherit;font-size:13px;font-weight:700;color:var(--muted,#6b7280);cursor:pointer}',
+    '.mrp-vue-b:hover{color:var(--text,#111)}',
+    '.mrp-vue-b.on{background:var(--card,#fff);color:var(--accent,#2563eb);box-shadow:0 1px 3px rgba(0,0,0,.12)}',
+    '.mrp-vue-b .n{min-width:18px;padding:0 7px;border-radius:999px;font-size:11px;line-height:18px;text-align:center;',
+    '  background:color-mix(in srgb,var(--accent,#2563eb) 14%,transparent);color:var(--accent,#2563eb)}',
+    '.mrp-vue-b .n:empty{display:none}',
+    '.mrp-autre{display:none;flex:1;min-height:0;overflow-y:auto;background:var(--bg,#f6f7f9);margin-top:12px;border-top:1px solid var(--border,#dcdfe4)}',
+    '.mrp.vue-autre .mrp-autre{display:block}',
+    '.mrp.vue-autre .mrp-cherche,.mrp.vue-autre .mrp-sel,.mrp.vue-autre .mrp-corps,',
+    '.mrp.vue-autre #mrp-choix,.mrp.vue-autre #mrp-refz,.mrp.vue-autre #mrp-ok,.mrp.vue-autre #mrp-avert{display:none !important}',
+    '.mrp.a-vues .mrp-cherche{margin-top:12px;border-top:1px solid var(--border,#dcdfe4)}',
     '.mrp-corps{flex:1;min-height:0;overflow-y:auto;padding:6px 0;background:var(--bg,#f6f7f9)}',
     '.mrp-msg{padding:34px 20px;text-align:center;color:var(--muted,#6b7280);font-size:13px}',
     '.mrp-piece{margin:8px 12px;border:1px solid var(--border,#dcdfe4);border-radius:11px;overflow:hidden;background:var(--card,#fff)}',
@@ -370,6 +407,7 @@
     var propose = (mode === 'commande' && objet === 'dossier');
     var dossiers = listeDossiers(o.dossiers);
     var etat = { pieces: [], choix: {}, jeton: 0, ouvertes: 1, ref: '', reliquat: false };
+    var vues = (o.vues || []).filter(function (v) { return v && v.libelle && v.monter; });
 
     // Ce qui est déjà rattaché revient coché. L'enregistrement remplace la
     // sélection entière : sans cette reprise, ajouter une deuxième commande
@@ -390,17 +428,27 @@
     var fond = document.createElement('div');
     fond.className = 'mrp-fond';
     fond.innerHTML =
-      '<div class="mrp" role="dialog" aria-modal="true">' +
+      '<div class="mrp' + (vues.length ? ' a-vues' : '') + '" role="dialog" aria-modal="true">' +
         '<div class="mrp-tete"><div><h2>' + esc(o.titre || titrePicker(mode, objet)) +
         '</h2><p class="st" id="mrp-st">—</p></div>' +
         '<button type="button" class="mrp-x" title="Fermer">×</button></div>' +
+        (vues.length
+          ? '<div class="mrp-vues" role="tablist">' +
+              '<button type="button" class="mrp-vue-b on" role="tab" data-vue="-1">' + esc(o.libelleVue || 'Depuis une commande') + '</button>' +
+              vues.map(function (v, i) {
+                return '<button type="button" class="mrp-vue-b" role="tab" data-vue="' + i + '">' + esc(v.libelle) +
+                  '<span class="n" data-vue-n="' + i + '"></span></button>';
+              }).join('') +
+            '</div>'
+          : '') +
         '<div class="mrp-cherche">' +
           '<input type="search" id="mrp-q" autocomplete="off" placeholder="' +
             (mode === 'commande'
               ? 'N° de commande, client, article, désignation…'
               : 'N° de BL, n° de commande, client…') + '">' +
           (mode === 'commande'
-            ? '<label class="mrp-bascule"><input type="checkbox" id="mrp-sold"> Inclure les commandes soldées</label>'
+            ? '<label class="mrp-bascule" title="Montrer aussi les commandes entièrement livrées">' +
+                '<input type="checkbox" id="mrp-sold"><span class="pis"></span>Inclure les soldées</label>'
             : '') +
         '</div>' +
         // Ce qui est déjà coché reste sous les yeux, quelle que soit la
@@ -411,6 +459,7 @@
         '<div class="mrp-sel" id="mrp-sel"><span class="t">Lignes choisies</span>' +
           '<span class="vide">aucune — cliquez sur une ligne pour la prendre</span></div>' +
         '<div class="mrp-corps" id="mrp-corps"><div class="mrp-msg">Tape au moins deux caractères.</div></div>' +
+        '<div class="mrp-autre" id="mrp-autre"></div>' +
         '<div class="mrp-pied">' +
           '<span class="mrp-choix" id="mrp-choix">Aucune ligne cochée</span>' +
           (propose
@@ -453,6 +502,50 @@
       });
     });
 
+    // ── Autres vues (bascule en tête) ───────────────────────────────────────
+    var stCommande = null, vueCourante = -1, montees = {};
+    function allerVue(i) {
+      if (i === vueCourante) return;
+      var st = $('mrp-st');
+      if (vueCourante === -1) stCommande = st.textContent;
+      vueCourante = i;
+      fond.querySelector('.mrp').classList.toggle('vue-autre', i >= 0);
+      Array.prototype.forEach.call(fond.querySelectorAll('[data-vue]'), function (b) {
+        var on = Number(b.getAttribute('data-vue')) === i;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      var zone = $('mrp-autre');
+      Array.prototype.forEach.call(zone.children, function (c) { c.style.display = 'none'; });
+      if (i < 0) {
+        st.textContent = stCommande || '—';
+        setTimeout(function () { champ.focus(); }, 0);
+        return;
+      }
+      st.textContent = '';
+      if (!montees[i]) {
+        montees[i] = document.createElement('div');
+        zone.appendChild(montees[i]);
+        vues[i].monter(montees[i], {
+          fermer: fermer,
+          sousTitre: function (t) { if (vueCourante === i) $('mrp-st').textContent = t || ''; montees[i]._st = t; }
+        });
+      } else {
+        st.textContent = montees[i]._st || '';
+      }
+      montees[i].style.display = '';
+    }
+    Array.prototype.forEach.call(fond.querySelectorAll('[data-vue]'), function (b) {
+      b.addEventListener('click', function () { allerVue(Number(b.getAttribute('data-vue'))); });
+    });
+    vues.forEach(function (v, i) {
+      if (!v.compter) return;
+      Promise.resolve().then(v.compter).then(function (n) {
+        var el = fond.querySelector('[data-vue-n="' + i + '"]');
+        if (el && n != null) el.textContent = String(n);
+      }, function () {});
+    });
+
     // ── Recherche ───────────────────────────────────────────────────────────
     var minuteur = null;
     champ.addEventListener('input', function () {
@@ -462,6 +555,7 @@
     var sold = $('mrp-sold');
     if (sold) sold.addEventListener('change', function () {
       etat.ouvertes = sold.checked ? 0 : 1;
+      sold.parentNode.classList.toggle('on', sold.checked);
       chercher();
     });
 
