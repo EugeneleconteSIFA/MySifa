@@ -36,7 +36,6 @@ NC_CSS = r"""
 .nc-client{font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nc-num{font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);margin-top:3px}
 .nc-prod{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nc-prod-sub{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
 .nc-etape{font-size:13px;color:var(--text2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .nc-etape-vide{color:var(--muted);font-style:italic}
 .nc-quand{font-size:12px;color:var(--text2);text-align:right}
@@ -218,7 +217,7 @@ function _ncListBody(){
     const ar=(!S.ncArchives&&n.type_nc==='client'&&!n.ar_client_envoye)?' · <span style="color:var(--warn)">accusé de réception à envoyer</span>':'';
     return `<button type="button" class="nc-row${(!S.ncArchives&&n.a_relancer)?' relance':''}" onclick="openDetail(${n.id})">
       <div><div class="nc-cell-lbl">Client</div><div class="nc-client" title="${escAttr(n.client_fournisseur||'')}">${escHtml(n.client_fournisseur||'—')}</div><div class="nc-num">${escHtml(n.numero||'')}${ar}</div></div>
-      <div><div class="nc-cell-lbl">Produit</div><div class="nc-prod" title="${escAttr(_ncProduit(n))}">${escHtml(_ncProduit(n)||'—')}</div>${(n.ref_client&&n.descriptif_produit)?`<div class="nc-prod-sub">${escHtml(n.descriptif_produit)}</div>`:''}</div>
+      <div><div class="nc-cell-lbl">Produit</div><div class="nc-prod" title="${escAttr(_ncProduit(n))}">${escHtml(_ncProduit(n)||'—')}</div></div>
       <div><div class="nc-cell-lbl">Où on en est</div><div class="nc-etape">${etape}</div></div>
       <div class="nc-quand"><div class="nc-cell-lbl">${S.ncArchives?'Clôturée':'Dernière action'}</div>${quand}</div>
     </button>`;
@@ -266,7 +265,7 @@ function renderList(){
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-        <input type="text" id="search-input" class="search-input" placeholder="Rechercher (client, produit, n° NC, dossier, observation…)" value="${escAttr(S.search||'')}" oninput="onSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';onSearch('');}">
+        <input type="text" id="search-input" class="search-input" placeholder="Rechercher (client, référence produit, n° NC, observation…)" value="${escAttr(S.search||'')}" oninput="onSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';onSearch('');}">
       </div>
     </div>
     <div id="nc-list-box">${_ncListBody()}</div>
@@ -345,9 +344,7 @@ function renderDetail(){
     <div class="form-grid">
       ${_ncChamp('Date de la NC','date_nc',n.date_nc,{type:'date'})}
       ${_ncChamp('Client','client_fournisseur',n.client_fournisseur,{ph:'Nom du client'})}
-      ${_ncChamp('Référence produit','ref_client',n.ref_client,{ph:'Référence du produit'})}
-      ${_ncChamp('Désignation produit','descriptif_produit',n.descriptif_produit,{ph:'ex : étiquette 100 x 150'})}
-      ${_ncChamp('Référence dossier','no_dossier',n.no_dossier,{picker:true,ph:'ex : 1153/0030'})}
+      ${_ncChamp('Référence produit','ref_client',n.ref_client,{ph:'ex : 91/0001'})}
       ${_ncChamp('N° de commande (AR)','numero_ar',n.numero_ar,{ph:'ex : 9930854'})}
       ${_ncChamp('Quantité concernée','quantite_concernee',n.quantite_concernee,{ph:'ex : 150 000 ex'})}
       <div><label class="form-label" for="ncf-pilote_id">Responsable du suivi</label>
@@ -657,7 +654,7 @@ function revokeValid(kind){ if(confirm('Retirer la signature ?')) return _ncVali
 function openCreateModal(){
   if(_ncRo()) return;
   S.ncNouveauxFichiers=[];
-  ['c-client','c-refprod','c-designation','c-dossier','c-ar','c-desc'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
+  ['c-client','c-refprod','c-ar','c-desc'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
   document.getElementById('c-date').value=_ncToday();
   document.getElementById('c-date').max=_ncToday();
   document.getElementById('c-type').value='client';
@@ -692,8 +689,6 @@ async function submitCreate(){
     date_nc:v('c-date')||null,
     client_fournisseur:v('c-client')||null,
     ref_client:v('c-refprod')||null,
-    descriptif_produit:v('c-designation')||null,
-    no_dossier:v('c-dossier')||null,
     numero_ar:v('c-ar')||null,
     description:v('c-desc')||null,
     type_nc:document.getElementById('c-type').value,
@@ -740,18 +735,7 @@ NC_CREATE_MODAL = r"""<div class="modal-ov" id="create-modal" style="display:non
       </div>
       <div>
         <label class="form-label" for="c-refprod">Référence produit</label>
-        <input type="text" class="form-input" id="c-refprod" placeholder="Référence du produit">
-      </div>
-      <div>
-        <label class="form-label" for="c-designation">Désignation produit <span style="text-transform:none;color:var(--muted);font-weight:400">(facultatif)</span></label>
-        <input type="text" class="form-input" id="c-designation" placeholder="ex : étiquette 100 x 150">
-      </div>
-      <div>
-        <label class="form-label" for="c-dossier">Référence dossier <span style="text-transform:none;color:var(--muted);font-weight:400">(facultatif)</span></label>
-        <div style="display:flex;gap:6px">
-          <input type="text" class="form-input" id="c-dossier" placeholder="ex : 1153/0030">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="openDossierPicker('c-dossier')">Rechercher</button>
-        </div>
+        <input type="text" class="form-input" id="c-refprod" placeholder="ex : 91/0001">
       </div>
       <div>
         <label class="form-label" for="c-ar">N° de commande AR <span style="text-transform:none;color:var(--muted);font-weight:400">(facultatif)</span></label>

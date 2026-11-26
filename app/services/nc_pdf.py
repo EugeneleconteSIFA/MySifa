@@ -217,10 +217,10 @@ def render_nc_pdf(nc: dict, fichiers: Optional[List[dict]] = None) -> bytes:
     def champ(lbl, val):
         return [Paragraph(_t(lbl).upper(), st.label), Paragraph(_t(val or "—"), st.valeur)]
 
-    produit = " · ".join(p for p in (nc.get("ref_client"), nc.get("descriptif_produit")) if p)
+    produit = nc.get("ref_client") or nc.get("descriptif_produit")
     lignes = [
-        (champ("Client", nc.get("client_fournisseur")), champ("Produit", produit)),
-        (champ("Référence dossier", nc.get("no_dossier")), champ("Quantité concernée", nc.get("quantite_concernee"))),
+        (champ("Client", nc.get("client_fournisseur")), champ("Référence produit", produit)),
+        (champ("N° de commande (AR)", nc.get("numero_ar")), champ("Quantité concernée", nc.get("quantite_concernee"))),
         (champ("Type · gravité", f"{_TYPE.get(nc.get('type_nc'), nc.get('type_nc') or '')} · {_GRAVITE.get(nc.get('gravite'), nc.get('gravite') or '')}"),
          champ("Ouverte par", nc.get("emetteur_nom") or nc.get("created_by_nom"))),
     ]
