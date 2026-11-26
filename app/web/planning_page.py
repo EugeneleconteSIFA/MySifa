@@ -5890,7 +5890,10 @@ async function openOfPreview(entryId){
   let ficheTabContent;
   if(ficheId){
     const ofQs = data.of_actif_id ? ('?of_id='+encodeURIComponent(data.of_actif_id)) : '';
-    ficheTabContent=`<iframe class="of-preview-iframe" src="/api/fiches-techniques/${ficheId}/pdf-preview${ofQs}"></iframe>`;
+    // Chargée à la première ouverture de l'onglet, pas dans un onglet masqué :
+    // Safari met un PDF chargé à 0 px à l'échelle de 0 px et l'affichait en
+    // vignette au milieu du cadre (retour du 26/11/2026).
+    ficheTabContent=`<iframe class="of-preview-iframe" data-src="/api/fiches-techniques/${ficheId}/pdf-preview${ofQs}"></iframe>`;
   }else{
     const msgFiche = refProduit
       ? `Aucune fiche technique trouvée pour la référence <strong style="color:var(--text)">${escHtml(refProduit)}</strong>.`
@@ -5978,6 +5981,8 @@ function switchOfPreviewTab(tab){
     if(titleEl) titleEl.innerHTML=titles.of||'Ordre de fabrication';
     if(dlWrap) dlWrap.style.display='';
   }else{
+    const cadre = paneFiche.querySelector('iframe[data-src]');
+    if(cadre && !cadre.getAttribute('src')) requestAnimationFrame(function(){ cadre.src = cadre.getAttribute('data-src'); });
     paneOf.classList.add('hidden');
     paneFiche.classList.remove('hidden');
     btnOf&&btnOf.classList.remove('active');
@@ -6043,15 +6048,18 @@ function renderPlanningOfPaneInner(){
   const isAdmin = (typeof IS_OF_ADMIN !== 'undefined' && IS_OF_ADMIN);
   const ofs = st.ofs || [];
 
-  // Pas d'OF : trois gestes, le plus courant en tête (refonte du 22/11/2026).
-  // Créer l'OF ouvre « Nouvel OF » dans MyProd, prérempli depuis ce dossier ;
-  // relier propose d'abord les OF qui lui correspondent.
+  // Pas d'OF (refonte du 22/11/2026, revue le 26/11/2026). Les OF qui
+  // correspondent au dossier sont cherchés d'office et proposés en tête, à
+  // relier d'un clic : plus de carte « Relier un OF existant » à ouvrir pour
+  // découvrir qu'il y en avait un. Restent deux gestes (créer, importer) et
+  // une recherche par numéro pour un OF que la correspondance n'a pas trouvé.
   if(ofs.length === 0){
     if(!st.depuis && !st.depuisCharge) planningOfChargerDepuis();
     const dep = st.depuis || {};
     const dos = dep.dossier || {};
     const sugg = dep.suggestions || [];
-    const nSugg = sugg.filter(o => o.selectionnable !== false).length;
+    const choix = sugg.filter(o => o.selectionnable !== false);
+    const ecartes = sugg.length - choix.length;
     const muted = 'font-size:12px;color:var(--muted)';
     const detail = [dos.ref_produit ? 'produit '+escHtml(dos.ref_produit) : '', dos.machine ? escHtml(dos.machine) : '',
       dos.date_livraison ? 'livraison '+escHtml(_ofpJour(dos.date_livraison)) : ''].filter(Boolean).join(' · ');
@@ -6066,24 +6074,38 @@ function renderPlanningOfPaneInner(){
     const descCreer = dep.fiche
       ? 'Fiche '+escHtml(dep.fiche.reference||'')+((dep.commandes||[]).length?' · commande '+escHtml(dep.commandes.map(c=>c.numero+(c.ligne?'/L'+c.ligne:'')).join(', ')):'')
       : 'Prérempli depuis ce dossier, dans MyProd';
+    // Correspondances, en tête quand il y en a : relier l'OF existant passe
+    // avant en créer un second.
+    let correspondances = '';
+    if(!st.depuis){
+      correspondances = `<div style="${muted}">Recherche des OF qui correspondent à ce dossier…</div>`;
+    }else if(choix.length){
+      correspondances = `<div style="border:1px solid var(--accent);border-radius:10px;background:var(--accent-bg);padding:12px 12px 6px">
+          <div style="font-size:13px;font-weight:700;color:var(--accent);margin:0 2px 8px">${choix.length>1 ? choix.length+' OF correspondent à ce dossier' : 'Un OF correspond à ce dossier'}</div>
+          ${choix.map(o => _ofpProposition(o, isAdmin)).join('')}
+        </div>`;
+    }
+    const noteEcartes = (st.depuis && ecartes)
+      ? `<div style="${muted}">${ecartes} OF du même numéro ou produit écarté${ecartes>1?'s':''} : déjà produit${ecartes>1?'s':''} ou relié${ecartes>1?'s':''} ailleurs.</div>` : '';
     const actions = isAdmin ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;width:100%">
-        ${carte({onclick:`planningOfCreer(${st.entryId})`, on:true, titre:"Créer l'OF",
+        ${carte({onclick:`planningOfCreer(${st.entryId})`, on:!!st.depuis && !choix.length, titre:"Créer l'OF",
           icon:svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/>'),
           desc:descCreer})}
-        ${carte({onclick:'togglePlanningOfPicker()', on:!!st.pickerOpen, titre:'Relier un OF existant',
-          icon:svg('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
-          desc: st.depuis ? (nSugg ? nSugg+' OF correspond'+(nSugg>1?'ent':'')+' à ce dossier' : 'Chercher un OF par son numéro') : 'Recherche des correspondances…'})}
         ${carte({onclick:`openOfImportFromPlanning(${st.entryId})`, on:false, titre:'Importer un PDF',
           icon:svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'),
           desc:'Un OF reçu ou scanné en PDF'})}
-      </div>` : `<div style="${muted}">Le rattachement d'un OF est réservé à l'administration.</div>`;
-    return `<div style="display:flex;flex-direction:column;gap:16px;padding:22px 24px;max-width:880px;margin:0 auto;width:100%;box-sizing:border-box">
+      </div>
+      ${st.pickerOpen ? renderPlanningOfPickerHtml()
+        : `<button type="button" onclick="planningOfChercherAutre()" style="align-self:flex-start;border:none;background:none;padding:0;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline">${choix.length ? 'Relier un autre OF' : 'Relier un OF existant'} par son numéro</button>`}`
+      : `<div style="${muted}">Le rattachement d'un OF est réservé à l'administration.</div>`;
+    return `<div style="display:flex;flex-direction:column;gap:14px;padding:22px 24px;max-width:880px;margin:0 auto;width:100%;box-sizing:border-box">
       <div>
         <div style="font-size:15px;font-weight:700;color:var(--text)">Aucun OF relié à ce dossier</div>
         <div style="${muted};margin-top:4px">Numéro attendu : <strong style="color:var(--text)">${escHtml(st.entry_numero_of||'non renseigné')}</strong>${detail?' · '+detail:''}</div>
       </div>
+      ${correspondances}
+      ${noteEcartes}
       ${actions}
-      ${st.pickerOpen ? renderPlanningOfPickerHtml() : ''}
     </div>`;
   }
 
@@ -6161,6 +6183,32 @@ function planningOfCreer(entryId){
     });
   }
 }
+/* Un OF qui correspond au dossier, proposé d'office : un bouton le relie. */
+function _ofpProposition(o, isAdmin){
+  const infos = [o.reference?escHtml(o.reference):'', o.machine?escHtml(o.machine):'', o.delai?'délai '+escHtml(o.delai):'', _ofpQte(o.qte)].filter(Boolean).join(' · ');
+  const cree = o.cree_le ? 'créé le '+escHtml(o.cree_le)+(o.par?' par '+escHtml(o.par):'') : '';
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;margin-bottom:6px;border-radius:8px;border:1px solid var(--border);background:var(--card)">
+      <div style="min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${escHtml(o.of_numero||'OF #'+o.id)}
+          ${o.raison?`<span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${escHtml(o.raison)}</span>`:''}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere">${[infos,cree].filter(Boolean).join(' · ')||'—'}</div>
+        ${o.note?'<div style="font-size:12px;color:var(--text2);margin-top:2px;font-weight:600">'+escHtml(o.note)+'</div>':''}
+      </div>
+      <span style="display:flex;gap:6px;flex-shrink:0">
+        <a href="/prod?page=of&of=${encodeURIComponent(o.id)}" target="_blank" rel="noopener" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap">Voir ↗</a>
+        ${isAdmin?`<button type="button" onclick="planningOfRelierDirect(${o.id})" style="padding:7px 14px;border-radius:8px;border:none;background:var(--accent);color:white;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;white-space:nowrap">Relier</button>`:''}
+      </span>
+    </div>`;
+}
+function planningOfRelierDirect(id){
+  const st = window._ofPlanningState; if(!st) return;
+  st.pickerSel = new Set([id]);
+  submitAttachOfsToPlanning();
+}
+function planningOfChercherAutre(){
+  togglePlanningOfPicker();
+  requestAnimationFrame(function(){ const el = document.getElementById('planning-of-picker-search'); if(el) el.focus(); });
+}
 /* Une ligne d'OF du sélecteur : toute la ligne se clique (comme le choix
    des commandes RVGI), aucune case à cocher. */
 function _ofpLigne(o, st){
@@ -6197,10 +6245,14 @@ function renderPlanningOfPickerHtml(){
   if(st.pickerLoading){
     lignes = vide('Recherche…');
   }else{
-    const liste = cherche ? (st.pickerResults||[]) : sugg;
-    titre = cherche ? 'Résultats' : 'Correspondances';
+    // Dossier sans OF : les correspondances sont déjà proposées au-dessus,
+    // la recherche ne sert qu'au numéro tapé.
+    const sansOf = !(st.ofs||[]).length;
+    const liste = cherche ? (st.pickerResults||[]) : (sansOf ? [] : sugg);
+    titre = cherche ? 'Résultats' : (sansOf ? '' : 'Correspondances');
     lignes = liste.length ? liste.map(o => _ofpLigne(o, st)).join('')
-      : vide(cherche ? `Aucun OF pour « ${escHtml(cherche)} »` : "Aucun OF ne correspond à ce dossier : créez-le, ou cherchez par numéro.");
+      : vide(cherche ? `Aucun OF pour « ${escHtml(cherche)} »`
+        : (sansOf ? "Tapez un numéro d'OF, une référence produit ou une machine." : "Aucun OF ne correspond à ce dossier : créez-le, ou cherchez par numéro."));
   }
   const n = st.pickerSel.size;
   return `<div style="border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px;width:100%;box-sizing:border-box;text-align:left">
@@ -6210,7 +6262,7 @@ function renderPlanningOfPickerHtml(){
       onkeydown="if(event.key==='Escape'){this.value='';onPlanningOfPickerSearchInput('')}"
       style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;
              padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:12px 2px 6px">${titre}</div>
+    ${titre?`<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:12px 2px 6px">${titre}</div>`:'<div style="height:8px"></div>'}
     <div role="listbox" aria-multiselectable="true" style="max-height:300px;overflow-y:auto">${lignes}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
       <span style="font-size:12px;color:var(--muted)">${n ? n+' OF sélectionné'+(n>1?'s':'') : 'Cliquez sur un OF pour le choisir'}</span>

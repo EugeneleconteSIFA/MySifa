@@ -531,6 +531,13 @@ def _ofs_suggeres(conn, d: Dict[str, Any], limite: int = 8) -> List[Dict[str, An
     if num and not reference_a_venir(num):
         for r in conn.execute("SELECT id FROM of_imports WHERE LOWER(TRIM(COALESCE(of_numero,'')))=LOWER(?)", (num,)):
             raisons.setdefault(int(r["id"]), "Même numéro")
+        # Un dossier « 9932957 » et ses OF « 9932957 - L1 », « - L2 » : même
+        # commande dans le numéro (26/11/2026, OF existants jamais proposés).
+        m = _COMMANDE_RE.search(num)
+        if m:
+            for r in conn.execute("SELECT id FROM of_imports WHERE of_numero LIKE ? LIMIT 20",
+                                  ("%" + m.group(1) + "%",)):
+                raisons.setdefault(int(r["id"]), "Même commande")
     for l in ratt.lister(conn, "dossier", int(d["id"]), piece="commande"):
         for r in conn.execute(
                 "SELECT objet_id AS id FROM rvgi_rattachements WHERE objet='of' AND piece='commande' "
@@ -566,7 +573,10 @@ def _ofs_suggeres(conn, d: Dict[str, Any], limite: int = 8) -> List[Dict[str, An
             continue
         out.append(o)
     # Le plus sûr d'abord ; à rang égal, le plus récent.
-    out.sort(key=lambda o: (ordre[o["raison"]], -_horodatage(o.get("date_import"))))
+    # Les lignes d'une même commande dans l'ordre (L1, L2…), pas de la plus récente.
+    out.sort(key=lambda o: (ordre[o["raison"]],
+                            str(o.get("of_numero") or "") if o["raison"] == "Même commande" else "",
+                            -_horodatage(o.get("date_import"))))
     return out[:limite]
 
 
