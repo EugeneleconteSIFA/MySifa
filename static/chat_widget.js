@@ -712,6 +712,22 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   /* Clavier ouvert : la marge de l'encoche du bas n'a plus lieu d'être. */
   body.cw-kb-open #cw-panel #cw-input-row{padding-bottom:6px}
 }
+/* Liste des conversations : canaux puis discussions À LA SUITE, une seule
+   zone qui défile (26/11/2026 : deux moitiés de hauteur égale laissaient un
+   grand blanc au milieu quand il y a peu de canaux). */
+#cw-panel-left{overflow-y:auto;overscroll-behavior:contain}
+#cw-panel-left .cw-list-section{flex:0 0 auto;min-height:auto;overflow:visible}
+#cw-panel-left #cw-channels,#cw-panel-left #cw-dms{flex:none;overflow:visible;min-height:0}
+#cw-panel-left .cw-list-topbar{position:sticky;top:0;z-index:2}
+/* Téléphone : un fond plein sous la messagerie, plus haut et plus bas que
+   l'écran. Quel que soit le calage au clavier (iOS ne réduit que la zone
+   visible), la page d'accueil ne peut plus apparaître entre la conversation
+   et le clavier. */
+#cw-fond{display:none}
+@media (max-width:900px){
+  body.cw-mobile.cw-panel-open #cw-fond{display:block;position:fixed;left:0;right:0;top:-50vh;bottom:-50vh;
+    background:var(--card);z-index:9114;pointer-events:none}
+}
 `;
 
   function escAttr(s) {
@@ -1029,6 +1045,13 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       ICO_SEND +
       '</button></div></div>';
     document.body.appendChild(panel);
+    // Fond plein sous le panneau sur téléphone (voir #cw-fond dans la feuille).
+    if (!document.getElementById('cw-fond')) {
+      const fond = document.createElement('div');
+      fond.id = 'cw-fond';
+      fond.setAttribute('aria-hidden', 'true');
+      document.body.insertBefore(fond, panel);
+    }
     setupChatPanelResize(panel);
 
     document.getElementById('cw-close').addEventListener('click', (e) => {

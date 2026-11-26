@@ -456,7 +456,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=21"></script>
+<script src="/static/chat_widget.js?v=22"></script>
 <script src="/static/chat_widget_v2.js?v=11"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <!-- Adresse de la page : section, AO ouvert, onglet, produit, fenêtre (url-etat.md). -->
