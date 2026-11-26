@@ -702,3 +702,17 @@ table.adv-table{font-size:12px}
 .adv-table td.c-commande{position:sticky}
 .adv-table td.c-commande .adv-info.vide{position:absolute;right:2px;top:50%;margin:-9px 0 0}
 .adv-table th.etape{font-size:10px}
+/* Le client prend la place qui reste (et se tronque quand il en manque) :
+   les autres colonnes gardent la largeur de leur contenu, l'article ne
+   s'étale plus sur un grand écran. */
+.adv-table th.client,.adv-table td.client{width:100%;min-width:100px}
+.adv-table td.client{max-width:0}
+.adv-table td.client .client-t{max-width:none}
+/* De l'air de part et d'autre des barres de section (commande, quantités,
+   étapes) : un nombre ne colle plus à la barre. */
+.adv-table th.sep,.adv-table td.sep{padding-left:11px}
+.adv-table th.fin-sec,.adv-table td.fin-sec{padding-right:11px}
+.adv-table th:first-child,.adv-table td:first-child{padding-left:10px}
+/* Au-dela, le tableau ne s etire plus : sinon toute la place part dans Client. */
+table.adv-table{max-width:1120px}
+.adv-table-wrap{width:fit-content;max-width:100%}

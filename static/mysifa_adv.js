@@ -671,7 +671,9 @@
     cols.forEach(function (c, i) {
       var actif = c.tri && S.tri === c.tri;
       var sep = separee(cols, i);
-      var th = h('th', {className: (c.num ? 'num' : '') + (c.etape ? ' etape' : '') + (sep ? ' sep' : '')
+      var finSec = i + 1 < cols.length && separee(cols, i + 1);
+      var th = h('th', {className: (c.num ? 'num' : '') + (c.etape ? ' etape' : '') + (sep ? ' sep' : '') + (finSec ? ' fin-sec' : '')
+          + (c.cle === 'client' ? ' client' : '')
           + (c.tri ? ' triable' : '') + (actif ? ' trie' : ''),
         draggable: 'true', 'data-col': c.cle,
         title: 'Glisser pour déplacer la colonne' + (c.tri ? ' · cliquer pour trier' : '')},
@@ -710,6 +712,7 @@
       cols.forEach(function (c, i) {
         var td = c.td(l);
         if (separee(cols, i)) td.classList.add('sep');
+        if (i + 1 < cols.length && separee(cols, i + 1)) td.classList.add('fin-sec');
         if (c.etape) {
           // Le trait relie deux étapes voisines ; il passe au vert quand
           // l'étape où il arrive est franchie, comme la frise de la fiche.
