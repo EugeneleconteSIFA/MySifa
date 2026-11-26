@@ -8948,7 +8948,7 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_impersonate.js?v=3"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=5"></script>
+<script src="/static/mysifa_promote.js?v=6"></script>
 <!-- Parametres > Fabrication > Impression : couleurs d'encre des BAT. -->
 <script src="/static/mysifa_encres.js?v=__V_LABEL__"></script>
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.

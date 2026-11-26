@@ -4288,6 +4288,62 @@ async def promote_run(request: Request):
     return StreamingResponse(stream(), media_type="text/plain; charset=utf-8")
 
 
+# ─── Journal de la dernière promotion ─────────────────────────────────────────
+# promote_v2.sh se relance dans une unité systemd détachée et écrit son journal
+# dans PROMOTE_LOG_DIR. Si v1 redémarre pendant une promotion, le flux de
+# POST /api/promote est coupé mais la promotion continue : la page reprend
+# alors le suivi en interrogeant cet endpoint.
+PROMOTE_LOG_DIR = f"{V2_REPO_PATH}/data/logs/promotions"
+_PROMOTE_MARQUEUR = re.compile(r"^\[promotion terminee - code (\d+)\]\s*$", re.M)
+# Le script écrit au moins une ligne toutes les 15 s, même quand il attend la
+# CI. Un journal sans marqueur de fin et muet depuis plus longtemps que ça a été
+# interrompu (redémarrage du VPS, unité tuée) : on ne le présente plus comme
+# « en cours », sinon le bouton resterait bloqué indéfiniment.
+_PROMOTE_SILENCE_MAX_S = 600
+_PROMOTE_JOURNAL_MAX_OCTETS = 64_000
+
+
+def _lire_journal_promotion(dossier: str, maintenant: Optional[float] = None) -> dict:
+    """État du dernier journal de promotion : contenu, fini ou non, code."""
+    vide = {"fichier": None, "contenu": "", "termine": False, "code": None,
+            "en_cours": False, "interrompu": False, "maj_le": None}
+    try:
+        journaux = sorted(Path(dossier).glob("promote_*.log"))
+    except OSError:
+        return vide
+    if not journaux:
+        return vide
+    chemin = journaux[-1]  # l'horodatage du nom trie dans l'ordre chronologique
+    try:
+        taille = chemin.stat().st_size
+        mtime = chemin.stat().st_mtime
+        with open(chemin, "rb") as f:
+            if taille > _PROMOTE_JOURNAL_MAX_OCTETS:
+                f.seek(taille - _PROMOTE_JOURNAL_MAX_OCTETS)
+            contenu = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return vide
+    fins = _PROMOTE_MARQUEUR.findall(contenu)
+    termine = bool(fins)
+    maintenant = maintenant if maintenant is not None else _dt.datetime.now().timestamp()
+    muet = (maintenant - mtime) > _PROMOTE_SILENCE_MAX_S
+    return {
+        "fichier": chemin.name,
+        "contenu": contenu,
+        "termine": termine,
+        "code": int(fins[-1]) if termine else None,
+        "en_cours": not termine and not muet,
+        "interrompu": not termine and muet,
+        "maj_le": _dt.datetime.fromtimestamp(mtime).strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+
+
+@router.get("/api/promote/journal")
+def promote_journal(request: Request):
+    require_settings(request)
+    return _lire_journal_promotion(PROMOTE_LOG_DIR)
+
+
 # ─── Sync DB v2 → v1 ───────────────────────────────────────────────────────────
 # Recopie la base de production (v2) vers v1 en utilisant le script existant
 # /usr/local/bin/mysifa-v1-resync-db.sh (déjà installé pour le cron nightly).

@@ -86,6 +86,10 @@
     const goBtn = document.getElementById('pr-go-btn');
     const blocked = document.getElementById('pr-blocked-reason');
     if (!commitsEl) return; // panneau promote absent de cette page
+    // Une promotion lancée avant un rechargement de la page (ou avant un
+    // redémarrage de v1) tourne peut-être encore : on reprend son journal.
+    // Avant le statut, qui peut échouer tant que v1 redémarre.
+    if (!_prSuivi) suivreJournalPromotion({ seulementEnCours: true });
     commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>';
     let data;
     try {
@@ -114,11 +118,75 @@
       }).join('');
     }
 
-    if (goBtn) goBtn.disabled = !data.can_promote;
+    if (goBtn) goBtn.disabled = _prSuivi || !data.can_promote;
     if (blocked) blocked.textContent = data.can_promote ? '' : (data.reason || '');
+
 
     // La santé du dépôt se rafraîchit avec le reste de l'onglet Déployer.
     loadDeploiementSante();
+  }
+
+  // ─── Suivi du journal de promotion ──────────────────────────────────
+  // La promotion tourne dans une unité systemd détachée (promote_v2.sh). Le
+  // flux de POST /api/promote peut être coupé sans qu'elle s'arrête : v1 qui
+  // redémarre, onglet rechargé. On lit alors son journal sur
+  // GET /api/promote/journal jusqu'au marqueur de fin. v1 peut être
+  // injoignable quelques secondes pendant son redémarrage : on réessaie.
+  let _prSuivi = false;
+  const _PR_SUIVI_PAS_MS = 2000;
+  const _PR_SUIVI_ECHECS_MAX = 60;
+
+  function _prAttendre(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  async function suivreJournalPromotion(opts) {
+    opts = opts || {};
+    if (_prSuivi) return;
+    const goBtn = document.getElementById('pr-go-btn');
+    const outCard = document.getElementById('pr-output-card');
+    const outEl = document.getElementById('pr-output');
+    if (!outEl) return;
+    _prSuivi = true;
+    let echecs = 0, affiche = false, avertiCoupure = false;
+    try {
+      while (true) {
+        let j = null;
+        try {
+          j = await _prGetJson('/api/promote/journal');
+          echecs = 0;
+        } catch (e) {
+          echecs++;
+          if (!avertiCoupure && affiche) {
+            outEl.textContent += '\n[v1 injoignable — reprise du suivi dès son retour]\n';
+            avertiCoupure = true;
+          }
+          if (echecs >= _PR_SUIVI_ECHECS_MAX) {
+            outEl.textContent += '\n[Suivi abandonné : v1 ne répond plus. Recharger la page pour lire le journal.]\n';
+            break;
+          }
+          await _prAttendre(_PR_SUIVI_PAS_MS);
+          continue;
+        }
+        if (!j || !j.fichier) break;
+        if (!affiche) {
+          if (opts.seulementEnCours && !j.en_cours) break;
+          affiche = true;
+          if (outCard) outCard.style.display = 'block';
+          if (goBtn) { goBtn.disabled = true; goBtn.textContent = 'Promotion en cours…'; }
+        }
+        outEl.textContent = j.contenu || '';
+        if (j.interrompu) outEl.textContent += '\n[Journal muet depuis plus de 10 min sans marqueur de fin : promotion interrompue. Vérifier l\'historique avant de relancer.]\n';
+        outEl.scrollTop = outEl.scrollHeight;
+        if (!j.en_cours) break;
+        await _prAttendre(_PR_SUIVI_PAS_MS);
+      }
+    } finally {
+      _prSuivi = false;
+      if (affiche) {
+        if (goBtn) goBtn.textContent = 'Promouvoir maintenant';
+        _phLoaded = false;
+        setTimeout(function () { loadPromoteStatus(); }, 500);
+      }
+    }
   }
 
   async function runPromote() {
@@ -141,6 +209,7 @@
     if (outCard) outCard.style.display = 'block';
     if (outEl) outEl.textContent = '';
 
+    let fluxComplet = false;
     try {
       const r = await fetch('/api/promote', {
         method: 'POST',
@@ -161,13 +230,21 @@
         if (step.done) break;
         if (outEl) { outEl.textContent += decoder.decode(step.value, { stream: true }); outEl.scrollTop = outEl.scrollHeight; }
       }
+      // Le back termine toujours le flux par « [script termine … » : s'il
+      // manque, la connexion a été coupée en route (v1 qui redémarre).
+      fluxComplet = !!(outEl && /\[script termine /.test(outEl.textContent));
     } catch (e) {
-      if (outEl) outEl.textContent += '\n[Erreur réseau : ' + (e && e.message ? e.message : String(e)) + ']\n';
-    } finally {
-      if (goBtn) goBtn.textContent = 'Promouvoir maintenant';
-      _phLoaded = false;  // la promotion vient d'ajouter une release : forcer le rechargement
-      setTimeout(function () { loadPromoteStatus(); }, 500);
+      if (outEl) outEl.textContent += '\n[Flux coupé : ' + (e && e.message ? e.message : String(e)) + ' — la promotion continue, reprise du suivi]\n';
     }
+    if (!fluxComplet) {
+      // La promotion tourne hors de v1 : elle va au bout même si le flux est
+      // coupé. On bascule sur la lecture de son journal.
+      await suivreJournalPromotion();
+      return;
+    }
+    if (goBtn) goBtn.textContent = 'Promouvoir maintenant';
+    _phLoaded = false;  // la promotion vient d'ajouter une release : forcer le rechargement
+    setTimeout(function () { loadPromoteStatus(); }, 500);
   }
 
   // ─── Sync DB v2 → v1 ────────────────────────────────────────────────
