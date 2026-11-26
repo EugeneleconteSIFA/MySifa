@@ -416,13 +416,13 @@ def _autolink_of_to_planning(of_id: int, of_numero: Optional[str],
             try:
                 tokens = _of_tokens(num)
                 if tokens:
-                    like_sql = " OR ".join(["numero_of LIKE ?"] * len(tokens))
+                    like_sql, like_params = _sql_tokens("numero_of", tokens)
                     extra = conn.execute(
                         "SELECT id, numero_of FROM planning_entries "
                         "WHERE (" + like_sql + ") "
                         "AND of_import_id IS NULL "
                         "AND COALESCE(of_link_user_managed, 0) = 0",
-                        tuple("%" + t + "%" for t in tokens),
+                        tuple(like_params),
                     ).fetchall()
                     for r in extra:
                         if int(r["id"]) in targets:
@@ -1439,6 +1439,21 @@ def admin_backfill_ref_produit_norm(request: Request):
 
 # Normalisation commune aux deux sens du rapprochement (dossier ↔ OF).
 _OF_TOKEN_RE  = re.compile(r"\d{5,}")
+# Numéros abrégés d'Access (26/11/2026) : « 9932913, 914, 915 et 916 »,
+# « 9932929-935-936 », « 9932553-54-55-56 - L2 », « 9932610+611+612 ». La
+# suite de 2 à 4 chiffres reprend le début du numéro complet qui la précède.
+# « 9931056/57/58/59 » sépare aussi par des barres. Jamais une référence
+# produit ni une date (« 1183/0030 », « 07/01 » : suivies d'une barre et de
+# deux chiffres), un rang de cadence (« - 2e »), une ligne (« L2 ») ni un
+# chiffre seul (« /6 », « &42/1 » garde 42, pas 1). Relevé sur les 387 OF
+# Access à numéros multiples de la prod.
+_OF_ABREGE_RE = re.compile(
+    r"(?<![\d/])(\d{5,})((?:"
+    r"\s*/\s*\d{2,4}(?!\d|[A-Za-z])"                                   # « /57/58 »
+    r"|\s*(?:[,+&-]|\bet\b)\s*(?:\d{3,4}(?!\d|[A-Za-z]|/\d{3})"      # « 914 », pas « 1183/0030 »
+    r"|\d{2}(?!\d|[A-Za-z]|/\d{2}))"                                    # « 89 », pas « 07/01 »
+    r")+)")
+_OF_SUITE_RE = re.compile(r"(?:[,+&/-]|\bet\b)\s*(\d{2,4})")
 _OF_RACINE_RE = re.compile(r"\b(99\d{5})\b")   # conservé : dédoublonnage à l'import
 _OF_PREFIX_RE = re.compile(r"^\s*OF\s+(.+?)\s*$", re.IGNORECASE)
 
@@ -1468,7 +1483,31 @@ def _of_tokens(value) -> list:
     C'est ce qui permet de rapprocher "9932376-377" ou "9932163 Reliquat 2"
     de l'OF 9932376 / 9932163 — l'égalité stricte, elle, échoue.
     """
-    return list(dict.fromkeys(_OF_TOKEN_RE.findall(str(value or ""))))
+    s = str(value or "")
+    out = _OF_TOKEN_RE.findall(s)
+    for m in _OF_ABREGE_RE.finditer(s):
+        # Chaque suite complète le numéro qui la PRÉCÈDE : « 9931685/86/87+
+        # 745/46 » donne 9931745 puis 9931746, pas 9931646.
+        base = m.group(1)
+        for court in _OF_SUITE_RE.findall(m.group(2)):
+            if len(court) < len(base):
+                base = base[:len(base) - len(court)] + court
+                out.append(base)
+    return list(dict.fromkeys(out))
+
+
+def _sql_tokens(colonne: str, tokens: list):
+    """Présélection SQL d'un numéro, complet ou abrégé : « 9932914 » doit
+    trouver « 9932913, 914 ». Le filtrage exact se fait ensuite en Python
+    (`_of_token_present`)."""
+    clauses, params = [], []
+    for t in tokens:
+        clauses.append(colonne + " LIKE ?")
+        params.append("%" + t + "%")
+        if len(t) >= 7:
+            clauses.append("(%s LIKE ? AND (%s LIKE ? OR %s LIKE ?))" % (colonne, colonne, colonne))
+            params += ["%" + t[:-3] + "%", "%" + t[-3:] + "%", "%" + t[-2:] + "%"]
+    return " OR ".join(clauses), params
 
 
 def _of_token_present(token: str, haystack) -> bool:
@@ -1476,7 +1515,10 @@ def _of_token_present(token: str, haystack) -> bool:
     chiffres — garde-fou pour que 9932163 ne matche pas 19932163."""
     if not token or not haystack:
         return False
-    return re.search(r"(?<!\d)" + re.escape(token) + r"(?!\d)", str(haystack)) is not None
+    if re.search(r"(?<!\d)" + re.escape(token) + r"(?!\d)", str(haystack)) is not None:
+        return True
+    # Numéro abrégé : « 9932914 » est dans « 9932913, 914 ».
+    return token in _of_tokens(haystack)
 
 
 def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = None,
@@ -1555,10 +1597,10 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
         # ── Étape 2 : inclusion par token numérique ──────────────────────────
         rows: list = []
         if tokens:
-            like_sql = " OR ".join(["of_numero LIKE ?"] * len(tokens))
+            like_sql, like_params = _sql_tokens("of_numero", tokens)
             found = c.execute(
                 f"SELECT {_OF_SELECT_COLS} FROM of_imports WHERE {like_sql}",
-                tuple("%" + t + "%" for t in tokens),
+                tuple(like_params),
             ).fetchall()
             # garde-fou : le token doit être isolé, pas noyé dans un plus long
             rows = [r for r in found

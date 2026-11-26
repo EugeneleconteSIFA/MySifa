@@ -536,3 +536,13 @@ d'un dossier du planning » (`actionsExtra` du sélecteur RVGI,
 `GET /api/of-planning/dossiers-sans-of` — hors de `/api/of/planning/…`, que
 `/api/of/planning/{entry_id}` capterait). Une case de date vide n'affiche plus
 la date du jour grisée de Safari (`data-vide`), l'étape 2 dit « à choisir ».
+
+**Numéros d'OF abrégés d'Access** (26/11/2026, `_of_tokens` de
+`of_import.py`). 387 OF de la prod portent plusieurs commandes dans leur
+numéro, souvent abrégées : « 9932913, 914, 915 et 916 », « 9932929-935-936 »,
+« 9931056/57/58/59 », « 9931685/86/87+745/46 ». Chaque suite de 2 à 4 chiffres
+complète le numéro qui la précède (9931745 puis 9931746). Jamais une référence
+produit ni une date (« 1183/0030 », « 07/01 »), une cadence (« 2e »), une
+ligne (« L2 ») ni un chiffre seul. La présélection SQL (`_sql_tokens`)
+cherche aussi le début du numéro et sa fin abrégée : « 9932914 » trouve
+« 9932913, 914 ». Test : `python3 tests/test_of_numeros_abreges.py` (cas réels).
