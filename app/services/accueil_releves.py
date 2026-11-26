@@ -332,6 +332,7 @@ def r_qualite(objet, f):
     from app.routers import qualite
     ncs = appeler(qualite.list_nc) or []
     return {"ouvertes": len(ncs) - _compte(ncs, "statut", "cloturee"),
+            "a-relancer": sum(1 for n in ncs if n.get("a_relancer")),
             "en-analyse": _compte(ncs, "statut", "en_analyse"),
             "action-corrective": _compte(ncs, "statut", "action_corrective"),
             "en-verification": _compte(ncs, "statut", "en_verification")}

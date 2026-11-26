@@ -372,8 +372,8 @@ BLOCS: dict[str, Bloc] = {
     "qualite.nc.statuts": Bloc(
         appli="qualite", libelle="Non-conformités", url="/qualite#list",
         type="chiffre",
-        historique=(("ouvertes", "-"), ("en-analyse", "="), ("action-corrective", "="), ("en-verification", "=")),
-        valeurs=(("ouvertes", "NC non clôturées"), ("en-analyse", "En analyse"),
+        historique=(("ouvertes", "-"), ("a-relancer", "-"), ("en-analyse", "="), ("action-corrective", "="), ("en-verification", "=")),
+        valeurs=(("ouvertes", "NC non clôturées"), ("a-relancer", "NC à faire avancer"), ("en-analyse", "En analyse"),
                  ("action-corrective", "Action corrective"), ("en-verification", "En vérification"),
                  ("non-lues", "Messages non lus")),
         acces="qualite",
