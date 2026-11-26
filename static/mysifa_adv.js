@@ -543,6 +543,27 @@
     });
   }
 
+  // Liens d'une cellule : la réf article vers sa fiche MyStock, la fin de prod
+  // vers le dossier au planning. Le clic n'ouvre pas la fiche de la ligne.
+  function lienCellule(href, texte, cls) {
+    return h('a', {className: 'adv-lien' + (cls ? ' ' + cls : ''), href: href, text: texte,
+      onClick: function (ev) { ev.stopPropagation(); }});
+  }
+  function lienArticle(l) {
+    return l.stock && l.stock.connu ? lienCellule('/stock?ref=' + encodeURIComponent(l.article), l.article) : l.article;
+  }
+  // Le planning n'ouvre un dossier que sur SA machine : sans `machine=`, il
+  // reprendrait la dernière machine consultée et ne trouverait pas le dossier.
+  function lienPlanning(d) {
+    return '/planning?' + (d.machine_id ? 'machine=' + encodeURIComponent(d.machine_id) + '&' : '') + 'dossier=' + encodeURIComponent(d.id);
+  }
+  // Le dossier qui fixe la fin de prod : celui qui finit le dernier.
+  function dossierFin(l) {
+    var ds = (l.dossiers || []).filter(function (d) { return d.fin; });
+    if (!ds.length) return null;
+    return ds.reduce(function (a, b) { return String(b.fin) > String(a.fin) ? b : a; });
+  }
+
   var COLONNES = [
     {cle: 'commande', famille: 'id', label: 'Commande', tri: 'commande', td: function (l) {
       return h('td', {className: 'adv-mono c-commande'}, h('span', {className: 'cde-t'}, l.numero, h('span', {className: 'adv-muet', text: ' · ' + l.ligne})), iconeInfo(l));
@@ -552,7 +573,7 @@
     }},
     {cle: 'article', famille: 'id', label: 'Article', tri: 'article', td: function (l) {
       return h('td', {className: 'des', 'data-tip': tip(l.cle + '|des', l.article, l.designation, libOrigine(l.origine) + (l.ref_client ? ' · réf. client ' + l.ref_client : ''))},
-        h('div', {className: 'adv-mono', text: l.article}), h('div', {className: 'des-l', text: l.designation}));
+        h('div', {className: 'adv-mono'}, lienArticle(l)), h('div', {className: 'des-l', text: l.designation}));
     }},
     {cle: 'expedition', famille: 'date', label: 'Expédition', tri: 'expedition', td: function (l) {
       return h('td', {className: 'date' + (l.retard ? ' adv-date-retard' : ''), text: dateFr(l.expedition) || '—'});
@@ -562,10 +583,12 @@
     }},
     {cle: 'fin_prod', famille: 'date', label: 'Fin de prod', tri: 'fin_prod', td: function (l) {
       var tard = l.fin_prod && l.expedition && String(l.fin_prod).slice(0, 10) > l.expedition;
+      var dfin = l.fin_prod ? dossierFin(l) : null;
       return h('td', {className: 'date' + (tard ? ' adv-date-tard' : (l.fin_prod ? '' : ' adv-muet')),
         'data-tip': l.fin_prod ? tip(l.cle + '|fin', l.fin_prod_reelle ? 'Fin de production saisie' : 'Fin de production planifiée',
-          dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : ''), tard ? 'Après la date d’expédition' : null) : null,
-        text: l.fin_prod ? dateFr(l.fin_prod) : '—'});
+          dateFr(l.fin_prod) + (heure(l.fin_prod) ? ' à ' + heure(l.fin_prod) : ''),
+          (tard ? 'Après la date d’expédition · ' : '') + (dfin ? 'Cliquer : dossier ' + (dfin.reference || dfin.id) + ' au planning' : '')) : null},
+        !l.fin_prod ? '—' : (dfin ? lienCellule(lienPlanning(dfin), dateFr(l.fin_prod)) : dateFr(l.fin_prod)));
     }},
     {cle: 'qte', famille: 'qte', label: 'Commandé', tri: 'qte', num: true, td: function (l) {
       return h('td', {className: 'num'}, fN(l.qte), unite(l) ? h('span', {className: 'adv-muet', text: ' ' + accord(unite(l), l.qte)}) : null);
@@ -892,7 +915,7 @@
       cellRang,
       h('td', {className: 'c-client'}, h('div', {className: 'c-client-t', text: l.client, title: l.client})),
       h('td', {className: 'c-cde adv-mono'}, h('span', {text: l.numero + '-L' + l.ligne}), (l.infos || []).length ? iconeInfo(l) : null),
-      h('td', {className: 'c-ref adv-mono', text: l.article, 'data-tip': tip(l.cle + '|ref', l.article, l.designation)}),
+      h('td', {className: 'c-ref adv-mono', 'data-tip': tip(l.cle + '|ref', l.article, l.designation)}, lienArticle(l)),
       h('td', {className: 'c-num c-qte', 'data-l': 'Commandé'}, qteU(l, l.qte)),
       h('td', {className: 'c-num c-stk' + (st.alloue ? '' : ' adv-muet'), 'data-l': 'En stock'}, st.alloue ? fN(st.alloue) : '—'),
       aPrep,
@@ -2011,7 +2034,7 @@
     if (!l.dossiers.length) rangees.appendChild(h('div', {className: 'adv-muet', text: 'Aucun dossier au planning.'}));
     l.dossiers.forEach(function (d) {
       var sd = STATUT_DOS[d.statut] || [d.statut || '', ''];
-      rangees.appendChild(h('a', {className: 'fi-rangee', href: '/planning?dossier=' + d.id},
+      rangees.appendChild(h('a', {className: 'fi-rangee', href: lienPlanning(d)},
         h('span', {className: 'fi-rangee-ico', text: d.repiquage ? 'Repiq.' : 'Prod'}),
         h('span', {className: 'fi-rangee-t', text: d.reference || ('Dossier ' + d.id)}),
         h('span', {className: 'adv-muet', text: (d.machine || '') + (d.fin ? ' · fin ' + (d.fin_reelle ? '' : 'prévue ') + dateFr(d.fin) : '')}),

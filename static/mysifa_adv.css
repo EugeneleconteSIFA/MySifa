@@ -671,3 +671,11 @@ body>*:not(#mroot){display:none !important}
 .od-table th,.od-table td,.od-infos{border-color:silver}
 }
 
+/* ── Liens de cellule (réf article → MyStock, fin de prod → planning) ── */
+/* Pas de couleur de lien au repos : la cellule garde sa lecture (et sa
+   mise en forme conditionnelle) ; le soulignement au survol dit qu'on peut
+   y aller. */
+.adv-lien{color:inherit;text-decoration:none;cursor:pointer;border-radius:3px}
+.adv-lien:hover{text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;color:var(--accent)}
+.mef-p .adv-lien:hover,.mef-ligne .adv-lien:hover{color:inherit}
+.adv-lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

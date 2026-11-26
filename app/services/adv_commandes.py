@@ -884,7 +884,7 @@ def construire(aujourdhui: Optional[date] = None) -> Dict[str, Any]:
         ds = ds + [d for d in dossiers if d.get("repiquage_source_id") in ids_ds and d["id"] not in ids_ds]
         l["dossiers"] = [{
             "id": d["id"], "reference": d.get("reference"), "statut": d.get("statut"),
-            "machine": d.get("machine"), "debut": d.get("planned_start"),
+            "machine": d.get("machine"), "machine_id": d.get("machine_id"), "debut": d.get("planned_start"),
             "fin": d.get("fin_reelle") or d.get("planned_end"),
             "fin_reelle": bool(d.get("fin_reelle")),
             "repiquage": bool(d.get("repiquage")),
