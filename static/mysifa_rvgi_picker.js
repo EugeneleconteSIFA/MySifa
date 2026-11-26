@@ -57,6 +57,9 @@
      titre       titre de la fenêtre, à la place du titre par défaut
      libelleRien libellé du bouton « Je ne trouve pas… » (« OF sans
                  commande » quand le sélecteur ouvre la création d'un OF)
+     actionsExtra [{libelle, onClick}] : boutons de plus dans le pied, qui
+                 ferment le sélecteur puis appellent onClick (« Partir d'un
+                 dossier du planning » à la création d'un OF, 26/11/2026)
      initial     lignes déjà rattachées, à re-cocher à l'ouverture.
                  SANS elles, valider après avoir coché une ligne
                  EFFACE les précédentes — l'enregistrement est un
@@ -414,6 +417,9 @@
             ? '<span class="mrp-ref" id="mrp-refz" style="display:none">Référence proposée <span class="v" id="mrp-ref"></span></span>'
             : '') +
           '<span class="mrp-b">' +
+            (o.actionsExtra || []).map(function (a, i) {
+              return '<button type="button" class="mrp-btn doux" data-extra="' + i + '">' + esc(a.libelle) + '</button>';
+            }).join('') +
             '<button type="button" class="mrp-btn doux" id="mrp-rien">' +
               (o.libelleRien ? esc(o.libelleRien)
                 : 'Je ne trouve pas ' + (mode === 'commande' ? 'ma commande' : 'mon BL')) + '</button>' +
@@ -438,6 +444,14 @@
     fond.addEventListener('click', function (e) { if (e.target === fond) fermer(); });
     fond.querySelector('.mrp-x').addEventListener('click', fermer);
     $('mrp-annul').addEventListener('click', fermer);
+    Array.prototype.forEach.call(fond.querySelectorAll('[data-extra]'), function (b) {
+      b.addEventListener('click', function () {
+        var a = (o.actionsExtra || [])[Number(b.getAttribute('data-extra'))];
+        fond.remove();
+        document.removeEventListener('keydown', auClavier);
+        if (a && a.onClick) a.onClick();
+      });
+    });
 
     // ── Recherche ───────────────────────────────────────────────────────────
     var minuteur = null;

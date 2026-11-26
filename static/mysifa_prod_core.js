@@ -1638,6 +1638,7 @@ async function openOfDepuisDossier(entryId){
   const d=new Date();
   const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const dos=r.dossier||{};
+  if(r.commande_retrouvee) toast('Commande '+r.commande_retrouvee+' retrouvée d\'après le numéro du dossier.','info');
   const m={_commandes:(r.commandes||[]).map(l=>({numero:l.numero,ligne:l.ligne,qte:l.qte})),date_creation:iso,_dom:{}};
   if(dos.numero_of){ m.of_numero=dos.numero_of; m._dom['ofe-numero']=dos.numero_of; }
   if(dos.date_livraison){ m.delai_client=dos.date_livraison; m._dom['ofe-delai']=dos.date_livraison; }
@@ -1769,7 +1770,10 @@ async function ofeChoisirCommandes(mDepart,premier){
     unProduit:true,
     recherche:(produit&&!m.id?produit:(m.of_numero||'')).trim(),
     titre:premier?'Nouvel OF — choisissez la ou les commandes':undefined,
-    libelleRien:m.id?undefined:'OF sans commande',
+    libelleRien:m.id?undefined:'OF de stock ou de marché (sans commande)',
+    // Partir d'un dossier déjà au planning (26/11/2026) : sa commande, son
+    // délai et sa fiche remplissent l'OF.
+    actionsExtra:(premier&&!m.id)?[{libelle:'Partir d\'un dossier du planning',onClick:function(){ ofeChoisirDossier(); }}]:undefined,
     onValider:function(res){
       if(!m.id && res && res.etat==='a_rattacher'){
         // OF sans commande (stock, marché, reliquat) : la fenêtre s'ouvre
@@ -3149,8 +3153,9 @@ function ofeDelaiHtml(m){
   return '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'+
     '<span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Délai</span>'+
     ((r.date_livraison||r.date_expedition)?ofeDatesPuces(m):'<span id="ofe-dates"></span>')+
-    '<input id="ofe-delai-etape2" type="date" value="'+escAttr(actuel)+'" title="Choisir librement le délai client" '+
-    'style="background:var(--bg);border:1px solid '+(libre?'var(--accent)':'var(--border)')+';border-radius:8px;padding:5px 9px;color:var(--text);font-size:13px;font-family:inherit;outline:none;cursor:pointer">'+
+    '<input id="ofe-delai-etape2" type="date" value="'+escAttr(actuel)+'"'+(actuel?'':' data-vide')+' title="Choisir librement le délai client" '+
+    'style="background:var(--card);border:1px solid '+(libre?'var(--accent)':'var(--border)')+';border-radius:8px;padding:5px 9px;color:var(--text);font-size:13px;font-family:inherit;outline:none;cursor:pointer">'+
+    '<span class="ofe-a-choisir">à choisir</span>'+
     '</div>';
 }
 
@@ -3521,11 +3526,84 @@ async function ofePlanCharger(m){
     m._planChoix=ancien;
   }else if(ds.length){
     ofePlanDefauts(m);
+    ofePlanReprendre(m);
   }else{
     m._planChoix={action:'creer',machine_id:r.machine_proposee||((r.machines||[])[0]||{}).id||null,place:'a_placer'};
   }
   ofePlanPeindre(m);
 }
+/* Le dossier choisi complète l'OF (retour du 26/11/2026) : un OF sans délai
+   prend la date de livraison du dossier. Une étape d'historique : la flèche
+   Annuler la défait. Une valeur déjà saisie n'est jamais remplacée. */
+function ofePlanReprendre(m){
+  const c=m._planChoix;
+  if(!c||c.action!=='relier') return;
+  const d=((m._plan||{}).dossiers||[]).find(x=>x.id===c.entry_id);
+  const el=document.getElementById('ofe-delai');
+  if(!d||!d.delai_iso||!el||String(el.value||'').trim()) return;
+  // Une seule fois par dossier : annulée par la flèche, elle ne revient pas.
+  m._planReprisesFaites=m._planReprisesFaites||{};
+  if(m._planReprisesFaites[d.id]) return;
+  m._planReprisesFaites[d.id]=true;
+  ofeMemoriser(m);
+  el.value=d.delai_iso;
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+  m._planReprise={entry_id:d.id,delai:d.delai_iso};
+  ofeMarquerDatesVides();
+}
+/* Une case de date vide ne montre pas la date du jour en gris (Safari) :
+   elle reste vide, et l'étape 2 dit « à choisir ». */
+function ofeMarquerDatesVides(){
+  document.querySelectorAll('#of-edit-overlay input[type=date]').forEach(function(el){
+    if(String(el.value||'').trim()) el.removeAttribute('data-vide'); else el.setAttribute('data-vide','');
+  });
+}
+/* « Partir d'un dossier du planning » : les dossiers à produire sans OF. */
+async function ofeChoisirDossier(){
+  let r=null;
+  try{ r=await api('/api/of-planning/dossiers-sans-of'); }
+  catch(e){ toast(e.message||'Liste des dossiers indisponible.','error'); return; }
+  const items=(r&&r.items)||[];
+  const fond=document.createElement('div');
+  fond.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;box-sizing:border-box';
+  const etat=d=>d.statut==='en_cours'?'en cours':(d.a_placer?'à placer':'en attente');
+  const ligne=d=>'<div role="option" tabindex="0" data-dossier="'+d.id+'" style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer">'+
+    '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+escHtml(d.reference||'#'+d.id)+
+      (d.commande?' <span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">commande '+escHtml(d.commande)+'</span>':'')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-top:2px">'+escHtml([d.ref_produit,d.client].filter(Boolean).join(' · ')||'—')+'</div></div>'+
+    '<div style="font-size:12px;color:var(--text2);text-align:right;white-space:nowrap">'+escHtml([d.machine,etat(d)].filter(Boolean).join(' · '))+
+      (d.livraison?'<div style="color:var(--muted)">livraison '+escHtml(d.livraison)+'</div>':'')+'</div></div>';
+  fond.innerHTML='<div role="dialog" aria-label="Partir d\'un dossier du planning" style="width:min(720px,100%);max-height:84vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border)"><div><div style="font-size:15px;font-weight:700;color:var(--text)">Partir d\'un dossier du planning</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:2px">Dossiers à produire sans OF · '+items.length+'</div></div>'+
+      '<button type="button" data-fermer aria-label="Fermer" style="border:none;background:none;color:var(--muted);font-size:20px;cursor:pointer">×</button></div>'+
+    '<div style="padding:12px 18px 0"><input type="text" data-q placeholder="Chercher (dossier, produit, client, machine)" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none"></div>'+
+    '<div data-liste role="listbox" style="padding:12px 18px 16px;overflow-y:auto"></div></div>';
+  document.body.appendChild(fond);
+  const liste=fond.querySelector('[data-liste]'), q=fond.querySelector('[data-q]');
+  const peindre=function(){
+    const mots=q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const vus=items.filter(d=>{ const t=[d.reference,d.ref_produit,d.client,d.machine,d.commande].join(' ').toLowerCase(); return mots.every(w=>t.indexOf(w)>=0); });
+    liste.innerHTML=vus.length?vus.map(ligne).join(''):'<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">'+(items.length?'Aucun dossier pour « '+escHtml(q.value)+' »':'Aucun dossier à produire sans OF.')+'</div>';
+  };
+  const fermer=function(){ fond.remove(); document.removeEventListener('keydown',clavier,true); };
+  const choisir=function(id){ fermer(); openOfDepuisDossier(Number(id)); };
+  const clavier=function(e){
+    if(e.key==='Escape'){ e.stopPropagation(); fermer(); }
+    else if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.getAttribute&&e.target.getAttribute('data-dossier')){ e.preventDefault(); choisir(e.target.getAttribute('data-dossier')); }
+  };
+  document.addEventListener('keydown',clavier,true);
+  fond.addEventListener('click',function(e){
+    if(e.target===fond||(e.target.closest&&e.target.closest('[data-fermer]'))){ fermer(); return; }
+    const l=e.target.closest&&e.target.closest('[data-dossier]');
+    if(l) choisir(l.getAttribute('data-dossier'));
+  });
+  q.addEventListener('input',peindre);
+  peindre();
+  requestAnimationFrame(()=>q.focus());
+}
+window.ofeChoisirDossier = ofeChoisirDossier;
 /* Fiche contestée : elle ne correspond pas aux commandes cochées (cadre rouge
    de l'étape 2). Ses valeurs ne partent alors vers le dossier que cochées à
    la main (retour du 22/11/2026, dossier 9932911 : laize et format d'une
@@ -3581,7 +3659,8 @@ function ofePlanHtml(m){
       h+='<div style="margin:2px 0 8px 26px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">'+
         '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 18px">'+
         cellules.map(x=>'<div style="font-size:12px;min-width:0"><div style="color:var(--muted)">'+escHtml(x[0])+'</div><div style="color:var(--text);overflow-wrap:anywhere">'+escHtml(String(x[1]))+'</div></div>').join('')+
-        '</div><a href="/planning?machine='+encodeURIComponent(d.machine_id)+'&dossier='+encodeURIComponent(d.id)+'" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent)">Ouvrir le dossier au planning ↗</a></div>';
+        '</div>'+(m._planReprise&&m._planReprise.entry_id===d.id&&(document.getElementById('ofe-delai')||{}).value===m._planReprise.delai?'<div style="margin-top:8px;font-size:12px;color:var(--success);font-weight:600">Délai repris du dossier dans l\'OF : '+escHtml(d.date_livraison||'')+'</div>':'')+
+        '<a href="/planning?machine='+encodeURIComponent(d.machine_id)+'&dossier='+encodeURIComponent(d.id)+'" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent)">Ouvrir le dossier au planning ↗</a></div>';
     }
     if(coche&&(d.ecarts||[]).length){
       h+='<div style="margin:0 0 6px 26px;display:flex;flex-direction:column;gap:4px">';
@@ -3627,6 +3706,7 @@ function ofePlanBrancher(overlay,m){
         const id=Number(v.slice(7)), d=((m._plan||{}).dossiers||[]).find(x=>x.id===id)||{};
         m._planChoix={action:'relier',entry_id:id,manuel:true,
           champs:d.deja_relie?[]:(d.ecarts||[]).filter(x=>x.modifiable).map(x=>x.champ)};
+        ofePlanReprendre(m);
       }else if(v==='creer'){
         m._planChoix={action:'creer',manuel:true,machine_id:(m._plan||{}).machine_proposee||(((m._plan||{}).machines||[])[0]||{}).id||null,place:'a_placer'};
       }else m._planChoix={action:'aucune',manuel:true};
@@ -4124,6 +4204,9 @@ function renderOfEditModal(){
   {
     ofeBrancherFiche(overlay,m);
     ofePlanBrancher(overlay,m);
+    ofeMarquerDatesVides();
+    overlay.addEventListener('input',function(e){ if(e.target&&e.target.type==='date') ofeMarquerDatesVides(); });
+    overlay.addEventListener('change',function(e){ if(e.target&&e.target.type==='date') ofeMarquerDatesVides(); });
     // Toute modification redessine l'OF : frappe, choix d'une liste, case
     // recopiée de la fiche ou recalculée (ces dernières appellent aussi
     // ofeApercuPlusTard, car un .value posé par le code ne déclenche rien).

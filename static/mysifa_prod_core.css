@@ -1946,6 +1946,18 @@ button.ofe-case{cursor:pointer;text-align:left;white-space:nowrap;overflow:hidde
 .ofe-bobinette{position:absolute;line-height:1;color:#000;font-family:Helvetica,Arial,sans-serif;font-weight:700;white-space:nowrap;pointer-events:none}
 .ofe-legende{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
 .ofe-legende i{display:inline-block;width:11px;height:11px;border-radius:3px}
+
+/* Délai vide (26/11/2026) : Safari peint la date du jour en gris dans une
+   case de date vide, ce qui se lit comme une valeur. Vide, la case reste
+   vide ; l'étape 2 dit « à choisir ». */
+#of-edit-overlay input[type=date][data-vide]{color:transparent}
+#of-edit-overlay input[type=date][data-vide]::-webkit-datetime-edit{color:transparent}
+#of-edit-overlay input[type=date][data-vide]:focus,
+#of-edit-overlay input[type=date][data-vide]:focus::-webkit-datetime-edit{color:inherit}
+#of-edit-overlay input[type=date][data-vide]:focus{color:var(--text)}
+.ofe-a-choisir{display:none;font-size:12px;color:var(--warn);font-weight:600}
+#ofe-delai-etape2[data-vide] + .ofe-a-choisir{display:inline}
+
 /* Dossier et devis côte à côte (rentCaracteristiques) */
 .rent-carac{margin:10px 0 4px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--card)}
 .rent-carac-attente{font-size:13px;color:var(--muted);padding:10px 12px}

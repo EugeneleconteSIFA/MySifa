@@ -524,3 +524,15 @@ simple ouverture du panneau, quelle que soit la date. Elle ne rend plus que
 des candidats (« Mappings à valider »), sans les OF `produit` ni `ancien`.
 Liens posés ainsi et encore à produire au 22/11/2026 : « Stock 1153/0005 » ↔
 1153/0005 - 01/04/26, « Marché 779 » (DSI) ↔ « Solde marché 662+703 » (2025).
+
+**Le dossier complète l'OF** (26/11/2026). À l'étape 4, un OF sans délai
+prend la date de livraison du dossier proposé (`ofePlanReprendre`, une fois
+par dossier, annulable par la flèche, mention dans la fiche du dossier). Les
+dossiers ne gardent presque jamais leur commande RVGI (4 sur 65 à produire) :
+`commande_du_dossier()` la retrouve par le numéro (« 9932911 », « … ligne 2 »,
+« … - L1 »), ligne citée ou ligne de l'article du dossier, jamais au hasard ;
+« Stock … » et « Marché … » n'en ont pas. « Créer un OF » propose « Partir
+d'un dossier du planning » (`actionsExtra` du sélecteur RVGI,
+`GET /api/of-planning/dossiers-sans-of` — hors de `/api/of/planning/…`, que
+`/api/of/planning/{entry_id}` capterait). Une case de date vide n'affiche plus
+la date du jour grisée de Safari (`data-vide`), l'étape 2 dit « à choisir ».
