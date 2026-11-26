@@ -684,7 +684,8 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         except (TypeError, ValueError):
             ligne = None
         choix.setdefault(num, {})[ligne] = _nombre(l.get("qte"))
-    vide = {"articles": [], "qte_etiquettes": None, "delai_client": None, "lignes": []}
+    vide = {"articles": [], "qte_etiquettes": None, "delai_client": None, "lignes": [],
+            "hors_produit": [], "autres_produits": []}
     if not choix:
         return vide
     try:
@@ -715,6 +716,11 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         return vide
 
     retenues = []
+    # Ce qui explique un OF sans produit (retour du 26/11/2026, 9912584 L2
+    # « Frais d'outils » cochée au lieu de la L1) : les lignes cochées qui ne
+    # sont pas un produit, et les lignes produit des mêmes commandes laissées
+    # de côté, à proposer à la place.
+    hors_produit, autres_produits = [], []
     for r in rows:
         num = r["numero"]
         sel = choix.get(num, {})
@@ -722,14 +728,22 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
             ligne = int(r["ligne"]) if r["ligne"] is not None else None
         except (TypeError, ValueError):
             ligne = None
+        article = _article_produit(r["code1"], r["code2"])
+        des = (r["des1"] or "").strip() or None
         if None in sel and len(sel) == 1:
             partielle = None              # commande entière
         elif ligne in sel:
             partielle = sel[ligne]
         else:
+            if article:
+                autres_produits.append({"numero": num, "ligne": ligne, "article": article,
+                                        "designation": des, "qte": _nombre(r["qte"])})
             continue
-        article = _article_produit(r["code1"], r["code2"])
         if not article:
+            if not (None in sel and len(sel) == 1):
+                hors_produit.append({"numero": num, "ligne": ligne, "designation": des,
+                                     "code": "%s/%s" % (str(r["code1"] or "").strip(),
+                                                        str(r["code2"] or "").strip())})
             continue
         qte = partielle if partielle else _nombre(r["qte"])
         unite, par_unite = unite_de_vente(r["cuv"], unites, r["des1"], r["des2"], r["des3"])
@@ -754,6 +768,8 @@ def lire_commandes(lignes: List[Dict[str, Any]]) -> Dict[str, Any]:
         "date_livraison": dates[0] if dates else None,
         "date_expedition": expeditions[0] if expeditions else None,
         "lignes": retenues,
+        "hors_produit": hors_produit,
+        "autres_produits": autres_produits,
     }
 
 
@@ -937,6 +953,8 @@ def depuis_commandes(conn, lignes: List[Dict[str, Any]],
                     "article": x["article"], "designation": x.get("designation")}
                    for x in lu.get("lignes") or []],
         "delai_client": lu["delai_client"],
+        "hors_produit": lu.get("hors_produit") or [],
+        "autres_produits": lu.get("autres_produits") or [],
     }
 
 

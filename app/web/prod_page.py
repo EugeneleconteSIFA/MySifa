@@ -128,7 +128,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu19"></script>
 <!-- Selecteur de pieces RVGI, partage avec le planning et MyExpe. Charge
      AVANT le coeur : la modale OF l'appelle des son premier rendu. -->
-<script src="/static/mysifa_rvgi_picker.js?v=17"></script>
+<script src="/static/mysifa_rvgi_picker.js?v=18"></script>
 <!-- Selecteur de reference matiere MyStock : c'est lui qui remplace le
      texte libre des champs carton / mandrin / palette / adhesif / support. -->
 <script src="/static/mysifa_ref_matiere.js?v=__V_LABEL__-rm2"></script>
@@ -154,7 +154,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_rent_tableau.js?v=7"></script>
 <!-- Rentabilite > lecture d'un devis : resultat, chaine du classeur, sensibilite -->
 <script src="/static/mysifa_rent_devis.js?v=3"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent32-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit5-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp65-rep2"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent32-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit5-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp66-rep2"></script>
 <!-- Repartir une fin de production sur plusieurs dossiers de la commande -->
 <script src="/static/mysifa_repartition.js?v=2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
