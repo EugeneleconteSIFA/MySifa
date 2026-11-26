@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from database import get_db
+from config import REFERENCE_A_VENIR_MOTIF
 from services.auth_service import get_current_user, is_admin
 from app.services.audit_service import log_action
 from app.services import rvgi_rattachement as ratt
@@ -49,6 +50,14 @@ CHAMPS = (
 )
 PLACES = ("a_placer", "fin")
 DUREE_DEFAUT_H = 8.0   # celle de l'ajout manuel au planning (`add_entry`)
+
+
+_A_VENIR_RE = re.compile(REFERENCE_A_VENIR_MOTIF)
+
+
+def reference_a_venir(reference: Any) -> bool:
+    """Dossier réservé au planning sans son numéro (« ???? », « XXXXXXX »)."""
+    return bool(_A_VENIR_RE.fullmatch(str(reference or "")))
 
 
 def _cle_produit(reference: Any) -> str:
@@ -73,6 +82,7 @@ def valeurs_de_l_of(of: Dict[str, Any]) -> Dict[str, Any]:
     l, h = _format_lh(of.get("format"))
     return {
         "numero_of": (str(of.get("of_numero") or "").strip() or None),
+        "reference": (str(of.get("of_numero") or "").strip() or None),
         "ref_produit": _cle_produit(of.get("reference")) or None,
         "date_livraison": _date_iso(of.get("delai_client")),
         "laize": _nombre(of.get("laize")),
@@ -103,7 +113,7 @@ def _affiche(champ: str, v: Any) -> str:
 
 
 def _egal(champ: str, a: Any, b: Any) -> bool:
-    if champ in ("numero_of", "ref_produit"):
+    if champ in ("numero_of", "ref_produit", "reference"):
         return str(a or "").strip().lower() == str(b or "").strip().lower()
     if champ == "date_livraison":
         return str(a or "")[:10] == str(b or "")[:10]
@@ -116,10 +126,14 @@ def _egal(champ: str, a: Any, b: Any) -> bool:
     return a == b
 
 
-def ecarts(dossier: Dict[str, Any], vals: Dict[str, Any]) -> List[Dict[str, Any]]:
+def ecarts(dossier: Dict[str, Any], vals: Dict[str, Any], conn=None) -> List[Dict[str, Any]]:
     """Les valeurs de l'OF qui diffèrent du dossier. Une valeur que l'OF ne
-    porte pas n'efface jamais celle du dossier."""
+    porte pas n'efface jamais celle du dossier.
+
+    La référence du dossier n'est proposée que pour une réservation
+    (« ???? ») : un vrai numéro de dossier ne se renomme pas depuis l'OF."""
     actuel = {
+        "reference": dossier.get("reference"),
         "numero_of": dossier.get("numero_of"),
         "ref_produit": dossier.get("ref_produit"),
         "date_livraison": dossier.get("date_livraison"),
@@ -128,7 +142,10 @@ def ecarts(dossier: Dict[str, Any], vals: Dict[str, Any]) -> List[Dict[str, Any]
     }
     modifiable = (dossier.get("statut") or "attente") == "attente"
     out = []
-    for champ, libelle in CHAMPS:
+    champs = list(CHAMPS)
+    if reference_a_venir(dossier.get("reference")):
+        champs.insert(0, ("reference", "Référence dossier"))
+    for champ, libelle in champs:
         neuf = vals.get(champ)
         if neuf in (None, "") or _egal(champ, actuel[champ], neuf):
             continue
@@ -138,6 +155,13 @@ def ecarts(dossier: Dict[str, Any], vals: Dict[str, Any]) -> List[Dict[str, Any]
                 "en cours" if dossier.get("statut") == "en_cours" else "terminé")
         elif champ == "date_livraison" and int(dossier.get("date_livraison_imposee") or 0):
             motif = "Délai imposé au planning."
+        elif champ == "reference" and conn is not None:
+            autre = conn.execute(
+                "SELECT reference FROM planning_entries WHERE id<>? AND statut IN ('attente','en_cours') "
+                "AND LOWER(TRIM(COALESCE(reference,'')))=LOWER(?) LIMIT 1",
+                (dossier.get("id") or 0, neuf)).fetchone()
+            if autre:
+                motif = "Un autre dossier à produire porte déjà la référence %s." % autre["reference"]
         out.append({"champ": champ, "libelle": libelle,
                     "avant": _affiche(champ, actuel[champ]), "apres": _affiche(champ, neuf),
                     "modifiable": motif is None, "motif": motif})
@@ -145,11 +169,13 @@ def ecarts(dossier: Dict[str, Any], vals: Dict[str, Any]) -> List[Dict[str, Any]
 
 
 def candidats(conn, of_id: Optional[int], numero: Optional[str],
-              commandes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+              commandes: List[Dict[str, Any]], depart: Optional[int] = None) -> List[Dict[str, Any]]:
     """Les dossiers qui correspondent à cet OF, le plus sûr d'abord.
 
     1. déjà relié à l'OF (quel que soit son état) ;
-    2. même numéro d'OF ou même référence de dossier ;
+    2. le dossier d'où l'OF est parti (« Partir d'un dossier du planning »),
+       seul moyen de retrouver une réservation « ???? » qui n'a ni numéro ni
+       commande ; puis même numéro d'OF ou même référence de dossier ;
     3. mêmes lignes de commande RVGI.
     Seuls les dossiers en attente ou en cours sont cherchés aux rangs 2 et 3 :
     un dossier terminé sur la même commande est une production passée, pas
@@ -161,6 +187,10 @@ def candidats(conn, of_id: Optional[int], numero: Optional[str],
             "SELECT planning_entry_id AS id FROM planning_of_links WHERE of_import_id=? "
             "UNION SELECT id FROM planning_entries WHERE of_import_id=?", (of_id, of_id)):
             raisons.setdefault(int(r["id"]), "Relié à cet OF")
+    if depart:
+        for r in conn.execute(
+                "SELECT id FROM planning_entries WHERE id=? AND statut IN ('attente','en_cours')", (depart,)):
+            raisons.setdefault(int(r["id"]), "Dossier de départ")
     num = str(numero or "").strip()
     if num:
         for r in conn.execute(
@@ -188,7 +218,7 @@ def candidats(conn, of_id: Optional[int], numero: Optional[str],
         "FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id "
         "LEFT JOIN of_imports o ON o.id = pe.of_import_id "
         "WHERE pe.id IN (%s)" % ph, list(raisons)).fetchall()
-    ordre = {"Relié à cet OF": 0, "Même numéro d'OF": 1}
+    ordre = {"Relié à cet OF": 0, "Dossier de départ": 1, "Même numéro d'OF": 1}
     out = []
     for r in rows:
         d = dict(r)
@@ -231,11 +261,12 @@ def _apercu(d: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _public(d: Dict[str, Any], vals: Dict[str, Any], of_id: Optional[int]) -> Dict[str, Any]:
+def _public(d: Dict[str, Any], vals: Dict[str, Any], of_id: Optional[int], conn=None) -> Dict[str, Any]:
     relie_ailleurs = bool(d.get("of_import_id")) and of_id and int(d["of_import_id"]) != int(of_id)
     return {
         "apercu": _apercu(d),
         "id": d["id"], "reference": d.get("reference"), "machine_id": d.get("machine_id"),
+        "reservation": reference_a_venir(d.get("reference")), "client": d.get("client"),
         "machine": d.get("machine_nom"), "statut": d.get("statut"),
         "a_placer": bool(int(d.get("a_placer") or 0)), "rang": d.get("_rang"),
         "date_livraison": _jour(d.get("date_livraison")) or None,
@@ -245,7 +276,7 @@ def _public(d: Dict[str, Any], vals: Dict[str, Any], of_id: Optional[int]) -> Di
         # Ce que l'OF peut reprendre du dossier quand il ne le porte pas
         # (retour du 26/11/2026 : le délai du dossier n'arrivait pas à l'OF).
         "delai_iso": str(d.get("date_livraison") or "")[:10] or None,
-        "ecarts": ecarts(d, vals),
+        "ecarts": ecarts(d, vals, conn),
     }
 
 
@@ -281,7 +312,9 @@ async def of_planning_candidats(request: Request):
             # OF enregistré : ses lignes de commande sont en base.
             commandes = [l for l in ratt.lister(conn, "of", of_id) if l["piece"] == "commande"]
         machines = _machines(conn)
-        dossiers = candidats(conn, of_id, vals["numero_of"], commandes)
+        depart = body.get("dossier_depart")
+        depart = int(depart) if str(depart or "").isdigit() else None
+        dossiers = candidats(conn, of_id, vals["numero_of"], commandes, depart)
         # Un numéro tapé déjà porté par un autre OF sera refusé à la création :
         # le dire avant le clic, avec de quoi ouvrir l'OF existant.
         meme_numero = None
@@ -294,9 +327,10 @@ async def of_planning_candidats(request: Request):
                 meme_numero = {"id": r["id"], "numero": r["of_numero"], "le": _jour(r["date_import"]),
                                "par": r["imported_by"] if r["imported_by"] not in (None, "access_bridge") else
                                ("le pont Access" if r["imported_by"] == "access_bridge" else None)}
+        publics = [_public(d, vals, of_id, conn) for d in dossiers[:5]]
     return {
         "of_meme_numero": meme_numero,
-        "dossiers": [_public(d, vals, of_id) for d in dossiers[:5]],
+        "dossiers": publics,
         "machines": machines,
         "machine_proposee": _machine_proposee(machines, body.get("machine"), body.get("machine_fiche")),
         "peut_planifier": is_admin(user),
@@ -344,7 +378,7 @@ def _relier(conn, request, user, qui, maintenant, of, entry_id, champs):
     vals = valeurs_de_l_of(of)
     voulus = {c for c in champs if isinstance(c, str)}
     ecrits = []
-    for e in ecarts(d, vals):
+    for e in ecarts(d, vals, conn):
         if e["champ"] not in voulus or not e["modifiable"]:
             continue
         if e["champ"] == "format":
@@ -376,13 +410,14 @@ def _relier(conn, request, user, qui, maintenant, of, entry_id, champs):
     # délai imposé, dossier en cours. `d` est le dossier d'AVANT l'écriture.
     gardes = [{"libelle": e["libelle"], "valeur": e["avant"], "propose": e["apres"],
                "motif": e["motif"] or "non reporté"}
-              for e in ecarts(d, vals) if e["champ"] not in ecrits_ch]
+              for e in ecarts(d, vals, conn) if e["champ"] not in ecrits_ch]
     bilan = _bilan_dossier(conn, entry_id)
     numero_of = of.get("of_numero") or "#%s" % of["id"]
     # Lisible dans « Historique des modifications » de la machine : la ligne
     # porte machine_id, le geste et les valeurs avant → après.
+    nom = bilan.get("reference") or d.get("reference") or entry_id
     log_action(user=user, action="UPDATE", module="planning",
-               objet="Dossier %s · %s" % (d.get("reference") or entry_id, bilan.get("machine") or ""),
+               objet="Dossier %s · %s" % (nom, bilan.get("machine") or ""),
                detail={"machine_id": d["machine_id"], "geste": "Relié à l'OF %s" % numero_of,
                        "avant": {e["libelle"]: e["avant"] for e in ecrits},
                        "apres": {e["libelle"]: e["apres"] for e in ecrits}},
@@ -392,7 +427,7 @@ def _relier(conn, request, user, qui, maintenant, of, entry_id, champs):
             "dossier": bilan, "ecrits": [{"libelle": e["libelle"], "avant": e["avant"], "apres": e["apres"]} for e in ecrits],
             "gardes": gardes,
             "message": "OF relié au dossier %s%s." % (
-                d.get("reference") or entry_id,
+                nom,
                 (", %d valeur%s mise%s à jour" % (n, "s" if n > 1 else "", "s" if n > 1 else "")) if n else "")}
 
 
@@ -493,7 +528,7 @@ def _ofs_suggeres(conn, d: Dict[str, Any], limite: int = 8) -> List[Dict[str, An
     commande, même produit. Les plus récents d'abord, jamais plus de `limite`."""
     raisons: Dict[int, str] = {}
     num = str(d.get("numero_of") or d.get("reference") or "").strip()
-    if num:
+    if num and not reference_a_venir(num):
         for r in conn.execute("SELECT id FROM of_imports WHERE LOWER(TRIM(COALESCE(of_numero,'')))=LOWER(?)", (num,)):
             raisons.setdefault(int(r["id"]), "Même numéro")
     for l in ratt.lister(conn, "dossier", int(d["id"]), piece="commande"):
@@ -597,7 +632,7 @@ def of_dossiers_sans_of(request: Request):
                 ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999') , pe.id""").fetchall()
     return {"items": [{
         "id": r["id"], "reference": r["reference"], "ref_produit": r["ref_produit"], "client": r["client"],
-        "machine": r["machine"], "statut": r["statut"], "a_placer": bool(int(r["a_placer"] or 0)),
+        "reservation": reference_a_venir(r["reference"]), "machine": r["machine"], "statut": r["statut"], "a_placer": bool(int(r["a_placer"] or 0)),
         "livraison": _jour(r["date_livraison"]) or None, "debut": _heure(r["planned_start"]) or None,
         "commande": (_COMMANDE_RE.search("%s %s" % (r["numero_of"] or "", r["reference"] or "")) or [None, None])[1],
     } for r in rows]}
@@ -630,8 +665,11 @@ def of_depuis_dossier(entry_id: int, request: Request):
                 fiche = None
         suggestions = _ofs_suggeres(conn, d)
     return {
+        # Réservation « ???? » : le numéro est à venir, il ne préremplit rien.
         "dossier": {"id": d["id"], "reference": d.get("reference"),
-                    "numero_of": (d.get("numero_of") or d.get("reference") or "").strip() or None,
+                    "reservation": reference_a_venir(d.get("reference")),
+                    "numero_of": None if reference_a_venir(d.get("numero_of") or d.get("reference"))
+                    else ((d.get("numero_of") or d.get("reference") or "").strip() or None),
                     "ref_produit": d.get("ref_produit"), "machine": d.get("machine_nom"),
                     "date_livraison": str(d.get("date_livraison") or "")[:10] or None,
                     "client": d.get("client")},

@@ -237,5 +237,62 @@ class TestPlanningDepuisOF(unittest.TestCase):
             op.ratt.chercher_commandes = avant
 
 
+class TestReservation(unittest.TestCase):
+    """Dossier réservé au planning sans numéro (« ???? », 26/11/2026)."""
+
+    def setUp(self):
+        with get_db() as conn:
+            self.machine = _preparer(conn)
+            conn.execute(
+                "INSERT INTO planning_entries (id, machine_id, position, reference, numero_of, statut, client) "
+                "VALUES (20, ?, 9, '????', '????', 'attente', 'KIABI')", (self.machine,))
+            conn.execute(
+                "INSERT INTO of_imports (id, of_numero, reference, statut) "
+                "VALUES (30, '9932950', '1027/0011 - DSI', 'en_attente')")
+            conn.commit()
+
+    def test_motif(self):
+        for ref in ("????", "?????", "XXXXXXX", "? ? ?", ""):
+            self.assertTrue(op.reference_a_venir(ref), ref)
+        for ref in ("9932911", "Stock 1153/0005", "Marché 779", "X12"):
+            self.assertFalse(op.reference_a_venir(ref), ref)
+
+    def test_trouvee_par_le_dossier_de_depart(self):
+        with get_db() as conn:
+            self.assertEqual(op.candidats(conn, None, "9932950", []), [])
+            ds = op.candidats(conn, None, "9932950", [], depart=20)
+        self.assertEqual([d["id"] for d in ds], [20])
+        self.assertEqual(ds[0]["_raison"], "Dossier de départ")
+
+    def test_reference_proposee_et_remplacee(self):
+        with get_db() as conn:
+            of = dict(conn.execute("SELECT * FROM of_imports WHERE id=30").fetchone())
+            d = dict(conn.execute("SELECT * FROM planning_entries WHERE id=20").fetchone())
+            e = {x["champ"]: x for x in op.ecarts(d, op.valeurs_de_l_of(of), conn)}
+            self.assertEqual((e["reference"]["avant"], e["reference"]["apres"]), ("????", "9932950"))
+            self.assertTrue(e["reference"]["modifiable"])
+            r = op._relier(conn, None, {"nom": "Essai"}, "Essai", "2026-11-26T10:00:00", of, 20,
+                           ["reference", "numero_of"])
+            apres = dict(conn.execute("SELECT reference, numero_of FROM planning_entries WHERE id=20").fetchone())
+        self.assertEqual(apres, {"reference": "9932950", "numero_of": "9932950"})
+        self.assertIn("9932950", r["message"])
+
+    def test_vrai_numero_jamais_renomme(self):
+        with get_db() as conn:
+            of = dict(conn.execute("SELECT * FROM of_imports WHERE id=30").fetchone())
+            d = dict(conn.execute("SELECT * FROM planning_entries WHERE id=1").fetchone())
+            champs = [x["champ"] for x in op.ecarts(d, op.valeurs_de_l_of(of), conn)]
+        self.assertNotIn("reference", champs)
+
+    def test_reference_deja_prise_refusee(self):
+        with get_db() as conn:
+            conn.execute("UPDATE of_imports SET of_numero='9932501/L1' WHERE id=30")
+            of = dict(conn.execute("SELECT * FROM of_imports WHERE id=30").fetchone())
+            d = dict(conn.execute("SELECT * FROM planning_entries WHERE id=20").fetchone())
+            e = {x["champ"]: x for x in op.ecarts(d, op.valeurs_de_l_of(of), conn)}
+        self.assertFalse(e["reference"]["modifiable"])
+        self.assertIn("9932501/L1", e["reference"]["motif"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
