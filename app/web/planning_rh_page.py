@@ -1220,7 +1220,13 @@ const API='/api/rh';
 async function api(path,opts={}){
   const r=await fetch(API+path,{credentials:'include',...opts});
   if(r.status===401){window.location.href='/';return null;}
-  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Erreur '+r.status);}
+  if(!r.ok){
+    // Un détail structuré (conflit à confirmer) garde son message lisible,
+    // et l'erreur porte le statut et le détail pour qui veut y répondre.
+    const e=await r.json().catch(()=>({}));
+    const msg=typeof e.detail==='string'?e.detail:((e.detail&&e.detail.message)||'Erreur '+r.status);
+    const err=new Error(msg); err.status=r.status; err.detail=e.detail; throw err;
+  }
   return r.json();
 }
 
@@ -1463,11 +1469,12 @@ async function deleteRowAssignments(semaine, machineCode, creneau){
   render();
 }
 
-async function submitConge(){
+async function submitConge(force){
   const f=S.congeForm;
   if(!f.user_id||!f.date_debut||!f.date_fin){toast('Employé, date de début et date de fin obligatoires.','error');return;}
   if(f.nb_manuel&&!(parseFloat(f.nb_jours)>0)){toast('Nombre de jours invalide — valeur supérieure à 0.','error');return;}
   const corps=prhCongeCorps();
+  if(force===true) corps.force=true;
   try{
     if(S.editConge){
       await api('/conges/'+S.editConge.id,{
@@ -1487,7 +1494,13 @@ async function submitConge(){
     S.congeForm=prhCongeFormVide();
     await loadData();
     await loadSoldes();
-  }catch(e){toast(e.message,'error');}
+  }catch(e){
+    if(e.status===409&&e.detail&&e.detail.conflict_type==='planning'&&force!==true){
+      if(confirm(e.message)) return submitConge(true);
+      return;
+    }
+    toast(e.message,'error');
+  }
   render();
 }
 

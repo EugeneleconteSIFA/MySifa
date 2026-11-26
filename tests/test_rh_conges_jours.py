@@ -12,6 +12,8 @@ Ce test verrouille :
 4. Absence justifiée (événement familial) : `jours_cp` s'ajoute aux CP posés,
    le reste ne touche pas au solde ; plus de jours CP que d'absence est
    refusé ; un motif CP ignore `jours_cp`.
+5. Absence sur un jour planifié (absence du jour) : le conflit demande
+   confirmation (409 structuré), puis passe avec `force`.
 """
 
 import asyncio
@@ -115,6 +117,20 @@ check("formation sans part CP : 0 par défaut", fo.get("jours_cp") if st == 200 
 check("soldes : la formation ne touche pas aux CP", poses_cp(), 6.0)
 st, m = appel(planning_rh.update_conge, ev["id"], Req({"type_conge": "CP"}))
 check("passé en CP : jours_cp effacé, 6 jours CP", (m.get("jours_cp"), poses_cp()), (None, 10.0))
+
+# 5. Absence du jour sur un poste planifié.
+with get_db() as c:
+    c.execute("INSERT INTO rh_planning_postes (user_id, semaine, poste, creneau, jours) "
+              "VALUES (?, '2026-W48', 'conducteur', 'matin', 31)", (U,))
+    c.commit()
+corps = {"user_id": U, "date_debut": "2026-11-26", "date_fin": "2026-11-26", "type_conge": "autre", "jours_cp": 1}
+st, det = appel(planning_rh.create_conge, Req(corps))
+check("jour planifié : confirmation demandée (409)", st, 409)
+check("… conflit typé planning, jour nommé",
+      (det.get("conflict_type"), "2026-W48 (Jeu)" in det.get("message", "")), ("planning", True))
+st, ab = appel(planning_rh.create_conge, Req({**corps, "force": True}))
+check("confirmé : absence enregistrée (1 j, 1 CP)",
+      (st, ab.get("nb_jours"), ab.get("jours_cp")), (200, 1.0, 1.0))
 
 print()
 print("ÉCHECS : " + ", ".join(ECHECS) if ECHECS else "Tous les contrôles passent.")
