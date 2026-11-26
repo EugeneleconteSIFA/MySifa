@@ -431,7 +431,8 @@ def bloc(debut, fin):
 
 
 js = (
-    bloc("function reorderKeepsLocked(", "function setupTlDD(")
+    bloc("// ── Sélection multiple de dossiers", "function _selCible(")
+    + bloc("function reorderKeepsLocked(", "function setupTlDD(")
     + bloc("// ── Place d'un dossier dans la file", "async function passerEnTete(")
     + bloc("async function moveEntry(", "// ── Place d'un dossier dans la file")
 )
@@ -459,6 +460,14 @@ const idx=id=>S.entries.findIndex(e=>e.id===id);
   envoye=null; await moveEntry(900,+1); out.descendreSOLUROAD=envoye;
   const ids=S.entries.map(e=>e.id); const [m]=ids.splice(idx(574),1); ids.splice(ids.indexOf(520)+1,0,m);
   out.deposerSurEnCours=reorderKeepsLocked(S.entries.map(e=>e.id),ids);
+  // Sélection multiple : STI 9932354 + LSDH, séparés par un terminé.
+  S.selection=new Set([466,541]);
+  envoye=null; await moveEntry(541,-1); out.monterBloc=envoye;
+  envoye=null; await moveEntry(466,+1); out.descendreBloc=envoye;
+  envoye=null; await moveEntry(517,-1); out.horsSelection=envoye;
+  S.selection=new Set([900,517]);
+  envoye=null; toast=null; await moveEntry(517,-1); out.monterBlocPremier=[envoye,toast];
+  S.selection=new Set();
   console.log(JSON.stringify(out));
 })();
 """ % (json.dumps(entries), js)
@@ -489,6 +498,23 @@ else:
         [551, 552, 566, 520, 517, 900, 466, 43, 541, 557, 292, 543, 556, 573, 571, 574],
     )
     verifier("deposer Maitre Coq sur l'en-cours : accepte", out["deposerSurEnCours"], True)
+    verifier(
+        "selection STI + LSDH, fleche haut : le bloc regroupe passe au-dessus de STI 9932472",
+        out["monterBloc"],
+        [551, 552, 566, 900, 520, 466, 541, 517, 43, 557, 292, 543, 556, 573, 571, 574],
+    )
+    verifier(
+        "selection STI + LSDH, fleche bas : le bloc passe derriere Evergreen",
+        out["descendreBloc"],
+        [551, 552, 566, 900, 520, 517, 43, 557, 292, 466, 541, 543, 556, 573, 571, 574],
+    )
+    verifier(
+        "fleche sur un dossier hors selection : il bouge seul",
+        out["horsSelection"],
+        [551, 552, 566, 517, 900, 520, 466, 43, 541, 557, 292, 543, 556, 573, 571, 574],
+    )
+    verifier("selection deja en tete : rien envoye, message",
+             out["monterBlocPremier"], [None, "Déjà les prochains dossiers à produire."])
 
 vrai("le bouton « Passer en tete » est rendu", "passerEnTete(${e.id})" in src)
 vrai("changer de machine passe par l'endpoint atomique", "/changer-machine`" in src)
