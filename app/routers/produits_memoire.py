@@ -430,14 +430,21 @@ async def rattacher_document(doc_id: int, request: Request):
 @router.post("/api/produits/documents")
 async def deposer_document(request: Request, file: UploadFile = File(...),
                            no_dossier: str = Form(""), of_numero: str = Form(""),
-                           chemin_origine: str = Form(""), date_fichier: str = Form("")):
-    """Depot manuel d'un scan depuis l'interface (secours de l'agent local)."""
+                           chemin_origine: str = Form(""), date_fichier: str = Form(""),
+                           of_import_id: str = Form("")):
+    """Depot manuel d'un scan depuis l'interface (secours de l'agent local).
+
+    `of_import_id` : depot depuis la ligne d'un OF (« scan attendu », liste des
+    OF, 26/11/2026). Le scan est rattache a CET OF quel que soit le nom du
+    fichier."""
     user = get_current_user(request)
     content = await file.read()
+    of_id = int(of_import_id) if str(of_import_id or "").strip().isdigit() else None
     return _enregistrer_scan(content, file.filename or "scan.pdf",
                              importe_par=_auteur(user),
                              no_dossier=no_dossier, of_numero=of_numero,
-                             chemin_origine=chemin_origine, date_fichier=date_fichier)
+                             chemin_origine=chemin_origine, date_fichier=date_fichier,
+                             of_impose=of_id)
 
 
 # ─── Depot par l'agent local (dossier reseau surveille) ──────────────────────
@@ -496,7 +503,8 @@ def _nom_fichier_sur(nom: str, of_numero: Optional[str]) -> str:
 
 def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
                       no_dossier: str = "", of_numero: str = "",
-                      chemin_origine: str = "", date_fichier: str = "") -> dict:
+                      chemin_origine: str = "", date_fichier: str = "",
+                      of_impose: Optional[int] = None) -> dict:
     """Enregistre un scan d'OF termine et le rattache au mieux.
 
     Ordre de resolution, du plus fiable au moins fiable :
@@ -514,6 +522,10 @@ def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
 
     La deduplication se fait sur le CONTENU (sha-256) : un fichier renomme ou
     deplace d'un dossier d'annee a l'autre reste le meme document.
+
+    `of_impose` court-circuite tout : l'utilisateur a depose le scan depuis la
+    ligne de l'OF, il n'y a rien a deviner. Le dossier retenu est le dernier
+    dossier TERMINE de l'OF (un OF repris garde un dossier a produire).
     """
     if not content:
         raise HTTPException(status_code=400, detail="Fichier vide.")
@@ -528,13 +540,54 @@ def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
         ).fetchone()
     if deja:
         d = dict(deja)
+        # Deja recu mais orphelin (file « A rattacher »), redepose depuis la
+        # ligne d'un OF : on le rattache a cet OF au lieu de dire « doublon ».
+        if of_impose and d.get("statut") == "a_rattacher":
+            with get_db() as conn:
+                o = conn.execute("SELECT id, of_numero, reference FROM of_imports WHERE id=?",
+                                 (of_impose,)).fetchone()
+                if o:
+                    pe = conn.execute(
+                        "SELECT reference FROM planning_entries WHERE of_import_id=? "
+                        "ORDER BY (statut='termine') DESC, id DESC LIMIT 1", (o["id"],)).fetchone()
+                    ref = pm._norm(str(o["reference"] or "").split(" - ")[0])
+                    if pe:
+                        ref = pm.contexte_dossier(conn, pe["reference"]).get("ref_produit_norm") or ref
+                    conn.execute(
+                        "UPDATE produit_documents SET of_import_id=?, of_numero=?, no_dossier=COALESCE(?, no_dossier), "
+                        "ref_produit_norm=COALESCE(?, ref_produit_norm), statut=CASE WHEN COALESCE(?, ref_produit_norm) "
+                        "IS NOT NULL THEN 'rattache' ELSE statut END WHERE id=?",
+                        (o["id"], o["of_numero"], pe["reference"] if pe else None, ref, ref, d["id"]))
+                    conn.commit()
+                    d.update({"success": True, "doublon": True, "rattache_a_of": o["of_numero"],
+                              "statut": "rattache" if ref else d.get("statut"),
+                              "message": "Scan deja recu, rattache a l'OF %s." % o["of_numero"]})
+                    return d
         d.update({"success": True, "doublon": True,
                   "message": "Deja enregistre (contenu identique)."})
         return d
 
+    impose = None
+    if of_impose:
+        with get_db() as conn:
+            r = conn.execute("SELECT id, of_numero, reference FROM of_imports WHERE id=?",
+                             (of_impose,)).fetchone()
+            if not r:
+                raise HTTPException(status_code=404, detail="OF introuvable.")
+            impose = dict(r)
+            pe = conn.execute(
+                "SELECT reference FROM planning_entries WHERE of_import_id=? "
+                "ORDER BY (statut='termine') DESC, id DESC LIMIT 1", (of_impose,)).fetchone()
+            impose["dossier"] = pe["reference"] if pe else None
+        of_numero = impose["of_numero"] or of_numero
+        no_dossier = no_dossier or impose["dossier"] or ""
+
     infos = pm.analyser_nom_scan(nom_origine)
     numero = (of_numero or "").strip() or infos.get("of_numero") or None
     ref_nom = infos.get("ref_produit_norm")
+    if impose:
+        # La reference de l'OF prime sur celle qu'on lirait dans le nom.
+        ref_nom = pm._norm(str(impose.get("reference") or "").split(" - ")[0]) or ref_nom
 
     # Le texte du PDF ne sert que si le nom n'a rien donne : sur un scan sans
     # OCR il est vide, ce qui est le cas nominal et non une erreur.
@@ -565,7 +618,7 @@ def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
     with get_db() as conn:
         dossier = (no_dossier or "").strip() or None
         ref_norm = None
-        of_import_id = None
+        of_import_id = impose["id"] if impose else None
 
         if not dossier and numero:
             row = conn.execute(

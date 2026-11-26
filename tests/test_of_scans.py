@@ -175,6 +175,22 @@ check("reference annoncee = celle qui sera ecrite",
       pmr.rechercher_dossiers(request=None, q="9931987")["dossiers"][0]["ref_produit_norm"],
       REF)
 
+print("--- depot depuis la ligne d'un OF (scan attendu) ---")
+res5 = pmr._enregistrer_scan(pdf_octets("sans nom utile"), "Scan_0042.pdf", "test", of_impose=1)
+check("OF impose, quel que soit le nom", res5["of_numero"], "9931987")
+check("dossier de l'OF", res5["no_dossier"], "D-9931987")
+check("rattache au produit de l'OF", (res5["statut"], res5["ref_produit_norm"]), ("rattache", REF))
+# Un PDF reportlab change d'octets a chaque generation : le meme contenu
+# doit etre depose deux fois tel quel.
+octets_orphelin = pdf_octets("orphelin")
+premier = pmr._enregistrer_scan(octets_orphelin, "illisible.pdf", "test")
+check("d'abord en file", premier["statut"], "a_rattacher")
+orphelin = pmr._enregistrer_scan(octets_orphelin, "illisible.pdf", "test", of_impose=1)
+check("orphelin redepose : rattache a l'OF", orphelin.get("rattache_a_of"), "9931987")
+with dbmod.get_db() as conn:
+    st = conn.execute("SELECT statut, of_import_id FROM produit_documents WHERE id=?", (premier["id"],)).fetchone()
+check("l'orphelin quitte la file", (st["statut"], st["of_import_id"]), ("rattache", 1))
+
 print("--- parcours du dossier reseau (sous-dossiers par annee) ---")
 import of_scans_commun as osc
 

@@ -562,6 +562,14 @@ Plus de carte « Relier un OF existant » : il reste Créer, Importer, et un lie
 de recherche par numéro. L'onglet Fiche technique charge son PDF à la
 première ouverture (`data-src`) : chargé masqué, Safari l'affichait en vignette.
 
+**Scan d'un OF depuis sa ligne** (26/11/2026). Colonne scan de la liste des OF :
+plein (accent) = scan reçu, ouvre le PDF ; pointillé gris = OF terminé (tous ses
+dossiers le sont) sans scan, le clic dépose un PDF rattaché à CET OF
+(`of_import_id` de `POST /api/produits/documents`, `of_impose` de
+`_enregistrer_scan` : dossier terminé de l'OF, référence de l'OF, nom du fichier
+ignoré). Un scan déjà reçu mais orphelin (« À rattacher ») redéposé ainsi est
+rattaché au lieu d'être refusé comme doublon. Test : `tests/test_of_scans.py`.
+
 **Numéros d'OF abrégés d'Access** (26/11/2026, `_of_tokens` de
 `of_import.py`). 387 OF de la prod portent plusieurs commandes dans leur
 numéro, souvent abrégées : « 9932913, 914, 915 et 916 », « 9932929-935-936 »,

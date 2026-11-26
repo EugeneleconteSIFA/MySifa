@@ -1027,6 +1027,35 @@ async function loadOfImports(){
   }
 }
 
+/* Dépôt du scan d'un OF depuis sa ligne : le PDF est rattaché à cet OF quel
+   que soit son nom (`of_import_id`, /api/produits/documents). */
+function ofDeposerScan(row){
+  const num=String(row.of_numero||'').trim()||('#'+row.id);
+  const input=document.createElement('input');
+  input.type='file'; input.accept='application/pdf,.pdf'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    const f=input.files&&input.files[0];
+    input.remove();
+    if(!f) return;
+    if(!/\.pdf$/i.test(f.name)){ toast('Fichier PDF requis.','error'); return; }
+    const fd=new FormData();
+    fd.append('file',f,f.name);
+    fd.append('of_import_id',String(row.id));
+    toast('Dépôt du scan de l\'OF '+num+'…','info');
+    try{
+      const r=await fetch('/api/produits/documents',{method:'POST',credentials:'include',body:fd});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'Dépôt refusé.');
+      if(j.doublon&&!j.rattache_a_of) toast('Ce scan était déjà enregistré (contenu identique).','info');
+      else toast('Scan rattaché à l\'OF '+num+'.','success');
+      loadOfImports();
+    }catch(e){ toast(e.message||'Dépôt impossible.','error'); }
+  });
+  input.click();
+}
+window.ofDeposerScan = ofDeposerScan;
+
 async function loadFiches(){
   set({fichesLoading:true});
   try{
@@ -5074,13 +5103,11 @@ function renderOfTab(){
         ? h('button',{style:bStyle+';color:var(--accent);border-color:var(--accent);background:var(--accent-bg)',title:'Voir le scan de l\'OF terminé',
             onClick:()=>{window.open('/api/produits/documents/'+row.scan_id+'/pdf','_blank');}},iconEl('file-text',13))
         : row.termine
-          ? h('button',{style:bStyle+';color:var(--muted);border-style:dashed;background:transparent',title:'OF terminé, scan pas encore reçu. Le chercher dans Scans d\'OF',
-              onClick:()=>{
-                const num=String(row.of_numero||'').trim();
-                set({page:'scans',scansSous:null,scansScan:null,scansRecherche:num});
-                nav();
-                toast('Aucun scan reçu pour l\'OF '+(num||'#'+row.id)+'. Déposé sans être reconnu, il attend dans « À rattacher ».','info');
-              }},iconEl('file-text',13))
+          // Scan attendu : le clic dépose le PDF scanné sur CET OF, sans
+          // dépendre du nom du fichier (26/11/2026 : ouvrir Scans d'OF sur une
+          // recherche forcément vide n'apportait rien).
+          ? h('button',{style:bStyle+';color:var(--muted);border-style:dashed;background:transparent',title:'OF terminé, scan pas encore reçu. Cliquer pour déposer le PDF scanné de cet OF',
+              onClick:()=>ofDeposerScan(row)},iconEl('file-text',13))
           : h('span',{style:bStyle+';visibility:hidden;display:inline-flex','aria-hidden':'true'},iconEl('file-text',13)),
       // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
       // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
