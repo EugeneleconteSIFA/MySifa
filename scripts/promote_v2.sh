@@ -11,6 +11,10 @@
 #  7. Annonce de release dans update_announcements (si NOTES fourni)
 #  8. Enregistrement dans promotion_history (toujours — succès, rollback, échec)
 #
+# Le tout tourne dans une unité systemd détachée (voir « 0. Lancement
+# détaché ») : un redémarrage de v1 pendant la promotion ne la coupe plus.
+# Journal de chaque passage : data/logs/promotions/promote_<horodatage>.log
+#
 # Usage :
 #  sudo ./scripts/promote_v2.sh ["Notes de release en HTML"]
 #
@@ -128,6 +132,116 @@ con.commit()
 con.close()
 PYEOF
 }
+
+# ─── 0. Lancement détaché ────────────────────────────────────────────
+# Pourquoi : le bouton de v1 lance ce script comme enfant du service
+# mysifa-v1. Si v1 redémarre pendant la promotion — typiquement le cron qui
+# récupère un push sur staging —, systemd tue tout ce que le service a lancé,
+# ce script compris. Constaté le 26/11/2026 : SIGTERM (code -15) à l'étape
+# 4/7, origin/main et les fichiers de v2 déjà avancés, mais le restart de
+# mysifa jamais fait — la prod tournait l'ancien code avec les nouveaux
+# fichiers sur disque.
+#
+# Remède : premier passage (le « lanceur »), le script se relance lui-même
+# dans une unité systemd transitoire, hors de l'arbre de v1, puis se contente
+# de suivre le journal pour le streamer au navigateur. Si v1 redémarre, seul
+# le lanceur meurt : la promotion va au bout, et la page reprend le suivi via
+# GET /api/promote/journal. Le lanceur tourne déjà en root (sudo), il peut
+# donc appeler systemd-run sans aucune ligne de sudoers en plus.
+#
+# Le journal se termine toujours par « [promotion terminee - code N] » (trap
+# EXIT) : c'est ce marqueur que lisent le lanceur et l'API pour savoir que
+# c'est fini, et avec quel code.
+#
+# Sans systemd-run (poste de dev), le script tourne au premier plan comme avant.
+LOG_DIR="${V2_PATH}/data/logs/promotions"
+VERROU="${LOG_DIR}/.verrou"
+SUIVI_MAX=900
+JOURNAUX_GARDES=30
+
+# suivre <journal> : streame le journal sur stdout jusqu'au marqueur de fin,
+# puis sort avec le code qu'il porte. Le marqueur est lu AVANT la taille :
+# comme il est la dernière écriture, tout ce qui précède est donc affiché.
+suivre() {
+    local journal="$1" pos=0 taille code debut
+    debut=$(date +%s)
+    while :; do
+        code=$(grep -aoE '^\[promotion terminee - code [0-9]+\]' "$journal" 2>/dev/null \
+               | tail -1 | grep -oE '[0-9]+')
+        taille=$(wc -c < "$journal" 2>/dev/null || echo "$pos")
+        taille=${taille//[[:space:]]/}
+        if (( taille > pos )); then
+            tail -c +$((pos + 1)) "$journal" | head -c $((taille - pos))
+            pos=$taille
+        fi
+        if [[ -n "$code" ]]; then return "$code"; fi
+        if (( $(date +%s) - debut > SUIVI_MAX )); then
+            log "Suivi interrompu après ${SUIVI_MAX} s. La promotion continue de son côté :"
+            log "son journal reste lisible dans Paramètres › Déploiement."
+            return 3
+        fi
+        sleep 1
+    done
+}
+
+if [[ -z "${PROMOTE_DETACHE:-}" ]] && command -v systemd-run >/dev/null 2>&1; then
+    mkdir -p "$LOG_DIR" || fail "Dossier de journal impossible à créer : $LOG_DIR"
+    # Refus immédiat si une promotion tourne déjà : sans ça, la seconde
+    # créerait un journal plus récent que celui de la promotion en cours, et
+    # la page suivrait le mauvais. L'unité reprend le verrou pour de bon.
+    exec 9>"$VERROU"
+    if ! flock -n 9; then
+        fail "Une promotion est déjà en cours. Attendre sa fin : son journal
+       s'affiche dans Paramètres › Déploiement."
+    fi
+    exec 9>&-
+
+    TS=$(date '+%Y%m%d_%H%M%S')
+    JOURNAL="${LOG_DIR}/promote_${TS}.log"
+    # Les notes passent par un fichier, pas par la ligne de commande :
+    # systemd interprète les « % » d'une ligne d'ExecStart, et une note de
+    # release peut très bien en contenir.
+    NOTES_FICHIER="${LOG_DIR}/promote_${TS}.notes"
+    : > "$JOURNAL" && chmod 644 "$JOURNAL"
+    printf '%s' "$NOTES" > "$NOTES_FICHIER"
+    # L'unité exécute une COPIE du script : bash lit son fichier au fil de
+    # l'exécution, et le cron de v1 peut réécrire scripts/promote_v2.sh par
+    # un git pull pendant que la promotion tourne.
+    COPIE="${LOG_DIR}/promote_${TS}.sh"
+    # Échec avant le départ de l'unité : on clôt le journal nous-mêmes, sinon
+    # la page le croirait « en cours » pendant dix minutes.
+    clore() { printf '[promotion terminee - code 1]\n' >> "$JOURNAL"; fail "$*"; }
+    cp "$(readlink -f "$0")" "$COPIE" || clore "Copie du script impossible : $COPIE"
+    UNITE="mysifa-promote-${TS}"
+    if ! systemd-run --quiet --collect --no-block --unit="$UNITE" \
+            --setenv=PROMOTE_DETACHE=1 \
+            --setenv=PROMOTE_JOURNAL="$JOURNAL" \
+            --setenv=PROMOTE_NOTES="$NOTES_FICHIER" \
+            /bin/bash "$COPIE"; then
+        clore "systemd-run a refusé de lancer la promotion (unité ${UNITE})."
+    fi
+    log "Promotion lancée dans l'unité ${UNITE}"
+    suivre "$JOURNAL"
+    exit $?
+fi
+
+if [[ -n "${PROMOTE_DETACHE:-}" ]]; then
+    exec >>"$PROMOTE_JOURNAL" 2>&1
+    trap 'printf "[promotion terminee - code %s]\n" "$?"' EXIT
+    NOTES=$(cat "$PROMOTE_NOTES" 2>/dev/null || true)
+    rm -f "$PROMOTE_NOTES"
+    # La copie peut disparaître du disque : bash garde le fichier ouvert.
+    case "$0" in "$LOG_DIR"/promote_*.sh) rm -f "$0" ;; esac
+fi
+
+mkdir -p "$LOG_DIR"
+exec 9>"$VERROU"
+if command -v flock >/dev/null 2>&1; then
+    flock -n 9 || fail "Une promotion est déjà en cours."
+fi
+
+# Ménage : on garde les ${JOURNAUX_GARDES} derniers journaux.
+ls -1t "$LOG_DIR"/promote_*.log 2>/dev/null | tail -n +$((JOURNAUX_GARDES + 1)) | xargs -r rm -f
 
 cd "$V2_PATH" || fail "V2_PATH introuvable : $V2_PATH"
 mkdir -p "$BACKUP_DIR"
