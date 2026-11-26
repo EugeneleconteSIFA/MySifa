@@ -222,6 +222,7 @@
     rentTdbMachine: '',
     rentTdbGrain: 'jour',
     rentTdbCourbe: 'marge',
+    rentTdbProg: 'combine',
     // Filtre de la file de travail : a_lier | comparables | tous.
     rentFiltre: 'a_lier',
     // Tri de la liste des dossiers : colonne + sens, poses par l'en-tete.
@@ -370,6 +371,7 @@
         if(S.rentTdbMachine) p.machine=S.rentTdbMachine;
         if(S.rentTdbGrain&&S.rentTdbGrain!=='jour') p.grain=S.rentTdbGrain;
         if(S.rentTdbCourbe&&S.rentTdbCourbe!=='marge') p.courbe=S.rentTdbCourbe;
+        if(S.rentTdbProg&&S.rentTdbProg!=='combine') p.progression=S.rentTdbProg;
       }else if(rs==='dossiers'){
         if(S.rentFiltre&&S.rentFiltre!=='a_lier') p.filtre=S.rentFiltre;
         var rt=S.rentTri||{};
@@ -622,6 +624,7 @@
         S.rentTdbMachine=(tm.length<=80&&!/[\u0000-\u001f<>]/.test(tm))?tm:'';
         S.rentTdbGrain=u.get('grain','jour',['jour','semaine','mois']);
         S.rentTdbCourbe=u.get('courbe','marge',['marge','horaire']);
+        S.rentTdbProg=u.get('progression','combine',['combine','marge','horaire']);
       }else if(S.rentSubTab==='pilotage'){
         S.rentPilotMachine=u.get('machine',null);
         S.rentPilotSemaines=Number(u.get('semaines','2',['1','2','4']));
@@ -8027,12 +8030,14 @@ function renderRentTableau(){
     machine: S.rentTdbMachine || '',
     grain: S.rentTdbGrain || 'jour',
     courbe: S.rentTdbCourbe || 'marge',
+    progression: S.rentTdbProg || 'combine',
     surFiltre: patch => {
       const p = {};
       if(patch.periode !== undefined) p.rentTdbPeriode = patch.periode;
       if(patch.machine !== undefined) p.rentTdbMachine = patch.machine;
       if(patch.grain !== undefined) p.rentTdbGrain = patch.grain;
       if(patch.courbe !== undefined) p.rentTdbCourbe = patch.courbe;
+      if(patch.progression !== undefined) p.rentTdbProg = patch.progression;
       set(p);
     },
     ouvrir: async entryId => {
@@ -8515,8 +8520,10 @@ function rentSelecteurDevis(o){
     return t.length === 3 ? t[2] + '/' + t[1] + '/' + t[0] : ''; };
   const details = s => [
     (s.format_h && s.format_v) ? (s.format_v + '×' + s.format_h + ' mm') : null,
-    s.papier || null,
     s.qte_etiquettes ? fmtQte(s.qte_etiquettes) + ' ex' : null,
+    s.ex_rouleau ? fmtQte(s.ex_rouleau) + ' ex/rlx' : null,
+    s.papier || null,
+    s.colle || null,
     s.date_devis ? fmtJour(s.date_devis) : null,
   ].filter(Boolean).join(' · ');
 
@@ -8632,6 +8639,80 @@ function rentSelecteurDevis(o){
   return racine;
 }
 
+/* Le dossier et son devis côte à côte : format, quantité, étiquettes par
+   rouleau, matière, colle (demande du 24/11/2026). Une ligne qui diffère est
+   marquée ; un côté inconnu n'est jamais un écart. Calcul serveur
+   (`/caracteristiques`, service `rentabilite_caracteristiques.py`), dessin
+   ici, réutilisé partout où un dossier et un devis se côtoient.
+   `devisId` : un devis choisi mais pas encore enregistré (panneau Dossiers). */
+function rentCaracTableau(r, avecDossier){
+  const fmt = (l, v) => {
+    if(v == null || v === '') return '—';
+    if(typeof v === 'number') return v.toLocaleString('fr-FR') + (l.unite ? ' ' + l.unite : '');
+    return String(v);
+  };
+  const zone = h('div',{className:'rent-carac' + (avecDossier ? '' : ' rent-carac-seul')});
+  zone.append(h('div',{className:'rent-carac-ligne rent-carac-tete'},
+    h('span',null,''), avecDossier ? h('span',null,'Dossier') : null, h('span',null,'Devis')));
+  (r.lignes || []).forEach(l => {
+    const devis = h('span',{className:'rent-carac-val'}, fmt(l, l.devis));
+    if(l.note) devis.title = 'Quantité du devis : ' + l.note + ' de celle du dossier';
+    if((l.cle === 'matiere' || l.cle === 'colle') && r.devis_fichier && l.devis)
+      devis.title = 'Lu dans le nom du fichier : ' + r.devis_fichier;
+    zone.append(h('div',{className:'rent-carac-ligne' + (l.ecart ? ' is-ecart' : ''),
+        title: l.ecart ? l.libelle + ' : le dossier diffère du devis' : ''},
+      h('span',{className:'rent-carac-lib'}, l.ecart ? h('span',{className:'rent-carac-diff'},'≠') : null, l.libelle),
+      avecDossier ? h('span',{className:'rent-carac-val'}, fmt(l, l.dossier)) : null,
+      devis));
+  });
+  return zone;
+}
+
+function rentCaracteristiques(entryId, devisId){
+  const zone = h('div',null, h('div',{className:'rent-carac-attente'},'Lecture du dossier et du devis…'));
+  api('/api/rentabilite/planning/' + entryId + '/caracteristiques'
+      + (devisId ? '?devis_id=' + encodeURIComponent(devisId) : ''))
+    .then(r => { zone.textContent = ''; zone.append(rentCaracTableau(r, true)); })
+    .catch(() => {
+      zone.textContent = '';
+      zone.append(h('div',{className:'rent-carac-attente'},'Caractéristiques indisponibles.'));
+    });
+  return zone;
+}
+
+/* Fenêtre d'un devis seul : ses caractéristiques, puis le même tableau
+   « Dossier / Devis » pour chaque dossier qui lui est rattaché. */
+function rentCaracteristiquesDevis(devisId){
+  const zone = h('div',{className:'rent-carac-devis'},
+    h('div',{className:'rent-carac-attente'},'Lecture du devis…'));
+  api('/api/rentabilite/devis/' + devisId + '/caracteristiques')
+    .then(r => {
+      zone.textContent = '';
+      const dossiers = r.dossiers || [];
+      if(!dossiers.length){
+        zone.append(h('div',{className:'form-section-title'},'Caractéristiques'),
+          rentCaracTableau(r, false));
+        return;
+      }
+      zone.append(h('div',{className:'form-section-title'},
+        dossiers.length > 1 ? 'Dossiers rattachés' : 'Dossier rattaché'));
+      dossiers.forEach(d => {
+        zone.append(h('div',{className:'rent-carac-dossier'},
+          h('b',null, d.reference || ('Dossier ' + d.planning_entry_id)),
+          h('span',null, [d.machine, d.valide ? null : 'proposé, à confirmer'].filter(Boolean).join(' · '))),
+          rentCaracTableau(d, true));
+      });
+      if(r.total_dossiers > dossiers.length)
+        zone.append(h('div',{className:'rent-carac-attente'},
+          '+ ' + (r.total_dossiers - dossiers.length) + ' autre(s) dossier(s) rattaché(s).'));
+    })
+    .catch(() => {
+      zone.textContent = '';
+      zone.append(h('div',{className:'rent-carac-attente'},'Caractéristiques indisponibles.'));
+    });
+  return zone;
+}
+
 // ── Fenêtre de rattachement ──────────────────────────────────────
 // `sansAdresse` : fermeture technique (relance, réouverture, Retour du
 // navigateur, passage à la fiche complète) — voir url-etat.md.
@@ -8733,6 +8814,7 @@ async function ouvrirRattachementModal(entryId, file){
   corps.innerHTML = '';
   corps.appendChild(h('div',{className:'form-section-title'},'Devis'));
   corps.appendChild(selecteur);
+  if(lien.devis_id) corps.appendChild(rentCaracteristiques(entryId));
   if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
   // Rattachement validé : la fiche rentabilité (devisé contre réel, en
   // fourchettes) se lit sous le devis. Calcul serveur, dessin dans
@@ -9545,7 +9627,10 @@ function renderRentPanneau(g, listeVisible){
 
   // Le choix n'est enregistré qu'au clic sur « Enregistrer », avec les
   // dossiers de production : on peut corriger les deux avant de valider.
-  const devisSel=rentSelecteurDevis({entryId, devisId:lien.devis_id});
+  const caracZone=h('div');
+  const peindreCarac=id=>{ caracZone.textContent=''; if(id) caracZone.appendChild(rentCaracteristiques(entryId, id)); };
+  const devisSel=rentSelecteurDevis({entryId, devisId:lien.devis_id, onChange:peindreCarac});
+  peindreCarac(lien.devis_id);
 
   const dosInput=h('input',{type:'text',className:'rent-input',
     placeholder:'N° dossier production (ex : 1003/0002)…',
@@ -9674,6 +9759,7 @@ function renderRentPanneau(g, listeVisible){
       h('div',null,
         h('div',{className:'form-section-title'},'Devis'),
         devisSel,
+        caracZone,
         dz, dzInp
       ),
       h('div',null,
@@ -9876,7 +9962,7 @@ function ouvrirDevisModal(devisId){
           h('div',{className:'devis-alerte devis-alerte-avertissement'},
             iconEl('alert-triangle',13), h('span',null,' '+dv.note)))
       : null,
-    h('div',{className:'contact-modal-body'}, lecture, valeursLues),
+    h('div',{className:'contact-modal-body'}, rentCaracteristiquesDevis(dv.id), lecture, valeursLues),
     h('div',{className:'devis-modal-actions'},
       dejaValide
         ? h('span',{className:'devis-modal-valide'},
@@ -11749,11 +11835,28 @@ function openEditModal(row) {
   // (cycle annulé, trace déjà remise à la main en fin de production).
   const peutRetablir = isAdmin(S.user) && (!row.kind || row.kind==='prod') && String(row.no_dossier||'').trim()
     && (String(row.operation_code||'').trim()==='90' || !!String(row.annule_le||'').trim());
+  // Plusieurs dossiers de la commande tournés sous ce seul dossier (L8 puis
+  // L5 et L7) : le cycle se découpe, un cycle par dossier (mysifa_repartition.js).
+  // Depuis n'importe quelle ligne du cycle (démarrage, production, arrêt,
+  // reprise, fin) : le serveur retrouve la fin de production qui le ferme.
+  const peutRepartir = isAdmin(S.user) && (!row.kind || row.kind==='prod')
+    && String(row.no_dossier||'').trim() && !Number(row.est_annule||0)
+    && ['86','87','90'].indexOf(String(row.operation_code||'').trim())===-1;
+  const repartirBtn = (peutRepartir && window.MySifaRepartition)
+    ? h('button',{className:'btn-sm',title:'Ce cycle a couvert plusieurs dossiers de la commande',
+        onClick:e=>{ e.stopPropagation();
+          try{ closeModal(); }catch(_){}
+          try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
+          MySifaRepartition.ouvrir(row,{toast:toast, recharger:loadSaisies}); }},'Plusieurs dossiers')
+    : null;
   const leftBtns = peutConvertir
     ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
         deleteBtn,
         h('button',{className:'btn-danger',title:'Le dossier a été annulé, pas terminé',
-          onClick:e=>{ e.stopPropagation(); openConvertirAnnulation(row); }},'Convertir en annulation'))
+          onClick:e=>{ e.stopPropagation(); openConvertirAnnulation(row); }},'Convertir en annulation'),
+        repartirBtn)
+    : (repartirBtn && !peutRetablir)
+      ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}}, deleteBtn, repartirBtn)
     : peutRetablir
       ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
           deleteBtn,
@@ -14603,6 +14706,8 @@ function vitSessions(rows){
   (rows||[]).forEach(r=>{
     const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
     if(r.vitesse_aberrante || vitCalc(r.metrage_m, den).err){ err = true; return; }
+    // Sans temps de production ni d'arrêt, la session ne pèse pas.
+    if(!(den > 0)) return;
     sain = true; m += Number(r.metrage_m||0); mn += den;
   });
   return (!sain && err) ? {v:null, err:true} : vitCalc(m, mn);
@@ -15588,13 +15693,13 @@ function _mpmListeSynthese(byDosNoRep){
   let items;
   if(axe === 'dossier'){
     items = _prodAggDossier(byDosNoRep).map(function(r){
-      const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
+      const no = String(r.no_dossier);
       return {
-        key: String(r.no_dossier),
+        key: no,
         titre: '#'+r.no_dossier,
         sous: prodSynthCleanClient(r.client) || '—',
         n: fN(r.metrage_m||0)+' m',
-        vit: vitEl(vitCalc(r.metrage_m, den)),
+        vit: vitEl(vitSessions(byDosNoRep.filter(function(x){ return String(x.no_dossier||'').trim() === no; }))),
       };
     });
   }else{
@@ -16705,7 +16810,9 @@ function renderProdKpis(){
           const no = String(r.no_dossier||'');
           return _psLigne({nom:no, dossier:no, sous:prodSynthCleanClient(r.client) || '—',
             cal:r.temps_calage_min, prd:r.temps_prod_min, arr:r.temps_arret_min, met:r.metrage_m,
-            vit:vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0)),
+            // Session par session : une saisie aberrante (compteur recopié,
+            // 89 juste après le 03) donne « erreur saisie », pas 0.00 m/min.
+            vit:vitSessions(byDosNoRep.filter(x=>String(x.no_dossier||'').trim()===no)),
             actif:no===actif, title:'Afficher la fiche du dossier',
             onClick:()=>{
               S.psSel = no; S.psLigne = null; render();

@@ -49,7 +49,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.6.1"
+APP_VERSION = "3.6.2"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -386,6 +386,15 @@ PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
 # repères de cadence. Ramené de 400 à 200 le 15/10/2026 : les machines
 # tournent autour de 75-100 m/min.
 PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
+
+# Délai de réaction au passage calage → production (minutes). La machine
+# démarre, puis le conducteur clique « Production » et relève le compteur :
+# le clic arrive en retard. Sur un dossier court, ce retard pèse lourd
+# (9932856 - L1 du 20/11/2026 : 687 m en 4,8 min = 143 m/min affichés pour
+# une machine qui tourne autour de 100). Ce délai est retiré du calage et
+# rendu à la production à chaque calage directement suivi d'une production,
+# sans jamais dépasser la durée du calage. 0 désactive la correction.
+PROD_DELAI_REACTION_CALAGE_MIN = float(os.getenv("PROD_DELAI_REACTION_CALAGE_MIN", "3"))
 
 # Part de la vitesse conducteur que represente la vitesse du devis. Le devis
 # chiffre une vitesse moyenne, inferieure a celle que le conducteur regle :
@@ -731,11 +740,19 @@ ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_AD
 ROLES_ERP = ROLES_ADMIN | {ROLE_EXPEDITION}
 
 # ADV (/adv) : le tableau de bord du carnet de commandes, côté administration
-# des ventes. Le tableau est ouvert à l'administration et à la direction ;
-# l'onglet Prépa l'est aussi à la logistique et à l'expédition, qui y passent
-# une préparation à « en cours » puis « prête ».
+# des ventes. Trois cercles (décision du 26/11/2026) :
+# - ROLES_ADV : l'administration et la direction PILOTENT — ordre de la Prépa,
+#   urgences, jour de prépa, forçages, repiquage, mise en forme ;
+# - ROLES_ADV_PREPA : qui passe une préparation « prête » (ADV, logistique,
+#   expédition) ;
+# - ROLES_ADV_CARNET : qui CONSULTE le carnet (onglet Commandes) — l'ADV, les
+#   commerciaux et l'expédition.
+# ROLES_ADV_LECTURE ouvre l'appli : tout rôle d'un des trois cercles. La
+# logistique n'a que l'onglet Prépa ; un commercial voit tout sans rien changer.
 ROLES_ADV = set(ROLES_ADMIN)
 ROLES_ADV_PREPA = ROLES_ADV | {ROLE_LOGISTIQUE, ROLE_EXPEDITION}
+ROLES_ADV_CARNET = ROLES_ADV | {ROLE_COMMERCIAL, ROLE_EXPEDITION}
+ROLES_ADV_LECTURE = ROLES_ADV_PREPA | ROLES_ADV_CARNET
 
 # Les cinq étapes de la chaîne d'une ligne de commande, dans l'ordre où elles
 # se franchissent, et les quatre états qu'une étape peut prendre.
@@ -744,13 +761,16 @@ ADV_ETAPES = (
     ("prod", "Prod"),
     ("stock", "Stock"),
     ("prepa", "Prépa"),
-    ("depart", "Départ prévu"),
+    ("depart", "Expé"),
 )
 ADV_ETATS = (
     ("oui", "Oui"),
     ("en_cours", "En cours"),
     ("non", "Non"),
     ("sans_objet", "Sans objet"),
+    # Stock seulement, calculé jamais fixé à la main : production terminée
+    # pour toute la ligne mais pas entrée dans MyStock (part directement).
+    ("probable", "Probable"),
 )
 ADV_PREPA_STATUTS = (
     ("a_preparer", "À préparer"),
@@ -759,6 +779,14 @@ ADV_PREPA_STATUTS = (
 )
 # L'onglet Prépa montre ce qui part dans les N prochains jours, retards compris.
 ADV_PREPA_HORIZON_JOURS = int(os.getenv("ADV_PREPA_HORIZON_JOURS", "21"))
+# Stock « probable » : part du reste à livrer que la production terminée doit
+# couvrir (étiquettes de fin de prod) pour qu'on la juge préparable sans
+# entrée MyStock. 0.95 = la gâche d'un tirage ne bloque pas la ligne.
+ADV_STOCK_PROBABLE_COUVERTURE = float(os.getenv("ADV_STOCK_PROBABLE_COUVERTURE", "0.95"))
+# Une préparation préparable devient urgente quand son expédition tombe dans
+# ce nombre de jours (0 = aujourd'hui, 1 = demain), retards compris. S'ajoute
+# aux lignes marquées « urgente » par l'ADV (table adv_urgences).
+ADV_PREPA_URGENCE_JOURS = int(os.getenv("ADV_PREPA_URGENCE_JOURS", "1"))
 
 # Mise en forme conditionnelle du carnet ADV (règles en base, table
 # adv_mises_en_forme). Ce qui peut être coloré, comment on compare, et avec
@@ -774,7 +802,11 @@ ADV_MEF_COLONNES = (
     ("expedition", "Expédition", "date"),
     ("livraison", "Livraison", "date"),
     ("fin_prod", "Fin de prod", "date"),
-) + tuple(("etape_" + k, v, "etat") for k, v in ADV_ETAPES)
+) + tuple(("etape_" + k, v, "etat") for k, v in ADV_ETAPES) + (
+    # Pas une colonne du carnet : la dernière info de suivi de la ligne, pour
+    # « si Info de suivi n'est pas vide, colorer la ligne ».
+    ("info", "Info de suivi", "texte"),
+)
 ADV_MEF_OPERATEURS = {
     "nombre": (("gt", ">"), ("ge", "≥"), ("lt", "<"), ("le", "≤"), ("eq", "="), ("ne", "≠"),
                ("vide", "est vide"), ("non_vide", "n'est pas vide")),
@@ -790,7 +822,35 @@ ADV_MEF_CIBLES = (("valeur", "une valeur"), ("colonne", "une autre colonne"),
                   ("aujourdhui", "aujourd'hui ± jours"))
 ADV_MEF_TONS = (("danger", "Rouge"), ("warn", "Orange"), ("ok", "Vert"),
                 ("accent", "Bleu"), ("neutre", "Gris"))
+# Palette élargie : une teinte (angle et saturation OKLCH) x une nuance x un
+# rendu. Les tons ci-dessus suivent la palette du thème ; ceux-ci gardent leur
+# teinte, et leur clarté suit le mode clair / sombre (mysifa_adv.css). Le ton
+# d'une règle s'écrit « <teinte>-<nuance> » : rouge-2, vert-1…
+ADV_MEF_TEINTES = (
+    ("rouge", "Rouge", 25, 0.19), ("orange", "Orange", 50, 0.17),
+    ("ambre", "Ambre", 75, 0.16), ("jaune", "Jaune", 98, 0.16),
+    ("citron", "Vert citron", 125, 0.17), ("vert", "Vert", 150, 0.16),
+    ("emeraude", "Émeraude", 170, 0.13), ("turquoise", "Turquoise", 195, 0.12),
+    ("ciel", "Bleu ciel", 230, 0.13), ("bleu", "Bleu", 262, 0.17),
+    ("indigo", "Indigo", 285, 0.17), ("violet", "Violet", 305, 0.17),
+    ("rose", "Rose", 345, 0.17), ("gris", "Gris", 260, 0.0),
+)
+ADV_MEF_NUANCES = (("1", "Pâle"), ("2", "Moyen"), ("3", "Soutenu"))
+ADV_MEF_RENDUS = (("fond", "Pastille"), ("texte", "Texte coloré"))
 ADV_MEF_MAX_REGLES = 40
+
+# Type de poste (machines.type), réglé dans Paramètres › Machines : la logique
+# lit le type, jamais le nom de la machine (app/services/machines_type.py).
+MACHINE_TYPES = (
+    ("impression", "Impression"),
+    ("repiquage", "Repiquage"),
+)
+# Statut du repiquage d'une ligne de commande, réglable par l'ADV (adv_repiquages).
+ADV_REPIQUAGE_STATUTS = (
+    ("a_faire", "À faire"),
+    ("en_cours", "En cours"),
+    ("termine", "Terminé"),
+)
 
 # Nouvel ERP (remplaçant de RVGI), servi sur son propre sous-domaine par le
 # middleware `router_hote_erp` de main.py : une requête dont le Host figure dans
@@ -1085,6 +1145,10 @@ def nc_service_for_role(role, nc_service_override=None):
 
 # Champs de nc_dossiers dont la modification remet à zéro les acks de tous les services
 # (pertinent quand le contenu de fond change et doit être relu). Voir app/routers/qualite.py.
+# Non-conformités : une NC dont la dernière étape de suivi date de plus de N jours
+# est signalée « à faire avancer » dans la liste (MyQualité).
+NC_RELANCE_JOURS = int(os.getenv("NC_RELANCE_JOURS", "7"))
+
 NC_ACK_RESET_FIELDS = frozenset({
     "titre", "description", "analyse_causes",
     "action_corrective", "action_preventive",
@@ -1267,6 +1331,19 @@ FERIES_NATIONAUX_FR: dict[int, list[tuple[str, str]]] = {
         ("2026-11-01", "La Toussaint"),
         ("2026-11-11", "Armistice 1918"),
         ("2026-12-25", "Noël"),
+    ],
+    2027: [
+        ("2027-01-01", "Jour de l'an"),
+        ("2027-03-29", "Lundi de Pâques"),
+        ("2027-05-01", "Fête du Travail"),
+        ("2027-05-08", "Victoire des Alliés 1945"),
+        ("2027-05-06", "Jeudi de l'Ascension"),
+        ("2027-05-17", "Lundi de Pentecôte"),
+        ("2027-07-14", "Fête Nationale"),
+        ("2027-08-15", "Assomption"),
+        ("2027-11-01", "La Toussaint"),
+        ("2027-11-11", "Armistice 1918"),
+        ("2027-12-25", "Noël"),
     ],
 }
 

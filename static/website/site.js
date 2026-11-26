@@ -1,3 +1,19 @@
+/* Textes affichés par le script, selon la langue de la page (<html lang>). */
+var SIFA_EN=(document.documentElement.lang||'').slice(0,2)==='en';
+var SIFA_T=SIFA_EN?{
+  toLight:'Switch to light theme',toDark:'Switch to dark theme',locale:'en-GB',
+  preview:'Mock-up: this form is not connected, no data has been sent.',
+  invalid:'E-mail address and description of your needs are required.',
+  opened:'Your e-mail app is opening with the request filled in. Otherwise: contact@sifa.pro.',
+  subject:'Quote request',company:'Company',name:'Name',email:'E-mail',phone:'Phone',product:'Product',qty:'Estimated quantity',need:'Needs'
+}:{
+  toLight:'Passer en thème clair',toDark:'Passer en thème sombre',locale:'fr-FR',
+  preview:'Maquette : ce formulaire n\'est pas connecté, aucune donnée n\'a été envoyée.',
+  invalid:'Adresse e-mail et description du besoin obligatoires.',
+  opened:'Votre messagerie s\'ouvre avec la demande préremplie. Sinon : contact@sifa.pro.',
+  subject:'Demande de devis',company:'Société',name:'Nom',email:'E-mail',phone:'Téléphone',product:'Produit',qty:'Quantité estimée',need:'Besoin'
+};
+
 (function(){
   var root=document.documentElement;
   root.classList.add('js');
@@ -42,7 +58,7 @@
   var btn=document.getElementById('themeBtn');
   function applyTheme(t){
     root.setAttribute('data-theme',t);
-    if(btn)btn.setAttribute('aria-label',t==='dark'?'Passer en thème clair':'Passer en thème sombre');
+    if(btn)btn.setAttribute('aria-label',t==='dark'?SIFA_T.toLight:SIFA_T.toDark);
   }
   try{var saved=localStorage.getItem('sifa-theme');if(saved==='light'||saved==='dark')applyTheme(saved);}catch(e){}
   if(btn)btn.addEventListener('click',function(){
@@ -81,7 +97,7 @@
     function step(ts){
       if(!t0)t0=ts;
       var p=Math.min((ts-t0)/d,1),v=Math.round(end*(1-Math.pow(1-p,3)));
-      el.textContent=v.toLocaleString('fr-FR')+suf;
+      el.textContent=v.toLocaleString(SIFA_T.locale)+suf;
       if(p<1)requestAnimationFrame(step);
     }
     requestAnimationFrame(step);
@@ -155,12 +171,13 @@
   form.addEventListener('submit',function(e){
     e.preventDefault();
     var msg=document.getElementById('formMsg');
-    if(preview){msg.textContent='Maquette : ce formulaire n\'est pas connecté, aucune donnée n\'a été envoyée.';return;}
-    if(!form.checkValidity()){msg.textContent='Adresse e-mail et description du besoin obligatoires.';return;}
+    if(preview){msg.textContent=SIFA_T.preview;return;}
+    if(!form.checkValidity()){msg.textContent=SIFA_T.invalid;return;}
     var f=function(n){var el=form.elements[n];return el?el.value.trim():'';};
     var prod=sel&&sel.selectedIndex>0?sel.options[sel.selectedIndex].text:'';
-    var body=['Société : '+f('societe'),'Nom : '+f('nom'),'E-mail : '+f('email'),'Téléphone : '+f('tel'),'Produit : '+prod,'Quantité estimée : '+f('quantite'),'','Besoin :',f('message')].join('\n');
-    location.href='mailto:contact@sifa.pro?subject='+encodeURIComponent('Demande de devis'+(prod?' : '+prod:''))+'&body='+encodeURIComponent(body);
-    msg.textContent='Votre messagerie s\'ouvre avec la demande préremplie. Sinon : contact@sifa.pro.';
+    var sep=SIFA_EN?': ':' : ',T=SIFA_T;
+    var body=[T.company+sep+f('societe'),T.name+sep+f('nom'),T.email+sep+f('email'),T.phone+sep+f('tel'),T.product+sep+prod,T.qty+sep+f('quantite'),'',T.need+sep.replace(/ $/,''),f('message')].join('\n');
+    location.href='mailto:contact@sifa.pro?subject='+encodeURIComponent(T.subject+(prod?sep+prod:''))+'&body='+encodeURIComponent(body);
+    msg.textContent=SIFA_T.opened;
   });
 })();

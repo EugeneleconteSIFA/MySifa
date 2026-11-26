@@ -27,6 +27,7 @@ from app.routers.planning_rh import (
     _require_conge_edit,
     _week_bounds,
     jours_affectes_pendant,
+    jours_ouvres,
 )
 from app.services.audit_service import log_action
 from app.services.auth_service import get_current_user
@@ -120,12 +121,8 @@ def _perimetre_validation(user: dict) -> str:
 
 
 def _jours_ouvres(d_deb: date, d_fin: date) -> float:
-    n, cur = 0, d_deb
-    while cur <= d_fin:
-        if cur.weekday() < 5:
-            n += 1
-        cur += timedelta(days=1)
-    return float(n)
+    """Jours ouvrés, fériés retirés : même calcul que les congés (planning_rh)."""
+    return jours_ouvres(d_deb, d_fin)
 
 
 def _lire_dates(body: dict) -> tuple[date, date]:

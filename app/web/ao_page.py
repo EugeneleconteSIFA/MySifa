@@ -453,7 +453,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <script>window.__MYSIFA_APP__='ao';</script>
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js?v=2"></script>
+<script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=21"></script>

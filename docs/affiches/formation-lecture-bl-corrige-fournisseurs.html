@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Lecture BL — Corrigé documents fournisseurs</title>
+<style>
+  :root{
+    --bg:#f1f5f9; --card:#ffffff; --border:#cbd5e1;
+    --text:#0f172a; --text2:#475569; --muted:#64748b;
+    --acc:#2563eb; --acc-bg:rgba(37,99,235,0.13); --acc-bg-soft:rgba(37,99,235,0.06);
+    --ok:#059669; --ok-bg:rgba(5,150,105,0.08);
+    --red:#ea580c; --red-bg:rgba(234,88,12,0.07);
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif }
+  .page{ width:210mm; height:297mm; padding:14mm 13mm 10mm; display:flex; flex-direction:column; gap:5mm; page-break-after:always; background:var(--bg); overflow:hidden }
+  .page:last-child{ page-break-after:auto }
+  .hero{ display:flex; align-items:center; gap:14px }
+  .mark{ width:48px; height:48px; border-radius:14px; background:var(--acc-bg); color:var(--acc); display:flex; align-items:center; justify-content:center; flex-shrink:0 }
+  .mark svg{ width:28px; height:28px }
+  h1{ margin:0; font-size:32px; line-height:1; font-weight:800; letter-spacing:-1px; text-transform:uppercase }
+  h1 em{ font-style:normal; color:var(--acc) }
+  .team{ margin-left:auto; padding:6px 14px; border-radius:999px; background:var(--acc-bg); color:var(--acc); font-size:12px; font-weight:800; letter-spacing:2.2px; text-transform:uppercase; white-space:nowrap }
+  .lead{ margin:0; font-size:15px; line-height:1.4; font-weight:600; color:var(--text2) }
+  .lead em{ font-style:normal; color:var(--acc); font-weight:800 }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:5mm 6mm }
+  .num{ width:24px; height:24px; border-radius:7px; background:var(--acc); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; flex-shrink:0 }
+  .ft{ margin-top:auto; font-size:9px; color:var(--muted); text-align:center; text-transform:uppercase; letter-spacing:1.5px; font-weight:700 }
+
+  /* ── BL type ── */
+  .bl{ position:relative; background:#fff; border:1.5px solid var(--text2); border-radius:6px; padding:6mm 6mm 5mm; font-size:11.5px; color:var(--text); font-family:Arial,Helvetica,sans-serif }
+  .bl .row{ display:flex; justify-content:space-between; gap:5mm }
+  .bl .four{ font-size:15px; font-weight:800; letter-spacing:.5px }
+  .bl .four small{ display:block; font-size:9.5px; font-weight:400; color:var(--muted); letter-spacing:0 }
+  .bl .titre{ font-size:15px; font-weight:800; text-align:right }
+  .bl .kv{ display:grid; grid-template-columns:auto auto; gap:1px 8px; margin-top:2mm }
+  .bl .kv span:nth-child(odd){ color:var(--muted) }
+  .bl .kv b{ font-weight:700 }
+  .bl .addr{ border:1px solid var(--border); border-radius:4px; padding:2mm 3mm; min-width:62mm }
+  .bl table{ width:100%; border-collapse:collapse; margin-top:3mm }
+  .bl th{ background:#e2e8f0; text-align:left; padding:1.6mm 2mm; font-size:9.5px; text-transform:uppercase; letter-spacing:.4px }
+  .bl td{ padding:2.6mm 2mm; border-bottom:1px solid #e2e8f0; vertical-align:top }
+  .bl td.n, .bl th.n{ text-align:right }
+  .bl .sub{ color:var(--muted); font-size:9.5px }
+  .bl .rel td{ color:var(--muted); font-style:italic }
+  .bl .bas{ display:grid; grid-template-columns:1fr 1fr; gap:4mm; margin-top:3mm }
+  .bl .box{ border:1px solid var(--border); border-radius:4px; padding:2.5mm 3mm; min-height:20mm }
+  .bl .box .l{ font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px }
+  .pin{ position:static; display:inline-flex !important; vertical-align:middle; margin:0 5px; width:19px; height:19px; border-radius:50%; background:var(--acc); color:#fff; font-family:'Segoe UI',system-ui,sans-serif; font-size:11px; font-weight:800; align-items:center; justify-content:center }
+  .bl .pin{ color:#fff !important }
+  .bl th, .bl td.n, .bl td:nth-child(2), .bl td:nth-child(6){ white-space:nowrap }
+  .legend{ display:grid; grid-template-columns:1fr 1fr; gap:2.6mm 6mm }
+  .lg{ display:flex; gap:9px; align-items:flex-start; font-size:12.5px; line-height:1.32; color:var(--text2); font-weight:600 }
+  .lg b{ color:var(--text); font-weight:800 }
+
+  /* ── Méthode ── */
+  .steps{ display:flex; flex-direction:column; gap:0; padding:1mm 6mm }
+  .step{ display:flex; gap:5mm; align-items:flex-start; padding:3.2mm 0; border-bottom:1px solid rgba(203,213,225,.7) }
+  .step:last-child{ border-bottom:none }
+  .step .num{ width:32px; height:32px; border-radius:10px; font-size:17px; background:var(--acc-bg); color:var(--acc) }
+  .step .t{ font-size:17px; font-weight:800; line-height:1.2; letter-spacing:-.3px }
+  .step .t em{ font-style:normal; color:var(--acc) }
+  .step .d{ font-size:12.5px; line-height:1.4; color:var(--text2); font-weight:600; margin-top:1.2mm }
+  .step .d b{ color:var(--text) }
+  .h2{ margin:0; font-size:12px; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; gap:10px }
+  .h2:after{ content:""; flex:1; height:1px; background:var(--border) }
+  table.t{ width:100%; border-collapse:collapse; font-size:12.5px }
+  table.t th{ text-align:left; font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); padding:0 3mm 2mm; border-bottom:2px solid var(--border) }
+  table.t td{ padding:2.4mm 3mm; border-bottom:1px solid rgba(203,213,225,.7); vertical-align:top; line-height:1.35; color:var(--text2); font-weight:600 }
+  table.t tr:last-child td{ border-bottom:none }
+  table.t td:first-child{ font-family:Consolas,'Courier New',monospace; color:var(--text); font-weight:700; white-space:nowrap }
+  table.t b{ color:var(--text) }
+  .calc{ white-space:nowrap; font-family:Consolas,'Courier New',monospace; color:var(--acc); font-weight:700 }
+
+  /* ── Écarts ── */
+  table.e td:first-child{ font-family:'Segoe UI',system-ui,sans-serif; white-space:normal; width:34% }
+  .stop{ background:var(--red-bg); border:1px dashed rgba(234,88,12,.45); border-radius:14px; padding:4mm 6mm }
+  .stop p{ margin:0; font-size:13.5px; line-height:1.42; font-weight:600; color:var(--text2) }
+  .stop p+p{ margin-top:2mm }
+  .stop b{ color:var(--text) } .stop em{ font-style:normal; color:var(--red); font-weight:800 }
+  .duo{ display:grid; grid-template-columns:1fr 1fr; gap:4mm }
+  .res{ border-radius:14px; padding:4mm 5mm; font-size:13px; line-height:1.38; font-weight:600; color:var(--text2) }
+  .res .h{ display:block; font-size:11.5px; font-weight:800; letter-spacing:1.8px; text-transform:uppercase; margin-bottom:1.5mm }
+  .res.ok{ background:var(--ok-bg); border:2px solid var(--ok) } .res.ok .h{ color:var(--ok) }
+  .res.ko{ background:var(--red-bg); border:2px solid var(--red) } .res.ko .h{ color:var(--red) }
+  .res q{ quotes:none; font-family:Consolas,'Courier New',monospace; color:var(--text); font-weight:700 }
+  .claimline{ background:var(--acc-bg-soft); border:1px dashed rgba(37,99,235,.42); border-radius:14px; padding:4mm 6mm; text-align:center }
+  .claimline p{ margin:0; font-size:16px; line-height:1.35; font-weight:700; color:var(--text2) }
+  .claimline em{ font-style:normal; color:var(--acc); font-weight:800 }
+
+  .tight{ padding:3mm 4mm }
+  table.rp{ width:100%; border-collapse:collapse; font-size:11.5px }
+  table.rp td{ padding:1.3mm 2mm; border-bottom:1px solid rgba(203,213,225,.7); vertical-align:top; line-height:1.33; color:var(--text2); font-weight:600 }
+  table.rp tr:last-child td{ border-bottom:none }
+  table.rp td:first-child{ width:8mm; padding-left:0 }
+  table.rp .num{ width:20px; height:20px; font-size:11px; border-radius:6px }
+  table.rp td.k{ width:30mm; font-size:10px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:var(--muted) }
+  table.rp b{ color:var(--text) }
+  table.g{ width:100%; border-collapse:collapse; font-size:11px }
+  table.g th{ text-align:left; font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); padding:0 2mm 1.6mm; border-bottom:2px solid var(--border) }
+  table.g td{ padding:1.7mm 2mm; border-bottom:1px solid rgba(203,213,225,.7); vertical-align:top; line-height:1.3; color:var(--text2); font-weight:600 }
+  table.g b{ color:var(--text) }
+  table.g tr.tot td{ border-top:2px solid var(--border); border-bottom:none; font-weight:800; color:var(--text) }
+  .v{ display:inline-block; padding:1px 7px; border-radius:6px; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; white-space:nowrap }
+  .v.ok{ background:var(--ok-bg); color:var(--ok) } .v.ko{ background:var(--red-bg); color:var(--red) }
+  .relever ul{ margin:0; padding-left:5mm }
+  .relever li{ font-size:12px; line-height:1.4; color:var(--text2); font-weight:600; margin:1.2mm 0 }
+  .relever b{ color:var(--text) }
+  .page{ gap:3.6mm }
+  .lead{ font-size:13.5px }
+</style></head><body>
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div><h1>Doc 1 · <em>UPM Raflatac</em></h1><span class="team">Corrigé · formateur</span></div>
+  <p class="lead">C'est la <em>facture</em> (n° 1010133929), pas le BL : elle reprend le n° de BL dans l'encadré de droite. Une seule ligne, et c'est la plus piégeuse des trois : la quantité facturée n'est pas ce qui est sur la palette.</p>
+  <div class="h2">Les repères sur ce document</div>
+  <div class="card tight"><table class="rp"><tr><td><span class="num">1</span></td><td class="k">N° de BL, date</td><td><b>SFR-8048515-1</b>, expédié le 12.10.2026. Le n° 1010133929 est celui de la facture.</td></tr><tr><td><span class="num">2</span></td><td class="k">Commande SIFA</td><td><b>N° de cde client : 6133</b>. Piège : « N° de cde FR-8048515 » juste au-dessus est le n° UPM.</td></tr><tr><td><span class="num">3</span></td><td class="k">Colis, poids</td><td>Conditionnement : <b>1 palette</b>, 590 kg brut, 562 kg net. Transporteur NCS Finland Oy.</td></tr><tr><td><span class="num">4</span></td><td class="k">Référence</td><td>EAN 8160497 · PP WHITE TC 60 RR524U HD 70, complexe adhésif.</td></tr><tr><td><span class="num">5</span></td><td class="k">Quantité, unité</td><td><b>5 000 M2</b> facturés, mais le détail dit <b>2 rouleaux de 480 mm × 5 000 m</b>.</td></tr><tr><td><span class="num">6</span></td><td class="k">N° de lot</td><td>Absent du document : à lire sur l'étiquette de chaque bobine.</td></tr><tr><td><span class="num">7</span></td><td class="k">Reliquat</td><td>Rien d'indiqué. RVGI : la cde 6133 portait 4 bobines, 2 sont arrivées le 12/10 sur le BL SFR-8048521-1, ces 2 soldent la commande.</td></tr><tr><td><span class="num">8</span></td><td class="k">FSC</td><td><b>Aucune allégation, aucun n° de certificat</b>, alors que la commande 6133 demande « FSC certified ».</td></tr><tr><td><span class="num">9</span></td><td class="k">Signature</td><td>Pas de zone : c'est une facture. Les réserves se portent sur le document du transporteur.</td></tr></table></div>
+  <div class="h2">La grille, ligne par ligne</div>
+  <div class="card tight"><table class="g">
+    <tr><th>L.</th><th>Désignation</th><th>Qté doc.</th><th>Unité</th><th>À compter sur le quai</th><th>Commande SIFA</th><th>Verdict</th></tr>
+    <tr><td>1</td><td>PP White TC60 RR524U HD70 · laize 480 mm</td><td>5 000</td><td>m²</td><td><b>2 bobines</b> de 5 000 m, soit 10 000 ml et 4 800 m²</td><td>6133 : 4 bobines de 5 000 ml, 2 déjà reçues</td><td><span class="v ok">OK</span></td></tr><tr><td>—</td><td>Charge for Offcut</td><td>200,000</td><td>m²</td><td><b>Rien</b> : ce sont des frais de chute facturés, pas de la matière</td><td>6133 L2 : frais de chute</td><td>—</td></tr>
+    <tr class="tot"><td colspan="4">1 palette</td><td>2 bobines</td><td colspan="2">FSC à vérifier sur le BL</td></tr>
+  </table></div>
+  <div class="h2">À faire relever en séance</div>
+  <div class="card tight relever"><ul><li><b>5 000 m² ≠ ce qui est livré.</b> 0,480 m × 5 000 m × 2 = <span class="calc">4 800 m²</span>. Les 200 m² restants sont des frais de chute, rien à compter.</li><li><b>Les formats de nombre changent selon le pays.</b> « 5.000 mètres » = cinq mille mètres. « 200,000 M2 » = deux cents m², la virgule est le séparateur décimal.</li><li><b>Deux n° de commande sur le même document</b> : toujours chercher celui de SIFA (« cde client », « réf. client », « PO »).</li><li><b>FSC</b> : commande FSC, document sans allégation ni certificat. Si le BL papier n'en porte pas non plus → étiquette <b>Matière non FSC</b> et on prévient, comme sur l'affiche Réception FSC.</li></ul></div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · corrigé formateur · document interne SIFA</div>
+</div>
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div><h1>Doc 2 · <em>Likexin</em></h1><span class="team">Corrigé · formateur</span></div>
+  <p class="lead">C'est une <em>commercial invoice</em> d'export (Chine, incoterm FOB), sans n° de BL. Palettes et poids n'y figurent pas, mais chaque bobine est détaillée : idéal pour compter par laize.</p>
+  <div class="h2">Les repères sur ce document</div>
+  <div class="card tight"><table class="rp"><tr><td><span class="num">1</span></td><td class="k">N° de BL, date</td><td>Pas de n° de BL. <b>Invoice FR20260928</b> du 28/09/2026 sert de référence (c'est elle qui est saisie dans RVGI).</td></tr><tr><td><span class="num">2</span></td><td class="k">Commande SIFA</td><td><b>PO No : ORDER n°6051+6002</b> : deux commandes SIFA sur un seul document. « PI No » est le n° du fournisseur.</td></tr><tr><td><span class="num">3</span></td><td class="k">Colis, poids</td><td><b>Absents.</b> Demander la liste de colisage (packing list) avant de signer quoi que ce soit.</td></tr><tr><td><span class="num">4</span></td><td class="k">Référence</td><td>3 articles : thermique 70 g, glassine jaune 60 g siliconée, étiquettes imprimées 15 × 10 mm (Krups).</td></tr><tr><td><span class="num">5</span></td><td class="k">Quantité, unité</td><td>Colonne <b>Rolls</b> = nombre de bobines. Article 3 : l'en-tête dit « Total SQM » mais la case contient <b>4470 CARTONS</b>. Lire la valeur, pas seulement le titre.</td></tr><tr><td><span class="num">6</span></td><td class="k">N° de lot</td><td>En haut : <b>Production No.</b> 26090883 (thermique), 26090884 et 25121029 (glassine).</td></tr><tr><td><span class="num">7</span></td><td class="k">Reliquat</td><td>Aucun. Cde 6002 : 66 765 rouleaux commandés, <b>67 050 livrés</b>, soit 285 de plus.</td></tr><tr><td><span class="num">8</span></td><td class="k">FSC</td><td><b>FSC Mix Credit</b> sur chaque ligne, <b>ESTS-COC-242264</b> en tête et en pied : conforme, c'est l'exemple de l'affiche FSC.</td></tr><tr><td><span class="num">9</span></td><td class="k">Signature</td><td>Pas de zone : la réception se signe sur le document du transporteur.</td></tr></table></div>
+  <div class="h2">La grille, ligne par ligne</div>
+  <div class="card tight"><table class="g">
+    <tr><th>L.</th><th>Désignation</th><th>Qté doc.</th><th>Unité</th><th>À compter sur le quai</th><th>Commande SIFA</th><th>Verdict</th></tr>
+    <tr><td>1</td><td>Thermique 70 g · laize 470</td><td>7 lignes</td><td>bob.</td><td><b>9 bobines</b> (108 140 ml)</td><td>6051 L6 : 9 bob. de 12 000 m</td><td><span class="v ok">OK</span></td></tr><tr><td>1</td><td>Thermique 70 g · laize 530</td><td>7 lignes</td><td>bob.</td><td><b>18 bobines</b> (216 280 ml)</td><td>6051 L1 : 18 bob. de 12 000 m</td><td><span class="v ok">OK</span></td></tr><tr><td>2</td><td>Glassine jaune 60 g · laize 530</td><td>8 lignes</td><td>bob.</td><td><b>16 bobines</b> (294 940 ml)</td><td>6051 L2 : 16 bob. de 18 000 m</td><td><span class="v ok">OK</span></td></tr><tr><td>2</td><td>Glassine jaune 60 g · laize 440</td><td>1 ligne</td><td>bob.</td><td><b>1 bobine</b> (18 100 ml)</td><td>6051 L3 : 1 bob. de 18 000 m</td><td><span class="v ok">OK</span></td></tr><tr><td>3</td><td>Étiquettes 15 × 10 mm · 2 000/rouleau</td><td>67 050</td><td>rouleaux</td><td><b>4 470 cartons</b> de 15 rouleaux</td><td>6002 : 66 765 rouleaux</td><td><span class="v ko">+285</span></td></tr>
+    <tr class="tot"><td colspan="4">Palettes : packing list</td><td>44 bobines + 4 470 cartons</td><td colspan="2">1 surplus à signaler</td></tr>
+  </table></div>
+  <div class="h2">À faire relever en séance</div>
+  <div class="card tight relever"><ul><li><b>On compte par laize, pas par ligne</b> : 14 lignes pour le thermique, mais 2 laizes. Additionner la colonne Rolls par laize : 9 en 470, 18 en 530.</li><li><b>Les longueurs varient d'une bobine à l'autre</b> (11 850 à 12 150 m pour 12 000 commandés) : c'est normal, la longueur réelle est sur l'étiquette de chaque bobine.</li><li><b>Surplus</b> : 285 rouleaux de plus que commandé. On réceptionne ce qui est compté et on prévient, l'acceptation du surplus n'est pas une décision du quai.</li><li>La commande exige un <b>code-barres sur chaque bobine</b> et un <b>mandrin de 152 mm</b> : à vérifier sur le quai.</li></ul></div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · corrigé formateur · document interne SIFA</div>
+</div>
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div><h1>Doc 3 · <em>Mosaico</em></h1><span class="team">Corrigé · formateur</span></div>
+  <p class="lead">C'est la <em>facture</em> n° 61008508, <em>page 1 sur 2</em>. Elle renvoie au BL italien (« D.D.T. ») n° 5614. Ses quantités sont en <em>kilos</em> : le nombre de bobines n'y figure pas.</p>
+  <div class="h2">Les repères sur ce document</div>
+  <div class="card tight"><table class="rp"><tr><td><span class="num">1</span></td><td class="k">N° de BL, date</td><td><b>D.D.T./Bon livraison 5614 du 21/10/26</b>, Villorba. 61008508 est le n° de facture. Le document fait <b>2 pages</b> : avoir la seconde.</td></tr><tr><td><span class="num">2</span></td><td class="k">Commande SIFA</td><td><b>RIF. CLIENTE/Réf. du client : 5791</b>. Piège : « ORDINE 5530138 » est le n° Mosaico.</td></tr><tr><td><span class="num">3</span></td><td class="k">Colis, poids</td><td><b>Total colis : 8</b>, poids brut 7 054 kg, camion (TIR).</td></tr><tr><td><span class="num">4</span></td><td class="k">Référence</td><td>ETIWELL VL. (vélin) 68 g, laizes <b>47 cm</b> et <b>51 cm</b>, Diam. 100 = diamètre de la bobine en cm.</td></tr><tr><td><span class="num">5</span></td><td class="k">Quantité, unité</td><td><b>1.662</b> et <b>5.392</b> en <b>kg</b> (le point sépare les milliers). U.M « T » = prix à la tonne.</td></tr><tr><td><span class="num">6</span></td><td class="k">N° de lot</td><td>Absent : sur les étiquettes. La marchandise est chargée par <b>Burgo</b> à Villorba : les étiquettes peuvent être au nom de Burgo.</td></tr><tr><td><span class="num">7</span></td><td class="k">Reliquat</td><td>Rien d'indiqué. RVGI : 2<sup>e</sup> livraison de la cde 5791 (56 bobines), la 1<sup>re</sup> est arrivée le 22/06.</td></tr><tr><td><span class="num">8</span></td><td class="k">FSC</td><td><b>FSC MIX CREDIT SGSCH-COC-002122</b> sur chaque ligne : conforme.</td></tr><tr><td><span class="num">9</span></td><td class="k">Signature</td><td>Pas de zone : facture. Destinataire « SIFA TOURCOING » à l'adresse de Roubaix : vérifier l'adresse de livraison.</td></tr></table></div>
+  <div class="h2">La grille, ligne par ligne</div>
+  <div class="card tight"><table class="g">
+    <tr><th>L.</th><th>Désignation</th><th>Qté doc.</th><th>Unité</th><th>À compter sur le quai</th><th>Commande SIFA</th><th>Verdict</th></tr>
+    <tr><td>1</td><td>Etiwell VL 68 g · laize 47 cm</td><td>1 662</td><td>kg</td><td><b>≈ 4 bobines</b> (RVGI : 50 200 ml)</td><td>5791 : bob. de 12 600 m, mandrin 152</td><td><span class="v ko">à confirmer DDT</span></td></tr><tr><td>2</td><td>Etiwell VL 68 g · laize 51 cm</td><td>5 392</td><td>kg</td><td><b>≈ 12 bobines</b> (RVGI : 150 080 ml)</td><td>5791 : bob. de 12 600 m, mandrin 152</td><td><span class="v ko">à confirmer DDT</span></td></tr>
+    <tr class="tot"><td colspan="4">8 colis</td><td>≈ 16 bobines</td><td colspan="2">Détail : DDT 5614</td></tr>
+  </table></div>
+  <div class="h2">À faire relever en séance</div>
+  <div class="card tight relever"><ul><li><b>Passer des kilos aux bobines.</b> Poids d'une bobine = laize × longueur × grammage : <span class="calc">0,47 × 12 600 × 0,068 ≈ 403 kg</span>, donc 1 662 kg ≈ 4 bobines. En 51 cm : <span class="calc">≈ 437 kg</span>, 5 392 kg ≈ 12 bobines. C'est une estimation, pas un comptage.</li><li><b>« 1.662 » se lit mille six cent soixante-deux</b>, pas un virgule six. Même piège que chez UPM.</li><li><b>Les chiffres ne se recoupent pas</b> : la colonne P affiche 2 et 3, le total dit 8 colis. On ne devine pas : on compte 8 colis au camion et on prend le détail sur le DDT 5614.</li><li><b>Page 1/2</b> et « segue » en bas : il manque une page. Un document incomplet se signale, il ne se complète pas de mémoire.</li></ul></div>
+  <div class="ft">MySifa · Formation logistique · Lecture du BL · corrigé formateur · document interne SIFA</div>
+</div>
+</body></html>

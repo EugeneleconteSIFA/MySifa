@@ -10,6 +10,10 @@ fichiers que l'on édite. Ce script ne réécrit que les blocs balisés :
     <!-- @scripts -->  ... <!-- /@scripts -->  site.js
 
 Les titres, descriptions et l'ordre des pages sont dans _partials/site.json.
+Chaque page existe en français et en anglais : la clé « en » du registre donne
+le chemin, le titre et la description de la version anglaise (sous en/), qui
+utilise _partials/header.en.html et footer.en.html. Les deux versions se
+répondent par des liens hreflang et par le sélecteur FR | EN de l'en-tête.
 Les liens entre pages sont relatifs ({{root}}) pour que les mêmes fichiers
 marchent sous /website/ (aperçu MySifa) et à la racine de www.sifapro.fr.
 
@@ -36,6 +40,31 @@ def charger_registre():
     return json.loads((PARTIALS / "site.json").read_text(encoding="utf-8"))
 
 
+LANGUES = ("fr", "en")
+TXT = {
+    "fr": {"accueil": "Accueil", "ariane": "Fil d'Ariane", "langue": "Langue",
+           "og_locale": "fr_FR", "in_lang": "fr-FR",
+           "og_alt": "SIFA, fabricant et enducteur d'étiquettes adhésives à Roubaix",
+           "desc_lb": "Fabricant et enducteur d'étiquettes adhésives à Roubaix depuis 1987."},
+    "en": {"accueil": "Home", "ariane": "Breadcrumb", "langue": "Language",
+           "og_locale": "en_GB", "in_lang": "en-GB",
+           "og_alt": "SIFA, self-adhesive label manufacturer and coater in Roubaix, France",
+           "desc_lb": "Self-adhesive label manufacturer and coater in Roubaix, France, since 1987."},
+}
+
+
+def vue(page, lang):
+    """La page dans une langue : path, crumb, title, description, nav, lang, fr, en."""
+    v = dict(page) if lang == "fr" else {**page["en"], "nav": page["nav"], "priority": page["priority"]}
+    v["lang"] = lang
+    v["fr"], v["en"] = page["path"], page["en"]["path"]
+    return v
+
+
+def vues(reg, lang):
+    return [vue(p, lang) for p in reg["pages"]]
+
+
 def racine_relative(chemin):
     profondeur = chemin.count("/")
     return "./" if profondeur == 0 else "../" * profondeur
@@ -51,6 +80,7 @@ def esc(t):
 
 def json_ld(reg, page):
     base = reg["base_url"]
+    t = TXT[page["lang"]]
     org_id = base + "#organization"
     adresse = {
         "@type": "PostalAddress",
@@ -77,7 +107,7 @@ def json_ld(reg, page):
             "@type": "LocalBusiness",
             "@id": base + "#roubaix",
             "name": "SIFA",
-            "description": "Fabricant et enducteur d'étiquettes adhésives à Roubaix depuis 1987.",
+            "description": t["desc_lb"],
             "url": base,
             "image": base + reg["og_image"].lstrip("/"),
             "telephone": "+33 3 20 69 01 01",
@@ -90,11 +120,11 @@ def json_ld(reg, page):
             "@id": base + "#website",
             "url": base,
             "name": "SIFA",
-            "inLanguage": "fr-FR",
+            "inLanguage": t["in_lang"],
             "publisher": {"@id": org_id},
         },
     ]
-    if page["path"]:
+    if page["path"] not in ("", "en/"):
         graphe.append({
             "@type": "BreadcrumbList",
             "itemListElement": [
@@ -107,14 +137,15 @@ def json_ld(reg, page):
 
 
 def fil(reg, page):
-    """[(nom, chemin)] de l'accueil à la page."""
-    par_chemin = {p["path"]: p for p in reg["pages"]}
-    etapes = [("Accueil", "")]
-    morceaux = page["path"].strip("/").split("/")
+    """[(nom, chemin)] de l'accueil à la page, dans la langue de la page."""
+    lang = page["lang"]
+    par_chemin = {v["path"]: v for v in vues(reg, lang)}
+    accueil = "" if lang == "fr" else "en/"
+    etapes = [(TXT[lang]["accueil"], accueil)]
     cumul = ""
-    for m in morceaux:
+    for m in page["path"].strip("/").split("/"):
         cumul += m + "/"
-        if cumul in par_chemin:
+        if cumul in par_chemin and cumul != accueil:
             etapes.append((par_chemin[cumul]["crumb"], cumul))
     return etapes
 
@@ -124,12 +155,18 @@ def bloc_head(reg, page, v_css):
     url = base + page["path"]
     img = base + reg["og_image"].lstrip("/")
     t, d = esc(page["title"]), esc(page["description"])
+    tx = TXT[page["lang"]]
+    autre = "en_GB" if page["lang"] == "fr" else "fr_FR"
     return f"""<meta name="robots" content="noindex, nofollow">
 <title>{t}</title>
 <meta name="description" content="{d}">
 <link rel="canonical" href="{url}">
+<link rel="alternate" hreflang="fr" href="{base}{page["fr"]}">
+<link rel="alternate" hreflang="en" href="{base}{page["en"]}">
+<link rel="alternate" hreflang="x-default" href="{base}{page["fr"]}">
 <meta property="og:type" content="website">
-<meta property="og:locale" content="fr_FR">
+<meta property="og:locale" content="{tx["og_locale"]}">
+<meta property="og:locale:alternate" content="{autre}">
 <meta property="og:site_name" content="SIFA">
 <meta property="og:title" content="{t}">
 <meta property="og:description" content="{d}">
@@ -137,7 +174,7 @@ def bloc_head(reg, page, v_css):
 <meta property="og:image" content="{img}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="SIFA, fabricant et enducteur d'étiquettes adhésives à Roubaix">
+<meta property="og:image:alt" content="{esc(tx["og_alt"])}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{t}">
 <meta name="twitter:description" content="{d}">
@@ -155,8 +192,21 @@ def bloc_head(reg, page, v_css):
 </script>"""
 
 
+def bloc_langues(page):
+    """Sélecteur FR | EN : lien vers la même page dans chaque langue."""
+    root = racine_relative(page["path"])
+    liens = []
+    for lang, nom, titre in (("fr", "FR", "Version française"), ("en", "EN", "English version")):
+        cur = ' aria-current="true"' if lang == page["lang"] else ""
+        liens.append(f'<a href="{root}{page[lang]}" hreflang="{lang}" lang="{lang}" title="{titre}"{cur}>{nom}</a>')
+    return f'<nav class="lang-sw" aria-label="{TXT[page["lang"]]["langue"]}">' + "".join(liens) + "</nav>"
+
+
 def bloc_partiel(nom, page):
+    if page["lang"] != "fr":
+        nom = nom.replace(".html", f".{page['lang']}.html")
     s = (PARTIALS / nom).read_text(encoding="utf-8")
+    s = s.replace("{{langswitch}}", bloc_langues(page))
     s = s.replace("{{root}}", racine_relative(page["path"]))
     for cle in ("savoir", "produits", "engagements", "entreprise"):
         s = s.replace("{{cur:%s}}" % cle, ' aria-current="page"' if page.get("nav") == cle else "")
@@ -172,7 +222,7 @@ def bloc_crumbs(reg, page):
             items.append(f'<li><span aria-current="page">{esc(nom)}</span></li>')
         else:
             items.append(f'<li><a href="{root}{chemin}">{esc(nom)}</a></li>')
-    return '<nav class="crumbs" aria-label="Fil d\'Ariane"><ol>' + "".join(items) + "</ol></nav>"
+    return f'<nav class="crumbs" aria-label="{esc(TXT[page["lang"]]["ariane"])}"><ol>' + "".join(items) + "</ol></nav>"
 
 
 def remplacer(texte, nom, contenu, obligatoire=True):
@@ -188,6 +238,9 @@ def controler(nom, texte):
     alertes = []
     corps = re.sub(r"<script.*?</script>", "", texte, flags=re.S)
     n_h1 = len(re.findall(r"<h1[\s>]", corps))
+    lang = re.search(r'<html lang="(\w+)"', texte)
+    if not lang:
+        alertes.append("attribut lang absent")
     if n_h1 != 1:
         alertes.append(f"{n_h1} balises h1")
     for img in re.findall(r"<img\b[^>]*>", corps):
@@ -205,7 +258,8 @@ def main():
     reg = charger_registre()
     v_css, v_js = empreinte("site.css"), empreinte("site.js")
     ecarts, alertes = 0, []
-    for page in reg["pages"]:
+    toutes = [v for lang in LANGUES for v in vues(reg, lang)]
+    for page in toutes:
         f = SITE / page["path"] / "index.html"
         if not f.exists():
             alertes.append(f"{page['path'] or '/'} : fichier absent")
@@ -217,13 +271,15 @@ def main():
         s = remplacer(s, "crumbs", bloc_crumbs(reg, page), obligatoire=False)
         s = remplacer(s, "scripts", f'<script src="/static/website/site.js?v={v_js}" defer></script>')
         alertes += controler(page["path"] or "/", s)
+        if f'<html lang="{page["lang"]}"' not in s:
+            alertes.append(f"{page['path'] or '/'} : <html lang=\"{page['lang']}\"> attendu")
         if s != avant:
             ecarts += 1
             if not check:
                 f.write_text(s, encoding="utf-8", newline="\n")
     for a in alertes:
         print("ATTENTION", a)
-    print(f"{len(reg['pages'])} pages, {ecarts} {'à mettre à jour' if check else 'mises à jour'}"
+    print(f"{len(toutes)} pages, {ecarts} {'à mettre à jour' if check else 'mises à jour'}"
           f" (site.css?v={v_css}, site.js?v={v_js})")
     if check and (ecarts or alertes):
         sys.exit(1)

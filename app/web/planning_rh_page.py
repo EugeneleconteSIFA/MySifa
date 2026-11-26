@@ -9,7 +9,9 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.auth_service import get_current_user
-from config import APP_VERSION, ROLES_PLANNING_RH_VIEW
+import json as _json
+
+from config import APP_VERSION, FERIES_NATIONAUX_FR, ROLES_PLANNING_RH_VIEW
 
 router = APIRouter()
 
@@ -376,6 +378,77 @@ body.light .rh-table tr:hover td{background:rgba(0,0,0,.02)}
 .rh-dm-absents{margin-top:4px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
 .rh-dm-absents.depasse{color:var(--danger);font-weight:600}
 .rh-dm-recues{border-color:var(--accent)}
+/* Formulaire de congé et calendrier (static/planning_rh_conges.js) */
+.rh-cg-grid{padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end}
+.rh-cg-jours{display:flex;align-items:center;gap:10px;min-height:42px;font-size:13px;color:var(--text2)}
+.rh-cg-jours strong{color:var(--text);font-size:15px}
+.rh-cg-jours input{max-width:110px}
+.rh-cg-lien{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--accent);
+  font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer}
+.rh-cg-lien:hover{border-color:var(--accent)}
+.rh-cg-tag{margin-left:6px;padding:1px 6px;border-radius:6px;background:var(--accent-bg);color:var(--accent);
+  font-size:10px;letter-spacing:0;text-transform:none}
+.rh-cg-aide{grid-column:span 2;align-self:center}
+.rh-cg-dont{color:var(--muted);font-size:11px}
+.rh-cal-wrap{padding:12px 16px 16px}
+.rh-cal-barre{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.rh-cal-nav{display:flex;align-items:center;gap:6px}
+.rh-cal-titre{font-weight:700;font-size:14px;min-width:130px;text-align:center;text-transform:capitalize}
+.rh-cal-filtre{font-size:12px;color:var(--text2)}
+.rh-cal-legende{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-left:auto}
+.rh-cal-legende span{display:inline-flex;align-items:center;gap:5px}
+.rh-cal-legende i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.rh-cal-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
+.rh-cal{border-collapse:separate;border-spacing:0;width:100%;font-size:12px}
+.rh-cal th,.rh-cal td{border-bottom:1px solid var(--border);padding:0}
+.rh-cal-nom{position:sticky;left:0;z-index:1;background:var(--card);text-align:left;font-weight:600;
+  padding:6px 10px!important;white-space:nowrap;border-right:1px solid var(--border)}
+.rh-cal-j{min-width:24px;height:34px;font-size:11px;font-weight:600;color:var(--text2);text-align:center}
+.rh-cal-j span{display:block;font-size:9px;font-weight:500;color:var(--muted)}
+.rh-cal-j.off{color:var(--muted)}
+.rh-cal-j.auj{color:var(--accent)}
+.rh-cal-c{height:26px;min-width:24px;border-left:1px solid var(--border)}
+.rh-cal-c.off,.rh-cal-pied.off{background:var(--bg)}
+.rh-cal-c.auj{box-shadow:inset 0 0 0 2px var(--accent)}
+.rh-cal-c.on{cursor:default}
+.rh-cal-c.on.cp{background:var(--accent)}
+.rh-cal-c.on.rtt{background:var(--c2)}
+.rh-cal-c.on.abs{background:var(--c3)}
+.rh-cal-c.on.pose{opacity:.45}
+.rh-cal-c.on[onclick]{cursor:pointer}
+.rh-cal-c.on[onclick]:hover{filter:brightness(1.1)}
+.rh-cal-tot{text-align:center;font-weight:700;color:var(--text2);padding:0 8px!important;border-left:1px solid var(--border)}
+.rh-cal-pied{text-align:center;font-weight:700;color:var(--text2);height:28px;border-left:1px solid var(--border)}
+.rh-cal tfoot th,.rh-cal tfoot td{border-bottom:none}
+@media(max-width:700px){.rh-cg-grid{grid-template-columns:1fr}.rh-cg-aide{grid-column:auto}.rh-cal-legende{margin-left:0}}
+/* Fermetures collectives (static/planning_rh_fermetures.js) */
+.rh-fm-box{max-width:820px}
+.rh-fm-ligne{cursor:pointer}
+.rh-fm-ligne:hover td{background:var(--accent-bg)}
+.rh-fm-grid3{display:grid;grid-template-columns:2fr 2fr 1fr;gap:12px}
+.rh-fm-resume{display:flex;flex-wrap:wrap;gap:6px;color:var(--text2);font-size:13px}
+.rh-fm-mini{color:var(--muted);font-size:11px;font-weight:400}
+.rh-fm-pers-hdr{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:8px 0;font-size:12px;font-weight:600;color:var(--text2)}
+.rh-fm-pers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 12px;
+  max-height:260px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.rh-fm-pers{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:3px 0}
+.rh-fm-pers input{width:auto}
+.rh-fm-pers.off{opacity:.55;cursor:default}
+.rh-fm-sel,.rh-fm-nb{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);
+  padding:5px 8px;font-size:12px}
+.rh-fm-nb{width:70px}
+.rh-fm-alerte{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  padding:10px 12px;margin-bottom:12px;border:1px solid var(--warn);border-radius:10px;font-size:12px;color:var(--text2)}
+.rh-fm-box .rh-badge{white-space:nowrap}
+.rh-badge.rh-fm-couvert{background:var(--accent-bg);color:var(--success)}
+.rh-badge.rh-fm-deja_absent{background:var(--accent-bg);color:var(--muted)}
+.rh-badge.rh-fm-a_ajouter{background:var(--accent-bg);color:var(--warn)}
+.rh-badge.rh-fm-exclu{background:var(--accent-bg);color:var(--muted)}
+.rh-fm-lien{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--accent);
+  font-size:11px;padding:2px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.rh-fm-lien:hover{border-color:var(--accent)}
+@media(max-width:600px){.rh-fm-grid3{grid-template-columns:1fr}}
 /* Outils du responsable (static/planning_rh_outils.js) */
 .rh-pub{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:var(--accent-bg)}
 .rh-pub.brouillon{color:var(--muted)}
@@ -755,14 +828,18 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js?v=2"></script>
+<script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/planning_rh_url.js?v=3"></script>
+<script src="/static/planning_rh_url.js?v=5"></script>
 <script src="/static/planning_rh_impression.js?v=1"></script>
 <!-- Demandes des employés et motifs d'absence (onglet Demandes). -->
-<script src="/static/planning_rh_demandes.js?v=4"></script>
+<script src="/static/planning_rh_demandes.js?v=5"></script>
+<!-- Formulaire de congé (jours tirés des dates) et calendrier des absences. -->
+<script src="/static/planning_rh_conges.js?v=1"></script>
+<!-- Fermetures collectives (fermeture annuelle, pont) : un congé posé à chacun. -->
+<script src="/static/planning_rh_fermetures.js?v=1"></script>
 <!-- Outils du responsable (génération, publication, notes, équité) et vue employé. -->
 <script src="/static/planning_rh_outils.js?v=3"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
@@ -806,14 +883,14 @@ const GRID_DEF = [
   },
   { code:'C1',  label:'Cohésio 1',             color:'var(--c1)',
     creneaux:[
-      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','aide','emballage'] },
-      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','aide','emballage'] }
+      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','aide'] },
+      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','aide'] }
     ]
   },
   { code:'C2',  label:'Cohésio 2',             color:'var(--c2)',
     creneaux:[
-      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','emballage'] },
-      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','emballage'] }
+      { key:'matin', label:'Matin',       hours:'05:25 – 13:00', hours_fri:'06:40 – 13:00', postes:['conducteur','aide'] },
+      { key:'aprem', label:'Après-midi',  hours:'13:00 – 20:35', hours_fri:'13:00 – 19:20', postes:['conducteur','aide'] }
     ]
   },
   { code:'DSI', label:'DSI',                   color:'var(--c3)',
@@ -866,7 +943,7 @@ function getEffectiveCreneaux(mdef){
 }
 
 const POSTE_LABELS = {
-  conducteur:'Conducteur', aide:'Aide', emballage:'Emballage',
+  conducteur:'Conducteur', aide:'Aide-conducteur',
   resp_atelier:"Chef d'atelier", logistique:'Logistique', tournant:'Tournant'
 };
 // Postes sans machine : chacun a sa ligne dédiée dans la grille.
@@ -875,6 +952,8 @@ function isSpecialRowAssignment(a, machineCode){
   return SPECIAL_POSTE_CODES[a.poste]===machineCode;
 }
 const TYPE_CONGE_LABELS = { CP:'Congés payés', maladie:'Maladie', autre:'Autre' };
+// Jours fériés nationaux {AAAA-MM-JJ: libellé}, tirés de config.FERIES_NATIONAUX_FR.
+window.PRH_FERIES = __PRH_FERIES__;
 const STATUT_CONGE_LABELS = { pose:'Posé', valide:'Validé', refuse:'Refusé' };
 
 // ── Helpers bitmask jours (Lun=bit0 … Ven=bit4, Sam=bit5 ; 31=lun–ven, 32=samedi) ──
@@ -979,6 +1058,11 @@ async function alertSamediProdIfNeeded(machineId,semaine,jours,prevJours,afterCl
   return false;
 }
 // Bitmask des jours de congé d'un opérateur sur une semaine donnée
+function congeCouvreSamedi(userId, ws){
+  const sam=new Date(weekMonday(ws)); sam.setDate(sam.getDate()+5);
+  const iso=toLocalDateStr(sam);
+  return userCongesThisWeek(userId,ws).some(c=>c.date_debut<=iso&&c.date_fin>=iso);
+}
 function congeJoursBitmask(userId, ws){
   const conges=userCongesThisWeek(userId,ws);
   if(!conges.length) return 0;
@@ -1017,7 +1101,10 @@ const S = {
   opViewRange: 2,       // opérateur : plage de vue (1, 2 ou 4 semaines — 4 desktop)
   editConge: null,      // congé en cours d'édition
   editSolde: null,      // solde en cours d'édition
-  congeForm: { user_id:'', date_debut:'', date_fin:'', nb_jours:'', type_conge:'CP', note:'' },
+  congeForm: prhCongeFormVide(),
+  congesAffichage: 'liste', // 'liste' | 'calendrier' (Congés posés)
+  congesMois: '',           // mois du calendrier AAAA-MM (vide = mois courant)
+  congesCalAbsents: false,  // calendrier : seulement les employés absents du mois
   soldeForm: { user_id:'', quota_cp:25, quota_rtt:0, note:'' },
   personSearch: '',
   modalTarget: null,     // { semaine, machineCode, poste, creneau, machineId }
@@ -1138,7 +1225,13 @@ const API='/api/rh';
 async function api(path,opts={}){
   const r=await fetch(API+path,{credentials:'include',...opts});
   if(r.status===401){window.location.href='/';return null;}
-  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Erreur '+r.status);}
+  if(!r.ok){
+    // Un détail structuré (conflit à confirmer) garde son message lisible,
+    // et l'erreur porte le statut et le détail pour qui veut y répondre.
+    const e=await r.json().catch(()=>({}));
+    const msg=typeof e.detail==='string'?e.detail:((e.detail&&e.detail.message)||'Erreur '+r.status);
+    const err=new Error(msg); err.status=r.status; err.detail=e.detail; throw err;
+  }
   return r.json();
 }
 
@@ -1381,29 +1474,38 @@ async function deleteRowAssignments(semaine, machineCode, creneau){
   render();
 }
 
-async function submitConge(){
+async function submitConge(force){
   const f=S.congeForm;
-  if(!f.user_id||!f.date_debut||!f.date_fin||!f.nb_jours){toast('Remplissez tous les champs obligatoires','error');return;}
+  if(!f.user_id||!f.date_debut||!f.date_fin){toast('Employé, date de début et date de fin obligatoires.','error');return;}
+  if(f.nb_manuel&&!(parseFloat(f.nb_jours)>0)){toast('Nombre de jours invalide — valeur supérieure à 0.','error');return;}
+  const corps=prhCongeCorps();
+  if(force===true) corps.force=true;
   try{
     if(S.editConge){
       await api('/conges/'+S.editConge.id,{
         method:'PUT',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(f)
+        body:JSON.stringify(corps)
       });
       toast('Congé mis à jour','success');
     }else{
       const d=await api('/conges',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(f)
+        body:JSON.stringify(corps)
       });
       if(d)S.conges.unshift(d);
       toast('Congé ajouté','success');
     }
     S.modal=null; S.editConge=null;
-    S.congeForm={user_id:'',date_debut:'',date_fin:'',nb_jours:'',type_conge:'CP',note:''};
+    S.congeForm=prhCongeFormVide();
     await loadData();
     await loadSoldes();
-  }catch(e){toast(e.message,'error');}
+  }catch(e){
+    if(e.status===409&&e.detail&&e.detail.conflict_type==='planning'&&force!==true){
+      if(confirm(e.message)) return submitConge(true);
+      return;
+    }
+    toast(e.message,'error');
+  }
   render();
 }
 
@@ -2098,15 +2200,21 @@ function renderPersonList(){
       else congePartiel=true;
     }
 
-    const blocked=assignedHere||congeFullWeek||assignFullWeek;
-    const warn=!blocked&&(congePartiel||assignPartiel);
-    const freeMask=userFreeDaysMask(p.id,t.semaine);
+    // Pris du lundi au vendredi mais samedi libre : on peut l'ajouter pour le samedi.
+    // Lundi–vendredi entièrement pris (affectations et congés confondus) mais
+    // samedi libre : on peut l'ajouter pour le samedi.
+    const semainePrise=((busyMask|congeJoursBitmask(p.id,t.semaine))&JOURS_MASK_WEEK)===JOURS_FULL_WEEK;
+    const samediLibre=semainePrise&&!assignedHere&&!congeFullWeek&&!(busyMask&JOURS_BIT_SAMEDI)&&!congeCouvreSamedi(p.id,t.semaine);
+    const blocked=assignedHere||congeFullWeek||(assignFullWeek&&!samediLibre);
+    const warn=!blocked&&(congePartiel||assignPartiel||samediLibre);
+    const freeMask=samediLibre?JOURS_BIT_SAMEDI:userFreeDaysMask(p.id,t.semaine);
 
     const item=document.createElement('div');
     item.className='rh-person-item'+(blocked?' blocked':'')+(warn?' warn':'');
 
     let titleTip='';
     if(assignedHere) titleTip='Déjà affecté sur ce poste / créneau';
+    else if(samediLibre) titleTip='Pris du lundi au vendredi (affectations ou congés) — cliquer pour l\'ajouter le samedi';
     else if(assignFullWeek) titleTip='Affecté toute la semaine sur un autre poste';
     else if(assignPartiel) titleTip='Affecté : '+assignJours.join(', ')+' — cliquer pour les autres jours';
     else if(congeFullWeek) titleTip='En congé toute la semaine';
@@ -2115,6 +2223,7 @@ function renderPersonList(){
 
     let statusHtml='<span class="rh-person-status ok">✓ Disponible</span>';
     if(assignedHere) statusHtml='<span class="rh-person-status blocked">Déjà sur ce poste</span>';
+    else if(samediLibre) statusHtml='<span class="rh-person-status warn">Pris lun–ven · samedi libre</span>';
     else if(assignFullWeek) statusHtml='<span class="rh-person-status blocked">Affecté — semaine entière</span>';
     else if(assignPartiel) statusHtml=`<span class="rh-person-status warn">Affecté : ${assignJours.join(', ')}</span>`;
     else if(congeFullWeek) statusHtml=`<span class="rh-person-status conge">Congé — semaine entière</span>`;
@@ -2302,9 +2411,14 @@ function buildCongesTab(){
   soldesSection.innerHTML=`
     <div class="rh-section-hdr">
       <span class="rh-section-title">${icon('users',13)} Soldes congés ${S.annee}${S.view==='rh'?' · Tous les services':''}</span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap">
+      ${S.canEditRH?`<button class="rh-icon-btn" onclick="prhOuvrirFermetures()">
+        ${icon('calendar',12)} Fermetures collectives
+      </button>`:''}
       ${S.isEditor?`<button class="rh-icon-btn" onclick="openSoldeModal(null)">
         ${icon('edit',12)} Modifier un solde
       </button>`:''}
+      </span>
     </div>
   `;
   const soldeTable=document.createElement('table'); soldeTable.className='rh-table';
@@ -2344,51 +2458,19 @@ function buildCongesTab(){
   // === Section 2: Ajouter un congé (configurateur) ===
   if(S.isEditor){
     const addSection=document.createElement('div'); addSection.className='rh-section';
-    // Options déjà échappées par prhMotifsOptions (planning_rh_demandes.js).
-    const typeOptionsHtml=prhMotifsOptions(S.congeForm.type_conge||'CP');
     addSection.innerHTML=`
       <div class="rh-section-hdr">
-        <span class="rh-section-title">${icon('plus',13)} ${S.editConge?'Modifier un congé':'Ajouter un congé'}</span>
+        <span class="rh-section-title">${icon(S.editConge?'edit':'plus',13)} ${S.editConge?'Modifier un congé':'Ajouter un congé'}</span>
         ${S.editConge?`<button class="rh-icon-btn" onclick="cancelEditConge()">Annuler</button>`:''}
       </div>
-      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end">
-        <div class="rh-field" style="margin:0">
-          <label>Employé *</label>
-          <select onchange="S.congeForm.user_id=this.value">
-            <option value="">Sélectionner…</option>
-            ${S.personnel.map(p=>`<option value="${p.id}"${S.congeForm.user_id==p.id?' selected':''}>${S.view==='rh'&&p.role?'['+p.role+'] ':''}${p.nom}</option>`).join('')}
-          </select>
-        </div>
-        <div class="rh-field" style="margin:0">
-          <label>Type</label>
-          <select onchange="S.congeForm.type_conge=this.value">
-            ${typeOptionsHtml}
-          </select>
-        </div>
-        <div class="rh-field" style="margin:0">
-          <label>Nb jours *</label>
-          <input type="number" min="0.5" step="0.5" value="${S.congeForm.nb_jours}" placeholder="ex: 5"
-            onchange="S.congeForm.nb_jours=this.value">
-        </div>
-        <div class="rh-field" style="margin:0">
-          <label>Date début *</label>
-          <input type="date" value="${S.congeForm.date_debut}" onchange="S.congeForm.date_debut=this.value">
-        </div>
-        <div class="rh-field" style="margin:0">
-          <label>Date fin *</label>
-          <input type="date" value="${S.congeForm.date_fin}" onchange="S.congeForm.date_fin=this.value">
-        </div>
-        <div class="rh-field" style="margin:0">
-          <label>Note</label>
-          <input type="text" value="${escHtml(S.congeForm.note||'')}" placeholder="Optionnel" onchange="S.congeForm.note=this.value">
-        </div>
-      </div>
+      ${prhCongeFormHtml()}
       <div style="padding:0 16px 16px;display:flex;justify-content:flex-end">
         <button class="rh-btn primary" onclick="submitConge()">
           ${icon('check',13)} ${S.editConge?'Enregistrer':'Ajouter le congé'}
         </button>
       </div>
     `;
+    prhCongeFormBrancher(addSection);
     wrap.appendChild(addSection);
   }
 
@@ -2396,9 +2478,17 @@ function buildCongesTab(){
   const listSection=document.createElement('div'); listSection.className='rh-section print-target';
   listSection.innerHTML=`
     <div class="rh-section-hdr">
-      <span class="rh-section-title">${icon('umbrella',13)} Congés posés ${S.annee}${S.view==='rh'?' · Tous les services':''}</span>
+      <span class="rh-section-title">${icon('umbrella',13)} ${S.congesAffichage==='calendrier'?'Calendrier des absences':'Congés posés '+S.annee}${S.view==='rh'?' · Tous les services':''}</span>
+      ${prhCongesBasculeHtml()}
     </div>
   `;
+  if(S.congesAffichage==='calendrier'){
+    const cal=document.createElement('div'); cal.className='rh-cal-wrap';
+    cal.innerHTML=prhCalendrierHtml();
+    listSection.appendChild(cal);
+    wrap.appendChild(listSection);
+    return wrap;
+  }
   const congesThisYear=S.conges.filter(c=>{
     const y=c.date_debut?c.date_debut.split('-')[0]:null;
     return y==String(S.annee)||c.date_fin&&c.date_fin.split('-')[0]==String(S.annee);
@@ -2419,9 +2509,11 @@ function buildCongesTab(){
         <td style="font-weight:600">${c.user_nom}${S.view==='rh'&&c.user_role?` <span style="color:var(--muted);font-weight:400;font-size:11px">· ${c.user_role}</span>`:''}</td>
         <td>${fmtDateFull(c.date_debut)}</td>
         <td>${fmtDateFull(c.date_fin)}</td>
-        <td><strong>${c.nb_jours}j</strong></td>
+        <td style="white-space:nowrap">${prhCongeJoursHtml(c)}</td>
         <td><span class="rh-badge ${c.type_conge.toLowerCase()}">${TYPE_CONGE_LABELS[c.type_conge]||c.type_conge}</span></td>
-        <td style="color:var(--muted);font-size:12px">${escHtml(c.note)||'—'}</td>
+        <td style="color:var(--muted);font-size:12px">${c.fermeture_id&&S.canEditRH
+          ?`<button class="rh-fm-lien" onclick="prhFmOuvrir(${Number(c.fermeture_id)})" title="Ouvrir la fermeture collective">${icon('calendar',11)} ${escHtml(c.fermeture_libelle||c.note||'Fermeture')}</button>`
+          :(escHtml(c.note)||'—')}</td>
         <td><span class="rh-badge ${c.statut}">${STATUT_CONGE_LABELS[c.statut]||c.statut}</span></td>
         ${S.isEditor?`<td style="white-space:nowrap">
           <button class="rh-act-btn ico" onclick="editConge(${c.id})" title="Modifier" aria-label="Modifier le congé">${icon('edit',13)}</button>
@@ -2487,12 +2579,12 @@ function editConge(id){
   const c=S.conges.find(x=>x.id===id);
   if(!c)return;
   S.editConge=c;
-  S.congeForm={user_id:c.user_id,date_debut:c.date_debut,date_fin:c.date_fin,nb_jours:c.nb_jours,type_conge:c.type_conge,note:c.note||''};
+  S.congeForm=prhCongeFormDepuis(c);
   render();
   // Scroll to form
   setTimeout(()=>{const f=document.querySelector('.rh-section:nth-child(2)');if(f)f.scrollIntoView({behavior:'smooth'});},60);
 }
-function cancelEditConge(){S.editConge=null;S.congeForm={user_id:'',date_debut:'',date_fin:'',nb_jours:'',type_conge:'CP',note:''};render();}
+function cancelEditConge(){S.editConge=null;S.congeForm=prhCongeFormVide();render();}
 
 // v2.2.59 : modal détail d'un créneau de maintenance (vue opérateur RH) ──
 async function openMyMaintDetail(eventId){
@@ -2928,10 +3020,11 @@ function renderModals(){
   }else if(S.modal==='my_maint_detail'){
     const m=buildMyMaintDetailModal();
     mr.innerHTML=''; if(m)mr.appendChild(m);
-  }else if(['demande','refus','motifs','seuils','generer','publication','note'].includes(S.modal)){
+  }else if(['demande','refus','motifs','seuils','generer','publication','note','fermetures'].includes(S.modal)){
     // Saisies libres relues depuis l'état : reconstruire ne perd rien.
     const fab={demande:buildDemandeModal,refus:buildRefusModal,motifs:buildMotifsModal,seuils:buildSeuilsModal,
-      generer:buildGenererModal,publication:buildPublicationModal,note:buildNoteModal}[S.modal];
+      generer:buildGenererModal,publication:buildPublicationModal,note:buildNoteModal,
+      fermetures:buildFermeturesModal}[S.modal];
     const m=fab();
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else{
@@ -3540,3 +3633,9 @@ window.addEventListener('hashchange',function(){try{setTab(_readPrhTab(),{silent
 # depuis l'ancien régime (max-age=86400) continue de servir une feuille
 # de style sans les tokens de couleur — la page s'affiche en noir et blanc.
 PLANNING_RH_HTML = PLANNING_RH_HTML.replace("__V_LABEL__", "v" + APP_VERSION)
+# Jours fériés nationaux pour le calcul des jours ouvrés côté navigateur
+# (même source que le serveur : config.FERIES_NATIONAUX_FR).
+PLANNING_RH_HTML = PLANNING_RH_HTML.replace(
+    "__PRH_FERIES__",
+    _json.dumps({d: lib for annee in FERIES_NATIONAUX_FR.values() for d, lib in annee}, ensure_ascii=False),
+)

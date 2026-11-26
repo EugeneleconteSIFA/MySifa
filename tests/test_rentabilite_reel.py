@@ -10,7 +10,8 @@ il est cohérent avec le prix au mille facturé, 11,26 €.
 Ce que le test garde :
 - la valorisation MyStock d'un dossier (bobines × laize × mètres × €/m²,
   adhésif au kilo, mandrins et cartons à la palette, retours déduits) ;
-- le prix de vente lu sur la facture RVGI, par numéro de commande et article ;
+- le prix de vente lu sur la facture RVGI, par numéro de commande et article,
+  ramené aux étiquettes produites quand la facture en compte plus (stock) ;
 - le dossier « complet » quand il est produit, déstocké et facturé, et
   seulement si rien ne fait douter du résultat : sinon « à vérifier » ;
 - la fenêtre « 7 derniers jours ouvrés » lue dans le calendrier du planning ;
@@ -227,6 +228,29 @@ qte = next(p for p in f["parametres"] if p["parametre"] == "Quantité")
 check("quantité produite 600 000 (deux équipes)", qte["reel"] == 600000, qte)
 print("     MB", r["marge_brute"], "MB %", r["mb_pct"], "€/h", r["cout_horaire"], "verdict", f["verdict"]["global"])
 
+with get_db() as conn:
+    from app.routers.rentabilite import caracteristiques_dossier_devis   # noqa: E402
+    ca = caracteristiques_dossier_devis(conn, 707)
+    ca_sans = caracteristiques_dossier_devis(conn, 708)
+check("caractéristiques : devis lié par défaut, cinq lignes", ca["devis_id"] == 10 and len(ca["lignes"]) == 5, ca)
+check("caractéristiques : format du planning faute d'OF, quantité du devis",
+      ca["lignes"][0]["dossier"] == "148 × 105.125 mm" and ca["lignes"][1]["devis"] == 600000, ca["lignes"][:2])
+check("caractéristiques sans devis : colonne devis vide, aucun écart",
+      ca_sans["devis_id"] is None and ca_sans["ecarts"] == 0 and all(l["devis"] is None for l in ca_sans["lignes"]))
+
+with get_db() as conn:
+    from app.routers.rentabilite import caracteristiques_devis_seul   # noqa: E402
+    cs = caracteristiques_devis_seul(conn, 10)
+check("devis seul : ses caractéristiques et son dossier rattaché",
+      len(cs["lignes"]) == 5 and cs["lignes"][1]["devis"] == 600000
+      and [d["planning_entry_id"] for d in cs["dossiers"]] == [707] and cs["dossiers"][0]["valide"], cs)
+try:
+    with get_db() as conn:
+        caracteristiques_devis_seul(conn, 99999)
+    check("devis inconnu : LookupError", False)
+except LookupError:
+    check("devis inconnu : LookupError", True)
+
 print("3. États explicites")
 with get_db() as conn:
     check("créneau sans devis", fiche_rentabilite(conn, 708)["etat"] == "sans_devis")
@@ -326,6 +350,80 @@ with get_db() as conn:
     t = tableau_de_bord(conn, "all", force=True)
 check("résultat hors norme : à vérifier", f["etat"] == "a_verifier" and f["hors_norme"], (f["etat"], f.get("hors_norme")))
 check("hors norme : hors des compteurs", t["comptes"]["complets"] == 0 and t["comptes"]["a_verifier"] == 1, t["comptes"])
+
+print("7. Une commande en plusieurs dossiers, progression au m²")
+from app.services.rentabilite_reel import cle_commande, par_commande, progression  # noqa: E402
+check("lignes d'une commande : même clé", cle_commande({"racines": ["9932856"], "reference": "9932856 - L2"})
+      == cle_commande({"racines": ["9932856"], "reference": "9932856 - L6"}) == "9932856")
+check("marché sans numéro : suffixe de ligne retiré",
+      cle_commande({"racines": [], "reference": "Marché 776 - L2"}) == cle_commande({"racines": [], "reference": "Marché 776 L1"}))
+check("cadences d'un marché : commandes distinctes",
+      cle_commande({"racines": [], "reference": "Marché 646 - 1ere cadence"})
+      != cle_commande({"racines": [], "reference": "Marché 646 - 2e cadence"}))
+
+
+def dossier(i, mb, pv, h, date, etat="complet", qte=300000):
+    return {"planning_entry_id": i, "commande": "9932856", "date": date, "heures": h,
+            "reference": f"9932856 - L{i}", "client": "Perimedias", "machine": "Cohésio 1", "etat": etat,
+            "manque": [] if etat == "complet" else ["facture"], "verdict": {}, "modifies": [],
+            "mb_pct": {"bas": mb / pv * 100, "probable": mb / pv * 100, "haut": mb / pv * 100},
+            "cout_horaire": {"bas": mb / h, "probable": mb / h, "haut": mb / h},
+            "marge_brute": mb, "prix_vente": pv,
+            "marge_brute_f": {"bas": mb - 50, "probable": mb, "haut": mb + 50},
+            "heures_f": {"bas": h * 0.97, "probable": h, "haut": h * 1.03},
+            "agregat": {"prix_vente": pv, "qte": qte, "devis_id": 10, "qte_devis": 600000,
+                        "calage_devis_mn": 150, "surface_m2": 5000},
+            "cascade_marge": [{"cause": "Calage", "nature": "perte", "valeur": -100}],
+            "cascade_cout_horaire": [{"cause": "Calage", "nature": "perte", "valeur": -50}],
+            "hors_norme": [], "raisons": [], "alertes": 0}
+
+
+seuils = {"mb_pct": 40, "cout_horaire": 325}
+with get_db() as conn:
+    # Le premier dossier porte tout le calage : 4 h pour 3 000 €, le second 1 h.
+    cs = par_commande(conn, [dossier(1, 1200, 3000, 4.0, "2026-11-19"),
+                             dossier(2, 1500, 3000, 1.0, "2026-11-20")], seuils)
+c = cs[0]
+check("deux dossiers, une commande", len(cs) == 1 and c["nb_dossiers"] == 2 and len(c["membres"]) == 2, cs)
+check("marge de la commande = Σ MB ÷ Σ PV", abs(c["mb_pct"]["probable"] - 2700 / 6000 * 100) < 0.01, c["mb_pct"])
+check("coût horaire de la commande = Σ MB ÷ Σ heures", abs(c["cout_horaire"]["probable"] - 2700 / 5) < 0.01, c["cout_horaire"])
+check("fourchettes additionnées", c["mb_pct"]["bas"] < c["mb_pct"]["probable"] < c["mb_pct"]["haut"], c["mb_pct"])
+check("commande datée de son dernier dossier", c["date"] == "2026-11-20")
+check("devis ramené une fois à la quantité totale", c["devis_prix_vente"] == 6756.0, c["devis_prix_vente"])
+check("verdict jugé sur la commande", c["verdict"].get("global") in ("reussi", "limite", "sous_seuil"), c["verdict"])
+with get_db() as conn:
+    cs = par_commande(conn, [dossier(1, 1200, 3000, 4.0, "2026-11-19"),
+                             dossier(2, 1500, 3000, 1.0, "2026-11-20", etat="provisoire")], seuils)
+check("un dossier non facturé : commande provisoire", cs[0]["etat"] == "provisoire" and cs[0]["manque"] == ["facture"], cs[0]["etat"])
+
+# Progression : trois commandes de plus en plus rentables.
+cmd = []
+for i, (mb, h) in enumerate([(1000, 5.0), (1500, 4.5), (2000, 4.0), (2200, 3.8)]):
+    cmd.append({"etat": "complet", "commande": f"99300{i}", "reference": f"99300{i}", "client": "X",
+                "date": f"2026-10-0{i + 1}", "mb_pct": {"probable": mb / 40}, "cout_horaire": {"probable": mb / h},
+                "marge_brute": mb, "prix_vente": 4000, "heures": h, "surface_m2": 10000})
+pr = progression(cmd, seuils)
+check("progression : un point par commande, m² cumulés", [p["m2"] for p in pr["points"]] == [10000, 20000, 30000, 40000], pr["points"])
+check("progression : la tendance monte", pr["tendance"]["mb_pct"]["fin"] > pr["tendance"]["mb_pct"]["debut"]
+      and pr["tendance"]["combine"]["fin"] > pr["tendance"]["combine"]["debut"], pr["tendance"])
+check("indice combiné = 100 sur les seuils", abs(progression(
+    [{**x, "marge_brute": 1600, "heures": 1600 / 325, "prix_vente": 4000} for x in cmd], seuils)["points"][-1]["combine"] - 100) < 0.1)
+check("progression : moins de trois commandes, rien", progression(cmd[:2], seuils)["points"] == [])
+
+# ── Facturé plus que produit : le surplus vient du stock ─────────────
+# 9932659 (Kiabi) : 476 000 ex produits, facture 26110065 de 1 200 000 ex à
+# 10,86 €/mille = 13 032 €. La fiche doit garder 476 000 ex, soit 5 169 €.
+from app.services.rentabilite_reel import pv_au_produit  # noqa: E402
+pv, fact = pv_au_produit(13032.0, 1200000, 1.0, 476000)
+check("facture > produit : ramenée aux étiquettes produites", proche(pv, 5169.36) and fact == 1200000, (pv, fact))
+pv, fact = pv_au_produit(6756.0, 600000, 1.0, 600000)
+check("facture = produit : inchangée", proche(pv, 6756.0) and fact is None, (pv, fact))
+pv, fact = pv_au_produit(6756.0, 500000, 1.0, 600000)
+check("facture < produit (surproduction) : inchangée", proche(pv, 6756.0) and fact is None, (pv, fact))
+pv, fact = pv_au_produit(10000.0, 1000000, 0.4, 300000)
+check("commande à plusieurs créneaux : part puis plafond", proche(pv, 3000.0) and proche(fact, 400000), (pv, fact))
+pv, fact = pv_au_produit(10000.0, None, 1.0, 300000)
+check("facture sans quantité au mille : inchangée", proche(pv, 10000.0) and fact is None, (pv, fact))
 
 import shutil                                            # noqa: E402
 shutil.rmtree(tmp, ignore_errors=True)

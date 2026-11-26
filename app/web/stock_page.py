@@ -2684,11 +2684,11 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=unite4"></script>
 <script src="/static/mysifa_scanner.js?v=1"></script>
-<script src="/static/mysifa_donnees_prod.js?v=19"></script>
-<script src="/static/mysifa_destockage.js?v=12"></script>
+<script src="/static/mysifa_donnees_prod.js?v=20"></script>
+<script src="/static/mysifa_destockage.js?v=13"></script>
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js?v=2"></script>
+<script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <!-- Reprendre une réception de RVGI : fournisseur, BL, matière, laize.
      Les bobines restent scannées une par une — voir le fichier. -->

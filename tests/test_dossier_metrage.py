@@ -72,8 +72,12 @@ JOURNEE = [
 stats = build_dossier_production_stats(JOURNEE, DOS)
 check("metrage = compteur fin - compteur debut", stats["quantites"]["metrage_m"], 17531.0)
 check("etiquettes remontees", stats["quantites"]["etiquettes"], 891000.0)
-check("temps de production (03 + 88)", stats["temps_totaux"]["production_min"], 279.8)
-check("vitesse non nulle", round(stats["vitesse_m_min"], 2), 62.66)
+# 03 + 88 = 279,8 min, plus le délai de réaction rendu par le calage qui
+# précède le 03 (config.PROD_DELAI_REACTION_CALAGE_MIN, 3 min par défaut).
+import config as _config  # noqa: E402
+_delai = _config.PROD_DELAI_REACTION_CALAGE_MIN
+check("temps de production (03 + 88)", stats["temps_totaux"]["production_min"], round(279.8 + _delai, 1))
+check("vitesse non nulle", round(stats["vitesse_m_min"], 2), round(17531.0 / round(279.8 + _delai, 1), 2))
 
 print("--- repli sur les anciennes colonnes (lignes historiques) ---")
 ANCIEN = [
@@ -131,6 +135,47 @@ check("metrage consomme avant annulation",
       build_dossier_production_stats(ANNULE, DOS)["quantites"]["metrage_m"], 1887.0)
 
 print()
+print("--- vitesse jugee session par session (9932723 - L1, 25/11/2026) ---")
+# 21/10 : 2 501 m entre un 03 et un 89 a 2 min 28 d'intervalle (~1 000 m/min).
+# 25/11 : compteur de fin recopie sur celui de debut, 50 400 etiquettes.
+# Additionnees, les deux erreurs donnaient 2 501 m / 42 min = 59 m/min.
+D2 = "9932723 - L1"
+JC, BV = "Jonathan Celisse", "913 - VERNISSE Bastien"
+
+
+def s2(sid, quand, code, op, cat="production", **extra):
+    r = {"id": sid, "no_dossier": D2, "operateur": op, "date_operation": quand,
+         "operation_code": code, "operation": code, "machine": "Cohésio 2",
+         "operation_category": cat, "quantite_traitee": extra.pop("etiquettes", 0)}
+    r.update(extra)
+    return r
+
+
+DEUX_JOURS = [
+    s2(1, "2026-10-21T14:37:12", "01", JC, metrage_total_debut=95481135.0),
+    s2(2, "2026-10-21T14:37:28", "02", JC, "calage"),
+    s2(3, "2026-10-21T19:38:01", "03", JC),
+    s2(4, "2026-10-21T19:40:29", "89", JC, metrage_total_fin=95483636.0, etiquettes=8600),
+    s2(5, "2026-11-25T12:02:14", "01", BV, metrage_total_debut=96164676.0),
+    s2(6, "2026-11-25T12:02:16", "02", BV, "calage"),
+    s2(7, "2026-11-25T13:15:58", "03", BV),
+    s2(8, "2026-11-25T15:13:00", "89", BV, metrage_total_fin=96164676.0, etiquettes=50400),
+]
+st2 = build_dossier_production_stats(DEUX_JOURS, D2)
+check("metrage total inchange", st2["quantites"]["metrage_m"], 2501.0)
+check("vitesse aberrante (aucune session saine)", st2["vitesse_aberrante"], True)
+check("vitesse nulle quand aberrante", st2["vitesse_m_min"], 0.0)
+# Le 25/11 seul : compteur recopie = erreur, pas 0 m/min.
+st3 = build_dossier_production_stats(DEUX_JOURS[4:], D2)
+check("compteur recopie : erreur saisie", st3["vitesse_aberrante"], True)
+# Une session saine reste comptee seule quand l'autre est aberrante.
+SAINE = DEUX_JOURS[4:7] + [s2(8, "2026-11-25T15:13:00", "89", BV,
+                             metrage_total_fin=96164676.0 + 6000, etiquettes=50400)]
+st4 = build_dossier_production_stats(DEUX_JOURS[:4] + SAINE, D2)
+check("session saine seule comptee", st4["vitesse_aberrante"], False)
+check("vitesse = celle du 25/11", round(st4["vitesse_m_min"]), round(6000 / st3["temps_totaux"]["production_min"]))
+
+
 if FAIL:
     print(f"{len(FAIL)} echec(s) : " + ", ".join(FAIL))
     sys.exit(1)

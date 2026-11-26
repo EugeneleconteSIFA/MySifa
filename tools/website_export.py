@@ -3,7 +3,8 @@
 Produit un dossier et un zip prêts à déposer à la racine de www.sifapro.fr :
   - les pages de app/web/website/ sans la balise meta robots noindex ;
   - static/website/ réduit aux fichiers que les pages utilisent ;
-  - sitemap.xml, robots.txt, .htaccess, 404.html.
+  - les pages anglaises (sous en/, déclarées dans le registre par la clé « en ») ;
+  - sitemap.xml (avec les alternates hreflang), robots.txt, .htaccess, 404.html.
 
 Ne touche pas à la base : n'importe ni `database` ni `app.*`.
 
@@ -76,8 +77,11 @@ Header always set Referrer-Policy "strict-origin-when-cross-origin"
 
 
 def pages(reg):
+    """(chemin, priorité, fichier) de chaque page, version française puis anglaise."""
     for p in reg["pages"]:
-        yield p, SITE / p["path"] / "index.html"
+        yield p["path"], p["priority"], SITE / p["path"] / "index.html"
+    for p in reg["pages"]:
+        yield p["en"]["path"], p["priority"], SITE / p["en"]["path"] / "index.html"
 
 
 def page_404(accueil_html):
@@ -113,22 +117,24 @@ def main():
 
     utilises, erreurs = set(), []
     accueil = None
-    for p, f in pages(reg):
+    n_pages = 0
+    for chemin, _prio, f in pages(reg):
+        n_pages += 1
         if not f.exists():
-            erreurs.append(f"page absente : {p['path'] or '/'}")
+            erreurs.append(f"page absente : {chemin or '/'}")
             continue
         s = f.read_text(encoding="utf-8")
         s2 = re.sub(r'<meta name="robots" content="noindex, nofollow">\n?', "", s)
         if s2 == s:
-            erreurs.append(f"{p['path'] or '/'} : meta noindex introuvable (blocs à jour ?)")
-        attendu = f'<link rel="canonical" href="{base}{p["path"]}">'
+            erreurs.append(f"{chemin or '/'} : meta noindex introuvable (blocs à jour ?)")
+        attendu = f'<link rel="canonical" href="{base}{chemin}">'
         if attendu not in s2:
-            erreurs.append(f"{p['path'] or '/'} : canonical attendu {attendu}")
+            erreurs.append(f"{chemin or '/'} : canonical attendu {attendu}")
         utilises |= set(re.findall(r"/static/website/([\w.\-]+)", s2))
-        cible = site_dir / p["path"] / "index.html"
+        cible = site_dir / chemin / "index.html"
         cible.parent.mkdir(parents=True, exist_ok=True)
         cible.write_text(s2, encoding="utf-8", newline="\n")
-        if p["path"] == "":
+        if chemin == "":
             accueil = s2
 
     # Fichiers référencés depuis la feuille de style et le JSON-LD
@@ -147,12 +153,17 @@ def main():
         (site_dir / "404.html").write_text(page_404(accueil), encoding="utf-8", newline="\n")
 
     jour = dt.date.today().isoformat()
-    urls = "".join(
-        f"  <url><loc>{base}{p['path']}</loc><lastmod>{jour}</lastmod><priority>{p['priority']}</priority></url>\n"
-        for p in reg["pages"])
+    def url(loc, prio, p):
+        alt = "".join(
+            f'<xhtml:link rel="alternate" hreflang="{h}" href="{base}{c}"/>'
+            for h, c in (("fr", p["path"]), ("en", p["en"]["path"]), ("x-default", p["path"])))
+        return f"  <url><loc>{base}{loc}</loc><lastmod>{jour}</lastmod><priority>{prio}</priority>{alt}</url>\n"
+    urls = "".join(url(p["path"], p["priority"], p) for p in reg["pages"])
+    urls += "".join(url(p["en"]["path"], p["priority"], p) for p in reg["pages"])
     (site_dir / "sitemap.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + urls + "</urlset>\n",
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+        'xmlns:xhtml="http://www.w3.org/1999/xhtml">\n' + urls + "</urlset>\n",
         encoding="utf-8", newline="\n")
     (site_dir / "robots.txt").write_text(
         f"User-agent: *\nAllow: /\n\nSitemap: {base}sitemap.xml\n", encoding="utf-8", newline="\n")
@@ -167,7 +178,7 @@ def main():
                 z.write(f, f.relative_to(site_dir).as_posix())
 
     taille = sum(f.stat().st_size for f in site_dir.rglob("*") if f.is_file())
-    print(f"{len(reg['pages'])} pages, {len(utilises)} fichiers statiques, {taille // 1024} Ko")
+    print(f"{n_pages} pages, {len(utilises)} fichiers statiques, {taille // 1024} Ko")
     print(f"dossier : {site_dir}")
     print(f"zip     : {zip_path} ({zip_path.stat().st_size // 1024} Ko)")
     for e in erreurs:

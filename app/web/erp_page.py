@@ -686,6 +686,7 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_guides.js"></script>
+<script src="/static/mysifa_rvgi_synchro.js?v=1"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/erp_url.js?v=1"></script>
@@ -1262,8 +1263,20 @@ function renderFraicheur(){
   const d=String(S.meta.importe_le||'');
   const j=(new Date()-new Date(d.replace(' ','T')))/86400000;
   const vieux=isFinite(j)&&j>2;
-  hote.innerHTML='<span class="pill lecture">Lecture seule</span>'+
-    '<span class="pill miroir'+(vieux?' vieux':'')+'">Miroir du '+esc(fmtDateHeure(d))+'</span>';
+  hote.innerHTML='<span class="pill lecture">Lecture seule</span><span id="erp-rvgi"></span>';
+  // Date des données et « Mettre à jour » : static/mysifa_rvgi_synchro.js,
+  // partagé avec l'ADV. Le miroir reconstruit, l'écran courant se recharge.
+  if(window.MySifaRvgiSynchro){
+    MySifaRvgiSynchro.monter(document.getElementById('erp-rvgi'),{
+      peutDemander:true,
+      surMiseAJour:async()=>{
+        try{ S.meta=await api('/api/erp/meta'); }catch(e){ return; }
+        appliquerHash();
+      }
+    });
+  } else {
+    hote.innerHTML+='<span class="pill miroir'+(vieux?' vieux':'')+'">Miroir du '+esc(fmtDateHeure(d))+'</span>';
+  }
 }
 
 // ── Vue menu ─────────────────────────────────────────────────────

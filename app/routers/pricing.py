@@ -1943,6 +1943,11 @@ def _cout_et_erreur(conn, produit: dict, reglages, cache: Optional[dict] = None)
     ), None
 
 
+def _ligne_principale(d: dict) -> dict:
+    lignes = d.get("lignes") or []
+    return next((l for l in lignes if l.get("principal")), lignes[0] if lignes else {})
+
+
 @router.get("/api/pricing/mystock/declinaisons")
 def list_mystock_declinaisons(request: Request):
     """
@@ -1969,6 +1974,8 @@ def list_mystock_declinaisons(request: Request):
                     "sous_section": m.get("sous_section"),
                     "reference": m["reference"],
                     "designation": m["designation"],
+                    "libelle_commercial": mystock_produits.libelle_commercial(
+                        m.get("sous_categorie"), m["designation"], m["reference"]),
                     "libelle": d["libelle"],
                     "parametre": d["parametre"],
                     "unit_price": d["unit_price"],
@@ -1998,14 +2005,10 @@ def list_mystock_declinaisons(request: Request):
                     # SON tarif, seul endroit où le transport se règle. Sans
                     # lui, l'écran nomme un coût qu'on ne peut aller corriger
                     # nulle part.
-                    "fournisseur_id": (
-                        (d.get("lignes") or [{}])[0].get("fournisseur_id")
-                        if d.get("lignes") else None
-                    ),
-                    "fournisseur_nom": (
-                        (d.get("lignes") or [{}])[0].get("fournisseur_nom")
-                        if d.get("lignes") else None
-                    ),
+                    # Celui qui porte le prix : la ligne marquée principale,
+                    # à défaut la seule ligne de prix.
+                    "fournisseur_id": _ligne_principale(d).get("fournisseur_id"),
+                    "fournisseur_nom": _ligne_principale(d).get("fournisseur_nom"),
                 })
     return {"declinaisons": out}
 
@@ -2036,6 +2039,10 @@ def get_mystock_produit(request: Request, produit_id: int):
         if not p:
             raise HTTPException(status_code=404, detail="Produit introuvable.")
         _poser_cout(conn, p, load_pricing_settings(conn))
+        # Ce que la composition donnerait : une désignation qui le vaut encore
+        # suit la composition quand on la modifie, une désignation retouchée
+        # à la main reste telle quelle.
+        p["designation_proposee"] = mystock_produits.designation_auto(p["composants"])
     return p
 
 
@@ -2080,7 +2087,20 @@ def preview_mystock_produit(request: Request, body: dict = Body(...)):
             "composants": composants,
         }
         _poser_cout(conn, produit, load_pricing_settings(conn))
-        return {"cost": produit["cost"], "cout_erreur": produit["cout_erreur"]}
+        # Code et désignation que la composition appelle : l'écran les pose
+        # tant qu'on ne les a pas saisis soi-même.
+        exclure = body.get("produit_id")
+        try:
+            exclure = int(exclure) if exclure not in (None, "") else None
+        except (TypeError, ValueError):
+            exclure = None
+        return {
+            "cost": produit["cost"],
+            "cout_erreur": produit["cout_erreur"],
+            "designation_proposee": mystock_produits.designation_auto(
+                mystock_produits.infos_declinaisons(conn, composants)),
+            "code_propose": mystock_produits.code_propose(conn, composants, exclure),
+        }
 
 
 @router.post("/api/pricing/mystock/produits")

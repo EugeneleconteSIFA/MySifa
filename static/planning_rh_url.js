@@ -23,6 +23,13 @@
  * fenêtres `publication=ouverte`, `seuils=ouverts`, `note=<id>` (modification
  * d'une note existante). Hors adresse : l'assistant de génération et la
  * création d'une note (gestes en cours).
+ *
+ * Congés (24/11/2026, static/planning_rh_conges.js) : `affichage=calendrier`,
+ * `mois=AAAA-MM` (mois courant par défaut), `absents=1`.
+ *
+ * Fermetures collectives (23/11/2026, static/planning_rh_fermetures.js) :
+ * fenêtre `fermetures=ouvertes` (liste), `fermeture=<id>` (détail par employé),
+ * `fermeture=<id>-modifier` (modification). Hors adresse : la création.
  */
 let _prhUrlPrete = false;
 let _prhDefauts = null;              // horizons par défaut du compte, relevés au démarrage
@@ -46,6 +53,11 @@ function _prhModale() {
   if (S.modal === 'machine_config' && S.machineConfigSelected) return { cle: 'config_machine', id: S.machineConfigSelected };
   if (S.modal === 'my_maint_detail' && S.myMaintDetail && S.myMaintDetail.id != null) return { cle: 'maintenance', id: S.myMaintDetail.id };
   if (S.modal === 'motifs') return { cle: 'motifs', id: 'ouverts' };
+  if (S.modal === 'fermetures' && S.fm) {
+    if (S.fm.detail && S.fm.detail.id) return { cle: 'fermeture', id: S.fm.detail.id + (S.fm.form && S.fm.form.id ? '-modifier' : '') };
+    if (!S.fm.form) return { cle: 'fermetures', id: 'ouvertes' };
+    return null;   // création en cours : pas d'adresse
+  }
   if (S.modal === 'seuils') return { cle: 'seuils', id: 'ouverts' };
   if (S.modal === 'publication') return { cle: 'publication', id: 'ouverte' };
   if (S.modal === 'note' && S.out && S.out.note && S.out.note.id) return { cle: 'note', id: S.out.note.id };
@@ -68,6 +80,11 @@ function prhParams() {
     if (S.detailMode) p.detail = 'jours';
   } else if (S.tab === 'conges') {
     if (S.annee && S.annee !== new Date().getFullYear()) p.annee = String(S.annee);
+    if (S.congesAffichage === 'calendrier') {
+      p.affichage = 'calendrier';
+      if (S.congesMois && typeof prhCalMoisCourant === 'function' && S.congesMois !== prhCalMoisCourant()) p.mois = S.congesMois;
+      if (S.congesCalAbsents) p.absents = '1';
+    }
   } else if (S.tab === 'equite') {
     if (S.annee && S.annee !== new Date().getFullYear()) p.annee = String(S.annee);
   } else if (S.tab === 'demandes') {
@@ -130,6 +147,12 @@ function prhLireUrl(complet) {
   if (hz && /^[0-9]{1,2}$/.test(hz)) { if (_prhOperateur()) S.opViewRange = Number(hz); else S.viewRange = Number(hz); }
   else if (complet) { S.viewRange = _prhDefauts.vue; S.opViewRange = _prhDefauts.op; }
   if (u.a('detail') || complet) S.detailMode = u.a('detail');
+  // Congés : liste ou calendrier (mois, seulement les absents).
+  const aff = u.get('affichage', complet ? 'liste' : null, ['liste', 'calendrier']);
+  if (aff) S.congesAffichage = aff;
+  const mois = u.get('mois', null);
+  if (mois && /^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) S.congesMois = mois; else if (complet) S.congesMois = '';
+  if (u.a('absents') || complet) S.congesCalAbsents = u.a('absents');
   const an = u.get('annee', null);
   if (an && /^\d{4}$/.test(an)) S.annee = Number(an); else if (complet) S.annee = new Date().getFullYear();
   return avant !== JSON.stringify([S.view, S.baseOffset, S.opOffset, S.viewRange, S.opViewRange, S.annee]);
@@ -145,6 +168,8 @@ const _PRH_REOUVRIR = {
   publication: v => { if (S.isEditor && typeof prhOuvrirPublication === 'function') prhOuvrirPublication(); },
   note: v => { if (S.isEditor && typeof prhOuvrirNote === 'function' && /^[0-9]+$/.test(v)) return prhOuvrirNote(Number(v)); },
   motifs: v => { if (typeof prhPeutValider === 'function' && prhPeutValider()) prhOuvrirMotifs(); },
+  fermetures: v => { if (typeof prhOuvrirFermetures === 'function') return prhOuvrirFermetures(); },
+  fermeture: v => { const m = /^([0-9]+)(-modifier)?$/.exec(v); if (m && typeof prhFmOuvrir === 'function') return prhFmOuvrir(Number(m[1]), !!m[2]); },
   modifier_conge: v => { if ((S.conges || []).some(c => String(c.id) === v)) editConge(isNaN(Number(v)) ? v : Number(v)); },
 };
 

@@ -38,6 +38,44 @@ from config import ROLES_ERP
 router = APIRouter(prefix="/api/erp", tags=["erp"])
 
 
+@router.get("/miroir/etat")
+def miroir_etat(request: Request):
+    """Date des données RVGI du miroir, et où en est la dernière demande de mise à jour.
+
+    Lu par le bandeau « Données RVGI du … » de l'ERP et de l'ADV (tous les
+    rôles qui ouvrent l'ADV, commerciaux et logistique compris).
+    """
+    from config import ROLES_ADV_LECTURE
+    user = get_current_user(request)
+    if user.get("role") not in (ROLES_ERP | ROLES_ADV_LECTURE):
+        raise HTTPException(status_code=403, detail="Accès refusé.")
+    from app.routers import api_bridge
+    from app.services import erp_synchro
+    from database import get_db
+    with get_db() as conn:
+        return erp_synchro.etat(conn, miroir.meta(), dict(api_bridge._ERP_ETAT))
+
+
+@router.post("/miroir/actualiser")
+def miroir_actualiser(request: Request):
+    """Demande au poste SIFA une mise à jour du miroir, maintenant.
+
+    Le VPS ne voit pas RVGI : la demande est relevée par le poste du réseau
+    SIFA (toutes les deux minutes), qui exporte et envoie le miroir. Deux clics
+    rapprochés ne font qu'une demande.
+    """
+    user = _exiger_acces(request)
+    from app.services import erp_synchro
+    from app.services.audit_service import log_action
+    from database import get_db
+    with get_db() as conn:
+        res = erp_synchro.demander(conn, (user.get("nom") or user.get("email") or "").strip())
+    if res["nouvelle"]:
+        log_action(user=user, action="CREATE", module="erp",
+                   objet="Demande de mise à jour du miroir RVGI", request=request)
+    return res
+
+
 def _exiger_acces(request: Request) -> dict:
     user = get_current_user(request)
     if user.get("role") not in ROLES_ERP:

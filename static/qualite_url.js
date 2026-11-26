@@ -11,7 +11,8 @@
  *              (liste des NC par défaut)
  *   objets     nc, audit, doc (certification), fiche (référentiel),
  *              fournisseur, groupe — chacun implique sa vue
- *   NC         statut, type, gravite ; fiche : onglet
+ *   NC         archives=1 (NC clôturées) ; fiche : nc (le suivi est sur la fiche,
+ *              plus d'onglets depuis le 26/11/2026)
  *   audits     statut ; fiche : onglet, dossier
  *   référentiel categorie, validation ; fiche : question, edition
  *   ressources categorie (multi), certif (multi), rangement, categories_visibles
@@ -132,7 +133,6 @@ function qualiteParams() {
     // NC précédente encore en mémoire pendant le chargement : rien à écrire.
     if (!S.current || (_qualNcVisee !== null && String(S.current.id) !== _qualNcVisee)) return null;
     p.nc = S.current.id; nav = 'nc:' + S.current.id;
-    if (S.detailTab && S.detailTab !== 'fiche') { p.onglet = S.detailTab; nav += '/' + S.detailTab; }
   } else if (v === 'audits-detail' && S.currentAudit) {
     p.audit = S.currentAudit.id; nav = 'audit:' + S.currentAudit.id;
     if (S.auditDetailTab && S.auditDetailTab !== 'fichiers') { p.onglet = S.auditDetailTab; nav += '/' + S.auditDetailTab; }
@@ -155,9 +155,7 @@ function qualiteParams() {
     if (vue) p.vue = vue;
   }
   if (v === 'list') {
-    if (S.filterStatut !== 'all') p.statut = S.filterStatut;
-    if (S.filterType !== 'all') p.type = S.filterType;
-    if (S.filterGravite !== 'all') p.gravite = S.filterGravite;
+    if (S.ncArchives) { p.archives = 1; nav = 'archives'; }
   } else if (v === 'audits-list') {
     if (S.auditFilterStatut !== 'all') p.statut = S.auditFilterStatut;
   } else if (v === 'formulaires-list' && S.formu) {
@@ -288,6 +286,7 @@ async function qualiteAllerUrl(complet) {
   let vue = null;
   const h = MySifaUrl.hashHerite();
   if (u.a('nc')) vue = 'detail';
+  else if (u.a('archives')) vue = 'list';
   else if (u.a('audit')) vue = 'audits-detail';
   else if (u.a('doc')) vue = 'sifa-docs-detail';
   else if (u.a('fiche')) vue = 'ref-detail';
@@ -301,15 +300,12 @@ async function qualiteAllerUrl(complet) {
   if (!S.isQualiteAdmin && !S.isQualiteReadonly && vue && ['ref-list', 'ref-detail'].indexOf(vue) === -1) vue = null;
 
   if (vue === 'list') {
-    const st = ou('statut', 'all'); if (st !== undefined) S.filterStatut = st;
-    const ty = ou('type', 'all'); if (ty !== undefined) S.filterType = ty;
-    const gr = ou('gravite', 'all'); if (gr !== undefined) S.filterGravite = gr;
-    setView('list');
+    const arch = u.get('archives', '0', ['0', '1']) === '1';
+    if (arch !== !!S.ncArchives || S.view !== 'list') ncSetArchives(arch);
+    else setView('list');
   } else if (vue === 'detail') {
     const id = u.get('nc');
     if (!(S.view === 'detail' && S.current && memes(S.current.id, id))) await openDetail(_qualNum(id));
-    const t = u.get('onglet', 'fiche', ['fiche', 'fichiers', 'discussion']);
-    if (S.current && memes(S.current.id, id) && S.detailTab !== t) setDetailTab(t);
   } else if (vue === 'audits-list') {
     const st = ou('statut', 'all'); if (st !== undefined) S.auditFilterStatut = st;
     setView('audits-list');

@@ -4,6 +4,7 @@ import sqlite3
 import io
 import pandas as pd
 from datetime import datetime
+from app.services import machines_type as _mtype
 from typing import Optional, List
 from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -88,12 +89,10 @@ def _resolve_target_dossier_meta(conn, to_ref: str) -> dict:
 # 86 Arrivée, 87 Départ) quand la machine est Repiquage. Ces saisies n'ont pas
 # de sens pour l'atelier Repiquage qui utilise un comptage par cartons.
 _REPIQUAGE_HIDE_CODES = ("01", "89", "86", "87")
-_REPIQUAGE_HIDE_FILTER = (
-    "NOT (operation_code IN ('01','89','86','87') AND "
-    "(lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
-    " OR lower(trim(COALESCE(machine,''))) = 'rep' "
-    " OR lower(trim(COALESCE(machine,''))) LIKE 'rep %'))"
-)
+def _repiquage_hide_filter() -> str:
+    # Postes de type « repiquage » (machines.type), plus leur nom.
+    return ("NOT (operation_code IN ('01','89','86','87') AND "
+            + _mtype.sql_nom_repiquage_global("machine") + ")")
 
 
 def normalize_date_operation(val):
@@ -342,7 +341,7 @@ def list_saisies(
     where, params = ["1=1"], []
     # Toujours masquer les saisies obsoletes sur la machine Repiquage
     # (Debut/Fin de production, Arrivee/Depart personnel).
-    where.append(_REPIQUAGE_HIDE_FILTER)
+    where.append(_repiquage_hide_filter())
     if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
@@ -1437,7 +1436,7 @@ def export_saisies(
     where, params = ["1=1"], []
     # Toujours masquer les saisies obsoletes sur la machine Repiquage
     # (Debut/Fin de production, Arrivee/Depart personnel).
-    where.append(_REPIQUAGE_HIDE_FILTER)
+    where.append(_repiquage_hide_filter())
     if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
@@ -1684,3 +1683,57 @@ async def annuler_annulation_creneau(entry_id: int, request: Request):
     except Exception:
         pass
     return {"success": True, "trace_id": tid, **res}
+
+
+# ─── Répartir un cycle sur plusieurs dossiers de la commande ─────────────────
+# L'opérateur a enchaîné L8, L5 et L7 sous « L8 » : la fin de production se
+# découpe en un cycle par dossier, au prorata des quantités. Voir
+# app/services/repartition_saisie.py.
+
+@router.get("/api/saisies/{row_id}/repartition")
+def apercu_repartition(row_id: int, request: Request):
+    _exiger_admin_saisies(request)
+    from app.services.repartition_saisie import apercu, fin_du_cycle
+    with get_db() as conn:
+        try:
+            return apercu(conn, fin_du_cycle(conn, row_id))
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/api/saisies/{row_id}/repartition")
+async def repartir_cycle(row_id: int, request: Request):
+    """`simuler: true` renvoie le découpage sans rien écrire.
+
+    `row_id` est n'importe quelle saisie du cycle ; la fin de production qui le
+    ferme est retrouvée."""
+    user = _exiger_admin_saisies(request)
+    body = await request.json()
+    parts = body.get("parts")
+    from app.services.repartition_saisie import plan, appliquer, fin_du_cycle
+    with get_db() as conn:
+        try:
+            # Ouverte depuis n'importe quelle ligne du cycle : on travaille sur sa fin.
+            row_id = fin_du_cycle(conn, row_id)
+            if body.get("simuler"):
+                return plan(conn, row_id, parts)
+            res = appliquer(conn, row_id, parts, user.get("email") or "",
+                            (user.get("nom") or user.get("email") or "").strip())
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+    try:
+        from app.services.audit_service import log_action
+        segs = res["plan"]["segments"]
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="saisies",
+            objet=f"Cycle réparti · {' + '.join(s['no_dossier'] for s in segs)} · {res['plan']['machine']}",
+            detail={"saisie_id": row_id, "segments": segs, "crees": res["crees"],
+                    "deplacees": res["deplacees"]},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "segments": res["plan"]["segments"], "crees": res["crees"]}

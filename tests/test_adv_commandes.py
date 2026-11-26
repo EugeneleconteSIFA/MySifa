@@ -143,7 +143,8 @@ INSERT INTO rvgi_rattachements(piece, objet, objet_id, numero, ligne) VALUES
     ('commande', 'dossier', 13, '9930002', 1);
 INSERT INTO expe_departs(id, date_enlevement, transporteur, statut, arc) VALUES
     (100, '{jour(1)[:10]}', 'TRANSP', 'valide', 'Cde 9930001'),
-    (101, '{jour(6)[:10]}', 'TRANSP', 'en_attente', NULL);
+    (101, '{jour(6)[:10]}', 'TRANSP', 'en_attente', NULL),
+    (102, '{jour(-20)[:10]}', 'TRANSP', 'valide', 'Envoi précédent 9930003');
 INSERT INTO expe_depart_dossiers(depart_id, planning_entry_id) VALUES (101, 11);
 INSERT INTO adv_forcages(numero, ligne, etape, valeur, note, maj_le, maj_par) VALUES
     ('9930003', 1, 'bat', 'non', 'Nouveau visuel', '{jour(0)}', 'ADV');
@@ -173,6 +174,8 @@ check("A servie d'abord, lots FIFO", [(e["emplacement"], e["quantite"]) for e in
 check("A : stock oui", A["etapes"]["stock"]["valeur"], "oui")
 check("B : reste = qte − BL vivants, pas qtep", (B["reste"], B["besoin_rvgi"]), (400.0, 9999.0))
 check("B : 200 en stock sur 400", (B["stock"]["alloue"], B["etapes"]["stock"]["valeur"]), (200.0, "en_cours"))
+check("B : jauge du stock à 50 %, unité accordée", (B["etapes"]["stock"]["jauge"], B["etapes"]["stock"]["detail"]),
+      (0.5, "Stock partiel : 200 étiquettes sur 400 (50 %)"))
 check("le lot en carton ne sert pas une ligne en étiquettes", A["stock"]["total"], 1200.0)
 check("C : rien en stock", C["etapes"]["stock"]["valeur"], "non")
 check("à fabriquer = reste à livrer − stock attribué", (A["a_fabriquer"], B["a_fabriquer"], C["a_fabriquer"]),
@@ -197,7 +200,9 @@ check("C : ligne sur stock, pas de prod", C["etapes"]["prod"]["valeur"], "sans_o
 print("\nDépart")
 check("A : départ par l'ARC", (A["etapes"]["depart"]["valeur"], [x["id"] for x in A["departs"]]), ("oui", [100]))
 check("D : départ du dossier, à valider", (D["etapes"]["depart"]["valeur"], [x["id"] for x in D["departs"]]), ("en_cours", [101]))
-check("C : aucun départ", C["etapes"]["depart"]["valeur"], "non")
+check("C : un départ passé ne « prévoit » rien", (C["etapes"]["depart"]["valeur"], [x["id"] for x in C["departs"]]),
+      ("non", [102]))
+check("C : le détail cite le dernier départ", C["etapes"]["depart"]["detail"].startswith("Aucun départ à venir"), True)
 check("étape bloquante de A : la prépa", A["bloquante"], "prepa")
 
 # ── 2. Une prépa engagée garde ses étiquettes ────────────────────────────────
@@ -221,6 +226,87 @@ check("groupes", groupes, {"9930001-1": "partiel", "9930002-1": "en_cours", "993
 check("horizon : la ligne à J+5 hors champ", "9930002-2" in groupes, False)
 check("compte par groupe", {g["cle"]: g["lignes"] for g in p["groupes"]},
       {"preparable": 0, "en_cours": 1, "partiel": 1, "attente": 1, "pretes": 0})
+
+# ── 3 bis. Ordre fixé à la main par l'ADV ────────────────────────────────────
+spec_o = importlib.util.spec_from_file_location(
+    "mig_ordre", "app/core/migrations/2026_11_24_adv_prepa_priorites.py")
+mig_o = importlib.util.module_from_spec(spec_o)
+spec_o.loader.exec_module(mig_o)
+b = sqlite3.connect(miroir.DB_PATH)
+mig_o.appliquer(b)
+mig_o.appliquer(b)                    # rejouable
+# B n'est plus engagée, mais l'ADV la place en tête ; D (J+5, hors horizon)
+# est placée juste après.
+b.execute("DELETE FROM adv_prepas WHERE numero='9930002' AND ligne=1")
+b.executemany("INSERT INTO adv_prepa_priorites(numero, ligne, rang, maj_le, maj_par) VALUES (?,?,?,?,?)",
+              [("9930002", 1, 1, jour(0), "ADV"), ("9930002", 2, 2, jour(0), "ADV")])
+b.commit()
+b.close()
+d = adv.construire()
+par = {l["cle"]: l for l in d["lignes"]}
+print("\nOrdre fixé à la main")
+check("le rang voyage avec la ligne", (par["9930002-1"]["priorite_manuelle"], par["9930001-1"]["priorite_manuelle"]), (1, None))
+check("le stock va d'abord à la ligne placée en tête",
+      (par["9930002-1"]["stock"]["alloue"], par["9930001-1"]["stock"]["alloue"]), (400.0, 800.0))
+p = adv.prepa(horizon=4)
+ordre = [l["cle"] for l in p["lignes"]]
+check("une ligne placée à la main reste visible hors horizon", "9930002-2" in ordre, True)
+check("les lignes placées passent avant l'ordre par date", ordre[:2], ["9930002-1", "9930002-2"])
+check("l'ordre manuel est signalé", p["ordre_manuel"], True)
+
+# ── 3 ter. Repiquage ─────────────────────────────────────────────────────────
+from app.services import machines_type as mtype  # noqa: E402
+
+
+def _migrer(fichier):
+    sp = importlib.util.spec_from_file_location("mig_" + fichier, "app/core/migrations/" + fichier)
+    mod = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(mod)
+    bb = sqlite3.connect(miroir.DB_PATH)
+    mod.appliquer(bb)
+    mod.appliquer(bb)                 # rejouable
+    bb.close()
+
+
+b = sqlite3.connect(miroir.DB_PATH)
+print("\nType de machine")
+check("avant migration : ancienne règle de nom", mtype.sql_nom_repiquage(b, "machine").startswith("(lower(trim("), True)
+b.execute("INSERT INTO machines(id, nom) VALUES (2, 'Repiquage')")
+b.commit()
+b.close()
+for f in ("2026_11_24_machines_type.py", "2026_11_24_planning_repiquage.py", "2026_11_24_adv_repiquage.py"):
+    _migrer(f)
+b = sqlite3.connect(miroir.DB_PATH)
+b.row_factory = sqlite3.Row
+check("la migration type les postes de repiquage", [r["type"] for r in b.execute("SELECT type FROM machines ORDER BY id")],
+      ["impression", "repiquage"])
+check("le type décide, plus le nom", (mtype.est_repiquage_nom(b, "Repiquage"), mtype.est_repiquage_nom(b, "Machine 1")), (True, False))
+b.execute("UPDATE machines SET nom='Atelier surimpression' WHERE id=2")
+check("un poste renommé reste un poste de repiquage", mtype.est_repiquage_nom(b, "Atelier surimpression"), True)
+check("fragment SQL sur les noms typés", mtype.sql_nom_repiquage(b, "machine"), "lower(trim(COALESCE(machine,''))) IN ('atelier surimpression')")
+# D (9930002-2) : son dossier 11 est imprimé, coché « pour repiquage » ; un
+# dossier de repiquage, sous une autre référence, le désigne comme origine.
+b.execute("UPDATE planning_entries SET pour_repiquage=1, statut='termine' WHERE id=11")
+b.execute("""INSERT INTO planning_entries(id, reference, numero_of, ref_produit, statut, machine_id, repiquage_source_id, planned_end)
+             VALUES (20, 'REP-ATELIER', 'REP-ATELIER', '', 'en_cours', 2, 11, ?)""", (jour(6),))
+b.commit()
+b.close()
+d = adv.construire()
+D = {l["cle"]: l for l in d["lignes"]}["9930002-2"]
+print("\nRepiquage dans Prod")
+check("le repiquage relié rejoint la ligne", sorted(x["id"] for x in D["dossiers"]), [11, 20])
+check("repiquage requis, en cours (planning)", (D["repiquage"]["requis"], D["repiquage"]["statut"], D["repiquage"]["manuel"]),
+      (True, "en_cours", False))
+check("Prod : impression faite, repiquage en cours", (D["etapes"]["prod"]["valeur"], D["etapes"]["prod"]["detail"]),
+      ("en_cours", "Impression terminée · repiquage en cours"))
+check("la fin de prod tient compte du repiquage", D["fin_prod"][:10], jour(6)[:10])
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("INSERT INTO adv_repiquages(numero, ligne, statut, maj_le, maj_par) VALUES ('9930002', 2, 'termine', ?, 'ADV')", (jour(0),))
+b.commit()
+b.close()
+D = {l["cle"]: l for l in adv.construire()["lignes"]}["9930002-2"]
+check("statut fixé par l'ADV : Prod faite", (D["etapes"]["prod"]["valeur"], D["repiquage"]["manuel"], D["repiquage"]["calcul"]),
+      ("oui", True, "en_cours"))
 
 # ── 4. Miroir absent ─────────────────────────────────────────────────────────
 miroir.ERP_MIRROR_DB = os.path.join(dossier, "absent.db")
@@ -265,6 +351,282 @@ try:
 except mef.RegleInvalide:
     trop = True
 check("plafond de règles", trop, True)
+
+# ── 6. Stock « probable » : production finie, pas rentrée dans MyStock ───────
+# La logistique ne met pas toujours en stock ce qui part directement. Prod
+# faite + étiquettes de fin de production qui couvrent la ligne = préparable.
+miroir.ERP_MIRROR_DB = os.path.join(dossier, "miroir.db")   # rebranché après le §4
+m = sqlite3.connect(miroir.ERP_MIRROR_DB)
+m.execute("INSERT INTO cde_entete(numero, rs, amjc) VALUES (9930004, 'CLIENT E', ?)", (jour(-3),))
+m.executemany("""INSERT INTO cde_ligne(numero, ligne, lpos, qte, qtep, amje, amjl, orig, code1, code2, des1)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)""", [
+    (9930004, 1, 0, 1000, 1000, jour(2), jour(3), 1, "400", "0004", "Etiquette E"),
+    (9930004, 2, 0, 10, 10, jour(2), jour(3), 1, "500", "0005", "Etiquette F en cartons"),
+    (9930004, 3, 0, 500, 500, jour(3), jour(4), 1, "400", "0004", "Etiquette E, suite"),
+])
+m.commit()
+m.close()
+b = sqlite3.connect(miroir.DB_PATH)
+for col in ("no_dossier TEXT", "quantite_traitee REAL", "operateur TEXT",
+            "metrage_total_debut REAL", "metrage_total_fin REAL"):
+    b.execute("ALTER TABLE production_data ADD COLUMN " + col)
+b.execute("ALTER TABLE planning_entries ADD COLUMN etiquettes_par_carton INTEGER")
+b.execute("INSERT INTO produits(id, reference, designation, unite) VALUES (5, '500/0005', 'Etiquette F', 'carton')")
+b.executemany("""INSERT INTO planning_entries(id, reference, numero_of, ref_produit, statut,
+                 planned_start, planned_end, machine_id) VALUES (?,?,?,?,?,?,?,1)""", [
+    (40, "9930004 - L1", "9930004 - L1", "400/0004", "termine", jour(-2), jour(-2, "12:00:00")),
+    (41, "9930004 - L2", "9930004 - L2", "500/0005", "termine", jour(-2), jour(-2, "12:00:00")),
+])
+for pe, dos in ((40, "9930004 - L1"), (41, "9930004 - L2")):
+    b.executemany("""INSERT INTO production_data(planning_entry_id, no_dossier, operation_code, date_operation,
+                     est_annule, operateur, quantite_traitee, metrage_total_debut, metrage_total_fin)
+                     VALUES (?,?,?,?,0,'OP',?,?,?)""", [
+        (pe, dos, "01", jour(-2)[:10] + "T08:00:00", None, 0, None),
+        (pe, dos, "89", jour(-2)[:10] + "T12:00:00", 1200, None, 500),
+    ])
+b.commit()
+b.close()
+d = adv.construire()
+par = {l["cle"]: l for l in d["lignes"]}
+E1, F, E3 = par["9930004-1"], par["9930004-2"], par["9930004-3"]
+print("\nStock probable")
+check("E1 : prod faite, 1 200 produites pour 1 000 : stock probable",
+      (E1["etapes"]["prod"]["valeur"], E1["etapes"]["stock"]["valeur"]), ("oui", "probable"))
+check("E1 : sortie de prod et plus rien à fabriquer", (E1["stock"]["sortie_prod"], E1["a_fabriquer"]), (1000.0, 0.0))
+check("E1 : le stock ne bloque plus, ni le BAT (prod faite)", E1["bloquante"], "prepa")
+check("E1 : sans BAT dans MyBAT, la prod faite vaut BAT bon",
+      (E1["etapes"]["bat"]["valeur"], "production lancée" in E1["etapes"]["bat"]["detail"]), ("oui", True))
+check("E3 : le même dossier ne sert pas deux fois (200 restantes pour 500)",
+      (E3["etapes"]["stock"]["valeur"], E3["a_fabriquer"]), ("non", 500.0))
+check("F : cartons sans « étiquettes par carton », on ne devine pas", F["etapes"]["stock"]["valeur"], "non")
+p = adv.prepa(horizon=10)
+check("E1 se prépare", {l["cle"]: l["groupe"] for l in p["lignes"]}.get("9930004-1"), "preparable")
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("UPDATE planning_entries SET etiquettes_par_carton = 100 WHERE id = 41")
+b.commit()
+b.close()
+F = {l["cle"]: l for l in adv.construire()["lignes"]}["9930004-2"]
+check("F : 1 200 étiquettes à 100 par carton couvrent 10 cartons", F["etapes"]["stock"]["valeur"], "probable")
+# Marge : 95 % du reste suffisent (la gâche d'un tirage ne bloque pas).
+def _produit_e(q):
+    b = sqlite3.connect(miroir.DB_PATH)
+    b.execute("UPDATE production_data SET quantite_traitee=? WHERE planning_entry_id=40 AND operation_code='89'", (q,))
+    b.commit()
+    b.close()
+    return {l["cle"]: l for l in adv.construire()["lignes"]}["9930004-1"]
+E1 = _produit_e(960)
+check("960 pour 1 000 (96 %) : probable, 960 en sortie de prod",
+      (E1["etapes"]["stock"]["valeur"], E1["stock"]["sortie_prod"]), ("probable", 960.0))
+check("le détail dit la couverture", "96 % du reste" in E1["etapes"]["stock"]["detail"], True)
+E1 = _produit_e(900)
+check("900 pour 1 000 (90 %) : pas assez", E1["etapes"]["stock"]["valeur"], "non")
+_produit_e(1200)
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("""INSERT INTO adv_forcages(numero, ligne, etape, valeur, maj_le, maj_par)
+             VALUES ('9930004', 1, 'stock', 'non', ?, 'ADV')""", (jour(0),))
+b.commit()
+b.close()
+E1 = {l["cle"]: l for l in adv.construire()["lignes"]}["9930004-1"]
+check("un forçage de l'ADV prime sur « probable »", (E1["etapes"]["stock"]["valeur"], E1["etapes"]["stock"]["force"]),
+      ("non", True))
+
+# ── 7. Préparations urgentes et bulles du portail ───────────────────────────
+print("\nUrgences")
+spec_u = importlib.util.spec_from_file_location("mig_urg", "app/core/migrations/2026_11_24_adv_urgences.py")
+mig_u = importlib.util.module_from_spec(spec_u)
+spec_u.loader.exec_module(mig_u)
+b = sqlite3.connect(miroir.DB_PATH)
+mig_u.appliquer(b)
+mig_u.appliquer(b)                    # rejouable
+b.execute("INSERT INTO adv_urgences(numero, ligne, maj_le, maj_par) VALUES ('9930003', 1, ?, 'ADV')", (jour(0),))
+b.commit()
+b.close()
+p = adv.prepa(horizon=4)
+par_p = {l["cle"]: l for l in p["lignes"]}
+check("marquée par l'ADV : urgente, avec son auteur", par_p["9930003-1"]["urgence"], "Marquée urgente par ADV")
+check("une ligne marquée (expédition à J+4) reste visible sur un horizon d'un jour",
+      "9930003-1" in {l["cle"] for l in adv.prepa(horizon=1)["lignes"]}, True)
+J = AUJ
+check("calcul : préparable, expédition demain → urgente",
+      bool(adv.urgence({"expedition": (J + timedelta(days=1)).isoformat()}, "preparable", J)), True)
+check("calcul : préparable, expédition dans 3 jours → non",
+      adv.urgence({"expedition": (J + timedelta(days=3)).isoformat()}, "preparable", J), None)
+check("calcul : en retard mais en attente de prod → non (rien à préparer)",
+      adv.urgence({"expedition": (J - timedelta(days=2)).isoformat()}, "attente", J), None)
+check("une prépa prête n'est plus urgente",
+      adv.urgence({"urgente_manuelle": True, "expedition": None}, "pretes", J), None)
+bd = adv.badges()
+d = adv.construire()
+check("bulle logistique = urgences de la Prépa", bd["urgentes"],
+      sum(1 for l in d["lignes"] if adv.urgence(l, adv.groupe_prepa(l), J)))
+check("bulle administration = tuiles retard + 7 jours du carnet",
+      (bd["retard"], bd["semaine"]), (d["compteurs"]["retard"]["lignes"], d["compteurs"]["semaine"]["lignes"]))
+
+# ── 8. Historique des préparations déjà faites ──────────────────────────────
+print("\nHistorique")
+b = sqlite3.connect(miroir.DB_PATH)
+b.execute("DELETE FROM adv_prepas")
+b.executemany("INSERT INTO adv_prepas(numero, ligne, statut, maj_le, maj_par) VALUES (?, ?, ?, ?, 'LOG')", [
+    ("9930003", 1, "prete", jour(0, "10:00:00")),      # dans le carnet, pas partie
+    ("9930001", 1, "prete", jour(-1, "08:00:00")),     # son départ est parti
+    ("9930003", 2, "prete", jour(-2, "09:00:00")),     # sortie du carnet (soldée)
+    ("9930002", 2, "prete", jour(-40, "09:00:00")),    # hors des 30 jours
+    ("9930002", 1, "en_cours", jour(0, "11:00:00")),   # pas encore faite
+])
+b.execute("UPDATE expe_departs SET parti_le = ? WHERE id = 100", (jour(-1, "16:00:00"),))
+b.commit()
+b.close()
+hst = adv.historique_prepa(30)
+check("les prêtes des 30 jours, la plus récente en tête", [l["cle"] for l in hst["lignes"]],
+      ["9930003-1", "9930001-1", "9930003-2"])
+par_h = {l["cle"]: l for l in hst["lignes"]}
+check("encore au carnet : en attente de départ", par_h["9930003-1"]["situation"], "attente_depart")
+check("départ parti : la ligne a quitté la Prépa, l'historique la garde",
+      (par_h["9930001-1"]["situation"], par_h["9930001-1"]["situation_label"][:9]), ("parti", "Parti le "))
+check("sortie du carnet : client et article relus dans le miroir",
+      tuple(par_h["9930003-2"][k] for k in ("situation", "client", "article", "qte")),
+      ("sortie", "CLIENT C", "200/0002", 10.0))
+check("auteur et date de la prépa", (par_h["9930003-1"]["prete_par"], par_h["9930003-1"]["prete_le"][:10]),
+      ("LOG", jour(0)[:10]))
+check("sur 90 jours, la plus ancienne revient", len(adv.historique_prepa(90)["lignes"]), 4)
+check("partie : absente de l'onglet Prépa", "9930001-1" in {l["cle"] for l in adv.prepa(horizon=30)["lignes"]}, False)
+
+# ── 9. Planning de prépa : le jour où préparer ──────────────────────────────
+print("\nJour de prépa")
+from datetime import date as _d  # noqa: E402
+check("jour ouvré avant un lundi = vendredi", adv.jour_ouvre_avant(_d(2026, 11, 30)).isoformat(), "2026-11-27")
+check("jour ouvré avant un mercredi = mardi", adv.jour_ouvre_avant(_d(2026, 11, 25)).isoformat(), "2026-11-24")
+LUNDI = _d(2026, 11, 23)
+check("expédition jeudi → préparée mercredi",
+      adv.jour_prepa({"expedition": "2026-11-26"}, LUNDI), ("2026-11-25", "expedition"))
+check("un enlèvement prévu prime sur l'expédition",
+      adv.jour_prepa({"expedition": "2026-11-27", "departs": [{"date_enlevement": "2026-11-25", "parti_le": None}]}, LUNDI),
+      ("2026-11-24", "enlevement"))
+check("un enlèvement déjà parti ne compte pas",
+      adv.jour_prepa({"expedition": "2026-11-27", "departs": [{"date_enlevement": "2026-11-25", "parti_le": "2026-11-25"}]}, LUNDI),
+      ("2026-11-26", "expedition"))
+check("en retard → aujourd'hui", adv.jour_prepa({"expedition": "2026-11-20"}, LUNDI), ("2026-11-23", "expedition"))
+check("expédition demain → aujourd'hui", adv.jour_prepa({"expedition": "2026-11-24"}, LUNDI), ("2026-11-23", "expedition"))
+check("jour fixé par l'ADV", adv.jour_prepa({"expedition": "2026-11-27", "jour_manuel": "2026-11-24"}, LUNDI),
+      ("2026-11-24", "manuel"))
+check("jour fixé dépassé → aujourd'hui", adv.jour_prepa({"expedition": "2026-11-27", "jour_manuel": "2026-11-20"}, LUNDI),
+      ("2026-11-23", "manuel"))
+check("sans date", adv.jour_prepa({"expedition": None}, LUNDI), (None, "sans_date"))
+spec_j = importlib.util.spec_from_file_location("mig_jours", "app/core/migrations/2026_11_24_adv_prepa_jours.py")
+mig_j = importlib.util.module_from_spec(spec_j)
+spec_j.loader.exec_module(mig_j)
+b = sqlite3.connect(miroir.DB_PATH)
+mig_j.appliquer(b)
+mig_j.appliquer(b)                    # rejouable
+b.execute("DELETE FROM adv_prepas")
+b.execute("INSERT INTO adv_prepa_jours(numero, ligne, jour, maj_le, maj_par) VALUES ('9930003', 1, ?, ?, 'ADV')",
+          ((AUJ + timedelta(days=3)).isoformat(), jour(0)))
+b.commit()
+b.close()
+par_p = {l["cle"]: l for l in adv.prepa(horizon=30)["lignes"]}
+check("le jour fixé par l'ADV remonte dans la Prépa",
+      (par_p["9930003-1"]["jour_prepa"], par_p["9930003-1"]["jour_source"]), ((AUJ + timedelta(days=3)).isoformat(), "manuel"))
+check("chaque ligne de la Prépa a un jour (ou None sans date)",
+      all("jour_prepa" in l for l in par_p.values()), True)
+
+# ── 10. Adresse de livraison : ce qui part ensemble ─────────────────────────
+print("\nAdresse de livraison")
+check("sans adresse dans le miroir : clé vide",
+      [l["destination"]["cle"] for l in adv.construire()["lignes"]][:1], [""])
+m = sqlite3.connect(miroir.ERP_MIRROR_DB)
+for c in adv.ADRESSE_LIVRAISON:
+    m.execute("ALTER TABLE cde_ligne ADD COLUMN %s TEXT" % c)
+m.execute("UPDATE cde_ligne SET lrs='CLIENT B', ladr1='1 rue des Lilas', lcp='69007', lville='LYON', lpays='FR' WHERE numero=9930002")
+m.execute("UPDATE cde_ligne SET lrs='client  b', ladr1='1 RUE DES LILAS', lcp='69007', lville='Lyon', lpays='FR' WHERE numero=9930002 AND ligne=2")
+m.commit()
+m.close()
+par_d = {l["cle"]: l for l in adv.construire()["lignes"]}
+dest = par_d["9930002-1"]["destination"]
+check("adresse de la ligne lue dans cde_ligne", (dest["rs"], dest["adr1"], dest["cp"], dest["ville"], dest["pays"]),
+      ("CLIENT B", "1 rue des Lilas", "69007", "LYON", "FR"))
+check("même adresse à la casse et aux espaces près : même clé",
+      par_d["9930002-1"]["destination"]["cle"] == par_d["9930002-2"]["destination"]["cle"] != "", True)
+check("autre commande sans adresse : clé différente",
+      par_d["9930001-1"]["destination"]["cle"] != dest["cle"], True)
+
+# ── 11. Infos de suivi ──────────────────────────────────────────────────────
+print("\nInfos de suivi")
+check("sans table : aucune info, pas d'erreur", par_d["9930001-1"]["infos"], [])
+_migrer("2026_11_25_adv_infos.py")
+b = sqlite3.connect(miroir.DB_PATH)
+b.executemany("INSERT INTO adv_infos(numero, ligne, texte, cree_le, cree_par) VALUES (?,?,?,?,?)", [
+    ("9930001", 1, "Attente retour BAT client", jour(-1), "ADV"),
+    ("9930001", 1, "BAT reçu, production lancée", jour(0), "ADV"),
+    ("9930002", 2, "Palette bloquée", jour(0), "ADV"),
+])
+b.commit()
+b.close()
+par_i = {l["cle"]: l for l in adv.construire()["lignes"]}
+check("le fil d'une ligne, le plus récent en tête",
+      [x["texte"] for x in par_i["9930001-1"]["infos"]], ["BAT reçu, production lancée", "Attente retour BAT client"])
+check("l'info reste sur SA ligne", ([x["texte"] for x in par_i["9930002-2"]["infos"]], par_i["9930002-1"]["infos"]),
+      (["Palette bloquée"], []))
+check("la Prépa porte aussi les infos",
+      all("infos" in l for l in adv.prepa(horizon=30)["lignes"]), True)
+
+# ── 12. Mise en forme : autre colonne, ligne, palette élargie ───────────────
+print("\nMise en forme : colorer ailleurs, palette")
+r2 = mef.valider([
+    {"colonne": "expedition", "operateur": "lt", "cible": "aujourdhui", "valeur": "0", "ton": "rouge-1", "appliquer": "ligne"},
+    {"colonne": "etape_bat", "operateur": "eq", "valeur": "non", "ton": "violet-3", "appliquer": "client", "rendu": "texte"},
+    {"colonne": "qte", "operateur": "gt", "valeur": "0", "ton": "warn", "appliquer": "qte"},
+    {"colonne": "info", "operateur": "non_vide", "ton": "jaune-2", "appliquer": "ligne"},
+])
+check("appliquer / rendu normalisés (même colonne = vide)",
+      [(r["ton"], r["appliquer"], r["rendu"]) for r in r2],
+      [("rouge-1", "ligne", "fond"), ("violet-3", "client", "texte"), ("warn", "", "fond"), ("jaune-2", "ligne", "fond")])
+check("nuance hors palette refusée", refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "rouge-4"}), True)
+check("teinte inconnue refusée", refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "fuchsia-1"}), True)
+check("colonne à colorer inconnue refusée",
+      refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "warn", "appliquer": "x; DROP"}), True)
+check("rendu inconnu refusé", refusee({"colonne": "qte", "operateur": "gt", "valeur": "1", "ton": "warn", "rendu": "clignotant"}), True)
+ref = mef.referentiel()
+check("le référentiel sert teintes, nuances et rendus",
+      (len(ref["teintes"]) >= 12, [n["cle"] for n in ref["nuances"]], [r["cle"] for r in ref["rendus"]]),
+      (True, ["1", "2", "3"], ["fond", "texte"]))
+_migrer("2026_11_20_adv_mises_en_forme.py")
+_migrer("2026_11_25_adv_mef_appliquer.py")
+b = sqlite3.connect(miroir.DB_PATH)
+b.row_factory = sqlite3.Row
+relu = mef.enregistrer(b, r2, jour(0), "ADV")
+b.close()
+check("enregistrées puis relues avec leur cible et leur rendu",
+      [(r["ton"], r["appliquer"], r["rendu"]) for r in relu], [(r["ton"], r["appliquer"], r["rendu"]) for r in r2])
+
+# ── 13. Tolérance de quantité, lue sur l'OF ─────────────────────────────────
+print("\nTolérance de l'OF")
+check("pourcentage extrait du champ importé",
+      [adv.tolerance_pct(t) for t in ("0% Autres cartons", "10,5 % Autres cartons", "Autres cartons", None)],
+      [0.0, 10.5, None, None])
+check("sans table des OF : non renseignée",
+      {l["cle"]: l["tolerance"] for l in adv.construire()["lignes"]}.get("9930001-1"), None)
+b = sqlite3.connect(miroir.DB_PATH)
+b.executescript("""
+CREATE TABLE of_imports(id INTEGER PRIMARY KEY, of_numero TEXT, reference TEXT,
+    tolerance TEXT, invalide_at TEXT);
+INSERT INTO of_imports(id, of_numero, reference, tolerance, invalide_at) VALUES
+    (1, '9930001 - L1', '100/0001', '10% Autres cartons', NULL),
+    (2, '9930001', NULL, '0% Autres cartons', NULL),
+    (3, '9930002 - L2', NULL, '0 % Autres cartons', NULL),
+    (4, '9930002', '100/0001', '5%', '2026-11-01'),
+    (5, 'Rel 9930003', '999/0001', '0%', NULL),
+    (6, '9930003', '200/0002', 'Autres cartons', NULL);
+UPDATE planning_entries SET of_import_id = 1 WHERE id = 10;
+""")
+b.commit()
+b.close()
+tol = {l["cle"]: l["tolerance"] for l in adv.construire()["lignes"]}
+check("l'OF du dossier de la ligne l'emporte sur un OF plus récent",
+      tol["9930001-1"], {"pct": 10.0, "of": "9930001 - L1"})
+check("sans OF au dossier : l'OF qui cite la commande et sa ligne",
+      tol["9930002-2"], {"pct": 0.0, "of": "9930002 - L2"})
+check("OF invalidé ou d'une autre ligne : non renseignée", tol["9930002-1"], None)
+check("OF d'un autre article, ou sans pourcentage : non renseignée", tol["9930003-1"], None)
 
 print()
 if ko:

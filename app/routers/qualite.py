@@ -24,6 +24,7 @@ from config import (
     NC_ACK_SERVICE_KEYS,
     NC_ACK_RESET_FIELDS,
     nc_service_for_role,
+    NC_RELANCE_JOURS,
 )
 
 ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
@@ -129,6 +130,80 @@ def _enrich_nc(conn, nc_dicts: List[dict]) -> List[dict]:
     return nc_dicts
 
 
+def _jours_depuis(date_str: Optional[str]) -> Optional[int]:
+    if not date_str:
+        return None
+    try:
+        d = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return (datetime.now().date() - d).days
+
+
+def _enrich_suivi(conn, nc_dicts: List[dict]) -> List[dict]:
+    """Ajoute la dernière étape de suivi et l'alerte « à faire avancer ».
+
+    - `derniere_etape` : texte, date et auteur de la dernière étape (ou None) ;
+    - `derniere_action_at` : date de la dernière étape, à défaut date de la NC ;
+    - `jours_sans_action` et `a_relancer` (NC active sans avancée depuis plus de
+      NC_RELANCE_JOURS jours).
+    """
+    if not nc_dicts:
+        return nc_dicts
+    ids = [n["id"] for n in nc_dicts]
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"""SELECT s.nc_id, s.texte, s.date_action, u.nom AS auteur_nom,
+                   (SELECT COUNT(*) FROM nc_suivis x WHERE x.nc_id = s.nc_id) AS n
+              FROM nc_suivis s
+              LEFT JOIN users u ON u.id = s.auteur_id
+             WHERE s.nc_id IN ({ph})
+               AND s.id = (SELECT x.id FROM nc_suivis x WHERE x.nc_id = s.nc_id
+                            ORDER BY x.date_action DESC, x.id DESC LIMIT 1)""",
+        ids,
+    ).fetchall()
+    last = {r["nc_id"]: r for r in rows}
+    for n in nc_dicts:
+        r = last.get(n["id"])
+        n["suivis_count"] = r["n"] if r else 0
+        n["derniere_etape"] = (
+            {"texte": r["texte"], "date_action": r["date_action"], "auteur_nom": r["auteur_nom"]}
+            if r else None
+        )
+        ref = (r["date_action"] if r else None) or n.get("date_nc") or (n.get("created_at") or "")[:10]
+        n["derniere_action_at"] = ref or None
+        jours = _jours_depuis(ref)
+        n["jours_sans_action"] = jours
+        n["a_relancer"] = bool(
+            n.get("statut") != "cloturee" and jours is not None and jours > NC_RELANCE_JOURS
+        )
+        n["relance_jours"] = NC_RELANCE_JOURS
+    return nc_dicts
+
+
+def _list_suivis(conn, nc_id: int) -> List[dict]:
+    rows = conn.execute(
+        """SELECT s.id, s.nc_id, s.date_action, s.texte, s.auteur_id, s.created_at,
+                  u.nom AS auteur_nom
+             FROM nc_suivis s
+             LEFT JOIN users u ON u.id = s.auteur_id
+            WHERE s.nc_id = ?
+            ORDER BY s.date_action DESC, s.id DESC""",
+        (nc_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _ajouter_suivi(conn, nc_id: int, user_id: int, texte: str, date_action: Optional[str] = None) -> int:
+    now = _now()
+    cur = conn.execute(
+        "INSERT INTO nc_suivis (nc_id, date_action, texte, auteur_id, created_at) VALUES (?,?,?,?,?)",
+        (nc_id, date_action or _today(), texte, user_id, now),
+    )
+    conn.execute("UPDATE nc_dossiers SET updated_at=?, updated_by=? WHERE id=?", (now, user_id, nc_id))
+    return cur.lastrowid
+
+
 def _enrich_unread(conn, user_id: int, nc_dicts: List[dict]) -> List[dict]:
     """Calcule unread_count pour l'utilisateur courant."""
     if not nc_dicts:
@@ -198,7 +273,9 @@ def _reset_acks_if_needed(conn, nc_id, changed_fields):
 # ─── Liste NC ────────────────────────────────────────────────────────
 
 @router.get("/api/qualite/nc")
-def list_nc(request: Request, statut: Optional[str] = None, type_nc: Optional[str] = None):
+def list_nc(request: Request, statut: Optional[str] = None, type_nc: Optional[str] = None,
+            archives: bool = False):
+    """NC actives par défaut ; `archives=true` rend les NC clôturées (archivées)."""
     user = _require_qualite_view(request)
     with get_db() as conn:
         sql = """SELECT nc.*,
@@ -214,6 +291,10 @@ def list_nc(request: Request, statut: Optional[str] = None, type_nc: Optional[st
         if statut and statut in NC_STATUTS:
             sql += " AND nc.statut=?"
             params.append(statut)
+        elif archives:
+            sql += " AND nc.statut='cloturee'"
+        else:
+            sql += " AND nc.statut!='cloturee'"
         if type_nc and type_nc in NC_TYPES:
             sql += " AND nc.type_nc=?"
             params.append(type_nc)
@@ -223,6 +304,7 @@ def list_nc(request: Request, statut: Optional[str] = None, type_nc: Optional[st
         ncs = _enrich_nc(conn, ncs)
         ncs = _enrich_unread(conn, user["id"], ncs)
         ncs = _enrich_acks(conn, ncs)
+        ncs = _enrich_suivi(conn, ncs)
     return ncs
 
 
@@ -254,13 +336,16 @@ def get_nc(nc_id: int, request: Request):
         nc = _enrich_nc(conn, [nc])[0]
         nc = _enrich_unread(conn, user["id"], [nc])[0]
         nc = _enrich_acks(conn, [nc])[0]
+        nc = _enrich_suivi(conn, [nc])[0]
+        nc["suivis"] = _list_suivis(conn, nc_id)
     return nc
 
 
 # ─── Création NC ─────────────────────────────────────────────────────
 
 class NCCreate(BaseModel):
-    titre: str
+    titre: Optional[str] = None
+    ar_client_envoye: bool = False
     type_nc: str = "interne"
     gravite: str = "mineure"
     date_nc: Optional[str] = None
@@ -283,12 +368,22 @@ class NCCreate(BaseModel):
     emetteur_id: Optional[int] = None
 
 
+def _titre_par_defaut(body) -> str:
+    """Titre affiché quand on n'en a pas saisi : client et produit, à défaut
+    le début de l'observation."""
+    parts = [p.strip() for p in (body.client_fournisseur, body.ref_client or body.descriptif_produit) if p and p.strip()]
+    if parts:
+        return " · ".join(parts)[:120]
+    obs = (body.description or "").strip()
+    return (obs.split("\n")[0].split(". ")[0][:120]) if obs else "Non-conformité"
+
+
 @router.post("/api/qualite/nc")
 def create_nc(body: NCCreate, request: Request):
     user = _require_qualite_access(request)
-    titre = (body.titre or "").strip()
-    if not titre:
-        raise HTTPException(status_code=400, detail="Titre obligatoire")
+    titre = (body.titre or "").strip() or _titre_par_defaut(body)
+    if not (body.client_fournisseur or "").strip() and not (body.description or "").strip():
+        raise HTTPException(status_code=400, detail="Renseigner au moins le client ou l'observation.")
     if body.type_nc not in NC_TYPES:
         raise HTTPException(status_code=400, detail="Type NC invalide")
     if body.gravite not in NC_GRAVITES:
@@ -306,9 +401,9 @@ def create_nc(body: NCCreate, request: Request):
                 date_nc, service_concerne, emetteur_id, client_fournisseur, ref_client,
                 no_dossier, descriptif_produit, quantite_concernee, description,
                 services_impliques, analyse_causes, action_corrective, action_preventive,
-                pilote_id, delai_cible, cout_estime,
+                pilote_id, delai_cible, cout_estime, ar_client_envoye, ar_client_envoye_at,
                 created_at, created_by, updated_at, updated_by)
-               VALUES (?,?,?,?,?, 'ouverte', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?,?,?,?,?, 'ouverte', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 numero, (body.numero_ar or None), (body.numero_historique or None),
                 body.type_nc, body.gravite, titre,
@@ -317,11 +412,13 @@ def create_nc(body: NCCreate, request: Request):
                 body.descriptif_produit, body.quantite_concernee, body.description,
                 services_csv, body.analyse_causes, body.action_corrective, body.action_preventive,
                 body.pilote_id, body.delai_cible, body.cout_estime,
+                1 if body.ar_client_envoye else 0, now if body.ar_client_envoye else None,
                 now, user["id"], now, user["id"],
             ),
         )
-        conn.commit()
         nc_id = cur.lastrowid
+        _ajouter_suivi(conn, nc_id, user["id"], "NC ouverte.", body.date_nc or _today())
+        conn.commit()
     return get_nc(nc_id, request)
 
 
@@ -329,6 +426,7 @@ def create_nc(body: NCCreate, request: Request):
 
 class NCUpdate(BaseModel):
     titre: Optional[str] = None
+    ar_client_envoye: Optional[bool] = None
     type_nc: Optional[str] = None
     gravite: Optional[str] = None
     statut: Optional[str] = None
@@ -371,6 +469,9 @@ def update_nc(nc_id: int, body: NCUpdate, request: Request):
             else:
                 new[k] = v
 
+        if "ar_client_envoye" in new:
+            new["ar_client_envoye"] = 1 if new["ar_client_envoye"] else 0
+            new["ar_client_envoye_at"] = _now() if new["ar_client_envoye"] else None
         if "statut" in new and new["statut"] not in NC_STATUTS:
             raise HTTPException(status_code=400, detail="Statut invalide")
         if "type_nc" in new and new["type_nc"] not in NC_TYPES:
@@ -395,6 +496,7 @@ def update_nc(nc_id: int, body: NCUpdate, request: Request):
             "descriptif_produit", "quantite_concernee", "description", "services_impliques",
             "analyse_causes", "action_corrective", "action_preventive", "pilote_id",
             "delai_cible", "cout_estime", "emetteur_id",
+            "ar_client_envoye", "ar_client_envoye_at",
         ):
             if col in new:
                 fields.append(f"{col}=?")
@@ -408,6 +510,101 @@ def update_nc(nc_id: int, body: NCUpdate, request: Request):
         # (titre, description, analyse causes, actions, gravité, quantité concernée).
         _reset_acks_if_needed(conn, nc_id, set(new.keys()))
         conn.commit()
+    return get_nc(nc_id, request)
+
+
+# ─── Suivi : étapes d'avancement ─────────────────────────────────────
+
+class NCSuiviIn(BaseModel):
+    texte: str
+    date_action: Optional[str] = None
+
+
+def _valider_suivi(body: NCSuiviIn):
+    texte = (body.texte or "").strip()
+    if not texte:
+        raise HTTPException(status_code=400, detail="Décrire l'étape — le texte est vide.")
+    d = (body.date_action or "").strip() or _today()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", d):
+        raise HTTPException(status_code=400, detail="Date invalide — format AAAA-MM-JJ.")
+    if d > _today():
+        raise HTTPException(status_code=400, detail="Date dans le futur — une étape décrit ce qui a été fait.")
+    return texte[:4000], d
+
+
+@router.post("/api/qualite/nc/{nc_id}/suivis")
+def add_suivi(nc_id: int, body: NCSuiviIn, request: Request):
+    user = _require_qualite_access(request)
+    texte, d = _valider_suivi(body)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM nc_dossiers WHERE id=?", (nc_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="NC introuvable")
+        _ajouter_suivi(conn, nc_id, user["id"], texte, d)
+        conn.commit()
+    return get_nc(nc_id, request)
+
+
+@router.put("/api/qualite/nc/{nc_id}/suivis/{suivi_id}")
+def update_suivi(nc_id: int, suivi_id: int, body: NCSuiviIn, request: Request):
+    user = _require_qualite_access(request)
+    texte, d = _valider_suivi(body)
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE nc_suivis SET texte=?, date_action=? WHERE id=? AND nc_id=?",
+            (texte, d, suivi_id, nc_id),
+        )
+        if not cur.rowcount:
+            raise HTTPException(status_code=404, detail="Étape introuvable")
+        conn.execute("UPDATE nc_dossiers SET updated_at=?, updated_by=? WHERE id=?", (_now(), user["id"], nc_id))
+        conn.commit()
+    return get_nc(nc_id, request)
+
+
+@router.delete("/api/qualite/nc/{nc_id}/suivis/{suivi_id}")
+def delete_suivi(nc_id: int, suivi_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM nc_suivis WHERE id=? AND nc_id=?", (suivi_id, nc_id))
+        if not cur.rowcount:
+            raise HTTPException(status_code=404, detail="Étape introuvable")
+        conn.execute("UPDATE nc_dossiers SET updated_at=?, updated_by=? WHERE id=?", (_now(), user["id"], nc_id))
+        conn.commit()
+    return get_nc(nc_id, request)
+
+
+# ─── Clôture (archivage) et réouverture ──────────────────────────────
+
+@router.post("/api/qualite/nc/{nc_id}/cloturer")
+def cloturer_nc(nc_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT statut FROM nc_dossiers WHERE id=?", (nc_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="NC introuvable")
+        if row["statut"] != "cloturee":
+            conn.execute(
+                "UPDATE nc_dossiers SET statut='cloturee', date_cloture=? WHERE id=?",
+                (_today(), nc_id),
+            )
+            _ajouter_suivi(conn, nc_id, user["id"], "NC clôturée et archivée.")
+            conn.commit()
+    return get_nc(nc_id, request)
+
+
+@router.post("/api/qualite/nc/{nc_id}/rouvrir")
+def rouvrir_nc(nc_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT statut FROM nc_dossiers WHERE id=?", (nc_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="NC introuvable")
+        if row["statut"] == "cloturee":
+            conn.execute(
+                "UPDATE nc_dossiers SET statut='ouverte', date_cloture=NULL WHERE id=?",
+                (nc_id,),
+            )
+            _ajouter_suivi(conn, nc_id, user["id"], "NC rouverte.")
+            conn.commit()
     return get_nc(nc_id, request)
 
 
@@ -526,6 +723,7 @@ def delete_nc(nc_id: int, request: Request):
             if os.path.exists(path):
                 try: os.remove(path)
                 except Exception: pass
+        conn.execute("DELETE FROM nc_suivis WHERE nc_id=?", (nc_id,))
         conn.execute("DELETE FROM nc_dossiers WHERE id=?", (nc_id,))
         conn.commit()
     return {"ok": True}
@@ -592,8 +790,14 @@ def download_fichier(nc_id: int, file_id: int, request: Request):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Fichier absent du serveur")
     media = d.get("mime_type") or "application/octet-stream"
-    return FileResponse(path, media_type=media, filename=d["original_name"],
-                        headers={"Content-Disposition": f'inline; filename="{d["original_name"]}"'})
+    # Photos et PDF s'affichent dans le navigateur ; tout le reste (HTML, scripts,
+    # emails…) se télécharge, pour ne jamais exécuter un contenu déposé.
+    affichable = (media.startswith("image/") and media != "image/svg+xml") or media == "application/pdf"
+    dispo = "inline" if affichable else "attachment"
+    return FileResponse(path, media_type=media if affichable else "application/octet-stream",
+                        filename=d["original_name"],
+                        headers={"Content-Disposition": f'{dispo}; filename="{d["original_name"]}"',
+                                 "X-Content-Type-Options": "nosniff"})
 
 
 @router.delete("/api/qualite/nc/{nc_id}/fichiers/{file_id}")
@@ -926,6 +1130,7 @@ async def import_nc_xlsx(request: Request, file: UploadFile = File(...)):
             ),
         )
         nc_id = cur.lastrowid
+        _ajouter_suivi(conn, nc_id, user["id"], "NC importée depuis la fiche Excel.")
 
         original = _sanitize_filename(file.filename)
         ts = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
@@ -954,7 +1159,10 @@ def export_nc_pdf(nc_id: int, request: Request):
     from fastapi.responses import Response
     from app.services.nc_pdf import render_nc_pdf
     nc = get_nc(nc_id, request)
-    pdf_bytes = render_nc_pdf(nc)
+    fichiers = list_fichiers(nc_id, request)
+    for f in fichiers:
+        f["path"] = os.path.join(QUALITE_UPLOAD_DIR, f["filename"])
+    pdf_bytes = render_nc_pdf(nc, fichiers)
     fname = (nc.get("numero") or f"NC_{nc_id}").replace(" ", "_") + ".pdf"
     return Response(
         content=pdf_bytes,
@@ -3968,7 +4176,7 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
             tpl_defaults = {}
         representant = (body.representant or "").strip() or None
         try:
-            from app.services.sifa_doc_pdf import build_template_pdf
+            from app.services.sifa_doc_pdf import build_template_pdf, SectionsIncompletes
             pdf_bytes = build_template_pdf(
                 template["code"],
                 client_nom=client_nom,
@@ -3980,6 +4188,8 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
                 template_default_overrides=tpl_defaults or None,
                 representant=representant,
             )
+        except SectionsIncompletes as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
 
@@ -4105,7 +4315,7 @@ def sifa_docs_edit_version(vid: int, body: SifaDocVersionEditBody, request: Requ
 
         fours = _fournisseurs_for_pdf(conn, body.fournisseurs_ids)
         try:
-            from app.services.sifa_doc_pdf import build_template_pdf
+            from app.services.sifa_doc_pdf import build_template_pdf, SectionsIncompletes
             pdf_bytes = build_template_pdf(
                 template["code"],
                 client_nom=client_nom,
@@ -4117,6 +4327,8 @@ def sifa_docs_edit_version(vid: int, body: SifaDocVersionEditBody, request: Requ
                 template_default_overrides=tpl_defaults or None,
                 representant=representant,
             )
+        except SectionsIncompletes as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
 
@@ -4195,7 +4407,7 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
                 representant_val = v["representant"]
             except Exception:
                 representant_val = None
-            from app.services.sifa_doc_pdf import build_template_pdf
+            from app.services.sifa_doc_pdf import build_template_pdf, SectionsIncompletes
             pdf_bytes = build_template_pdf(
                 template["code"],
                 client_nom=v["client_nom"],
@@ -4207,6 +4419,8 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
                 template_default_overrides=tpl_defaults or None,
                 representant=(representant_val or None),
             )
+        except SectionsIncompletes as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération : {e}")
 
@@ -4291,6 +4505,7 @@ def sifa_docs_preview_template(code: str, request: Request):
             date_emission_iso=_today(),
             validite_mois=int(template["validite_mois"] or 12),
             template_default_overrides=tpl_defaults or None,
+            brouillon=True,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur preview : {e}")

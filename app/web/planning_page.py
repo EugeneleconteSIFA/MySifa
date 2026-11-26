@@ -535,6 +535,15 @@ table.planning-of-table tr:last-child td{border-bottom:none}
   cursor:grab;transition:background .2s;background:var(--bg-dark)}
 .tr:first-child{background:var(--accent-bg)}
 .tr.dov{background:var(--accent-bg);opacity:.95}.tr.dra{opacity:.5}
+.tr.sel{background:var(--accent-bg);box-shadow:inset 0 0 0 2px var(--accent)}
+.slot.sel{outline:3px solid var(--accent);outline-offset:2px;z-index:25}
+.sel-barre{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:500;display:flex;align-items:center;gap:12px;
+  padding:8px 10px 8px 16px;border-radius:10px;background:var(--card);border:1px solid var(--accent);color:var(--text);
+  font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.sel-barre button{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);border:none;color:var(--bg);
+  border-radius:7px;height:28px;padding:0 10px 0 8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit}
+.sel-barre button:hover{filter:brightness(1.12)}
+.sel-ghost{position:fixed;top:-100px;left:-100px;padding:6px 12px;border-radius:8px;background:var(--accent);color:var(--bg);font-size:12px;font-weight:700}
 .tr.drop-before{box-shadow:0 -3px 0 0 var(--accent) inset}
 .tr.drop-after{box-shadow:0 3px 0 0 var(--accent) inset}
 /* Nouvel indicateur de drop précis - ligne horizontale */
@@ -1073,7 +1082,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js?v=2"></script>
+<script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -1909,7 +1918,7 @@ function renderEntries(){
 
   if(filtered.length===0){
     tbody.innerHTML=S.searchQuery?'<div class="empty">Aucun résultat pour \"'+escAttr(S.searchQuery)+'\"</div>':'<div class="empty">Aucun dossier au planning</div>';
-    setupDD();setupStatutSelects();
+    setupDD();setupStatutSelects();selAppliquer();
     return;
   }
 
@@ -1947,6 +1956,7 @@ function renderEntries(){
 
   setupDD();
   setupStatutSelects();
+  selAppliquer();
 }
 function escAttr(s){return String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
 function escHtml(s){
@@ -2113,6 +2123,8 @@ function timeInputFromFloat(f){
 }
 function machineKey(){
   const m=S.machine||{};
+  // Le type du poste (machines.type) décide du repiquage, plus le nom.
+  if(m.type==="repiquage") return "REP";
   const raw=String(m.code||m.nom||String(MID)||"").trim();
   const norm=raw
     .normalize("NFD").replace(/[\u0300-\u036f]/g,"") // remove accents (Cohésio -> Cohesio)
@@ -3178,14 +3190,213 @@ function renderTL(){
   const container=document.getElementById("tl-blocks-container");
   if(container) container.innerHTML=tlBlocks;
   buildLegend(sl, m1, nw);
-  requestAnimationFrame(()=>{updateTlMatchInfo();setupTlDD();});
+  requestAnimationFrame(()=>{updateTlMatchInfo();setupTlDD();selAppliquer();});
 }
 
 // ── Drag & Drop timeline slots ──
 // Les listeners dragover/drop sont sur le conteneur (stable) et non sur les slots
 // (recréés à chaque render). _tlDDContainerBound évite les doublons de listeners.
 let _tlDragEid=null;
+let _tlBloc=null;
 let _tlDDContainerBound=false;
+
+// ── Sélection multiple de dossiers ──
+// Cmd/Ctrl+clic ajoute ou retire un dossier, Maj+clic sélectionne la plage
+// (ordre du planning), Échap ou clic simple vide la sélection. Glisser un
+// dossier sélectionné déplace tout le bloc, dans l'ordre actuel des dossiers,
+// comme un seul dossier. Seuls les dossiers en attente sont sélectionnables.
+let _selAncre=null;
+function selPeutContenir(id){
+  const e=(S.entries||[]).find(x=>x.id===id);
+  return !!e && e.statut!=="en_cours" && e.statut!=="termine";
+}
+function selPrune(){
+  if(!S.selection) S.selection=new Set();
+  for(const id of Array.from(S.selection)) if(!selPeutContenir(id)) S.selection.delete(id);
+}
+function selAppliquer(){
+  selPrune();
+  document.querySelectorAll("#tbody .tr[data-eid], #tl-blocks-container .slot[data-eid]").forEach(el=>{
+    el.classList.toggle("sel", S.selection.has(+el.dataset.eid));
+  });
+  selMajBarre();
+}
+function selVider(){
+  _selAncre=null;
+  if(!S.selection||!S.selection.size) return;
+  S.selection.clear();
+  selAppliquer();
+}
+function selMajBarre(){
+  let bar=document.getElementById("sel-barre");
+  const n=S.selection?S.selection.size:0;
+  if(!n){ if(bar) bar.remove(); return; }
+  if(!bar){
+    bar=document.createElement("div");
+    bar.id="sel-barre";
+    bar.className="sel-barre";
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML=`<span>${n} dossier${n>1?"s":""} sélectionné${n>1?"s":""} · glisser pour déplacer le bloc</span>`+
+    `<button type="button" onclick="selVider()" title="Désélectionner (Échap)">`+
+    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Désélectionner</button>`;
+}
+function selClic(ev, eid){
+  selPrune();
+  if(ev.shiftKey && _selAncre!=null){
+    const ids=(S.entries||[]).map(e=>e.id);
+    const a=ids.indexOf(_selAncre), b=ids.indexOf(eid);
+    if(a>=0&&b>=0){
+      const lo=Math.min(a,b), hi=Math.max(a,b);
+      for(let i=lo;i<=hi;i++) if(selPeutContenir(ids[i])) S.selection.add(ids[i]);
+    }
+  }else if(!selPeutContenir(eid)){
+    showToast("Dossier en cours ou terminé — il ne se déplace pas.","info");
+    return;
+  }else{
+    if(S.selection.has(eid)) S.selection.delete(eid); else S.selection.add(eid);
+    _selAncre=eid;
+  }
+  selAppliquer();
+}
+// Dossiers emportés par un drag qui part de eid : toute la sélection si eid en fait partie.
+function selBlocPour(eid){
+  selPrune();
+  if(S.selection.has(eid) && S.selection.size>1){
+    const set=S.selection;
+    return (S.entries||[]).map(e=>e.id).filter(id=>set.has(id));
+  }
+  return [eid];
+}
+// Nouvel ordre : le bloc (dans son ordre actuel) posé avant anchorId, après
+// si after, ou en fin de liste si anchorId est null.
+function ordreAvecBloc(ids, bloc, anchorId, after){
+  const set=new Set(bloc);
+  const blk=ids.filter(id=>set.has(id));
+  const rest=ids.filter(id=>!set.has(id));
+  let pos=anchorId==null?rest.length:rest.indexOf(anchorId);
+  if(pos<0) return null;
+  if(anchorId!=null&&after) pos++;
+  rest.splice(pos,0,...blk);
+  return rest;
+}
+function dragImageBloc(ev, n){
+  if(n<2||!ev.dataTransfer||!ev.dataTransfer.setDragImage) return;
+  const g=document.createElement("div");
+  g.className="sel-ghost";
+  g.textContent=n+" dossiers";
+  document.body.appendChild(g);
+  ev.dataTransfer.setDragImage(g,12,12);
+  setTimeout(()=>g.remove(),0);
+}
+// ── Actions rapides sur la sélection ──
+// Un bouton d'action cliqué sur un dossier qui fait partie d'une sélection de
+// plusieurs dossiers agit sur toute la sélection. Hors sélection : le dossier seul.
+function selBlocAction(id){
+  selPrune();
+  return (S.selection.has(id)&&S.selection.size>1)?selBlocPour(id):null;
+}
+async function reorderBloc(ids, okMsg){
+  if(!reorderKeepsLocked(S.entries.map(e=>e.id), ids)){
+    showToast("Déplacement impossible — l'ordre des dossiers déjà produits changerait.","danger");
+    return;
+  }
+  const savedTbodyScroll=document.getElementById("tbody")?.scrollTop??0;
+  _suppressAutoScroll=true;
+  try{
+    await api(`/machines/${MID}/reorder`,{method:"POST",body:JSON.stringify({entry_ids:ids})});
+    await load();
+    showToast(okMsg,"success");
+  }catch(e){
+    showToast(apiErrorMessage(e,"Réordonnancement impossible."),"danger");
+    await load();
+  }finally{
+    _suppressAutoScroll=false;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const tbody=document.getElementById("tbody");
+      if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
+    }));
+  }
+}
+// Monter / descendre : le bloc, regroupé, passe par-dessus le dossier en
+// attente voisin (avant le premier du bloc, ou après le dernier).
+async function moveBloc(bloc, delta){
+  const l=S.entries||[];
+  const ids=l.map(e=>e.id);
+  const set=new Set(bloc);
+  const pos=ids.map((id,k)=>set.has(id)?k:-1).filter(k=>k>=0);
+  let anchor=null;
+  if(delta<0){
+    for(let j=pos[0]-1;j>=0;j--) if(!estVerrouille(l[j])&&!set.has(ids[j])){ anchor=ids[j]; break; }
+  }else{
+    for(let j=pos[pos.length-1]+1;j<l.length;j++) if(!estVerrouille(l[j])&&!set.has(ids[j])){ anchor=ids[j]; break; }
+  }
+  if(anchor==null){
+    showToast(delta<0?"Déjà les prochains dossiers à produire.":"Déjà les derniers dossiers en attente.","info");
+    return;
+  }
+  const ordre=ordreAvecBloc(ids, bloc, anchor, delta>0);
+  if(ordre) await reorderBloc(ordre, "Ordre enregistré.");
+}
+async function blocEnTete(bloc){
+  const l=S.entries||[];
+  const set=new Set(bloc);
+  const premier=l.find(e=>!estVerrouille(e)&&!set.has(e.id));
+  if(!premier){ showToast("Déjà les prochains dossiers à produire.","info"); return; }
+  const ordre=ordreAvecBloc(l.map(e=>e.id), bloc, premier.id, false);
+  if(ordre) await reorderBloc(ordre, `${bloc.length} dossiers passés en tête.`);
+}
+async function supprimerDepuisLigne(id){
+  if(!CAN_EDIT) return;
+  const bloc=selBlocAction(id);
+  if(!bloc){ if(confirm("Supprimer ?")) delEntry(id); return; }
+  if(!confirm(`Supprimer les ${bloc.length} dossiers sélectionnés ?`)) return;
+  let ko=0;
+  for(const eid of bloc){
+    try{ await api(`/machines/${MID}/entries/${eid}`,{method:"DELETE"}); }catch(e){ ko++; }
+  }
+  selVider();
+  await load();
+  if(ko) showToast(`${bloc.length-ko} dossiers supprimés, ${ko} refusés.`,"danger");
+  else showToast(`${bloc.length} dossiers supprimés.`,"success");
+}
+function _selCible(ev){
+  if(!CAN_EDIT) return null;
+  const t=ev.target;
+  if(!t||!t.closest) return null;
+  if(t.closest("button,select,input,textarea,a,.slot-resize-handle")) return null;
+  return t.closest("#tbody .tr[data-eid], #tl-blocks-container .slot[data-eid]");
+}
+// Dossier saisi à la souris : l'infobulle disparaît et ne revient qu'au
+// relâchement, sinon elle masque la zone où l'on veut déposer le dossier.
+let _tipBloque=false;
+document.addEventListener("mousedown",ev=>{
+  if(ev.button!==0||!ev.target||!ev.target.closest) return;
+  if(ev.target.closest("#tl-blocks-container .slot[data-eid]")){ _tipBloque=true; hideTip(); }
+},true);
+document.addEventListener("mouseup",()=>{ _tipBloque=false; },true);
+document.addEventListener("dragend",()=>{ _tipBloque=false; hideTip(); },true);
+// Maj/Cmd+mousedown : empêcher la sélection de texte du navigateur.
+document.addEventListener("mousedown",ev=>{
+  if((ev.shiftKey||ev.metaKey||ev.ctrlKey) && _selCible(ev)) ev.preventDefault();
+},true);
+document.addEventListener("click",ev=>{
+  const el=_selCible(ev);
+  if(!el) return;
+  if(ev.metaKey||ev.ctrlKey||ev.shiftKey){
+    ev.preventDefault();
+    ev.stopPropagation();
+    selClic(ev, +el.dataset.eid);
+  }else{
+    selVider();
+  }
+},true);
+document.addEventListener("keydown",ev=>{
+  if(ev.key!=="Escape"||!S.selection||!S.selection.size) return;
+  const mr=document.getElementById("mroot");
+  if(mr&&mr.firstElementChild) return;
+  selVider();
+});
 function lockedPositionsFromIds(ids){
   const locked = (S.entries||[]).filter(e=>e.statut==="en_cours"||e.statut==="termine").map(e=>e.id);
   const pos={};
@@ -3215,14 +3426,21 @@ function setupTlDD(){
   document.querySelectorAll("#tl-blocks-container .slot[draggable='true']").forEach(el=>{
     el.addEventListener("dragstart",ev=>{
       if(ev.target&&ev.target.closest&&ev.target.closest(".slot-resize-handle")){ev.preventDefault();return;}
+      hideTip();
       _tlDragEid=+el.dataset.eid;
-      el.style.opacity="0.45";
+      _tlBloc=selBlocPour(_tlDragEid);
+      const set=new Set(_tlBloc);
+      document.querySelectorAll("#tl-blocks-container .slot[data-eid]").forEach(s=>{
+        if(set.has(+s.dataset.eid)) s.style.opacity="0.45";
+      });
       ev.dataTransfer.effectAllowed="move";
       ev.dataTransfer.setData("text/plain",String(_tlDragEid));
+      dragImageBloc(ev,_tlBloc.length);
     });
     el.addEventListener("dragend",()=>{
-      el.style.opacity="";
+      document.querySelectorAll("#tl-blocks-container .slot[data-eid]").forEach(s=>{ s.style.opacity=""; });
       _tlDragEid=null;
+      _tlBloc=null;
       document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
     });
   });
@@ -3237,7 +3455,7 @@ function setupTlDD(){
     ev.dataTransfer.dropEffect="move";
     const target=ev.target.closest(".slot[data-eid]");
     document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
-    if(target && +target.dataset.eid!==_tlDragEid){
+    if(target && !(_tlBloc||[_tlDragEid]).includes(+target.dataset.eid)){
       target.classList.add("tl-drop-over");
     }
   });
@@ -3251,28 +3469,28 @@ function setupTlDD(){
     document.querySelectorAll("#tl-blocks-container .slot.tl-drop-over").forEach(e=>e.classList.remove("tl-drop-over"));
     const target=ev.target.closest(".slot[data-eid]");
     const fromEid=_tlDragEid;
+    const bloc=_tlBloc||[fromEid];
     _tlDragEid=null;
+    _tlBloc=null;
     if(!target||!fromEid) return;
     const targetStat=(target.dataset&&target.dataset.statut)?String(target.dataset.statut):"";
     const eid=+target.dataset.eid;
-    if(eid===fromEid) return;
+    if(bloc.includes(eid)) return;
     const fromE=(S.entries||[]).find(x=>x.id===fromEid);
     if(fromE&&(fromE.statut==="en_cours"||fromE.statut==="termine")){
       showToast("Dossier en cours ou terminé — il garde sa place.","info");
       return;
     }
-    const ids=S.entries.map(e=>e.id);
-    const fromIdx=ids.indexOf(fromEid);
-    const toIdx=ids.indexOf(eid);
+    const idsBefore=S.entries.map(e=>e.id);
+    const fromIdx=idsBefore.indexOf(bloc[0]);
+    const toIdx=idsBefore.indexOf(eid);
     if(fromIdx<0||toIdx<0) return;
-    const [moved]=ids.splice(fromIdx,1);
-    if(targetStat && targetStat!=="attente"){
-      // Lâché sur un dossier en cours / terminé : « à produire juste après lui ».
-      ids.splice(ids.indexOf(eid)+1,0,moved);
-    }else{
-      ids.splice(toIdx,0,moved);
-    }
-    if(!reorderKeepsLocked(S.entries.map(e=>e.id), ids)){
+    // Lâché sur un dossier en cours / terminé : « à produire juste après lui ».
+    // Sinon, comme pour un dossier seul : après la cible si on descend, avant si on monte.
+    const after=(targetStat && targetStat!=="attente") || fromIdx<toIdx;
+    const ids=ordreAvecBloc(idsBefore, bloc, eid, after);
+    if(!ids) return;
+    if(!reorderKeepsLocked(idsBefore, ids)){
       showToast("Déplacement impossible — l'ordre des dossiers déjà produits changerait.","danger");
       await load();
       return;
@@ -3571,6 +3789,13 @@ function mkTL(mon,slots){
     if(isExpeVue && nbPalettes!==null){
       expeBrightnessStyle = nbPalettes>=6 ? "" : "filter:brightness(0.4);";
     }
+    // Repiquage : une production « pour repiquage », ou un repiquage et sa
+    // production d'origine (repiquage_source, choisie dans le formulaire).
+    const repTxt=s.repiquage_source
+      ? "Repique "+(s.repiquage_source.reference||"")+(s.repiquage_source.machine?" ("+s.repiquage_source.machine+")":"")
+      : (s.pour_repiquage
+        ? "Pour repiquage"+((s.repiquages||[]).length?" · "+s.repiquages.map(x=>(x.reference||"")+" "+({attente:"à faire",en_cours:"en cours",termine:"fait"}[x.statut]||"")).join(", "):" · repiquage à planifier")
+        : "");
     // Date de livraison imposée — la date passe en rouge dans le slot et le tooltip
     const dlImp=!!s.date_livraison_imposee;
     const dlRed=dlImp?"color:var(--danger);font-weight:700":"";
@@ -3586,7 +3811,8 @@ function mkTL(mon,slots){
       line2SlotHtml=line2Txt?escHtml(line2Txt):"";
       const dateLivHtml=s.date_livraison?`<span style="${dlRed}">${escHtml("à livrer pour "+s.date_livraison)}</span>`:"";
       const comHtml=com?escHtml(com):"";
-      const l3parts=[dateLivHtml,comHtml].filter(Boolean);
+      const repHtml=repTxt?`<span style="color:var(--accent);font-weight:700">${escHtml(repTxt)}</span>`:"";
+      const l3parts=[repHtml,dateLivHtml,comHtml].filter(Boolean);
       line3SlotHtml=l3parts.length?l3parts.join(" | "):"";
     }
 
@@ -3594,7 +3820,7 @@ function mkTL(mon,slots){
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
-      ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
+      ` data-rep="${escAttr(repTxt)}" data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
       ` data-tr="${s.transport?'1':'0'}" data-tr-transp="${escAttr((s.transport&&s.transport.transporteur)||"")}" data-tr-date="${escAttr((s.transport&&s.transport.date_enlevement)||"")}" data-tr-pal="${escAttr(s.transport&&s.transport.palettes!=null?String(s.transport.palettes):"")}" data-tr-limite="${escAttr((s.transport&&s.transport.limite)||"")}" data-tr-tension="${escAttr((s.transport&&s.transport.tension)||"")}" data-tr-marge="${escAttr(s.transport&&s.transport.marge_heures?String(s.transport.marge_heures):"")}" data-tr-nb="${escAttr(String((s.transport&&s.transport.departs&&s.transport.departs.length)||0))}"`+
       ` data-annule="${annuleSlot?'1':'0'}" data-annule-motif="${escAttr(s.annule_motif||"")}" data-annule-par="${escAttr(s.annule_par||"")}" data-annule-count="${escAttr(String(s.annule_count||0))}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
@@ -3692,7 +3918,7 @@ function mkRow(e,i,slots){
         ?`<button type="button" class="ab" disabled title="Non disponible — dossier terminé">${BAN}</button>`
         :e.statut==="en_cours"
           ?`<button type="button" class="ab del" onclick="if(confirm('Supprimer ce dossier en cours ? Le suivant passera automatiquement en cours.'))delEntry(${e.id})" title="Supprimer (en cours)">${icon('trash-2',14)}</button>`
-          :`<button type="button" class="ab del" onclick="if(confirm('Supprimer ?'))delEntry(${e.id})" title="Supprimer">${icon('trash-2',14)}</button>`
+          :`<button type="button" class="ab del" onclick="supprimerDepuisLigne(${e.id})" title="Supprimer">${icon('trash-2',14)}</button>`
       }`;
       })():""}
     </div></div>`;
@@ -3700,6 +3926,8 @@ function mkRow(e,i,slots){
 
 async function moveEntry(entryId,delta){
   if(!CAN_EDIT) return;
+  const bloc=selBlocAction(entryId);
+  if(bloc) return moveBloc(bloc,delta);
   const idx = S.entries.findIndex(e=>e.id===entryId);
   if(idx<0) return;
   const cur = S.entries[idx];
@@ -3760,6 +3988,8 @@ function estEnTete(i){
 }
 async function passerEnTete(entryId){
   if(!CAN_EDIT) return;
+  const bloc=selBlocAction(entryId);
+  if(bloc) return blocEnTete(bloc);
   const savedTbodyScroll=document.getElementById("tbody")?.scrollTop??0;
   _suppressAutoScroll=true;
   try{
@@ -3946,7 +4176,7 @@ function ouvrirResumeDossier(eid){
 // ── Tooltip ──
 let tipEl=null;
 let _hoveredSlotEid=null;
-function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.eid:null;tipEl=document.createElement("div");tipEl.className="tip";
+function showTip(ev,el){hideTip();if(_tlDragEid!=null||_ddDragIdx!=null||_tipBloque)return;const d=el.dataset;_hoveredSlotEid=d.eid?+d.eid:null;tipEl=document.createElement("div");tipEl.className="tip";
   tipEl.style.borderColor=(d.co||"#888")+"55";
   const sub=d.lbl?`<div class="tip-lbl">${d.lbl}</div>`:"";
   const liv=(d.livraison||"").trim();
@@ -3968,6 +4198,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     <span class="k">Fin</span><span class="v">${d.fin||""}</span>
     <span class="k">Statut</span><span class="v" style="color:${d.st==="En cours"?"var(--green)":d.st==="Terminé"?"var(--muted)":"var(--amber)"};font-weight:600">${d.st||""}</span>
     ${(()=>{const r=d.statutReel||"";if(r==="reellement_termine")return`<span class="k">Saisie</span><span class="v" style="color:var(--muted)">✓ Terminé</span>`;if(r==="reellement_en_saisie")return`<span class="k">Saisie</span><span class="v" style="color:var(--success)">⚙ En cours</span>`;return"";})()}
+    ${(d.rep||"").trim()?`<span class="k">Repiquage</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(d.rep)}</span>`:""}
     ${expeTipRows}`;
   // Colonne droite : infos techniques (frontal/adhésif depuis fiche, qté étiquettes)
   const supTxt=(d.support||"").trim();
@@ -4101,6 +4332,7 @@ function hideNowTip(){if(nowTipEl){nowTipEl.remove();nowTipEl=null}}
 // Variables globales pour le DnD de la liste des dossiers
 let _ddDragIdx=null;      // Index de l'élément draggué dans S.entries
 let _ddDropIdx=null;      // Index d'insertion calculé
+let _ddBloc=null;         // Ids déplacés ensemble (sélection multiple)
 let _ddIndicator=null;    // Élément DOM de l'indicateur de drop
 let _ddAutoScrollInterval=null; // Timer pour l'auto-scroll
 
@@ -4128,6 +4360,7 @@ function setupDD(){
   function clearState(){
     _ddDragIdx=null;
     _ddDropIdx=null;
+    _ddBloc=null;
     if(_ddIndicator) _ddIndicator.style.display="none";
     tbody.querySelectorAll(".tr.dra").forEach(r=>r.classList.remove("dra"));
     tbody.querySelectorAll(".tr.dov").forEach(r=>r.classList.remove("dov"));
@@ -4206,8 +4439,12 @@ function setupDD(){
       return;
     }
     _ddDragIdx=parseInt(row.dataset.idx,10);
+    _ddBloc=selBlocPour(+row.dataset.eid);
+    const set=new Set(_ddBloc);
+    tbody.querySelectorAll(".tr[data-eid]").forEach(r=>{ if(set.has(+r.dataset.eid)) r.classList.add("dra"); });
     row.classList.add("dra");
     e.dataTransfer.effectAllowed="move";
+    dragImageBloc(e,_ddBloc.length);
   });
 
   tbody.addEventListener("dragover",(e)=>{
@@ -4254,13 +4491,19 @@ function setupDD(){
       return;
     }
 
-    // Ajuster l'index d'insertion si nécessaire
-    let insertAt=_ddDropIdx;
-    if(insertAt>_ddDragIdx) insertAt--;
-    insertAt=Math.max(0,Math.min(insertAt,S.entries.length-1));
+    // Le bloc (un dossier, ou toute la sélection) se pose avant le premier
+    // dossier hors bloc situé à l'index d'insertion, ou en fin de liste.
+    const idsBefore=S.entries.map(en=>en.id);
+    const bloc=_ddBloc||[idsBefore[_ddDragIdx]];
+    const blocSet=new Set(bloc);
+    let anchorId=null;
+    for(let k=Math.max(0,_ddDropIdx);k<idsBefore.length;k++){
+      if(!blocSet.has(idsBefore[k])){ anchorId=idsBefore[k]; break; }
+    }
+    const ids=ordreAvecBloc(idsBefore, bloc, anchorId, false);
 
     // Ne rien faire si on drop au même endroit
-    if(insertAt===_ddDragIdx){
+    if(!ids || ids.every((id,k)=>id===idsBefore[k])){
       clearState();
       return;
     }
@@ -4269,11 +4512,6 @@ function setupDD(){
     const savedScroll=document.querySelector(".main")?.scrollTop??0;
     const savedTbodyScroll=tbody.scrollTop??0;
 
-    // Réordonner
-    const idsBefore=S.entries.map(en=>en.id);
-    const ids=idsBefore.slice();
-    const [moved]=ids.splice(_ddDragIdx,1);
-    ids.splice(insertAt,0,moved);
     if(!reorderKeepsLocked(idsBefore, ids)){
       clearState();
       showToast("Déplacement impossible — cela déplacerait un dossier en cours/terminé.","danger");
@@ -4366,6 +4604,18 @@ function setupStatutSelects(){
 async function delEntry(id){await api(`/machines/${MID}/entries/${id}`,{method:"DELETE"});load()}
 async function splitEntry(id){
   if(!CAN_EDIT) return;
+  const bloc=selBlocAction(id);
+  if(bloc){
+    if(!confirm(`Spliter les ${bloc.length} dossiers sélectionnés en 2 (mêmes infos) avec durée /2 ?`)) return;
+    let ko=0;
+    for(const eid of bloc){
+      try{ await api(`/machines/${MID}/entries/${eid}/split`,{method:"POST"}); }catch(e){ ko++; }
+    }
+    await load();
+    if(ko) showToast(`${bloc.length-ko} dossiers divisés, ${ko} refusés.`,"danger");
+    else showToast(`${bloc.length} dossiers divisés.`,"success");
+    return;
+  }
   const e=S.entries.find(x=>x.id===id);
   if(!e) return;
   if(e.statut==="en_cours"||e.statut==="termine") return alert("Dossier verrouillé");
@@ -4388,7 +4638,7 @@ function duplicateEntry(id){
   _dossierEditId=null;  // duplication : nouveau dossier, pas d'enregistrement à la volée
   document.getElementById("mroot").innerHTML=modalHTML(
     "Dupliquer le dossier",
-    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0,e.etiquettes_par_carton??null),
+    dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0,e.etiquettes_par_carton??null,null,e.pour_repiquage||0,null),
     "Ajouter","submitDuplicate()"
   ,"","",false,"md--dossier");
 }
@@ -4401,12 +4651,14 @@ async function submitDuplicate(){
 
 // ── Switch machine ──
 let _switchEntryId=null;
+let _switchBloc=null;     // ids déplacés ensemble (sélection multiple), dans l'ordre du planning
 function openSwitchMachine(entryId){
   if(!CAN_EDIT) return;
   const e=S.entries.find(x=>x.id===entryId);
   if(!e) return;
   if(e.statut==="en_cours"||e.statut==="termine") return alert("Dossier verrouille - impossible de changer de machine");
   _switchEntryId=entryId;
+  _switchBloc=selBlocAction(entryId);
   const otherMachines=S.machines.filter(m=>m.id!==MID);
   if(otherMachines.length===0) return alert("Aucune autre machine disponible");
   const machineOptions=otherMachines.map(m=>`<option value="${m.id}">${escAttr(m.nom||'')}</option>`).join("");
@@ -4425,7 +4677,7 @@ async function showTargetDossiers(){
   if(!e) return closeM();
   const cible=(S.machines||[]).find(m=>m.id===targetMachineId);
   document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:600px;max-width:95vw;"><h3>Où placer le dossier sur ${escHtml(cible?.nom||"la machine cible")} ?</h3>
-    <p style="font-size:12px;color:var(--muted);margin:-12px 0 12px">Cliquez sur un dossier pour placer <strong>${escHtml(e.client||e.numero_of||'')}</strong> juste après lui.</p>
+    <p style="font-size:12px;color:var(--muted);margin:-12px 0 12px">Cliquez sur un dossier pour placer <strong>${_switchBloc?`les ${_switchBloc.length} dossiers sélectionnés`:escHtml(e.client||e.numero_of||'')}</strong> juste après lui${_switchBloc?", dans leur ordre actuel":""}.</p>
     <div id="switch-dossier-list" style="max-height:400px;overflow:auto;border:1px solid var(--border2);border-radius:8px;">
       <div style="padding:20px;text-align:center;color:var(--muted)">Chargement…</div>
     </div>
@@ -4465,6 +4717,7 @@ async function showTargetDossiers(){
 }
 async function confirmSwitch(targetMachineId,place){
   if(!_switchEntryId) return;
+  if(_switchBloc) return confirmSwitchBloc(targetMachineId,place);
   if(!confirm("Confirmer le déplacement de ce dossier vers l'autre machine ?")) return;
   // Une seule écriture côté serveur : la ligne change de machine en gardant son
   // id (commandes RVGI rattachées, départs MyExpé, split, déstockage). Jusqu'au
@@ -4482,6 +4735,34 @@ async function confirmSwitch(targetMachineId,place){
   }catch(err){
     showToast(apiErrorMessage(err,"Déplacement impossible — le dossier n'a pas bougé."),"danger");
   }
+}
+
+// Sélection : chaque dossier change de machine à son tour. Le premier prend
+// la place choisie, les suivants se rangent juste après le précédent.
+async function confirmSwitchBloc(targetMachineId,place){
+  const bloc=_switchBloc||[];
+  if(!confirm(`Confirmer le déplacement des ${bloc.length} dossiers vers l'autre machine ?`)) return;
+  closeM();
+  let prev=null, ok=0;
+  for(const eid of bloc){
+    const p=(prev!=null&&(place.en_tete||place.apres_id))?{apres_id:prev}:(place||{});
+    try{
+      await api(`/machines/${MID}/entries/${eid}/changer-machine`,{
+        method:"POST",
+        body:JSON.stringify({machine_cible:targetMachineId,...p})
+      });
+      prev=eid; ok++;
+    }catch(err){
+      showToast(apiErrorMessage(err,"Déplacement interrompu."),"danger");
+      break;
+    }
+  }
+  _switchEntryId=null;
+  _switchBloc=null;
+  selVider();
+  if(ok===bloc.length) showToast(`${ok} dossiers déplacés.`,"success");
+  else showToast(`${ok} dossiers déplacés sur ${bloc.length}.`,"danger");
+  load();
 }
 
 // ── Modals ──
@@ -4822,7 +5103,7 @@ function rvgiRafraichirResume(entryId){
   else z.innerHTML='';
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null,entryId=null){
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null,entryId=null,pourRepiquage=0,repSourceId=null){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&FSC_REQ_CODES.includes(fscType))?fscType:FSC_CLAIM_DEFAUT;
   const rdvOn=priseRdv===1||priseRdv===true;
@@ -4911,12 +5192,67 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
           </div>
         </div>
       </div>
+      ${repiquageSection(entryId,pourRepiquage,repSourceId)}
       <div class="dossier-section">
         <span class="dossier-section-label">Particularités et commentaires</span>
         <div class="fd"><label>Commentaire</label><input id="f-com" value="${escAttr(commentaire)}" placeholder="Bobine, contraintes, etc."></div>
         <div class="fd"><label>Exigences de production</label><textarea id="f-exig" class="dossier-ta" rows="2" placeholder="Consignes impératives pour l'atelier (visibles en priorité sur la timeline)">${escHtml(exigences_production||"")}</textarea></div>
       </div>
     </div>`
+}
+
+// Repiquage dans le formulaire du dossier :
+// - poste d'impression : la case « Prod pour repiquage » (les étiquettes
+//   attendent un repiquage pour la même commande) ;
+// - poste de repiquage (machines.type) : la production d'origine, choisie
+//   parmi les dossiers cochés, la plus probable d'abord (même dossier, même
+//   article), chargée par /api/planning/repiquage/sources.
+function repiquageSection(entryId,pourRepiquage,repSourceId){
+  if(machineKey()==="REP"){
+    setTimeout(()=>chargerSourcesRepiquage(entryId,repSourceId),0);
+    return `<div class="dossier-section">
+        <span class="dossier-section-label">Repiquage</span>
+        <div class="fd fd--full">
+          <label for="f-rep-src">Production d'origine</label>
+          <select id="f-rep-src" class="form-sel" style="width:100%" data-actuelle="${repSourceId!=null?escAttr(String(repSourceId)):''}">
+            <option value="">Chargement…</option>
+          </select>
+          <span style="font-size:11px;color:var(--muted);display:block;margin-top:4px">Le dossier d'impression dont ce repiquage surimprime les étiquettes. Seuls les dossiers cochés « Prod pour repiquage » sont proposés.</span>
+        </div>
+      </div>`;
+  }
+  const on=pourRepiquage===1||pourRepiquage===true;
+  return `<div class="dossier-section">
+      <span class="dossier-section-label">Repiquage</span>
+      <label class="dossier-check-lbl" style="margin:0">
+        <input type="checkbox" id="f-pour-rep" ${on?"checked":""} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+        Prod pour repiquage — les étiquettes seront repiquées avant de partir
+      </label>
+    </div>`;
+}
+async function chargerSourcesRepiquage(entryId,actuelle,essai=0){
+  const sel=document.getElementById("f-rep-src");
+  // La fenêtre est posée dans la page après la construction du formulaire :
+  // on attend le champ (au plus ~2 s) au lieu de le manquer.
+  if(!sel){ if(essai<40) setTimeout(()=>chargerSourcesRepiquage(entryId,actuelle,essai+1),50); return; }
+  try{
+    const r=await fetch("/api/planning/repiquage/sources"+(entryId?"?entry_id="+encodeURIComponent(entryId):""),{credentials:"include"});
+    const d=r.ok?await r.json():{sources:[]};
+    if(!document.body.contains(sel))return;
+    const st={attente:"en attente",en_cours:"en cours",termine:"terminé"};
+    sel.innerHTML="";
+    const vide=document.createElement("option");vide.value="";vide.textContent="— Aucune production d'origine —";sel.appendChild(vide);
+    (d.sources||[]).forEach(x=>{
+      const o=document.createElement("option");
+      o.value=String(x.id);
+      o.textContent=[(x.reference||"Dossier "+x.id),x.machine,x.ref_produit,x.client,st[x.statut]||x.statut].filter(Boolean).join(" · ")
+        +(x.meme_reference?" · même dossier":x.meme_article?" · même article":"")
+        +(x.deja_repique?" · déjà repiqué":"");
+      if(actuelle!=null&&String(actuelle)===String(x.id))o.selected=true;
+      sel.appendChild(o);
+    });
+    if(!(d.sources||[]).length){vide.textContent="Aucune production cochée « pour repiquage »";}
+  }catch(e){sel.innerHTML='<option value="">Liste indisponible</option>';}
 }
 
 function getFormData(withStatut){
@@ -4935,6 +5271,9 @@ function getFormData(withStatut){
     valide:document.getElementById("f-valide")?.checked?1:0,
     departement_livraison:(document.getElementById("f-dept")?.value||"").trim(),
     prise_rdv:document.getElementById("f-rdv")?.checked?1:0,
+    ...(document.getElementById("f-pour-rep")?{pour_repiquage:document.getElementById("f-pour-rep").checked?1:0}:{}),
+    ...(document.getElementById("f-rep-src")&&document.getElementById("f-rep-src").options.length>0&&document.getElementById("f-rep-src").options[0].textContent!=="Chargement…"
+      ?{repiquage_source_id:document.getElementById("f-rep-src").value?parseInt(document.getElementById("f-rep-src").value,10):null}:{}),
     date_livraison_imposee:document.getElementById("f-dl-imp")?.checked?1:0,
     etiquettes_par_carton:(()=>{
       const v=document.getElementById("f-epc")?.value;
@@ -5351,7 +5690,7 @@ function openEdit(id){
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
   setTimeout(()=>rvgiRafraichirResume(e.id??null),0);
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null,e.pour_repiquage||0,e.repiquage_source_id??null);
 
   // Bouton déstockage compact en en-tête
   // Repère RVGI (collègue qui déstocke dans l'ERP) — disjoint du stock MySifa.
@@ -5840,7 +6179,7 @@ function _ofpLigne(o, st){
         <div style="font-size:13px;font-weight:700;color:${sel?'var(--accent)':'var(--text)'}">${escHtml(o.of_numero||'OF #'+o.id)}
           ${o.raison?`<span style="margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)">${escHtml(o.raison)}</span>`:''}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere">${infos||'—'}</div>
-        ${o.note?`<div style="font-size:12px;color:${ton};margin-top:2px;font-weight:600">${escHtml(o.note)}</div>`:''}
+        ${o.note?'<div style="font-size:12px;color:'+ton+';margin-top:2px;font-weight:600">'+escHtml(o.note)+'</div>':''}
       </div>
       <div style="font-size:11px;color:var(--muted);white-space:nowrap;text-align:right">${cree}</div>
     </div>`;

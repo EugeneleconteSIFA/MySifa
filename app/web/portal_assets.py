@@ -1930,21 +1930,43 @@ function renderPortal(){
     )});
   }
 
-  // ADV : carnet de commandes (ROLES_ADV) et onglet Prépa, ouvert aussi à la
-  // logistique et à l'expédition (ROLES_ADV_PREPA, config.py).
-  if(isSuper || ['direction','administration','administration_ventes','administration_technique','logistique','expedition'].includes(urole)){
+  // ADV : ouverte à ROLES_ADV_LECTURE (config.py) — l'ADV, les commerciaux et
+  // l'expédition voient le carnet, la logistique n'a que l'onglet Prépa : pour
+  // elle, l'appli s'appelle « Prépa » et s'ouvre sur les préparations.
+  // Bulle rouge (/api/adv/badges) : préparations urgentes pour la logistique et
+  // l'expédition, lignes à expédier en retard ou sous 7 jours pour les autres.
+  if(isSuper || ['direction','administration','administration_ventes','administration_technique','logistique','expedition','commercial'].includes(urole)){
     const id='adv';
-    const prepaSeule=!isSuper && ['logistique','expedition'].includes(urole);
+    const prepaSeule=!isSuper && urole==='logistique';
+    const advIcoEl=h('div',{className:'portal-app-icon'},iconEl('clipboard',28));
+    advIcoEl.appendChild(h('span',{className:'portal-app-badge',id:'portal-adv-badge',style:{display:'none'}},'0'));
     tileSpecs.push({id,el:h('div',{
       className:'portal-app',
       'data-portal-id':id,
       draggable:'true',
       onClick:()=>{if(_portalDragSuppressClick)return;window.location.href=prepaSeule?'/adv?onglet=prepa':'/adv';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('clipboard',28)),
-      h('div',{className:'portal-app-name'},'ADV'),
+      advIcoEl,
+      h('div',{className:'portal-app-name'},prepaSeule?'Prépa':'ADV'),
       h('div',{className:'portal-app-desc'},prepaSeule?'Préparations à faire':'Carnet de commandes & préparations')
     )});
+    setTimeout(()=>{
+      fetch('/api/adv/badges',{credentials:'include'})
+        .then(r=>r.ok?r.json():null)
+        .then(d=>{
+          const el=document.getElementById('portal-adv-badge');
+          if(!el||!d) return;
+          const n=d.nombre||0;
+          if(n>0){
+            el.style.display='inline-flex';
+            el.textContent=n>99?'99+':String(n);
+            el.title=d.vue==='prepa'
+              ?n+' préparation'+(n>1?'s':'')+' urgente'+(n>1?'s':'')
+              :(d.retard||0)+' en retard · '+(d.semaine||0)+' à expédier sous 7 jours';
+          } else el.style.display='none';
+        })
+        .catch(()=>{});
+    },0);
   }
 
   // Messagerie: icône dans le coin (sous Paramètres) pour le super admin

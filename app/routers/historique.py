@@ -3,6 +3,7 @@ Sanity Score : une note par journée opérateur, puis moyenne pondérée par la 
 """
 import math
 from datetime import datetime, timedelta
+from app.services import machines_type as _mtype
 from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Request, Query
 from database import get_db, parse_datetime
@@ -480,11 +481,7 @@ def dashboard_historique(
             GROUP BY machine,operation_severity ORDER BY c DESC""", params).fetchall()
         # Exclure les saisies machine Repiquage du calcul "Qualite de saisie".
         # Le score n'a pas de sens pour l'atelier Repiquage qui utilise un comptage carton.
-        san_machine_excl = (
-            "AND NOT (lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
-            " OR lower(trim(COALESCE(machine,''))) = 'rep' "
-            " OR lower(trim(COALESCE(machine,''))) LIKE 'rep %')"
-        )
+        san_machine_excl = "AND NOT " + _mtype.sql_nom_repiquage(conn, "machine")
         san_rows  = conn.execute(f"""
             SELECT id,operateur,date_operation,operation_code,operation_category,machine,no_dossier,
                    quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel,commentaire

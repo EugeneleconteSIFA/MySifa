@@ -794,9 +794,22 @@ def devis_suggeres(planning_entry_id: int, request: Request, limit: int = 8, q: 
         classes = classer_devis_pour_entree(devis_rows, dict(entree), limite, voc)
 
     par_id = {int(d["id"]): d for d in devis_rows}
+    # Étiquettes par rouleau : lues dans le classeur, sinon le « B3500 » du nom.
+    from app.services.rentabilite_caracteristiques import ex_par_rouleau_devis
+    ex_classeur: dict = {}
+    ids = [int(c["devis_id"]) for c in classes]
+    if ids:
+        with get_db() as conn:
+            if _table_existe(conn, "devis_chiffrage"):
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(devis_chiffrage)").fetchall()}
+                if "etiquettes_rouleau" in cols:
+                    ex_classeur = {int(r[0]): r[1] for r in conn.execute(
+                        f"SELECT devis_id, etiquettes_rouleau FROM devis_chiffrage "
+                        f"WHERE devis_id IN ({','.join('?' * len(ids))})", ids).fetchall()}
     for c in classes:
         dv = par_id.get(c["devis_id"], {})
         car = caracteristiques_devis(dv, voc)
+        c["ex_rouleau"] = ex_par_rouleau_devis(ex_classeur.get(int(c["devis_id"])), dv.get("filename"))
         c.update({
             "filename": dv.get("filename"),
             "client": dv.get("client"),
@@ -1850,6 +1863,114 @@ def fiche_rentabilite_dossier(planning_entry_id: int, request: Request):
     with get_db() as conn:
         try:
             return fiche_rentabilite(conn, planning_entry_id)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+
+
+# Une relecture de classeur ne se refait pas à chaque ouverture : seulement
+# pour un chiffrage lu avant que l'on sache lire les étiquettes par rouleau.
+_LU_AVANT_EX_ROULEAU = "2026-11-24"
+
+
+def caracteristiques_dossier_devis(conn, planning_entry_id: int, devis_id: Optional[int] = None) -> dict:
+    """Format, quantité, étiquettes par rouleau, matière et colle, dossier contre devis."""
+    from app.services import devis_chiffrage
+    from app.services.rentabilite_caracteristiques import comparer
+    entree = conn.execute(
+        """SELECT e.*, o.format AS of_format, o.qte_etiquettes AS of_qte_etiquettes,
+                  o.qte_bobines AS of_qte_bobines, o.conditionnement AS of_conditionnement,
+                  o.matiere AS matiere, o.adhesif_label AS adhesif_label, o.ref_adhesif AS ref_adhesif
+             FROM planning_entries e LEFT JOIN of_imports o ON o.id = e.of_import_id
+            WHERE e.id=?""", (planning_entry_id,)).fetchone()
+    if not entree:
+        raise LookupError("Entrée planning introuvable")
+    if devis_id is None:
+        lien = conn.execute("SELECT devis_id FROM rent_links WHERE planning_entry_id=?",
+                            (planning_entry_id,)).fetchone()
+        devis_id = lien["devis_id"] if lien else None
+    devis = conn.execute("SELECT * FROM devis WHERE id=?", (devis_id,)).fetchone() if devis_id else None
+    ex_classeur = None
+    if devis is not None:
+        ch = devis_chiffrage.chiffrage_du_devis(conn, int(devis["id"]))
+        if ch and ch["valeurs"].get("etiquettes_rouleau") is None \
+                and str(ch.get("lu_at") or "") < _LU_AVANT_EX_ROULEAU:
+            try:
+                if devis_chiffrage.relire_depuis_fichier(conn, int(devis["id"])) is not None:
+                    conn.commit()
+                    ch = devis_chiffrage.chiffrage_du_devis(conn, int(devis["id"]))
+            except Exception:
+                pass
+        ex_classeur = (ch or {}).get("valeurs", {}).get("etiquettes_rouleau")
+    res = comparer(dict(entree), dict(devis) if devis is not None else {}, ex_classeur, _vocabulaire(conn))
+    res["devis_id"] = int(devis["id"]) if devis is not None else None
+    if devis is None:
+        for l in res["lignes"]:
+            l["devis"], l["ecart"] = None, False
+        res["ecarts"] = 0
+    return res
+
+
+def caracteristiques_devis_seul(conn, devis_id: int) -> dict:
+    """Les cinq caractéristiques d'un devis, et le tableau « Dossier / Devis »
+    de chaque dossier qui lui est rattaché (validé ou proposé)."""
+    from app.services.rentabilite_caracteristiques import comparer
+    devis = conn.execute("SELECT id FROM devis WHERE id=?", (devis_id,)).fetchone()
+    if not devis:
+        raise LookupError("Devis introuvable")
+    liens = conn.execute(
+        """SELECT l.planning_entry_id, l.origine, l.valide_at, e.reference, e.client,
+                  m.nom AS machine, e.statut
+             FROM rent_links l JOIN planning_entries e ON e.id = l.planning_entry_id
+             LEFT JOIN machines m ON m.id = e.machine_id
+            WHERE l.devis_id=?
+            ORDER BY COALESCE(e.planned_end, e.updated_at) DESC""", (devis_id,)).fetchall()
+    dossiers = []
+    for l in liens[:12]:
+        try:
+            c = caracteristiques_dossier_devis(conn, int(l["planning_entry_id"]), devis_id)
+        except LookupError:
+            continue
+        dossiers.append({**c, "planning_entry_id": int(l["planning_entry_id"]),
+                         "reference": l["reference"], "client": l["client"], "machine": l["machine"],
+                         "valide": bool(l["origine"] != "auto" or l["valide_at"])})
+    if dossiers:
+        seul = [{**ligne, "dossier": None, "ecart": False} for ligne in dossiers[0]["lignes"]]
+    else:
+        # Aucun dossier : la colonne devis seule, lue comme pour une comparaison.
+        from app.services import devis_chiffrage
+        row = conn.execute("SELECT * FROM devis WHERE id=?", (devis_id,)).fetchone()
+        ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
+        if ch and ch["valeurs"].get("etiquettes_rouleau") is None \
+                and str(ch.get("lu_at") or "") < _LU_AVANT_EX_ROULEAU:
+            try:
+                if devis_chiffrage.relire_depuis_fichier(conn, devis_id) is not None:
+                    conn.commit()
+                    ch = devis_chiffrage.chiffrage_du_devis(conn, devis_id)
+            except Exception:
+                pass
+        res = comparer({}, dict(row), (ch or {}).get("valeurs", {}).get("etiquettes_rouleau"), _vocabulaire(conn))
+        seul = [{**ligne, "dossier": None, "ecart": False} for ligne in res["lignes"]]
+    return {"devis_id": devis_id, "lignes": seul, "dossiers": dossiers, "total_dossiers": len(liens)}
+
+
+@router.get("/api/rentabilite/devis/{devis_id}/caracteristiques")
+def caracteristiques_devis_route(devis_id: int, request: Request):
+    """Le devis seul : ses caractéristiques, et ses dossiers rattachés en regard."""
+    require_rentabilite(request)
+    with get_db() as conn:
+        try:
+            return caracteristiques_devis_seul(conn, devis_id)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+
+
+@router.get("/api/rentabilite/planning/{planning_entry_id}/caracteristiques")
+def caracteristiques_rentabilite(planning_entry_id: int, request: Request, devis_id: Optional[int] = None):
+    """Le dossier et son devis côte à côte (devis lié par défaut, ou `devis_id`)."""
+    require_rentabilite(request)
+    with get_db() as conn:
+        try:
+            return caracteristiques_dossier_devis(conn, planning_entry_id, devis_id)
         except LookupError as e:
             raise HTTPException(404, str(e))
 

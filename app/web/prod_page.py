@@ -95,7 +95,7 @@ __ARRIVEE_PLANNING__
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1-msb1">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent19-san3-sev1-opk2-ofl11">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent21-san3-sev1-opk2-ofl12">
 <!-- Portrait telephone de MyProd > Production. Le socle mobile partage
      (prefixe .msf-) fournit les briques ; la feuille qui suit ne porte que
      ce qui appartient a MyProd (.mpm-) et quelques reprises du bureau. -->
@@ -143,18 +143,20 @@ __ARRIVEE_PLANNING__
 <!-- Export PDF des saisies par operateur et par session (appele par le core) -->
 <script src="/static/mysifa_saisies_pdf.js?v=1"></script>
 <!-- Panneau « Données de prod » d'un dossier (partage avec le destockage) -->
-<script src="/static/mysifa_donnees_prod.js?v=19"></script>
+<script src="/static/mysifa_donnees_prod.js?v=20"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/mysifa_confirm.js?v=4"></script>
 <!-- Fiche rentabilite d'un dossier, devise contre reel (Pilotage de Rentabilite) -->
-<link rel="stylesheet" href="/static/mysifa_rent_fiche.css?v=7">
+<link rel="stylesheet" href="/static/mysifa_rent_fiche.css?v=8">
 <script src="/static/mysifa_rent_fiche.js?v=5"></script>
 <!-- Rentabilite > Tableau de bord (nuage MB x cout horaire, causes, liste) -->
-<script src="/static/mysifa_rent_tableau.js?v=6"></script>
+<script src="/static/mysifa_rent_tableau.js?v=7"></script>
 <!-- Rentabilite > lecture d'un devis : resultat, chaine du classeur, sensibilite -->
 <script src="/static/mysifa_rent_devis.js?v=3"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent29-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit4-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp62"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent32-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit5-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp63-rep2"></script>
+<!-- Repartir une fin de production sur plusieurs dossiers de la commande -->
+<script src="/static/mysifa_repartition.js?v=2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->

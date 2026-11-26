@@ -501,7 +501,10 @@
       + carte('Métrage', q.metrage_m ? nombre(Math.round(q.metrage_m)) + ' m' : '—', d.alerte ? 'var(--danger)' : 'var(--accent)',
         devis(th.metrage_ml, (v) => nombre(Math.round(v)) + ' m', 'metrage_ml', false))
       + carte('Vitesse', st.vitesse_aberrante ? '<span style="color:var(--danger);font-weight:400">erreur saisie</span>'
-          : st.vitesse_m_min ? vit(st.vitesse_m_min) : '—', 'var(--accent)', devis(th.vitesse, vit, 'vitesse', true))
+          : st.vitesse_m_min ? vit(st.vitesse_m_min) : '—', 'var(--accent)',
+        // Vitesse inexploitable : le devis reste lisible, l'écart n'a pas de sens.
+        st.vitesse_aberrante ? (c && Number(th.vitesse || 0) ? 'Devis ' + vit(th.vitesse) : '')
+          : devis(th.vitesse, vit, 'vitesse', true))
       + '</div><div class="dp-cartes dp-3">'
       + carte('Calage', duree(tt.calage_min), DP_CATS.calage[1], devis(th.temps_calage_mn, duree, 'temps_calage_mn', false))
       + carte('Production', duree(tt.production_min), DP_CATS.production[1],

@@ -146,6 +146,7 @@ vm.runInContext([
   extraire('mspRoleLabel'),
   extraire('supportCle'), constanteObjet('SUPPORT_LABELS'),
   extraire('supportBadge'), extraire('msProductComp'),
+  extraire('msProductCompTexte'),
   extraire('msProductCompLabel'), extraire('msProductGrammage'),
   extraire('msProductSupport'),
   extraire('msProductSupportTexte'), extraire('msProductDetailHtml'),
@@ -171,8 +172,20 @@ const produit = {
 // La cellule d'un composant ne porte plus que sa reference : le grammage a sa
 // propre colonne, et l'ecrire aux deux endroits ferait chercher lequel des deux
 // fait foi le jour ou ils different.
-check('la cellule ne porte que la référence',
-  ctx.msProductCompLabel(produit, 'FRONTAL'), '70gsm TOP Thermal');
+check('sans libellé commercial, la cellule retombe sur la référence',
+  ctx.msProductCompTexte(produit, 'FRONTAL'), '70gsm TOP Thermal');
+const commercial = { composants: [
+  { role: 'FRONTAL', reference: '70gsm TOP Thermal', sous_categorie: 'Thermique Pro',
+    libelle_commercial: 'Thermique Pro', grammage_matiere: '70g' },
+  { role: 'ADHESIF', reference: '2028Y', sous_categorie: 'Permanent',
+    libelle_commercial: 'Permanent', grammage_matiere: null, grammage_gsm: 22 },
+] };
+check('le frontal se lit en libellé commercial et grammage',
+  ctx.msProductCompTexte(commercial, 'FRONTAL'), 'Thermique Pro 70g');
+check("l'adhésif se lit « Permanent », pas « 2028Y »",
+  ctx.msProductCompTexte(commercial, 'ADHESIF'), 'Permanent');
+check('la référence reste au survol',
+  ctx.msProductCompLabel(commercial, 'ADHESIF').includes('Référence : 2028Y'), true);
 check('plus de grammage dans la cellule adhésif',
   ctx.msProductCompLabel(produit, 'ADHESIF').includes('g/m²'), false);
 check('un emplacement vide reste neutre',
@@ -276,7 +289,10 @@ const dup = src.slice(src.indexOf('data-msp-dup]'), src.indexOf('data-msp-mat]')
 for (const champ of ['code:', 'designation:', 'roles', 'autres', 'custom_margin_pct:']) {
   check('la copie reprend : ' + champ, dup.includes(champ), true);
 }
-check('le code copié est signalé', dup.includes('"-copie"'), true);
+// La copie ne porte plus « -copie » : code et désignation repartent de la
+// composition, le code au prochain numéro libre de la famille.
+check('la copie recalcule son code', dup.includes('codeAuto: true'), true);
+check('et sa désignation', dup.includes('designationAuto: true'), true);
 
 // ─── Aucun survol coloré dans la zone dépliée ───────────────────────────────
 // La cellule qui CONTIENT le détail doit être couverte, sinon la règle

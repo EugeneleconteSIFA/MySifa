@@ -327,6 +327,65 @@ SEC_4_9_BODY = (
     "dès disponibilité.</i>"
 )
 
+# ─── Section « Contact alimentaire » ──────────────────────────────────────
+# Absente par défaut (defaut_exclue) : elle ne concerne que les clients
+# agroalimentaires. Les passages « [à compléter : …] » sont propres à chaque
+# étiquette ; tant qu'il en reste un, la génération est refusée
+# (SectionsIncompletes) — seul l'aperçu les accepte.
+MARQUE_A_COMPLETER = "[à compléter"
+
+SEC_CA_INTRO = (
+    "La présente section s'applique aux étiquettes destinées à entrer en "
+    "contact avec des denrées alimentaires. Elle porte sur l'étiquette finie, "
+    "tous composants confondus, et non sur un composant isolé."
+)
+
+SEC_CA_1_BODY = (
+    "<b>Règlement (CE) n° 1935/2004</b> (articles 3 et 16) : dans les "
+    "conditions d'utilisation décrites ci-dessous, les étiquettes ne cèdent "
+    "pas aux denrées de constituants en quantité susceptible de présenter un "
+    "danger pour la santé humaine, d'entraîner une modification inacceptable "
+    "de leur composition ou une altération de leurs caractères "
+    "organoleptiques.<br/>"
+    "<b>Règlement (CE) n° 2023/2006</b> : SIFA applique les bonnes pratiques "
+    "de fabrication à la transformation des matières [à compléter : système "
+    "d'assurance qualité, maîtrise des matières entrantes, documentation].<br/>"
+    "<b>Règlement (UE) 2024/3190</b> : selon les attestations des fabricants, "
+    "aucun bisphénol visé par ce règlement n'entre dans les frontaux, "
+    "adhésifs, vernis et encres de l'étiquette. Pour les papiers thermiques, "
+    "le bisphénol A est en outre restreint par le règlement REACH (annexe "
+    "XVII, entrée 66)."
+)
+
+SEC_CA_2_BODY = (
+    "<b>Article(s)</b> : [à compléter : référence client et désignation].<br/>"
+    "<b>Matière</b> : [à compléter : référence fabricant du complexe].<br/>"
+    "<b>Composants</b> : frontal [à compléter] ; couche thermosensible et "
+    "top-coat [à compléter, ou « sans objet »] ; adhésif [à compléter] ; "
+    "encres d'impression [à compléter, ou « sans impression »].<br/>"
+    "Chaque composant est couvert par une déclaration de conformité de son "
+    "fabricant, conservée au dossier technique."
+)
+
+SEC_CA_3_BODY = (
+    "<b>Type de contact</b> : [à compléter : direct ou indirect].<br/>"
+    "<b>Denrées</b> : [à compléter : ex. viandes et volailles crues, denrées "
+    "grasses non lavées avant consommation].<br/>"
+    "<b>Température et durée de contact</b> : [à compléter : ex. 10 jours à "
+    "4 °C].<br/>"
+    "<b>Essais de migration sur étiquette finie</b> : [à compléter : "
+    "simulants, migration globale et spécifique, laboratoire, n° et date du "
+    "rapport]."
+)
+
+SEC_CA_4_BODY = (
+    "[à compléter : restrictions déclarées par les fabricants des composants, "
+    "ou « Aucune restriction dans les conditions d'utilisation ci-dessus »]. "
+    "Toute utilisation hors de ces conditions relève de la responsabilité de "
+    "l'utilisateur."
+)
+
+
 SEC_5_BODY = (
     "À la date d'émission, au moins un des fournisseurs de SIFA ne livre pas "
     "ses matières sous forme recyclée. SIFA ne peut donc pas garantir un taux "
@@ -540,6 +599,28 @@ def _sec_4_9(ctx, body, parent_num=4, sub_num=9):
             Paragraph(body or SEC_4_9_BODY, S["body"])]
 
 
+def _sec_ca(ctx, body, num=5):
+    S = ctx["styles"]
+    out = _h2(f"{num}. Contact alimentaire", S)
+    out.append(Paragraph(body or SEC_CA_INTRO, S["body"]))
+    # Titre et introduction ne se séparent pas en bas de page.
+    return [KeepTogether(out)]
+
+
+def _sec_ca_sous(titre, defaut):
+    def _builder(ctx, body, parent_num=5, sub_num=1):
+        S = ctx["styles"]
+        return [Paragraph(f"{parent_num}.{sub_num} {titre}", S["h3"]),
+                Paragraph(body or defaut, S["body"])]
+    return _builder
+
+
+_sec_ca_1 = _sec_ca_sous("Cadre réglementaire", SEC_CA_1_BODY)
+_sec_ca_2 = _sec_ca_sous("Étiquettes et composants couverts", SEC_CA_2_BODY)
+_sec_ca_3 = _sec_ca_sous("Conditions d'utilisation", SEC_CA_3_BODY)
+_sec_ca_4 = _sec_ca_sous("Restrictions d'usage", SEC_CA_4_BODY)
+
+
 def _sec_5(ctx, body, num=5):
     S = ctx["styles"]
     out = _h2(f"{num}. Contenu recyclé", S)
@@ -750,6 +831,24 @@ SECTIONS_META = [
     {"id": "sec_4_9", "sub_group": "4", "parent": "sec_4_intro", "title": "4.9 Recyclabilité",
      "removable": True, "editable": True, "default_body": SEC_4_9_BODY,
      "builder": _sec_4_9},
+    # Contact alimentaire : decochee par defaut (defaut_exclue), a cocher
+    # pour un client agroalimentaire. Ses sous-sections suivent le parent.
+    {"id": "sec_ca", "is_main": True, "defaut_exclue": True,
+     "title": "5. Contact alimentaire (clients agroalimentaires)",
+     "removable": True, "editable": True, "default_body": SEC_CA_INTRO,
+     "builder": _sec_ca},
+    {"id": "sec_ca_1", "parent": "sec_ca", "title": "5.1 Cadre réglementaire",
+     "removable": False, "editable": True, "default_body": SEC_CA_1_BODY,
+     "builder": _sec_ca_1},
+    {"id": "sec_ca_2", "parent": "sec_ca", "title": "5.2 Étiquettes et composants couverts",
+     "removable": False, "editable": True, "default_body": SEC_CA_2_BODY,
+     "builder": _sec_ca_2},
+    {"id": "sec_ca_3", "parent": "sec_ca", "title": "5.3 Conditions d'utilisation",
+     "removable": False, "editable": True, "default_body": SEC_CA_3_BODY,
+     "builder": _sec_ca_3},
+    {"id": "sec_ca_4", "parent": "sec_ca", "title": "5.4 Restrictions d'usage",
+     "removable": False, "editable": True, "default_body": SEC_CA_4_BODY,
+     "builder": _sec_ca_4},
     {"id": "sec_5", "is_main": True, "title": "5. Contenu recyclé",
      "removable": True, "editable": True, "default_body": SEC_5_BODY,
      "builder": _sec_5},
@@ -850,7 +949,11 @@ def _build_flowables(ctx, sections_overrides):
 
     def _skipped(sec):
         ov = ov_all.get(sec["id"], {})
-        return sec["removable"] and ov.get("include") is False
+        if not sec["removable"]:
+            return False
+        if sec.get("defaut_exclue"):
+            return ov.get("include") is not True
+        return ov.get("include") is False
 
     # Étape 1 : renumérotation dynamique des sections principales
     # (retirer "2. Nature" → la suivante devient "2" au lieu de "3")
@@ -916,6 +1019,10 @@ def _build_flowables(ctx, sections_overrides):
                 if t_default and str(t_default).strip():
                     body = str(t_default).strip()
 
+        texte_rendu = body or sec.get("default_body") or ""
+        if MARQUE_A_COMPLETER in texte_rendu:
+            ctx.setdefault("a_completer", []).append(sec["title"])
+
         # Appeler le builder avec les bons kwargs de numérotation
         if sec.get("is_main"):
             story.extend(sec["builder"](ctx, body, num=main_num_by_id[sec["id"]]))
@@ -929,12 +1036,18 @@ def _build_flowables(ctx, sections_overrides):
     return story
 
 
+class SectionsIncompletes(ValueError):
+    """Une section incluse contient encore un passage « [à compléter : …] ».
+    Le message liste les sections concernées ; le router le rend en 400."""
+
+
 def build_declaration_ue_pdf(*, client_nom: str, fournisseurs: list,
                              ref: str, date_emission_iso: str,
                              validite_mois: int = 12,
                              sections_overrides: dict = None,
                              template_default_overrides: dict = None,
-                             representant: str = None) -> bytes:
+                             representant: str = None,
+                             brouillon: bool = False) -> bytes:
     """
     Génère un PDF de Déclaration UE de Conformité.
 
@@ -953,6 +1066,8 @@ def build_declaration_ue_pdf(*, client_nom: str, fournisseurs: list,
             hardcodés.
         representant: Nom du représentant SIFA qui signe (section 8). Si
             fourni, remplace la ligne « Nom : ____ » par le nom en gras.
+        brouillon: True pour l'aperçu — accepte les passages « [à compléter »
+            restants. Sinon SectionsIncompletes est levée.
 
     Returns:
         bytes: contenu binaire du PDF
@@ -993,6 +1108,11 @@ def build_declaration_ue_pdf(*, client_nom: str, fournisseurs: list,
     doc.addPageTemplates([PageTemplate(id="main", frames=[frame],
                                        onPage=_on_page)])
     story = _build_flowables(ctx, sections_overrides or {})
+    if ctx.get("a_completer") and not brouillon:
+        raise SectionsIncompletes(
+            "Passages « à compléter » restants dans : "
+            + ", ".join(ctx["a_completer"])
+            + ". Compléter le texte avant de générer la déclaration.")
     doc.build(story)
     return buf.getvalue()
 

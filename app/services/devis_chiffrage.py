@@ -57,6 +57,9 @@ POSTES = (
     ("taux_horaire",         r"^co[uû]t\s+kdo",                       1, "€/h",  "Taux machine (KDO)"),
     ("temps_total_mn",       r"^s\s*/?\s*total$",                     1, "mn",   "Temps total devisé"),
     ("metrage_total_ml",     r"^s\s*/?\s*total$",                     3, "ml",   "Métrage total devisé"),
+    # Pas un montant : sert à comparer le conditionnement chiffré à celui de
+    # l'OF (colonne ajoutée par la migration `devis_chiffrage_etiquettes_rouleau`).
+    ("etiquettes_rouleau",   r"^nb\s+[ée]tiquettes\s+au\s+rouleau",    1, "ex",   "Étiquettes par rouleau"),
 )
 
 CHAMPS_CHIFFRAGE = tuple(p[0] for p in POSTES)

@@ -37,14 +37,23 @@
 
     Sans `|`, c'est MYSIFA_API_KEY qui sert.
 
-    Installation de la tache planifiee (PowerShell en administrateur)
-    -----------------------------------------------------------------
-        $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-        $script = "C:\chemin\vers\MySifa\scripts\sync_rvgi.ps1"
-        schtasks /Create /TN "MySifa - Synchro RVGI 5h"    /SC DAILY /ST 05:00 /RU SYSTEM `
-                 /TR "$ps -NoProfile -ExecutionPolicy Bypass -File `"$script`""
-        schtasks /Create /TN "MySifa - Synchro RVGI 12h30" /SC DAILY /ST 12:30 /RU SYSTEM `
-                 /TR "$ps -NoProfile -ExecutionPolicy Bypass -File `"$script`""
+    Planification (depuis le 24/11/2026)
+    ------------------------------------
+      - toutes les heures de 06:00 a 20:00, tous les jours ;
+      - une fois la nuit, a 02:00 ;
+      - toutes les 2 minutes, la releve des demandes faites depuis MySifa
+        (bouton "Mettre a jour" de l'ERP et de l'ADV) : `-SiDemande` demande a
+        chaque instance s'il y a une demande en attente, et ne lance la synchro
+        complete que dans ce cas. Sans demande, il sort sans rien ecrire.
+
+    Installation des taches (PowerShell EN ADMINISTRATEUR, une seule fois)
+    ----------------------------------------------------------------------
+        .\scripts\sync_rvgi.ps1 -Installer
+
+    Cree (ou remplace), sous le compte SYSTEM :
+      "MySifa - Synchro RVGI"               6h a 20h toutes les heures, et 2h
+      "MySifa - Synchro RVGI a la demande"  toutes les 2 minutes (-SiDemande)
+    et supprime les anciennes taches de 5h et 12h30.
 
     Verification a la main
     ----------------------
@@ -55,7 +64,9 @@ param(
     [switch] $Verbeux,
     [switch] $SansEnvoi,      # exporte et zippe, n'envoie rien (test)
     [string[]] $Urls,         # surcharge MYSIFA_SYNC_URLS
-    [int] $TimeoutSec = 900
+    [int] $TimeoutSec = 900,
+    [switch] $SiDemande,      # ne synchronise que si MySifa a une demande en attente
+    [switch] $Installer       # (re)cree les taches planifiees, puis sort
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,37 +87,6 @@ function Ecrire {
         Write-Host $ligne -ForegroundColor $couleur
     }
 }
-
-# -- Verrou -----------------------------------------------------------------
-# Deux executions qui se chevauchent liraient l'ERP en double. Le verrou porte
-# le PID de la synchro qui le detient : une fenetre fermee ou un Ctrl+C laisse
-# le fichier derriere lui, mais plus le processus. On verifie donc que le
-# proprietaire vit encore, au lieu d'attendre une heure et demie pour rien.
-if (Test-Path $verrou) {
-    $age = (Get-Date) - (Get-Item $verrou).LastWriteTime
-    $pidVerrou = 0
-    try { $pidVerrou = [int]((Get-Content -LiteralPath $verrou -TotalCount 1 -ErrorAction Stop) -replace '\D', '') } catch { $pidVerrou = 0 }
-
-    $vivant = $false
-    if ($pidVerrou -gt 0) {
-        $proc = Get-Process -Id $pidVerrou -ErrorAction SilentlyContinue
-        # Le PID est reattribue par Windows : on verifie aussi que c'est bien
-        # un PowerShell, sinon on parlerait du processus de quelqu'un d'autre.
-        if ($proc -and $proc.ProcessName -match 'powershell|pwsh') { $vivant = $true }
-    }
-
-    if ($vivant) {
-        Ecrire ("Synchro deja en cours (PID {0}, depuis {1:N0} min). Abandon." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
-        exit 0
-    }
-    if ($pidVerrou -gt 0) {
-        Ecrire ("Verrou orphelin (PID {0} disparu, {1:N0} min) : la synchro precedente s'est interrompue." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
-    } else {
-        Ecrire ("Verrou sans proprietaire identifiable ({0:N0} min) : on passe outre." -f $age.TotalMinutes) 'ALERTE'
-    }
-    Remove-Item $verrou -Force -ErrorAction SilentlyContinue
-}
-Set-Content -LiteralPath $verrou -Value $PID -Encoding ASCII
 
 # -- Lecture du .env ---------------------------------------------------------
 # Duplique volontairement le parseur de export_rvgi_csv.ps1 : la tache
@@ -169,6 +149,113 @@ if ($brut) {
         }
     }
 }
+
+# -- Installation des taches planifiees ---------------------------------------
+# Cmdlets ScheduledTasks plutot que schtasks.exe : passer un chemin entre
+# guillemets dans /TR depuis PowerShell 5.1 est fragile, et les cmdlets disent
+# proprement "06:00 puis toutes les heures pendant 14 h".
+if ($Installer) {
+    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $admin) {
+        Write-Host 'Lancer PowerShell EN ADMINISTRATEUR pour installer les taches.' -ForegroundColor Red
+        exit 1
+    }
+    $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    # Jamais deux synchros en meme temps (le script a aussi son verrou).
+    $reglages = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable `
+                  -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+
+    foreach ($ancienne in @('MySifa - Synchro RVGI 5h', 'MySifa - Synchro RVGI 12h30')) {
+        Unregister-ScheduledTask -TaskName $ancienne -Confirm:$false -ErrorAction SilentlyContinue
+    }
+
+    # Journee : 06:00 puis toutes les heures pendant 14 h (06:00 ... 20:00).
+    $jour = New-ScheduledTaskTrigger -Daily -At '06:00'
+    $jour.Repetition = (New-ScheduledTaskTrigger -Once -At '06:00' `
+        -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Hours 14 -Minutes 1)).Repetition
+    # Nuit : une seule fois, a 02:00.
+    $nuit = New-ScheduledTaskTrigger -Daily -At '02:00'
+    Register-ScheduledTask -TaskName 'MySifa - Synchro RVGI' -Force -Principal $principal -Settings $reglages `
+        -Action (New-ScheduledTaskAction -Execute $ps -Argument $arguments) -Trigger @($jour, $nuit) `
+        -Description 'Export RVGI et envoi du miroir a MySifa : toutes les heures de 6h a 20h, et a 2h.' | Out-Null
+
+    # Releve des demandes : toutes les 2 minutes, jour et nuit.
+    $releve = New-ScheduledTaskTrigger -Daily -At '00:00'
+    $releve.Repetition = (New-ScheduledTaskTrigger -Once -At '00:00' `
+        -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Hours 23 -Minutes 59)).Repetition
+    Register-ScheduledTask -TaskName 'MySifa - Synchro RVGI a la demande' -Force -Principal $principal -Settings $reglages `
+        -Action (New-ScheduledTaskAction -Execute $ps -Argument "$arguments -SiDemande") -Trigger $releve `
+        -Description 'Releve les demandes "Mettre a jour" faites dans MySifa (ERP, ADV) et lance la synchro.' | Out-Null
+
+    Write-Host ''
+    Write-Host 'Taches installees :' -ForegroundColor Green
+    Get-ScheduledTask -TaskName 'MySifa - Synchro RVGI*' | ForEach-Object {
+        $info = $_ | Get-ScheduledTaskInfo
+        Write-Host ("  {0,-40} prochaine execution : {1}" -f $_.TaskName, $info.NextRunTime)
+    }
+    exit 0
+}
+
+# -- Releve des demandes faites depuis MySifa (toutes les 2 minutes) ----------
+# Une demande n'est qu'un drapeau pose cote serveur : le VPS ne voit pas RVGI,
+# c'est ce poste qui exporte et envoie. Sans demande, on sort sans rien ecrire
+# dans le journal - sinon il prendrait 720 lignes par jour pour rien.
+if ($SiDemande) {
+    if (Test-Path $verrou) {
+        $ageVerrou = (Get-Date) - (Get-Item $verrou).LastWriteTime
+        if ($ageVerrou.TotalMinutes -lt 90) { exit 0 }   # une synchro tourne deja
+    }
+    $demandee = $false
+    foreach ($c in $cibles) {
+        if (-not $c.Cle) { continue }
+        try {
+            $rep = Invoke-RestMethod -Uri "$($c.Url)/api/bridge/erp/demande/prendre" -Method Post `
+                    -Headers @{ 'X-Api-Key' = $c.Cle } -TimeoutSec 20
+            if ($rep.demande) {
+                $demandee = $true
+                Ecrire ("Demande de mise a jour sur {0} (par {1}, {2})" -f $c.Url, $rep.demande.demande_par, $rep.demande.demande_le)
+            }
+        } catch {
+            # Silencieux : un serveur injoignable sera signale par le passage
+            # horaire, qui, lui, journalise ses echecs.
+        }
+    }
+    if (-not $demandee) { exit 0 }
+}
+
+# -- Verrou -----------------------------------------------------------------
+# Deux executions qui se chevauchent liraient l'ERP en double. Le verrou porte
+# le PID de la synchro qui le detient : une fenetre fermee ou un Ctrl+C laisse
+# le fichier derriere lui, mais plus le processus. On verifie donc que le
+# proprietaire vit encore, au lieu d'attendre une heure et demie pour rien.
+if (Test-Path $verrou) {
+    $age = (Get-Date) - (Get-Item $verrou).LastWriteTime
+    $pidVerrou = 0
+    try { $pidVerrou = [int]((Get-Content -LiteralPath $verrou -TotalCount 1 -ErrorAction Stop) -replace '\D', '') } catch { $pidVerrou = 0 }
+
+    $vivant = $false
+    if ($pidVerrou -gt 0) {
+        $proc = Get-Process -Id $pidVerrou -ErrorAction SilentlyContinue
+        # Le PID est reattribue par Windows : on verifie aussi que c'est bien
+        # un PowerShell, sinon on parlerait du processus de quelqu'un d'autre.
+        if ($proc -and $proc.ProcessName -match 'powershell|pwsh') { $vivant = $true }
+    }
+
+    if ($vivant) {
+        Ecrire ("Synchro deja en cours (PID {0}, depuis {1:N0} min). Abandon." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
+        exit 0
+    }
+    if ($pidVerrou -gt 0) {
+        Ecrire ("Verrou orphelin (PID {0} disparu, {1:N0} min) : la synchro precedente s'est interrompue." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
+    } else {
+        Ecrire ("Verrou sans proprietaire identifiable ({0:N0} min) : on passe outre." -f $age.TotalMinutes) 'ALERTE'
+    }
+    Remove-Item $verrou -Force -ErrorAction SilentlyContinue
+}
+Set-Content -LiteralPath $verrou -Value $PID -Encoding ASCII
 
 $dossierExport = Join-Path $racine 'data\rvgi_export'
 $archive = Join-Path $racine 'data\rvgi_export.zip'

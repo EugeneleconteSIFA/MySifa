@@ -1705,7 +1705,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_dock.js?v=5"></script>
 <script src="/static/mysifa_resize.js"></script>
 <script src="/static/mysifa_postit.js?v=15"></script>
-<script src="/static/mysifa_cmdk.js?v=2"></script>
+<script src="/static/mysifa_cmdk.js?v=3"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <!-- Recherche d'encre a la saisie + pastille de teinte (referentiel

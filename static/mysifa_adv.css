@@ -48,12 +48,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* ── Éléments communs ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s,background .15s;text-decoration:none;white-space:nowrap}
 .btn:hover{background:var(--bg)}
-.adv-carte .btn,.adv-modal .btn{background:var(--bg)}
-.adv-carte .btn:hover,.adv-modal .btn:hover{background:var(--card)}
-.btn-accent,.adv-carte .btn-accent,.adv-modal .btn-accent{background:var(--accent);border-color:var(--accent);color:white}
-.btn-accent:hover,.adv-carte .btn-accent:hover,.adv-modal .btn-accent:hover{background:var(--accent);filter:brightness(1.08)}
-.btn-ok,.adv-carte .btn-ok{background:var(--success);border-color:var(--success);color:white}
-.btn-ok:hover,.adv-carte .btn-ok:hover{background:var(--success);filter:brightness(1.08)}
+.adv-pl .btn,.adv-modal .btn{background:var(--bg)}
+.adv-pl .btn:hover,.adv-modal .btn:hover{background:var(--card)}
+.btn-accent,.adv-pl .btn-accent,.adv-modal .btn-accent{background:var(--accent);border-color:var(--accent);color:white}
+.btn-accent:hover,.adv-pl .btn-accent:hover,.adv-modal .btn-accent:hover{background:var(--accent);filter:brightness(1.08)}
+.btn-ok,.adv-pl .btn-ok{background:var(--success);border-color:var(--success);color:white}
+.btn-ok:hover,.adv-pl .btn-ok:hover{background:var(--success);filter:brightness(1.08)}
 .btn:disabled{opacity:.6;cursor:default}
 .btn-petit{padding:6px 11px;font-size:12px;border-radius:8px}
 
@@ -90,20 +90,52 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 @media(max-width:768px){.adv-table-wrap{max-height:none}}
 table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .adv-table th{position:sticky;top:0;z-index:2;background:var(--card);text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:10px 8px;border-bottom:1px solid var(--border);white-space:nowrap;user-select:none}
+.adv-table th{cursor:grab}
 .adv-table th.triable{cursor:pointer}
+.adv-table th.attrapee{opacity:.4}
+.adv-table th.cible{box-shadow:inset 3px 0 0 var(--accent);color:var(--accent)}
+.adv-table th.num{text-align:right}
+.adv-table td.date{font-variant-numeric:tabular-nums}
 .adv-table th.triable:hover{color:var(--accent)}
 .adv-table th.trie{color:var(--accent)}
 .adv-table th.etape{text-align:center}
-.adv-table th.sep,.adv-table td.sep{border-left:1px solid var(--border)}
+/* Barre entre deux familles de colonnes (dates | quantités | étapes). */
+.adv-table th.sep,.adv-table td.sep{border-left:2px solid var(--border)}
 .adv-table td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap;color:var(--text)}
 .adv-table tbody tr{cursor:pointer}
 .adv-table tbody tr:hover td{background:var(--accent-bg)}
 .adv-table td.num{text-align:right;font-variant-numeric:tabular-nums}
 /* La commande reste visible quand le tableau défile en largeur. */
-.adv-table th:first-child,.adv-table td:first-child{position:sticky;left:0;z-index:1;background:var(--card)}
+.adv-table th:first-child,.adv-table td:first-child{position:sticky;left:0;z-index:2;background:var(--card)}
 .adv-table th:first-child{z-index:3}
 .adv-table tbody tr:hover td:first-child{background:var(--card);box-shadow:inset 0 0 0 999px var(--accent-bg)}
-.adv-table td.etape{text-align:center;padding:6px 4px}
+.adv-table td.etape{text-align:center;padding:6px 4px;position:relative}
+/* Frise d'avancement : un trait relie les étapes voisines (pas une étape
+   déplacée loin des autres), vert quand l'étape d'arrivée est franchie. */
+.adv-table td.etape.lien-g::before,.adv-table td.etape.lien-d::after{content:"";position:absolute;top:50%;height:3px;margin-top:-1.5px;background:var(--border);z-index:0}
+.adv-table td.etape.lien-g::before{left:0;right:50%}
+.adv-table td.etape.lien-d::after{left:50%;right:0}
+.adv-table td.etape.lien-g.v-oui::before,.adv-table td.etape.lien-d.suiv-oui::after{background:var(--success)}
+.adv-table td.etape.lien-g.v-probable::before,.adv-table td.etape.lien-d.suiv-probable::after{background:repeating-linear-gradient(90deg,var(--success) 0 5px,transparent 5px 9px)}
+.adv-noeud{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;vertical-align:middle;box-sizing:border-box}
+.adv-noeud svg{width:13px;height:13px}
+.adv-noeud.oui{background:var(--success);color:white}
+.adv-noeud.en_cours{background:var(--adv-cours);color:white}
+.adv-noeud.non{background:var(--card);color:var(--danger);border:2px solid var(--danger)}
+.adv-noeud.sans_objet{background:var(--card);color:var(--muted);border:2px dashed var(--border)}
+.adv-noeud.probable{background:var(--card);color:var(--success);border:2px dashed var(--success)}
+/* Jauge : Stock et Prod en cours se remplissent de gauche à droite (--p, en %),
+   dans le sens de la frise. */
+/* « En cours » (nœud et jauge) : une couleur du thème éloignée du rouge
+   (à faire) et du vert (fait). L'orange --warn est trop proche du rouge.
+   L'accent convient, sauf dans les palettes où il est chaud (Ambre, Forge,
+   Pivoine, Cocon, Braise : --warn y est bleu) ou vert (Forêt : --c4 violet). */
+body{--adv-cours:var(--accent)}
+body.palette-ambre,body.palette-forge,body.palette-pivoine,body.palette-cocon,body.palette-braise{--adv-cours:var(--warn)}
+body.palette-foret{--adv-cours:var(--c4)}
+.adv-noeud.jauge,.fi-etape .fi-rond.jauge{background:var(--card);color:var(--adv-cours);border:2px solid var(--adv-cours)}
+.adv-noeud.jauge::before,.fi-etape .fi-rond.jauge::before{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(to right,var(--adv-cours) calc(var(--p) * 1%),transparent calc(var(--p) * 1%));opacity:.4;z-index:-1}
+.adv-noeud.force::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
 .adv-table td.des{max-width:210px;overflow:hidden}
 .adv-table td.des .des-l{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .adv-table td.client{max-width:150px;overflow:hidden;text-overflow:ellipsis;font-weight:600}
@@ -113,38 +145,208 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-date-retard{color:var(--danger);font-weight:700}
 .adv-date-tard{color:var(--warn);font-weight:700}
 
-/* Pastille d'étape : un état se lit en un coup d'œil, le détail au survol. */
-.adv-etat{display:inline-flex;align-items:center;justify-content:center;min-width:44px;gap:4px;padding:3px 6px;border-radius:999px;font-size:11px;font-weight:700;position:relative;border:1px solid transparent}
-.adv-etat.oui{background:var(--accent-bg);color:var(--success)}
-.adv-etat.en_cours{background:var(--accent-bg);color:var(--warn)}
-.adv-etat.non{background:var(--bg);color:var(--danger);border-color:var(--border)}
-.adv-etat.sans_objet{background:transparent;color:var(--muted)}
-.adv-etat.force::after{content:"";position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--accent);border:1px solid var(--card)}
+.adv-empl .adv-sortie-prod{border:1px dashed var(--success);color:var(--success);white-space:nowrap}
 
 /* Infobulle instantanée (plusieurs lignes) */
 #adv-tip{position:fixed;z-index:100000;pointer-events:none;max-width:320px;padding:9px 12px;border-radius:9px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12px;line-height:1.45;box-shadow:0 8px 28px rgba(0,0,0,.35);opacity:0;transition:opacity .08s}
 #adv-tip.vu{opacity:1}
 #adv-tip .tip-t{font-weight:800;margin-bottom:3px}
+#adv-tip div{white-space:pre-line}
 #adv-tip .tip-n{color:var(--muted);margin-top:4px;font-size:11px}
 
 /* ── Prépa ── */
-.adv-groupe{margin-bottom:16px}
-.adv-groupe h2{font-size:14px;font-weight:800;margin:0 0 8px;display:flex;align-items:center;gap:8px}
-.adv-groupe h2 .n{font-size:12px;color:var(--muted);font-weight:700}
-.adv-carte{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:grid;grid-template-columns:28px minmax(220px,2fr) minmax(110px,.8fr) minmax(150px,1.4fr) 110px auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .15s}
-.adv-carte:hover{border-color:var(--accent)}
-.adv-carte.retard{border-left:3px solid var(--danger)}
-.adv-rang{width:28px;height:28px;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--text2)}
-.adv-carte .c-id{min-width:0}
-.adv-carte .c-haut{display:flex;gap:8px;align-items:baseline;min-width:0;white-space:nowrap;overflow:hidden}
-.adv-carte .c-client{font-weight:800;font-size:13.5px;overflow:hidden;text-overflow:ellipsis}
-.adv-carte .c-des{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
-.adv-carte .c-qte{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-.adv-carte .c-quand{font-size:13px;font-weight:700;white-space:nowrap}
-.adv-carte .c-sous{font-size:11.5px;font-weight:600;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.adv-carte .c-sous.adv-ok{color:var(--success)}
-.adv-carte .adv-empl{margin-top:0}
-@media(max-width:1100px){.adv-carte{grid-template-columns:28px minmax(0,1fr) auto;row-gap:6px}.adv-carte .c-qte,.adv-carte .adv-empl,.adv-carte .c-quand{grid-column:2}.adv-carte .adv-actions{grid-column:3;grid-row:1}}
+/* Planning de prépa : la frise des semaines, comme le planning machine. Par
+   semaine, un titre, les en-têtes de jour, puis une barre où chaque jour est
+   un segment et chaque préparation un bloc coloré (même client, même teinte,
+   tirée des cinq couleurs du thème). Le jour choisi filtre le tableau. */
+.pf{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px 16px;margin-bottom:14px}
+.pf-tete{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pf-titre{font-size:17px;font-weight:800;color:var(--text)}
+.pf-espace{flex:1}
+.pf-sans-date{font-size:13px;color:var(--muted);font-weight:600}
+.pf-groupe{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.pf-gbtn{padding:7px 14px;border:0;border-left:1px solid var(--border);background:var(--card);color:var(--text2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+.pf-gbtn:first-child{border-left:0}
+.pf-gbtn:hover:not(:disabled){background:var(--bg)}
+.pf-gbtn.active{background:var(--accent-bg);color:var(--accent)}
+.pf-gbtn:disabled{opacity:.4;cursor:default}
+.pf-semaine{margin-top:16px}
+.pf-sem{font-size:15.5px;font-weight:800;color:var(--text);margin-bottom:6px}
+.pf-sem.courante{color:var(--accent)}
+/* Chaque jour est sa propre case, séparée de la suivante par un vide net
+   (12 px, trois fois l'écart entre deux blocs du même jour) : on ne confond
+   pas ce qui se prépare aujourd'hui et demain. Même écart sur les en-têtes
+   pour qu'ils restent au-dessus de leur case. */
+.pf-jours,.pf-barre{display:flex;gap:12px}
+.pf-jh{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 4px 7px;border:0;border-bottom:2px solid var(--border);background:var(--card);color:var(--text2);font-family:inherit;cursor:pointer}
+.pf-jh:hover:not(:disabled){color:var(--accent)}
+.pf-jh-lib{font-size:15px;font-weight:800}
+.pf-jh-n{font-size:12.5px;font-weight:700;color:var(--muted)}
+.pf-jh.today{color:var(--accent);border-bottom-color:var(--accent)}
+.pf-jh.choisi{background:var(--accent-bg);color:var(--accent);border-bottom-color:var(--accent);border-radius:8px 8px 0 0}
+.pf-jh.passe{opacity:.5;cursor:default}
+.pf-barre{margin-top:6px;height:118px}
+.pf-seg{flex:1 1 0;min-width:0;display:flex;gap:4px;padding:4px;background:var(--bg);border:1px solid var(--border);border-radius:10px}
+.pf-seg.passe{opacity:.5}
+.pf-seg.choisi{background:var(--accent-bg);border-color:var(--accent)}
+.pf-seg.cible{box-shadow:inset 0 0 0 2px var(--accent);background:var(--accent-bg)}
+.pf-bloc{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:6px;border-radius:7px;border:1px solid transparent;color:var(--text);text-align:center;overflow:hidden;cursor:pointer}
+.pf-bloc.c1{background:color-mix(in srgb,var(--c1) 32%,var(--card))}
+.pf-bloc.c2{background:color-mix(in srgb,var(--c2) 32%,var(--card))}
+.pf-bloc.c3{background:color-mix(in srgb,var(--c3) 32%,var(--card))}
+.pf-bloc.c4{background:color-mix(in srgb,var(--c4) 32%,var(--card))}
+.pf-bloc.c5{background:color-mix(in srgb,var(--c5) 32%,var(--card))}
+.pf-bloc:hover{border-color:var(--text2)}
+.pf-cli{max-width:100%;font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-l2,.pf-l3{max-width:100%;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.pf-l3{font-weight:500}
+.pf-l3.retard{color:var(--danger);font-weight:700}
+.pf-badge{max-width:100%;margin-top:4px;padding:2px 9px;border-radius:6px;background:var(--danger);color:white;font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-badge.partiel{background:var(--warn)}
+.pf-badge.faite{background:var(--success)}
+.pf-bloc.urgente{box-shadow:inset 0 0 0 2px var(--danger)}
+.pf-bloc.partiel{background-image:repeating-linear-gradient(135deg,transparent 0 7px,color-mix(in srgb,var(--warn) 20%,transparent) 7px 14px)}
+.pf-bloc.faite{opacity:.5}
+/* Bloc étroit : le client seul, à la verticale. */
+.pf-bloc.etroit{padding:6px 2px}
+.pf-bloc.etroit .pf-l2,.pf-bloc.etroit .pf-l3,.pf-bloc.etroit .pf-badge{display:none}
+.pf-bloc.etroit .pf-cli{writing-mode:vertical-rl;transform:rotate(180deg);max-height:100%;font-size:12.5px}
+.pf-bloc[draggable=true]{cursor:grab}
+.pf-bloc.attrapee{opacity:.4}
+/* Téléphone : la frise devient un sélecteur de jour (en-têtes et compteurs),
+   le tableau en dessous liste les préparations du jour choisi. */
+@media(max-width:560px){.pf{padding:10px}.pf-barre{display:none}.pf-jours{gap:4px}.pf-titre{width:100%}
+.pf-jh-lib{font-size:12.5px}.pf-jh-n{font-size:11.5px}.pf-gbtn{padding:6px 10px;font-size:13px}}
+
+/* Onglets de la Prépa : un groupe à la fois, avec son compteur ;
+   l'historique, dernier onglet, se range à droite. */
+.adv-ongl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.adv-ongl-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer}
+.adv-ongl-btn:hover{background:var(--bg)}
+.adv-ongl-btn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.adv-ongl-btn .n{font-size:12px;font-weight:800;min-width:22px;text-align:center;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--text2)}
+.adv-ongl-btn.active .n{background:var(--accent);color:white}
+.adv-ongl-btn.histo{margin-left:auto}
+
+/* Un vrai tableau, un onglet à la fois : un seul en-tête, collé en haut
+   quand la liste défile. Les colonnes tombent d'elles-mêmes sous leur
+   en-tête, quelle que soit la largeur des valeurs. */
+.adv-prepa-wrap{max-height:calc(100vh - 300px)}
+.adv-prepa-table th{cursor:default;background:var(--bg);color:var(--text2);font-size:12px;font-weight:800;letter-spacing:.3px;padding:11px 9px;border-bottom:2px solid var(--border)}
+.adv-prepa-table td{padding:10px 8px;font-size:15px}
+.adv-prepa-table .num,.adv-prepa-table .c-num{text-align:right;font-variant-numeric:tabular-nums}
+/* Poignée de glisser-déposer (ADV). */
+.adv-prepa-table .c-poignee{width:1%;padding-right:0;color:var(--muted);cursor:grab}
+.adv-prepa-table .c-poignee svg{display:block}
+.adv-pl:hover .c-poignee{color:var(--text2)}
+/* Au-delà de deux emplacements : « +N », liste complète au survol. */
+.adv-empl .adv-empl-plus{background:var(--card);border-style:dashed;color:var(--text2)}
+.adv-pl .c-client{font-weight:800}
+/* Une cellule de tableau ignore max-width : le plafond va sur son contenu. */
+.adv-pl .c-client-t{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(min-width:1700px){.adv-pl .c-client-t{max-width:320px}}
+.adv-pl .c-cde,.adv-pl .c-ref{font-size:14px}
+.adv-prepa-table .adv-empl span{font-size:13px;padding:3px 8px}
+.adv-prepa-table .btn-petit{font-size:13.5px}
+.adv-pl .c-ref{color:var(--text2)}
+.adv-pl .c-empl{white-space:normal;min-width:120px}
+.adv-pl .c-act{width:1%}
+/* La colonne se règle sur ses boutons : côte à côte tant que la place le permet. */
+.adv-prepa-table .adv-actions{flex-wrap:nowrap}
+/* Les boutons restent visibles à droite même si le tableau défile en largeur. */
+.adv-prepa-table th.c-act,.adv-prepa-table td.c-act{position:sticky;right:0;z-index:2}
+.adv-prepa-table th.c-act{z-index:3}
+.adv-prepa-table td.c-act{background:var(--card)}
+.adv-prepa-table tbody tr.adv-pl:hover td.c-act{box-shadow:inset 0 0 0 999px var(--accent-bg)}
+/* Largeur moyenne : la puce « Sortie prod » se coupe au besoin, aucun
+   contenu n'impose sa largeur à toute la colonne. */
+@media(max-width:1500px){.adv-prepa-table .adv-empl .adv-sortie-prod{white-space:normal}.adv-pl .c-client-t{max-width:180px}}
+.adv-pl .c-fort{font-weight:800}
+.adv-pl .c-fab{color:var(--warn);font-weight:800}
+.adv-pl .c-aprep.adv-date-tard{color:var(--warn)}
+.adv-pl .c-quand{font-weight:700}
+.adv-pl .c-quand.adv-date-retard{color:var(--danger)}
+/* En retard : bord rouge à gauche de la ligne. */
+.adv-prepa-table tbody tr.adv-pl.retard td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
+.adv-prepa-table tbody tr.adv-pl.retard:hover td:first-child{box-shadow:inset 3px 0 0 var(--danger),inset 0 0 0 999px var(--accent-bg)}
+.adv-rang-cel{display:flex;align-items:center;gap:3px}
+.adv-rang{width:28px;height:28px;flex-shrink:0;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--text2)}
+/* Rang fixé à la main par l'ADV : il se distingue de l'ordre automatique. */
+.adv-rang.manuel{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+/* Préparation urgente (marquée par l'ADV ou expédition imminente). */
+.adv-rang.urgente{background:var(--danger);border-color:var(--danger);color:white}
+.adv-btn-urgence{background:var(--bg);color:var(--danger);border:1px solid var(--border)}
+.adv-btn-urgence.on{background:var(--danger);border-color:var(--danger);color:white}
+/* Gestes d'une ligne : ordre d'expé, urgente, prête. Icônes carrées dans le
+   tableau (libellé au survol), icône et libellé dans la fiche. */
+.adv-act-btn{display:inline-flex;align-items:center;gap:6px}
+.adv-act-btn .ico{display:inline-flex}
+.adv-act-btn .ico svg{width:17px;height:17px;display:block}
+.adv-act-btn.btn-ico{width:32px;height:32px;padding:0;justify-content:center;gap:0}
+.adv-prepa-table .adv-actions{gap:4px}
+.adv-btn-ordre{color:var(--text2)}
+.adv-btn-ordre:hover{color:var(--accent)}
+.adv-act-btn:disabled{opacity:.35;cursor:default}
+.adv-pl .adv-btn-prete.on,.adv-fiche .adv-btn-prete.on{background:var(--success);border-color:var(--success);color:white}
+.adv-fleches{display:flex;flex-direction:column;gap:1px;opacity:0;transition:opacity .12s}
+.adv-pl:hover .adv-fleches,.adv-pl:focus-within .adv-fleches{opacity:1}
+@media(hover:none){.adv-fleches{opacity:1}}
+.adv-fleche{width:15px;height:13px;padding:0;border:none;border-radius:4px;background:var(--bg);color:var(--text2);font-size:10px;line-height:13px;cursor:pointer}
+.adv-fleche:hover:not(:disabled){background:var(--accent-bg);color:var(--accent)}
+.adv-fleche:disabled{opacity:.3;cursor:default}
+/* Glisser-déposer (ADV) : la ligne se prend à la main, la cible se marque d'un trait. */
+.adv-pl[draggable=true]{cursor:grab}
+.adv-pl.attrapee{opacity:.4}
+.adv-prepa-table tbody tr.adv-pl.cible-haut td{box-shadow:inset 0 3px 0 var(--accent)}
+.adv-prepa-table tbody tr.adv-pl.cible-bas td{box-shadow:inset 0 -3px 0 var(--accent)}
+/* Écran étroit : chaque ligne redevient une carte. Client et boutons en tête,
+   puis commande / réf / expédition, puis les quantités avec leur libellé,
+   puis les emplacements ; l'en-tête des colonnes disparaît. En dessous de
+   1400 px, le tableau (1 100 px au plus serré, police agrandie, trois
+   boutons par ligne) ne tient plus à côté du menu. */
+@media(max-width:1400px){
+.adv-prepa-wrap{background:transparent;border:0;border-radius:0;max-height:none;overflow:visible}
+.adv-prepa-table,.adv-prepa-table tbody{display:block}
+.adv-prepa-table thead{display:none}
+.adv-prepa-table tr.adv-pl{display:grid;grid-template-columns:46px repeat(3,minmax(0,1fr)) auto;gap:6px 12px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:6px;transition:border-color .15s}
+.adv-prepa-table tr.adv-pl:hover{border-color:var(--accent)}
+.adv-prepa-table tr.adv-pl.retard{border-left:3px solid var(--danger)}
+.adv-prepa-table tbody tr.adv-pl td,.adv-prepa-table tbody tr.adv-pl:hover td,.adv-prepa-table tbody tr.adv-pl td:first-child,.adv-prepa-table tbody tr.adv-pl:hover td:first-child,.adv-prepa-table tbody tr.adv-pl.retard td:first-child,.adv-prepa-table tbody tr.adv-pl.retard:hover td:first-child{display:block;padding:0;border:0;position:static;background:transparent;box-shadow:none;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis}
+.adv-prepa-table tbody tr.adv-pl.cible-haut{box-shadow:inset 0 3px 0 var(--accent)}
+.adv-prepa-table tbody tr.adv-pl.cible-bas{box-shadow:inset 0 -3px 0 var(--accent)}
+.adv-pl .c-rang{grid-row:1/3}
+.adv-pl .c-client{grid-column:2/5;grid-row:1}
+.adv-pl .c-client-t{max-width:none}
+.adv-pl .adv-actions{flex-direction:row}
+.adv-pl .c-act{grid-column:5;grid-row:1;width:auto}
+.adv-pl .c-cde{grid-column:2;grid-row:2}
+.adv-pl .c-ref{grid-column:3;grid-row:2}
+.adv-pl .c-quand{grid-column:4/6;grid-row:2}
+.adv-pl .c-qte{grid-column:2;grid-row:3}
+.adv-pl .c-stk{grid-column:3;grid-row:3}
+.adv-pl .c-aprep{grid-column:4;grid-row:3}
+.adv-pl .c-poignee{display:none !important}
+.adv-prepa-table .adv-pl .adv-actions{flex-wrap:wrap}
+.adv-prepa-table tbody tr.adv-pl td.c-act{overflow:visible}
+.adv-pl .c-empl{grid-column:2/6;grid-row:4;white-space:normal;overflow:visible}
+.adv-prepa-table .adv-pl .c-num{text-align:left;align-self:end}
+.adv-pl .c-num[data-l]::before{content:attr(data-l);display:block;white-space:normal;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+}
+/* Téléphone : le bouton ne réserve plus sa propre colonne, il se range au-dessus
+   de la date ; les trois chiffres gagnent la place. */
+@media(max-width:560px){
+.adv-prepa-table tr.adv-pl{grid-template-columns:46px repeat(3,minmax(0,1fr))}
+.adv-pl .c-client{grid-column:2/4}
+.adv-pl .c-act{grid-column:4}
+.adv-pl .c-quand{grid-column:4}
+.adv-pl .c-empl{grid-column:2/5}
+.adv-ongl-btn{padding:7px 11px;font-size:13px}
+/* Police agrandie partout, sauf sur téléphone où trois chiffres se partagent la largeur. */
+.adv-prepa-table tbody tr.adv-pl td{font-size:13.5px}
+.adv-prepa-table tbody tr.adv-pl td.c-cde,.adv-prepa-table tbody tr.adv-pl td.c-ref{font-size:12px}
+.adv-prepa-table tbody tr.adv-pl td.c-quand{font-size:12.5px}
+.adv-ongl-btn.histo{margin-left:0}
+}
 .adv-empl{display:flex;gap:5px;flex-wrap:wrap}
 .adv-empl span{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:7px;background:var(--bg);border:1px solid var(--border);color:var(--text2)}
 .adv-empl span b{color:var(--text);font-family:ui-monospace,Menlo,Consolas,monospace}
@@ -155,28 +357,78 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-badge.ok{color:var(--success)}
 
 /* ── Mise en forme conditionnelle ── */
-/* Fond opaque (mélangé à la carte) : la première colonne est collante. */
-.adv-table tbody tr td.mef-danger{background:color-mix(in srgb,var(--danger) 16%,var(--card))}
-.adv-table tbody tr td.mef-warn{background:color-mix(in srgb,var(--warn) 18%,var(--card))}
-.adv-table tbody tr td.mef-ok{background:color-mix(in srgb,var(--success) 16%,var(--card))}
-.adv-table tbody tr td.mef-accent{background:color-mix(in srgb,var(--accent) 16%,var(--card))}
-.adv-table tbody tr td.mef-neutre{background:color-mix(in srgb,var(--muted) 18%,var(--card))}
-.adv-table tbody tr td.mef-danger:not(.etape){color:var(--danger);font-weight:700}
-.adv-table tbody tr td.mef-warn:not(.etape){color:var(--warn);font-weight:700}
-.adv-table tbody tr td.mef-ok:not(.etape){color:var(--success);font-weight:700}
-.adv-table tbody tr td.mef-accent:not(.etape){color:var(--accent);font-weight:700}
-.adv-table tbody tr td.mef .adv-muet,.adv-table tbody tr td.mef .des-l{color:inherit;opacity:.8}
+/* La valeur colorée passe dans une pastille teintée ; une étape (déjà en
+   pastille) reçoit un anneau de la couleur de la règle. Une règle peut aussi
+   teinter toute la ligne (tr.mef-ligne). */
+.mef-p{display:inline-block;padding:2px 8px;border-radius:8px;font-weight:700;max-width:100%}
+/* Tons du thème. Rouge en pastille PLEINE, les autres teintées : rouge et
+   orange se distinguent par la forme, pas seulement par une teinte voisine. */
+.mef-danger>.mef-p{background:var(--danger);color:white}
+.mef-warn>.mef-p{background:color-mix(in srgb,var(--warn) 17%,transparent);color:var(--warn)}
+.mef-ok>.mef-p{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.mef-accent>.mef-p{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.mef-neutre>.mef-p{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
+.mef-r-texte.mef-danger>.mef-p{background:none;color:var(--danger)}
+.mef-r-texte.mef-warn>.mef-p{background:none;color:var(--warn)}
+.mef-r-texte.mef-ok>.mef-p{background:none;color:var(--success)}
+.mef-r-texte.mef-accent>.mef-p{background:none;color:var(--accent)}
+.mef-r-texte.mef-neutre>.mef-p{background:none;color:var(--text2)}
+td.mef .mef-p .adv-muet,td.mef .mef-p .des-l{color:inherit;opacity:.75}
+td.etape.mef-danger .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--danger)}
+td.etape.mef-warn .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--warn)}
+td.etape.mef-ok .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--success)}
+td.etape.mef-accent .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent)}
+td.etape.mef-neutre .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--muted)}
+
+/* Palette élargie : teinte (--mef-h, --mef-c posés par la page depuis
+   ADV_MEF_TEINTES) x nuance (mef-n1 pâle, n2 moyen, n3 soutenu). La clarté
+   suit le mode : fonds sombres en sombre, clairs en clair. Soutenu = fond plein,
+   texte blanc dans les deux modes. */
+:root{--mef-f1:.34;--mef-f2:.45;--mef-f3:.58;--mef-x1:.88;--mef-x2:.94;--mef-r1:.27;--mef-r2:.34;--mef-r3:.42;
+  --mef-t1:.86;--mef-t2:.78;--mef-t3:.70}
+body.light{--mef-f1:.95;--mef-f2:.88;--mef-f3:.56;--mef-x1:.42;--mef-x2:.34;--mef-r1:.97;--mef-r2:.93;--mef-r3:.87;
+  --mef-t1:.66;--mef-t2:.54;--mef-t3:.42}
+.mef-n1{--mef-lf:var(--mef-f1);--mef-kf:.35;--mef-lx:var(--mef-x1);--mef-lr:var(--mef-r1);--mef-lt:var(--mef-t1)}
+.mef-n2{--mef-lf:var(--mef-f2);--mef-kf:.7;--mef-lx:var(--mef-x2);--mef-lr:var(--mef-r2);--mef-lt:var(--mef-t2)}
+.mef-n3{--mef-lf:var(--mef-f3);--mef-kf:1;--mef-lx:1;--mef-lr:var(--mef-r3);--mef-lt:var(--mef-t3)}
+.mef-t>.mef-p{background:oklch(var(--mef-lf) calc(var(--mef-c) * var(--mef-kf)) var(--mef-h));
+  color:oklch(var(--mef-lx) var(--mef-c) var(--mef-h))}
+.mef-t.mef-n3>.mef-p{color:white}
+.mef-t.mef-r-texte>.mef-p{background:none;color:oklch(var(--mef-lt) var(--mef-c) var(--mef-h))}
+td.etape.mef-t .adv-noeud{box-shadow:0 0 0 2px var(--card),0 0 0 4px oklch(var(--mef-f3) var(--mef-c) var(--mef-h))}
+
+/* Toute la ligne : un voile (box-shadow, pour passer aussi sous la première
+   colonne collante), ou le texte coloré. */
+.adv-table tr.mef-ligne.mef-t>td{box-shadow:inset 0 0 0 999px oklch(var(--mef-lr) calc(var(--mef-c) * .6) var(--mef-h))}
+.adv-table tr.mef-ligne.mef-danger>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--danger) 16%,transparent)}
+.adv-table tr.mef-ligne.mef-warn>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--warn) 14%,transparent)}
+.adv-table tr.mef-ligne.mef-ok>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--success) 13%,transparent)}
+.adv-table tr.mef-ligne.mef-accent>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--accent) 13%,transparent)}
+.adv-table tr.mef-ligne.mef-neutre>td{box-shadow:inset 0 0 0 999px color-mix(in srgb,var(--muted) 16%,transparent)}
+.adv-table tr.mef-ligne.mef-r-texte>td{box-shadow:none}
+.adv-table tr.mef-ligne.mef-r-texte.mef-t>td{color:oklch(var(--mef-lt) var(--mef-c) var(--mef-h));font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-danger>td{color:var(--danger);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-warn>td{color:var(--warn);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-ok>td{color:var(--success);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-accent>td{color:var(--accent);font-weight:600}
+.adv-table tr.mef-ligne.mef-r-texte.mef-neutre>td{color:var(--muted);font-weight:600}
+.adv-table tr.mef-ligne>td:first-child{background:var(--card)}
+
 .adv-tete-actions{display:flex;gap:8px;align-items:center}
 .btn.adv-btn-icone{padding:9px 11px}
 .adv-modal.adv-modal-large{width:min(1060px,100%)}
 .mef-liste{margin-top:14px;display:flex;flex-direction:column;gap:8px}
-.mef-regle{display:grid;grid-template-columns:22px 140px 140px minmax(280px,1fr) auto 56px auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
-@media(max-width:860px){.mef-regle{grid-template-columns:22px 1fr 1fr;}.mef-regle .mef-valeur,.mef-regle .mef-tons,.mef-regle .mef-ordre{grid-column:2/-1}}
-.mef-rang{font-size:12px;font-weight:800;color:var(--muted);text-align:center}
-.mef-valeur{display:flex;gap:6px;align-items:center;min-width:0}
+.mef-regle{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.mef-corps{display:flex;flex-direction:column;gap:8px;min-width:0}
+.mef-cond,.mef-effet{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.mef-cond>select{flex:0 1 170px;min-width:0}
+.mef-effet>select{flex:0 1 210px;min-width:0}
+.mef-regle select,.mef-regle input{background:var(--card)}
+.mef-mot{font-size:12px;font-weight:700;color:var(--muted);min-width:14px}
+.mef-rang{font-size:12px;font-weight:800;color:var(--muted);text-align:center;padding-top:8px}
+.mef-valeur{display:flex;gap:6px;align-items:center;min-width:0;flex:1 1 220px}
 .mef-valeur select,.mef-valeur input{min-width:0;flex:1 1 0}
 .mef-valeur input[type=number]{max-width:120px}
-.mef-tons{display:flex;gap:5px}
 .mef-ton{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;outline-offset:2px}
 .mef-ton.mef-danger{background:var(--danger)}
 .mef-ton.mef-warn{background:var(--warn)}
@@ -184,11 +436,54 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .mef-ton.mef-accent{background:var(--accent)}
 .mef-ton.mef-neutre{background:var(--muted)}
 .mef-ton.actif{border-color:var(--text);box-shadow:0 0 0 2px var(--card) inset}
-.mef-n{font-size:11.5px;font-weight:700;text-align:right;white-space:nowrap}
+.mef-choix{display:inline-flex;align-items:center;gap:6px;padding:4px 8px 4px 5px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--text);cursor:pointer;font:inherit}
+.mef-choix:hover,.mef-choix.ouvert{border-color:var(--accent)}
+.mef-choix-f{font-size:10px;color:var(--muted)}
+.mef-ech-p>.mef-p{font-size:12px;padding:2px 9px}
+.mef-palette{display:flex;flex-direction:column;gap:7px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);max-width:100%}
+.mef-pal-l{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.mef-pal-theme{display:flex;gap:6px}
+.mef-pal-grille{display:grid;grid-template-columns:repeat(var(--mef-nb,14),minmax(0,26px));gap:4px;max-width:100%}
+.mef-ech{aspect-ratio:1;width:100%;min-width:0;border-radius:6px;border:2px solid transparent;cursor:pointer;padding:0;outline-offset:2px;
+  background:oklch(var(--mef-lf) calc(var(--mef-c) * var(--mef-kf)) var(--mef-h))}
+.mef-ech:hover{border-color:var(--muted)}
+.mef-ech.actif{border-color:var(--text);box-shadow:0 0 0 2px var(--card) inset}
+.mef-pal-rendus{display:flex;gap:6px;flex-wrap:wrap}
+.mef-pal-rendus .btn.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.mef-n{font-size:11.5px;font-weight:700;text-align:right;white-space:nowrap;margin-left:auto}
 .mef-ordre{display:flex;gap:4px}
 .mef-ordre .btn{padding:4px 9px;background:var(--card)}
+@media(max-width:700px){.mef-regle{grid-template-columns:22px minmax(0,1fr)}.mef-ordre{grid-column:2}}
 .mef-bas{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .mef-compte{font-size:12px}
+
+/* ── Infos de suivi ── */
+/* Un « ? » rond et jaune, quel que soit le thème : c'est un signal, comme un
+   panneau d'avertissement. Le « ? » est en ocre foncé (jamais noir) pour rester
+   lisible sur le jaune. */
+.adv-info{display:inline-flex;align-items:center;justify-content:center;flex:none;width:18px;height:18px;border-radius:50%;
+  background:oklch(.86 .17 92);color:oklch(.36 .08 70);border:1px solid oklch(.72 .16 80);
+  font:800 12px/1 system-ui,sans-serif;padding:0;cursor:pointer;vertical-align:middle;margin-left:6px}
+button.adv-info:hover{box-shadow:0 0 0 3px oklch(.86 .17 92 / .35)}
+.adv-info.vide{background:transparent;color:var(--muted);border:1px dashed var(--muted);visibility:hidden}
+.adv-table tbody tr:hover .adv-info.vide,.adv-info.vide:focus-visible{visibility:visible}
+.adv-info.vide:hover{color:oklch(.55 .14 80);border-color:oklch(.72 .16 80)}
+.adv-table td.c-commande{white-space:nowrap}
+.fi-infos h4{display:flex;align-items:center;gap:6px}
+.fi-infos h4 .adv-info{margin-left:0}
+.adv-fiche .fi-carte.fi-infos.avec{border-color:oklch(.78 .15 85);box-shadow:inset 3px 0 0 oklch(.82 .16 88)}
+.fi-info-saisie{display:flex;gap:8px;margin:8px 0 10px}
+.fi-info-champ{flex:1 1 auto;min-width:0;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 11px;color:var(--text);font:inherit}
+.fi-info-champ:focus{border-color:var(--accent);outline:none}
+.fi-infos-fil{display:flex;flex-direction:column;gap:8px}
+.fi-info{display:flex;gap:10px;align-items:flex-start}
+.fi-info .adv-info{margin:1px 0 0;cursor:default;width:16px;height:16px;font-size:11px}
+.fi-info-c{flex:1 1 auto;min-width:0}
+.fi-info-t{white-space:pre-wrap;overflow-wrap:anywhere}
+.fi-info-m{font-size:11.5px;margin-top:2px}
+.fi-info-suppr{flex:none;border:1px solid transparent;background:none;color:var(--muted);cursor:pointer;border-radius:7px;padding:2px 7px;font:inherit;font-size:12px}
+.fi-info-suppr:hover{border-color:var(--border);color:var(--danger)}
+.fi-info-suppr.confirmer{background:var(--danger);color:white;font-weight:700}
 
 /* ── Modale ── */
 .adv-voile{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -212,8 +507,287 @@ table.adv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:1
 .adv-liste a:hover{text-decoration:underline}
 .adv-modal .m-pied{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 
+/* ── Fiche d'une ligne ── */
+.adv-modal.adv-fiche{width:min(860px,100%);padding:0;background:var(--bg)}
+.adv-fiche .fi-tete{display:flex;justify-content:space-between;gap:16px;padding:20px 22px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
+.adv-fiche .fi-titre{min-width:0}
+.adv-fiche h3{font-size:20px;font-weight:800;letter-spacing:-.2px}
+.adv-fiche .fi-ref{font-size:12.5px;color:var(--text2);margin-top:3px}
+.adv-fiche .fi-des{font-size:13px;color:var(--muted);margin-top:2px}
+.adv-fiche .fi-puces{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.fi-fermer{width:36px;height:36px;flex-shrink:0;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.fi-fermer:hover{background:var(--card);color:var(--text)}
+.adv-fiche .fi-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.adv-fiche .fi-chaine{margin:16px 22px 0}
+.adv-fiche h4{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:0 0 12px}
+/* Une seule colonne, l'essentiel en haut (préparation, puis la chaîne) :
+   deux colonnes débordaient dès qu'une puce longue (« Sortie prod · dossier
+   … ») imposait sa largeur. minmax(0,1fr) : aucun contenu n'élargit la fiche. */
+.adv-fiche .fi-grille{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:14px 22px 0}
+.adv-fiche .adv-sortie-prod{white-space:normal}
+.adv-fiche .fi-livrer{font-size:13.5px;line-height:1.45;color:var(--text)}
+.adv-fiche .fi-livrer div:first-child{font-weight:700}
+.adv-fiche .m-pied{padding:16px 22px 20px;margin-top:0;justify-content:space-between;align-items:center}
+
+/* Frise de la chaîne de valeur */
+.fi-frise{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:relative}
+.fi-etape{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;padding:4px 6px 8px;border-radius:10px;--c:var(--muted)}
+.fi-etape::before{content:"";position:absolute;top:22px;left:-50%;width:100%;height:3px;background:var(--border);z-index:0}
+.fi-etape:first-child::before{display:none}
+.fi-etape.oui{--c:var(--success)}
+.fi-etape.en_cours{--c:var(--adv-cours)}
+.fi-etape.non{--c:var(--danger)}
+.fi-etape.oui::before{background:var(--success)}
+.fi-etape.cliquable{cursor:pointer}
+.fi-etape.cliquable:hover,.fi-etape.ouverte{background:var(--accent-bg)}
+.fi-rond{position:relative;z-index:1;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--c);color:white;box-shadow:0 0 0 4px var(--card)}
+.fi-etape.sans_objet .fi-rond{background:var(--bg);color:var(--muted);border:2px dashed var(--border)}
+.fi-etape.probable{--c:var(--success)}
+.fi-etape.probable .fi-rond{background:var(--card);color:var(--success);border:2px dashed var(--success)}
+.fi-etape.non .fi-rond{background:var(--card);color:var(--danger);border:2px solid var(--danger)}
+.fi-etape.force .fi-rond::after{content:"";position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--card)}
+.fi-etape-lib{font-size:13px;font-weight:800;margin-top:8px;color:var(--text)}
+.fi-etape-val{font-size:11.5px;font-weight:700;color:var(--c);margin-top:1px}
+.fi-etape-det{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:640px){.fi-etape-det{display:none}.fi-rond{width:32px;height:32px}.fi-etape::before{top:19px}}
+.fi-correction{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--accent)}
+.fi-correction-t{font-size:13px;font-weight:800;margin-bottom:8px}
+.fi-correction-l{display:grid;grid-template-columns:200px minmax(0,1fr) auto auto;gap:8px;align-items:center}
+@media(max-width:640px){.fi-correction-l{grid-template-columns:1fr}}
+.fi-correction-n{font-size:12px;margin-top:8px}
+
+/* Quantités */
+.fi-chiffres{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.fi-chiffre-v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
+.fi-chiffre-l{font-size:11.5px;font-weight:600;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:5px}
+.fi-chiffre.livre .fi-chiffre-l::before,.fi-chiffre.stock .fi-chiffre-l::before,.fi-chiffre.fab .fi-chiffre-l::before{content:"";width:8px;height:8px;border-radius:2px}
+.fi-chiffre.livre .fi-chiffre-l::before{background:var(--success)}
+.fi-chiffre.stock .fi-chiffre-l::before{background:var(--accent)}
+.fi-chiffre.fab .fi-chiffre-l::before{background:var(--warn)}
+.fi-chiffre.fab .fi-chiffre-v{color:var(--warn)}
+.fi-barre{display:flex;height:10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);overflow:hidden;margin-top:12px}
+.fi-barre span{height:100%}
+.fi-barre .livre{background:var(--success)}
+.fi-barre .stock{background:var(--accent)}
+.fi-barre .fab{background:var(--warn)}
+.fi-note{font-size:11.5px;margin-top:10px}
+.fi-alerte{color:var(--warn);font-weight:700}
+
+/* Échéances */
+.fi-jalons{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:relative}
+.fi-jalon{position:relative;padding-top:18px}
+.fi-jalon::before{content:"";position:absolute;top:5px;left:0;right:0;height:2px;background:var(--border)}
+.fi-jalon:first-child::before{left:6px}
+.fi-jalon:last-child::before{right:auto;width:6px}
+.fi-jalon-p{position:absolute;top:0;left:0;width:12px;height:12px;border-radius:50%;background:var(--card);border:2px solid var(--muted)}
+.fi-jalon.fort .fi-jalon-p{border-color:var(--text);background:var(--text)}
+.fi-jalon.ok .fi-jalon-p{border-color:var(--success);background:var(--success)}
+.fi-jalon.warn .fi-jalon-p{border-color:var(--warn);background:var(--warn)}
+.fi-jalon.danger .fi-jalon-p{border-color:var(--danger);background:var(--danger)}
+.fi-jalon-c{padding-right:8px;min-width:0}
+.fi-jalon-l{font-size:11.5px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fi-jalon-d{font-size:14px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fi-jalon.warn .fi-jalon-d{color:var(--warn)}
+.fi-jalon.danger .fi-jalon-d{color:var(--danger)}
+.fi-jalon-r{font-size:11.5px;color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fi-jalon-x{font-weight:600;color:var(--text2)}
+.fi-jalon.warn .fi-jalon-x{color:var(--warn)}
+.fi-jalon.vide .fi-jalon-d{color:var(--muted);font-weight:600}
+
+/* Préparation, production, départs */
+.fi-prepa{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fi-prepa-b{display:flex;gap:6px;margin-left:auto}
+.fi-sous-t{font-size:11.5px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+.fi-rangees{display:flex;flex-direction:column;gap:6px}
+.fi-rangee{display:grid;grid-template-columns:54px minmax(0,auto) minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 10px;border-radius:9px;background:var(--bg);border:1px solid var(--border);text-decoration:none;color:var(--text);font-size:13px}
+.fi-rangee:hover{border-color:var(--accent)}
+.fi-rangee.passe{opacity:.6}
+.fi-rangee-ico{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.fi-rangee-t{font-weight:700;white-space:nowrap}
+.fi-rangee .adv-muet{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+
+.fi-rep{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;margin-bottom:8px;border-radius:9px;background:var(--bg);border:1px solid var(--border)}
+.fi-rep-t{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fi-rep-t .adv-muet{font-size:11.5px}
+.fi-rep-b{display:flex;gap:5px;flex-wrap:wrap}
+
 /* ── Toasts ── */
 .toast-wrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:9999;align-items:center}
 .toast{padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.4);max-width:90vw;border:1px solid var(--border);background:var(--card);color:var(--text)}
 .toast.success{border-color:var(--success);color:var(--success)}
 .toast.danger{border-color:var(--danger);color:var(--danger)}
+
+/* ── Historique des préparations (Prépa › Historique) ── */
+.adv-histo .adv-table th,.adv-histo .adv-table tbody tr{cursor:default}
+.adv-histo-statut{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 8px;color:var(--text);font-size:12.5px;font-family:inherit;cursor:pointer}
+.adv-histo-statut:focus{outline:none;border-color:var(--accent)}
+.adv-histo-statut:disabled{opacity:.5;cursor:default}
+
+/* ── Envois : les lignes qui partent ensemble (Prépa) ── */
+.adv-prepa-table tbody tr.adv-envoi td{background:var(--bg)}
+.adv-prepa-table tbody tr.adv-envoi:hover td{background:var(--accent-bg)}
+.adv-prepa-table tbody tr.adv-envoi{cursor:pointer}
+.adv-envoi .adv-envoi-caret{display:inline-block;margin-left:4px;color:var(--text2);font-size:13px;transition:transform .15s}
+.adv-envoi.ouvert .adv-envoi-caret{transform:rotate(90deg)}
+.adv-envoi .adv-envoi-n{font-weight:700;color:var(--text2)}
+/* Ligne d'envoi sur fond gris : son bouton reprend le fond de carte. */
+.adv-envoi .btn:not(.btn-accent):not(.on){background:var(--card)}
+.adv-envoi .btn:not(.btn-accent):not(.on):hover{background:var(--accent-bg)}
+.adv-prepa-table tbody tr.adv-enfant td.c-client{padding-left:26px}
+.adv-prepa-table tbody tr.adv-enfant.replie{display:none !important}
+.adv-prepa-table tbody tr.adv-enfant td{border-bottom-style:dashed}
+@media(max-width:1400px){.adv-prepa-table tbody tr.adv-envoi{background:var(--bg)}
+.adv-prepa-table tbody tr.adv-enfant{border-left:3px solid var(--accent)}
+.adv-prepa-table tbody tr.adv-enfant td.c-client{padding-left:0}}
+
+/* ── Ordre d'expédition (aperçu imprimable) ── */
+.adv-modal.adv-ordre{width:min(900px,100%);padding:24px 26px}
+.od-tete{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid var(--text)}
+.od-org{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.adv-ordre h3{font-size:22px;font-weight:800;margin-top:2px}
+.od-date{font-size:15px;font-weight:700;margin-top:4px}
+.od-infos{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));gap:14px 18px;padding:16px 0;border-bottom:1px solid var(--border)}
+.od-l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.od-v{font-size:14px;font-weight:600}
+.od-rs{font-size:16px;font-weight:800}
+.od-adr{font-size:14px;line-height:1.45}
+@media(max-width:760px){.od-infos{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.od-dest{grid-column:1/-1}}
+.od-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
+.od-table th{text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:8px 8px;border-bottom:2px solid var(--border)}
+.od-table td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+.od-table .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700}
+.od-table .od-des{color:var(--text2)}
+.od-table .od-empl{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+.od-total{margin-top:12px;font-size:14px;font-weight:800;text-align:right}
+/* Tolérance de l'OF : 0 % (quantité exacte) encadré, pour qu'il se voie
+   aussi sur la feuille imprimée en noir et blanc. */
+.od-tol{white-space:nowrap;font-variant-numeric:tabular-nums}
+.od-tol-v{font-weight:700}
+.od-tol-v.zero{display:inline-block;padding:1px 7px;border:2px solid currentColor;border-radius:6px;font-weight:800}
+@media(max-width:640px){.od-table{font-size:12.5px}.od-table .od-des{display:none}}
+/* Impression : l'ordre seul, à plat, en noir sur blanc. */
+@media print{
+body>*:not(#mroot){display:none !important}
+#mroot .adv-voile{position:static;background:none;padding:0;display:block}
+.adv-modal.adv-ordre{width:100%;max-height:none;overflow:visible;border:0;padding:0;background:white;color:black}
+.adv-ordre .od-ecran{display:none !important}
+.adv-ordre .od-tete{border-bottom-color:black}
+.adv-ordre .od-l,.adv-ordre .od-org,.od-table th,.od-table .od-des{color:dimgray}
+.od-table th,.od-table td,.od-infos{border-color:silver}
+}
+
+/* ── Liens de cellule (réf article → MyStock, fin de prod → planning) ── */
+/* Pas de couleur de lien au repos : la cellule garde sa lecture (et sa
+   mise en forme conditionnelle) ; le soulignement au survol dit qu'on peut
+   y aller. */
+.adv-lien{color:inherit;text-decoration:none;cursor:pointer;border-radius:3px}
+.adv-lien:hover{text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;color:var(--accent)}
+.mef-p .adv-lien:hover,.mef-ligne .adv-lien:hover{color:inherit}
+.adv-lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Carnet : toutes les colonnes tiennent dans l'écran (retour du 26/11) ── */
+/* Une zone de ~1 000 px doit tout montrer, sans défilement horizontal :
+   marges réduites, en-têtes sur deux lignes au besoin, étapes resserrées,
+   client tronqué (nom complet au survol). En dessous, le tableau défile. */
+.adv-table th{padding:8px 5px;white-space:normal;line-height:1.15;vertical-align:bottom;letter-spacing:.2px}
+.adv-table td{padding:7px 5px}
+.adv-table th.etape{padding:8px 1px;letter-spacing:0}
+.adv-table td.etape{padding:6px 1px}
+.adv-table td.client{max-width:none}
+.adv-table td.client .client-t{display:block;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+table.adv-table{font-size:12px}
+.adv-table th{font-size:10.5px}
+.adv-table td.des{max-width:none}
+.adv-table td.c-commande .adv-info{margin-left:4px}
+.adv-table th.etape,.adv-table td.etape{width:40px;min-width:40px;max-width:40px}
+.adv-table .adv-noeud{width:24px;height:24px}
+.adv-table th.etape{font-size:10px}
+/* Le client prend la place qui reste (et se tronque quand il en manque) :
+   les autres colonnes gardent la largeur de leur contenu, l'article ne
+   s'étale plus sur un grand écran. */
+.adv-table th.client,.adv-table td.client{width:100%;min-width:100px}
+.adv-table td.client{max-width:0}
+.adv-table td.client .client-t{max-width:none}
+/* De l'air de part et d'autre des barres de section (commande, quantités,
+   étapes) : un nombre ne colle plus à la barre. */
+.adv-table th.sep,.adv-table td.sep{padding-left:11px}
+.adv-table th.fin-sec,.adv-table td.fin-sec{padding-right:11px}
+.adv-table th:first-child,.adv-table td:first-child{padding-left:10px}
+/* Au-dela, le tableau ne s etire plus : sinon toute la place part dans Client. */
+table.adv-table{max-width:1360px}
+.adv-table-wrap{width:fit-content;max-width:100%}
+
+/* Légende des pictos, au-dessus du tableau (Commandes et Prépa) : les pictos
+   des lignes en réduction, une phrase courte chacun. Discrète : elle se lit
+   une fois, puis on ne la regarde plus. */
+.adv-legende{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:6px 16px;margin:-2px 0 10px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.adv-leg{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.adv-noeud.mini{width:18px;height:18px}
+.adv-noeud.mini svg{width:10px;height:10px}
+.adv-noeud.mini.non,.adv-noeud.mini.sans_objet,.adv-noeud.mini.probable,.adv-noeud.mini.jauge{border-width:1.5px}
+.adv-noeud.mini.force::after{top:-3px;right:-3px;width:7px;height:7px}
+.adv-leg-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text2)}
+.adv-leg-btn svg{width:12px;height:12px;display:block}
+.adv-leg-btn.urgence{color:var(--danger)}
+.adv-leg-btn.urgence.on{background:var(--danger);border-color:var(--danger);color:white}
+.adv-leg-btn.prete{background:var(--accent);border-color:var(--accent);color:white}
+.adv-leg-btn.prete.on{background:var(--success);border-color:var(--success)}
+@media(max-width:560px){.adv-legende{justify-content:flex-start;gap:6px 12px;font-size:12px}}
+
+/* ── Place (retour du 26/11) ──────────────────────────────────── */
+/* La légende prend la place de l'ancienne tuile « Prêtes à partir », en
+   colonne : la ligne qu'elle occupait sous la barre disparaît. */
+.adv-legende.adv-legende-tuile{flex-direction:column;align-items:flex-start;justify-content:center;flex-wrap:nowrap;gap:5px;margin:0;
+  padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--card);font-size:12px}
+.adv-legende-tuile .adv-leg{gap:8px}
+@media(max-width:768px){.adv-legende.adv-legende-tuile{padding:8px 10px;gap:4px;font-size:11.5px}.adv-legende-tuile .adv-leg{white-space:normal}}
+/* Recherche plus courte : elle tient sur la ligne des filtres d'étape. */
+.adv-recherche{flex:0 1 300px;max-width:300px}
+@media(max-width:768px){.adv-recherche{flex:1 1 100%;max-width:none}}
+
+/* Colonne Commentaire : la dernière info de suivi, tronquée ; le texte entier
+   au survol. */
+.adv-table td.c-com{min-width:210px;max-width:280px;white-space:nowrap;overflow:hidden}
+.adv-table td.c-com.avec{cursor:pointer}
+.adv-table td.c-com .com-t{display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
+  padding:2px 7px;border-radius:6px;background:oklch(.86 .17 92 / .22);color:var(--text)}
+.adv-table td.c-com.avec:hover .com-t{background:oklch(.86 .17 92 / .38)}
+.adv-table td.c-com .com-n{margin-left:5px;font-size:11px;font-weight:700;color:var(--muted);vertical-align:middle}
+.adv-table .com-ajout{visibility:hidden;border:1px dashed var(--border);background:transparent;color:var(--muted);border-radius:6px;
+  padding:2px 8px;font:inherit;font-size:11.5px;cursor:pointer}
+.adv-table tbody tr:hover .com-ajout,.adv-table .com-ajout:focus-visible{visibility:visible}
+.adv-table .com-ajout:hover{color:var(--text);border-color:var(--accent)}
+@media(hover:none){.adv-table .com-ajout{visibility:visible}}
+
+/* ── Prépa (retour du 26/11) ──────────────────────────────────── */
+/* Le tableau reprend toute la largeur : la règle « largeur du contenu » du
+   carnet ne vaut pas pour lui. */
+.adv-table-wrap.adv-prepa-wrap{width:auto}
+table.adv-table.adv-prepa-table{width:100%;max-width:none}
+/* Légende dans la rangée des onglets, poussée à droite, avant Historique. */
+.adv-ongl .adv-legende.adv-legende-ongl{margin:0 4px 0 auto;font-size:12px;gap:4px 12px}
+.adv-ongl .adv-legende-ongl + .adv-ongl-btn.histo{margin-left:0}
+/* Frise compacte : environ moitié moins haute. */
+.pf{padding:10px 14px 12px;margin-bottom:12px}
+.pf-titre{font-size:15px}
+.pf-gbtn{padding:5px 11px;font-size:13px}
+.pf-tete .adv-puce{padding:4px 10px;font-size:12.5px}
+.pf-semaine{margin-top:8px}
+.pf-sem{font-size:13px;margin-bottom:2px}
+.pf-jours,.pf-barre{gap:8px}
+.pf-jh{flex-direction:row;justify-content:center;gap:6px;padding:3px 4px 4px}
+.pf-jh-lib{font-size:13px}
+.pf-jh-n{font-size:11.5px}
+.pf-barre{margin-top:4px;height:70px}
+.pf-seg{padding:3px;gap:3px;border-radius:8px}
+.pf-bloc{padding:3px 5px;border-radius:6px}
+.pf-cli{font-size:12.5px}
+.pf-l2{display:none}
+.pf-l3{font-size:11px}
+.pf-badge{margin-top:2px;padding:1px 6px;font-size:9.5px}
+/* Bloc étroit : le client à l'horizontale sur trois lignes au plus — la
+   verticale ne laissait lire que cinq lettres à cette hauteur. */
+.pf-bloc.etroit{padding:3px 2px}
+.pf-bloc.etroit .pf-cli{writing-mode:horizontal-tb;transform:none;max-height:none;white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:auto;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;font-size:10.5px;line-height:1.15}
+@media(max-width:900px){.adv-ongl .adv-legende.adv-legende-ongl{flex-basis:100%;order:9;margin:4px 0 0;justify-content:flex-start}}
