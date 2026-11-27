@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 from app.services.audit_service import log_action
 from app.services import machines_type as _mtype
-from config import PROD_VITESSE_MAX_M_MIN
+from config import PROD_VITESSE_MAX_M_MIN, FAB_RELAIS_VALIDITE_HEURES
 from app.services import origine_bobine
 from app.services import poste_bobine, bobines_montees
 from database import get_db, parse_datetime
@@ -615,6 +615,28 @@ def _suggest_rh_machine_id(machines: list, now: datetime) -> Optional[int]:
     return machines[0]["machine_id"]
 
 
+def _machine_relais_recente(conn, user_id, now: datetime) -> Optional[int]:
+    """Machine reprise par ce conducteur via « Passer la main », si le relais
+    date de moins de `FAB_RELAIS_VALIDITE_HEURES`. None sinon."""
+    try:
+        uid = int(user_id) if user_id is not None else None
+    except (TypeError, ValueError):
+        return None
+    if not uid:
+        return None
+    depuis = (now.replace(tzinfo=None) - timedelta(hours=FAB_RELAIS_VALIDITE_HEURES)).strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        row = conn.execute(
+            """SELECT machine_id FROM fab_relais
+                WHERE vers_user_id = ? AND created_at >= ?
+             ORDER BY created_at DESC, id DESC LIMIT 1""",
+            (uid, depuis),
+        ).fetchone()
+    except Exception:
+        return None  # base pas encore migrée
+    return int(row["machine_id"]) if row and row["machine_id"] else None
+
+
 def _machine_du_jour(
     user: dict, conn, *,
     wanted_id: Optional[int] = None,
@@ -624,6 +646,12 @@ def _machine_du_jour(
     Voir docstring du bloc pour l'ordre de priorité. Retourne None si rien trouvable.
     """
     now = now or datetime.now(_PARIS)
+    # Un relais (« Passer la main ») récent sur une machine fait foi avant le
+    # Planning RH : le conducteur a repris CETTE machine, même s'il était
+    # planifié ailleurs. Son sélecteur de machine du jour reste utilisable.
+    relais = _machine_relais_recente(conn, user.get("id"), now)
+    if relais and (not wanted_id or int(wanted_id) == relais):
+        return relais
     machines = _rh_machines_du_jour(conn, user.get("id"), now)
     if machines:
         allowed = {m["machine_id"] for m in machines}

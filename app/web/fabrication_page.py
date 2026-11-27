@@ -1769,7 +1769,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.metrageCorr || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showRelais || S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.metrageCorr || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -1972,6 +1972,7 @@ function icon(name,size=16){
     'flag-off':'<line x1="4" y1="4" x2="4" y2="20"/><path d="M4 15s4-4 8 0 8 0 8 0V4s-4 4-8 0-8 0-8 0"/>',
     flag:'<path d="M4 15s4-4 8 0 8 0 8 0V4s-4 4-8 0-8 0-8 0"/><line x1="4" y1="4" x2="4" y2="20"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/>',
+    users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     'arrow-left':'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
@@ -2676,6 +2677,298 @@ function fabAnnulationPossible(){
   // Pas de restriction sur l'avancement : un manque de matiere ou de
   // mandrins peut survenir en plein calage comme en pleine production.
   return debutIdx >= 0;
+}
+
+/* ── Passer la main ───────────────────────────────────────────────────────
+   Le conducteur qui part choisit celui qui reprend ; celui-ci tape son code
+   sur la tablette. L'écran enchaîne alors, sans rien d'autre à faire, ce que
+   les conducteurs faisaient à la main :
+     89 Fin de production « à reprendre plus tard » + 87 Départ personnel
+       (au nom de celui qui part, compteur relevé une seule fois)
+     bascule de session (POST /api/fabrication/relais/basculer)
+     86 Arrivée personnel + 01 Démarrer le même dossier (même compteur)
+       + la dernière opération en cours (au nom de celui qui arrive).
+   Le code est vérifié AVANT la première saisie : un code faux ne laisse ni
+   dossier arrêté ni machine sans conducteur. */
+
+// Le dossier en cours. Hors planning, la session ne renvoie pas d'objet
+// dossier : on reprend la référence portée par le dernier 01.
+function relaisDossier(){
+  if(S.dossier && S.dossier.reference) return S.dossier;
+  const lignes = (S.saisies||[]).filter(s => s.kind!=='stock' && !Number(s.est_annule||0))
+    .slice().sort((a,b)=>String(a.date_operation||'').localeCompare(String(b.date_operation||'')));
+  let d = null;
+  lignes.forEach(s=>{
+    const c = String(s.operation_code||'').trim();
+    if(c==='01' && String(s.no_dossier||'').trim())
+      d = {reference:String(s.no_dossier).trim(), client:s.client||'', description:s.designation||''};
+    else if(c==='89' || c==='90') d = null;
+  });
+  return d;
+}
+
+function relaisPossible(){
+  return !!relaisDossier() && !S.adminMachineId && !isRepiquageMode();
+}
+
+function relaisMachineId(){
+  return (S.machine && S.machine.id) || S.wantedMachineId || S.machineIdCourant || null;
+}
+
+// Dernière opération du dossier depuis son démarrage, à reprendre après le 01.
+// Production (03/88) → 03. Changement d'outil ou intervention de maintenance :
+// rien — ce sont des gestes ponctuels, pas un état, et les rejouer
+// réenregistrerait un outil ou une intervention.
+function relaisOpAReprendre(){
+  const dd = relaisDossier();
+  const ref = String(dd && dd.reference || '').trim();
+  const lignes = (S.saisies||[]).filter(s => s.kind!=='stock' && !Number(s.est_annule||0))
+    .slice().sort((a,b)=>String(a.date_operation||'').localeCompare(String(b.date_operation||'')));
+  let debut = -1;
+  lignes.forEach((s,i)=>{
+    if(String(s.operation_code||'').trim()==='01' && String(s.no_dossier||'').trim()===ref) debut = i;
+  });
+  if(debut < 0) return null;
+  let der = null;
+  lignes.slice(debut+1).forEach(s=>{
+    const c = String(s.operation_code||'').trim();
+    if(c && ['01','86','87','89','90'].indexOf(c) === -1) der = s;
+  });
+  if(!der) return null;
+  const code = String(der.operation_code).trim();
+  const cat = String((OPS[code] && OPS[code].category) || der.operation_category || '').toLowerCase();
+  if(cat === 'production') return {code:'03', label:opLabel('03','Production')};
+  if(opOutilType(code) || opFormulaire(code)) return null;
+  const op = {code, label:opLabel(code, String(der.operation||'').replace(/^\s*\d+\s*-?\s*/,'') || code)};
+  if(CODES_COMMENTAIRE_OBLIGATOIRE[code] && der.commentaire) op.commentaire = der.commentaire;
+  return op;
+}
+
+function relaisOuvrir(){
+  fabPauseAutoRefresh(300000);
+  set({showRelais:true, relaisEtape:'choix', relaisOps:null, relaisVers:null, relaisCode:'',
+       relaisCompteur:'', relaisBusy:false, relaisErreur:'', relaisPas:null, relaisVerifie:false,
+       finCompteurConfirme:null});
+  const mid = relaisMachineId();
+  apiFetch('/api/fabrication/relais/operateurs'+(mid?'?machine_id='+encodeURIComponent(mid):''))
+    .then(d=>{ if(S.showRelais) fabRenderPreserveUi({relaisOps:(d && d.operateurs) || []}); })
+    .catch(e=>{ if(S.showRelais) fabRenderPreserveUi({relaisOps:[], relaisErreur:e.message}); });
+}
+
+function relaisFermer(){
+  if(S.relaisBusy) return;
+  // Code vérifié mais relais pas mené au bout : la session préparée part.
+  if(S.relaisVerifie) apiFetch('/api/fabrication/relais',{method:'DELETE'}).catch(()=>{});
+  fabPauseAutoRefresh(5000);
+  set({showRelais:false, relaisCode:'', relaisVerifie:false, relaisPas:null});
+}
+
+async function relaisLancer(){
+  if(S.relaisBusy) return;
+  const vers = S.relaisVers;
+  if(!vers){ set({relaisEtape:'choix'}); return; }
+  if(!String(S.relaisCode||'')){ set({relaisErreur:'Code de '+vers.nom+' requis.'}); return; }
+  // Même contrôle du compteur qu'en fin de production (relevé précédent,
+  // plafond, vitesse) ; la confirmation d'un relevé suspect relance ici.
+  S.metrageFinVal = S.relaisCompteur;
+  const compteur = finValiderCompteur(relaisLancer);
+  if(compteur === null) return;
+
+  const dos = relaisDossier();
+  const mid = relaisMachineId();
+  const reprise = relaisOpAReprendre();
+  const pas = [
+    {cle:'verif', label:'Code de '+vers.nom},
+    {cle:'89', label:'89 Fin de production · à reprendre'},
+    {cle:'87', label:'87 Départ personnel · '+(S.operateur||'')},
+    {cle:'bascule', label:'Connexion de '+vers.nom},
+    {cle:'86', label:'86 Arrivée personnel · '+vers.nom},
+    {cle:'01', label:'01 '+opLabel('01','Démarrer un dossier')+' · '+dos.reference},
+  ];
+  if(reprise) pas.push({cle:'reprise', label:reprise.code+' '+reprise.label});
+  pas.forEach(p=>{ p.etat = 'attente'; });
+  fabRenderPreserveUi({relaisBusy:true, relaisErreur:'', relaisPas:pas});
+
+  const marquer = (cle, etat) => {
+    const p = pas.find(x=>x.cle===cle); if(p) p.etat = etat;
+    fabRenderPreserveUi({relaisPas:pas.slice()});
+  };
+  // Une seconde d'écart entre deux saisies, à partir du clic : l'ordre des
+  // lignes ne dépend jamais de leur id, et les durées restent nulles.
+  let derniere = 0;
+  const heure = () => {
+    derniere = Math.max(Math.floor(Date.now()/1000), derniere + 1);
+    const d = new Date(derniere * 1000);
+    const pad = n => String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())
+      +'T'+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  };
+  const saisir = body => apiFetch('/api/fabrication/saisie',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(Object.assign({date_operation: heure(), machine: S.machine ? S.machine.nom : null},
+                                       mid ? {machine_id: mid} : {}, body)),
+  });
+  const dossierChamps = () => {
+    const b = {no_dossier: dos.reference, client: dos.client||'', designation: dos.description||''};
+    if(dos.fictif || isFictifDossierRef(dos.reference)){
+      b.dossier_fictif = true;
+      b.numero_of_fictif = fictifOfDisplay(dos.reference||dos.numero_of||'');
+      b.designation = 'Dossier hors planning';
+    }
+    return b;
+  };
+
+  let cle = 'verif';
+  let bascule = false;
+  try{
+    marquer('verif','cours');
+    await apiFetch('/api/fabrication/relais/verifier',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({vers_user_id: vers.id, code: S.relaisCode}),
+    });
+    S.relaisVerifie = true;
+    S.relaisCode = '';
+    marquer('verif','ok');
+
+    cle = '89'; marquer(cle,'cours');
+    try{ if(window.MysifaAlerts && window.MysifaAlerts.flushOpenAcks) await window.MysifaAlerts.flushOpenAcks(); }catch(_){}
+    await saisir(Object.assign(dossierChamps(), {operation:'89 - Fin de production', fin_dossier:false,
+                                                  metrage_fin: compteur}));
+    marquer(cle,'ok');
+
+    cle = '87'; marquer(cle,'cours');
+    await saisir({operation:'87 - Départ personnel'});
+    marquer(cle,'ok');
+
+    cle = 'bascule'; marquer(cle,'cours');
+    await apiFetch('/api/fabrication/relais/basculer',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({machine_id: mid, no_dossier: dos.reference, compteur}),
+    });
+    bascule = true; S.relaisVerifie = false;
+    marquer(cle,'ok');
+
+    cle = '86'; marquer(cle,'cours');
+    await saisir({operation:'86 - Arrivée personnel'});
+    marquer(cle,'ok');
+
+    cle = '01'; marquer(cle,'cours');
+    // Les bobines montées restent : le dossier continue sur la même machine.
+    await saisir(Object.assign(dossierChamps(), {operation:'01 - '+opLabel('01','Démarrer un dossier'),
+                                                  metrage_debut: compteur, bobines_montees:{retirer:[]}}));
+    marquer(cle,'ok');
+
+    if(reprise){
+      cle = 'reprise'; marquer(cle,'cours');
+      const b = Object.assign(dossierChamps(), {operation: reprise.code+' - '+reprise.label});
+      if(reprise.commentaire) b.commentaire = reprise.commentaire;
+      await saisir(b);
+      marquer(cle,'ok');
+    }
+    fabRenderPreserveUi({relaisEtape:'fait'});
+    setTimeout(()=>location.reload(), 1400);
+  }catch(e){
+    marquer(cle,'erreur');
+    S.relaisBusy = false;
+    const msg = (e && e.message) || 'Erreur';
+    if(cle === 'verif'){
+      // Rien n'a été saisi : on reste sur l'écran du code.
+      fabRenderPreserveUi({relaisErreur: msg, relaisPas:null, relaisCode:''});
+      setTimeout(()=>{ const el = document.getElementById('relais-code'); if(el) el.focus(); }, 0);
+      return;
+    }
+    fabRenderPreserveUi({relaisEtape:'erreur', relaisErreur: msg,
+      relaisBascule: bascule});
+  }
+}
+
+function renderRelaisModal(){
+  const etape = S.relaisEtape || 'choix';
+  const dos = relaisDossier() || {};
+  const titre = h('div',{className:'fab-modal-title'},'Passer la main');
+  const sous = h('div',{className:'fab-modal-sub'},
+    'Dossier ', h('strong',null, fabDossierRefLabel(dos)),
+    S.machine && S.machine.nom ? ' · '+S.machine.nom : '');
+  const erreur = S.relaisErreur ? h('div',{className:'fab-field-hint',
+    style:{color:'var(--danger)',fontWeight:'700',marginTop:'8px'}}, S.relaisErreur) : null;
+  let corps, boutons;
+
+  if(S.relaisPas && (S.relaisBusy || etape==='fait' || etape==='erreur')){
+    const puce = {attente:'·', cours:'…', ok:'✓', erreur:'×'};
+    const coul = {attente:'var(--muted)', cours:'var(--accent)', ok:'var(--success)', erreur:'var(--danger)'};
+    corps = h('div',null,
+      ...S.relaisPas.map(p=>h('div',{style:{display:'flex',gap:'10px',alignItems:'center',
+          padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:'14px',
+          color: p.etat==='attente' ? 'var(--muted)' : 'var(--text)'}},
+        h('span',{style:{width:'18px',textAlign:'center',fontWeight:'800',color:coul[p.etat]}}, puce[p.etat]),
+        h('span',null,p.label))),
+      etape==='fait' ? h('div',{style:{marginTop:'12px',fontWeight:'700',color:'var(--success)'}},
+        'Main passée à '+(S.relaisVers ? S.relaisVers.nom : '')+'.') : null,
+      etape==='erreur' ? h('div',{className:'fab-field-hint',style:{color:'var(--danger)',fontWeight:'700',marginTop:'12px'}},
+        S.relaisErreur+' — les étapes cochées sont enregistrées. '
+        +(S.relaisBascule ? (S.relaisVers ? S.relaisVers.nom : 'Le nouveau conducteur')+' est connecté : terminer à la main.'
+                          : 'Terminer à la main.')) : null);
+    boutons = etape==='erreur'
+      ? [h('button',{className:'fab-btn fab-btn-primary',onClick:()=>location.reload()},'Recharger')]
+      : [];
+  } else if(etape === 'choix'){
+    const ops = S.relaisOps;
+    corps = h('div',null,
+      h('div',{style:{fontWeight:'800',fontSize:'15px',color:'var(--text)',marginBottom:'10px'}},
+        'Qui reprend la machine ?'),
+      ops == null ? h('div',{className:'fab-field-hint'},'Chargement…')
+      : !ops.length ? h('div',{className:'fab-field-hint'},'Aucun autre conducteur actif.')
+      : h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:'8px',
+          maxHeight:'50vh',overflowY:'auto'}},
+          ...ops.map(o=>h('button',{type:'button',className:'fab-btn',
+              style:{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',
+                     justifyContent:'flex-start',flexDirection:'column',alignItems:'flex-start',gap:'2px'},
+              onClick:()=>{
+                set({relaisVers:o, relaisEtape:'code', relaisErreur:'', relaisCode:''});
+                setTimeout(()=>{ const el = document.getElementById('relais-code'); if(el) el.focus(); }, 0);
+              }},
+            h('span',{style:{fontWeight:'700'}}, o.nom),
+            o.planifie ? h('span',{style:{fontSize:'11px',color:'var(--accent)',fontWeight:'600'}},'Planifié sur la machine') : null))),
+      erreur);
+    boutons = [h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',onClick:relaisFermer},'Annuler')];
+  } else {
+    const vers = S.relaisVers || {};
+    const code = h('input',{type:'password',id:'relais-code',autocomplete:'off',
+      placeholder:'Code de '+vers.nom});
+    code.value = S.relaisCode || '';
+    code.addEventListener('input', e=>{ S.relaisCode = e.target.value; });
+    code.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault();
+      const c = document.getElementById('relais-compteur'); if(c && !c.value) c.focus(); else relaisLancer(); } });
+    const machine = S.machine;
+    const cpt = champCompteur({id:'relais-compteur', valeur:S.relaisCompteur,
+      reference: machine ? machine.dernier_metrage : null, plafond: plafondCompteur(),
+      onInput:v=>{ S.relaisCompteur = v; }});
+    const reprise = relaisOpAReprendre();
+    corps = h('div',null,
+      h('div',{style:{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}},
+        h('span',{style:{fontSize:'14px',color:'var(--text2)'}},'Reprend : '),
+        h('strong',{style:{fontSize:'15px'}}, vers.nom),
+        h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',style:{marginLeft:'auto',background:'var(--bg)'},
+          onClick:()=>set({relaisEtape:'choix', relaisErreur:'', relaisCode:''})},'Changer')),
+      h('div',{className:'fab-field'}, h('label',null,'Code de '+vers.nom), code),
+      h('div',{className:'fab-field'},
+        h('label',null,'Compteur machine actuel, en mètres — obligatoire'), cpt),
+      h('div',{className:'fab-field-hint',style:{lineHeight:'1.6'}},
+        'Enregistré : fin de production (dossier à reprendre) et départ de '+(S.operateur||'vous')
+        +', puis arrivée de '+vers.nom+', démarrage du dossier'
+        +(reprise ? ' et '+reprise.code+' '+reprise.label : '')+'.'),
+      erreur);
+    boutons = [
+      h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',onClick:relaisFermer},'Annuler'),
+      h('button',{className:'fab-btn fab-btn-primary',onClick:relaisLancer},
+        svgIcon('users',15),' Passer la main'),
+    ];
+  }
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{ if(e.target===e.currentTarget) relaisFermer(); }},
+    h('div',{className:'fab-modal',style:{maxWidth:'560px'}},
+      titre, sous, h('div',{style:{marginTop:'12px'}}, corps),
+      boutons.length ? h('div',{className:'fab-modal-btns'}, ...boutons) : null));
 }
 
 function renderAnnulerDossierBtn(){
@@ -6239,6 +6532,11 @@ function renderFooter(){
       onClick:()=>handleOpTrigger('89','Fin de production','personnel')
     }, svgIcon('flag',16),' Fin de production'));
     if(fabAnnulationPossible()) btns.push(renderAnnulerDossierBtn());
+    if(relaisPossible()) btns.push(h('button',{
+      className:'fab-btn fab-btn-muted fab-btn-sm',
+      title:'Fin de production, départ, arrivée du conducteur suivant et reprise du dossier',
+      onClick:relaisOuvrir
+    }, svgIcon('users',14),' Passer la main'));
   }
 
   // ── État : arrêt en cours ──
@@ -6252,6 +6550,11 @@ function renderFooter(){
       onClick:()=>handleOpTrigger('89','Fin de production','personnel')
     }, svgIcon('flag',14),' Fin de production'));
     if(fabAnnulationPossible()) btns.push(renderAnnulerDossierBtn());
+    if(relaisPossible()) btns.push(h('button',{
+      className:'fab-btn fab-btn-muted fab-btn-sm',
+      title:'Fin de production, départ, arrivée du conducteur suivant et reprise du dossier',
+      onClick:relaisOuvrir
+    }, svgIcon('users',14),' Passer la main'));
   }
 
   // ── État : dossier terminé ──
@@ -10152,6 +10455,7 @@ function render(){
   if(S.showFictifModal)   root.appendChild(renderFictifModal());
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
+  if(S.showRelais)        root.appendChild(renderRelaisModal());
   if(S.confirmCompteur)   root.appendChild(renderConfirmCompteurModal());
   if(S.showCompteurCalage) root.appendChild(renderCompteurCalageModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
