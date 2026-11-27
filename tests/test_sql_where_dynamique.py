@@ -74,6 +74,12 @@ SITES_REVUS = {
         "raison": "les cles viennent de McProductUpdate.model_dump()",
         "modele": "McProductUpdate",
     },
+    # Numéros d'OF abrégés (26/11/2026) : `colonne` ne reçoit que des noms
+    # littéraux ("numero_of", "of_numero") aux deux appels de of_import.py ;
+    # les numéros cherchés passent en `?`.
+    ("app/routers/of_import.py", "_sql_tokens"): {
+        "raison": "colonne = nom littéral passé par l'appelant (numero_of, of_numero), valeurs en `?`",
+    },
     ("app/routers/expe_departs.py", "list_palettes_europe"): {
         "raison": "search_sql vient de _historique_search_clause() : colonnes issues de "
                   "_HIST_SEARCH_COLS (constante module), valeurs en `?`",

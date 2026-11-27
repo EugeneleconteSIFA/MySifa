@@ -52,6 +52,9 @@ TOLERES = {
     # navigateur. Ce ne sont pas des saisies utilisateur ; le jour ou un detail
     # d'erreur reprend une saisie, ce site devra etre echappe.
     "u.message": "message d'erreur renvoye par l'API, pas une saisie",
+    # Panneau OF du planning (planning_page.py) : bloc HTML construit dans le
+    # code a partir d'un compte d'OF ecartes, aucune saisie dedans.
+    "noteEcartes": "HTML construit a partir d'un nombre d'OF ecartes, pas une saisie",
     "e.message": "message de l'objet Error du navigateur",
     # Portail EUDR : area(<nom du champ>) recoit un nom de champ ecrit dans le
     # code ; la valeur pre-remplie est echappee par esc() dans area().
