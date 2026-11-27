@@ -4715,6 +4715,7 @@ async function openEdit(id) {
     '<div id="ed-mac-wrap"><label class="sub" title="Machine par défaut utilisée uniquement si l\'opérateur n\'est pas planifié au Planning RH du jour. Sinon, la machine réelle vient du Planning RH (matin/après-midi/nuit).">Machine par défaut <span style="color:var(--muted);font-weight:400;font-size:11px">(fallback si non planifié RH)</span></label><select id="ed-mac" style="margin-bottom:10px">' +
     '<option value="">—</option>' + machines.map(m => '<option value="' + esc(m.id) + '"' + (String(u.machine_id) === String(m.id) ? ' selected' : '') + '>' + esc(m.nom) + '</option>').join('') + '</select></div>' +
     '<label class="sub" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="ed-act" ' + (Number(u.actif) === 1 ? 'checked' : '') + '> Compte actif</label>' +
+    '<label class="sub" style="display:flex;align-items:center;gap:8px" title="Proposé dans « Passer la main » de la saisie de production, même sans être planifié conducteur au Planning RH."><input type="checkbox" id="ed-reprend" ' + (Number(u.peut_reprendre_machine) === 1 ? 'checked' : '') + '> Peut reprendre une machine</label>' +
     '<label class="sub">Nouveau mot de passe (optionnel)</label><input id="ed-pwd" type="password" style="margin-bottom:10px">' +
     '<label class="sub">Service NC (surcharge)</label>' +
     '<select id="ed-nc-svc" style="margin-bottom:4px">' +
@@ -4750,6 +4751,7 @@ async function openEdit(id) {
       machine_id: dlg.querySelector('#ed-mac').value ? Number(dlg.querySelector('#ed-mac').value) : null,
       actif: dlg.querySelector('#ed-act').checked ? 1 : 0,
       nc_service_override: dlg.querySelector('#ed-nc-svc').value || null,
+      peut_reprendre_machine: dlg.querySelector('#ed-reprend').checked ? 1 : 0,
     };
     const np = dlg.querySelector('#ed-pwd').value;
     if (np) body.password = np;

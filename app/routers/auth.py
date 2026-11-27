@@ -611,6 +611,7 @@ def list_users(request: Request):
         rows = conn.execute(
             """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
                       u.matricule,u.created_at,u.last_login,u.access_overrides,u.nc_service_override,
+                      u.peut_reprendre_machine,
                       m.nom AS machine_nom
                FROM users u
                LEFT JOIN machines m ON m.id = u.machine_id
@@ -634,6 +635,7 @@ def get_user(user_id: int, request: Request):
         row = conn.execute(
             """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
                       u.matricule,u.created_at,u.last_login,u.access_overrides,
+                      u.peut_reprendre_machine,
                       m.nom AS machine_nom
                FROM users u
                LEFT JOIN machines m ON m.id = u.machine_id
@@ -774,6 +776,13 @@ async def update_user(user_id: int, request: Request):
         else:
             nc_service_override_sql = exd.get("nc_service_override")
 
+        # Peut reprendre une machine (« Passer la main ») sans être conducteur
+        # au Planning RH.
+        if "peut_reprendre_machine" in body:
+            peut_reprendre = 1 if body.get("peut_reprendre_machine") in (True, 1, "1", "true") else 0
+        else:
+            peut_reprendre = int(exd.get("peut_reprendre_machine") or 0)
+
         # identifiant: générer si vide (ou si absent en base) à partir du nom, puis assurer unicité.
         if not ident_in:
             ident_in = _default_identifiant_from_nom(str(nom or ""))
@@ -781,10 +790,11 @@ async def update_user(user_id: int, request: Request):
 
         conn.execute(
             """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-               adresse=?,date_naissance=?,password_hash=?,access_overrides=?,machine_id=?,matricule=?,nc_service_override=? WHERE id=?""",
+               adresse=?,date_naissance=?,password_hash=?,access_overrides=?,machine_id=?,matricule=?,nc_service_override=?,
+               peut_reprendre_machine=? WHERE id=?""",
             (nom, email, ident_sql or None, role_eff, op, actif, tel,
              (adresse or None), (date_naissance or None),
-             pwd_hash, ao_sql, machine_id, matricule, nc_service_override_sql, user_id),
+             pwd_hash, ao_sql, machine_id, matricule, nc_service_override_sql, peut_reprendre, user_id),
         )
         conn.commit()
 

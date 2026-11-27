@@ -21,14 +21,19 @@ font que ce que l'écran ne peut pas faire seul :
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from config import COOKIE_NAME, FAB_RELAIS_DELAI_SECONDES, session_hours_for_role
+from config import (
+    COOKIE_NAME,
+    FAB_RELAIS_DELAI_SECONDES,
+    FAB_RELAIS_SEMAINES_RH,
+    session_hours_for_role,
+)
 from database import get_db
 from app.services.audit_service import log_action
 from app.services.auth_service import (
@@ -46,7 +51,7 @@ router = APIRouter()
 
 _PARIS = ZoneInfo("Europe/Paris")
 COOKIE_RELAIS = "sifa_relais"
-ROLE_CONDUCTEUR = "fabrication"
+POSTE_CONDUCTEUR = "conducteur"  # poste du Planning RH
 
 # Codes faux : 5 essais par conducteur sortant et par fenêtre de 5 minutes.
 _ESSAIS_MAX = 5
@@ -72,48 +77,57 @@ def _noter_echec(uid: int) -> None:
     _essais.setdefault(uid, []).append(time.time())
 
 
-def _planifies_sur(conn, machine_id: Optional[int]) -> set:
-    """Conducteurs planifiés aujourd'hui sur cette machine (Planning RH)."""
-    if not machine_id:
-        return set()
-    from app.routers.fabrication import _rh_machines_du_jour  # import tardif : gros module
+def _conducteurs(conn, machine_id: Optional[int], exclure_id: int) -> list:
+    """Qui peut reprendre une machine (décision d'Eugène du 27/11/2026) :
+    les conducteurs planifiés aujourd'hui sur cette machine, puis les autres
+    conducteurs, puis les comptes cochés « Peut reprendre une machine ». « Conducteur » se lit au Planning RH (poste `conducteur` sur
+    les `FAB_RELAIS_SEMAINES_RH` dernières semaines), pas dans le rôle du
+    compte : les aides-conducteurs ont le même rôle et ne reprennent pas."""
+    from app.routers.fabrication import _iso_semaine  # import tardif : gros module
 
     now = datetime.now(_PARIS)
-    ids = set()
-    for r in conn.execute(
-        "SELECT id FROM users WHERE actif=1 AND role=?", (ROLE_CONDUCTEUR,)
-    ).fetchall():
-        try:
-            if any(int(m["machine_id"]) == int(machine_id) for m in _rh_machines_du_jour(conn, r["id"], now)):
-                ids.add(int(r["id"]))
-        except Exception:
-            continue
-    return ids
+    auj = now.date()
+    depuis = _iso_semaine(auj - timedelta(weeks=FAB_RELAIS_SEMAINES_RH))
+    semaine = _iso_semaine(auj)
+    day_bit = 1 << auj.weekday()
+    rows = conn.execute(
+        """SELECT u.id, u.nom,
+                  MAX(CASE WHEN p.semaine = ? AND (p.jours & ?) != 0 AND p.machine_id = ?
+                           THEN 1 ELSE 0 END) AS sur_machine
+             FROM users u
+             JOIN rh_planning_postes p ON p.user_id = u.id
+            WHERE u.actif = 1 AND u.id <> ?
+              AND p.poste = ? AND p.semaine >= ? AND p.semaine <= ?
+         GROUP BY u.id, u.nom""",
+        (semaine, day_bit, int(machine_id or 0), int(exclure_id or 0),
+         POSTE_CONDUCTEUR, depuis, semaine),
+    ).fetchall()
+    out = [{"id": int(r["id"]), "nom": (r["nom"] or "").strip(),
+            "groupe": "machine" if r["sur_machine"] else "conducteur"} for r in rows]
+    # Puis les comptes cochés « Peut reprendre une machine » (Paramètres ›
+    # Utilisateurs) qui ne sont pas déjà conducteurs.
+    deja = {o["id"] for o in out}
+    try:
+        renforts = conn.execute(
+            "SELECT id, nom FROM users WHERE actif = 1 AND id <> ? AND peut_reprendre_machine = 1",
+            (int(exclure_id or 0),),
+        ).fetchall()
+    except Exception:
+        renforts = []  # base pas encore migrée
+    out += [{"id": int(r["id"]), "nom": (r["nom"] or "").strip(), "groupe": "renfort"}
+            for r in renforts if int(r["id"]) not in deja]
+    ordre = {"machine": 0, "conducteur": 1, "renfort": 2}
+    out.sort(key=lambda o: (ordre[o["groupe"]], o["nom"].lower()))
+    return out
 
 
 @router.get("/api/fabrication/relais/operateurs")
 def relais_operateurs(request: Request, machine_id: Optional[int] = None):
-    """Conducteurs à qui passer la main : comptes actifs du rôle fabrication,
-    sauf soi-même. Ceux planifiés sur la machine aujourd'hui d'abord."""
+    """Conducteurs à qui passer la main, ceux de la machine d'abord."""
     user = get_current_user(request)
     _check_acces(user)
     with get_db() as conn:
-        rows = conn.execute(
-            """SELECT id, nom, operateur_lie FROM users
-                WHERE actif=1 AND role=? AND id<>?
-             ORDER BY nom COLLATE NOCASE""",
-            (ROLE_CONDUCTEUR, int(user.get("id") or 0)),
-        ).fetchall()
-        planifies = _planifies_sur(conn, machine_id)
-    out = [
-        {
-            "id": int(r["id"]),
-            "nom": (r["operateur_lie"] or r["nom"] or "").strip(),
-            "planifie": int(r["id"]) in planifies,
-        }
-        for r in rows
-    ]
-    out.sort(key=lambda o: (not o["planifie"], o["nom"].lower()))
+        out = _conducteurs(conn, machine_id, int(user.get("id") or 0))
     return {"operateurs": out}
 
 
@@ -135,12 +149,17 @@ async def relais_verifier(request: Request):
     if _trop_d_essais(uid):
         raise HTTPException(status_code=429, detail="Trop de codes erronés — réessayez dans quelques minutes.")
 
+    try:
+        machine_id = int(body.get("machine_id")) if body.get("machine_id") not in (None, "") else None
+    except (TypeError, ValueError):
+        machine_id = None
     with get_db() as conn:
+        eligibles = {o["id"] for o in _conducteurs(conn, machine_id, uid)}
         cible = conn.execute(
             "SELECT id, nom, operateur_lie, role, password_hash FROM users WHERE id=? AND actif=1",
             (vers_id,),
         ).fetchone()
-    if not cible or cible["role"] != ROLE_CONDUCTEUR:
+    if not cible or vers_id not in eligibles:
         raise HTTPException(status_code=400, detail="Conducteur introuvable.")
     try:
         ok = verify_password(code, cible["password_hash"] or "")
@@ -152,7 +171,7 @@ async def relais_verifier(request: Request):
         raise HTTPException(status_code=400, detail="Code incorrect.")
 
     token = create_session(int(cible["id"]), cible["role"])
-    nom = (cible["operateur_lie"] or cible["nom"] or "").strip()
+    nom = (cible["nom"] or cible["operateur_lie"] or "").strip()
     resp = JSONResponse({"success": True, "nom": nom})
     resp.set_cookie(
         key=COOKIE_RELAIS, value=token, httponly=True, samesite="lax", secure=False,
@@ -197,7 +216,7 @@ async def relais_basculer(request: Request):
     if ancien:
         delete_session(ancien)
     nom_avant = (user.get("operateur_lie") or user.get("nom") or "").strip()
-    nom_apres = (nouveau.get("operateur_lie") or nouveau.get("nom") or "").strip()
+    nom_apres = (nouveau.get("nom") or nouveau.get("operateur_lie") or "").strip()
     log_action(
         user=user,
         action="UPDATE",

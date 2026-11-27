@@ -393,6 +393,9 @@ PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
 FAB_RELAIS_VALIDITE_HEURES = int(os.getenv("FAB_RELAIS_VALIDITE_HEURES", "12"))
 # Délai pour mener le relais à son terme une fois le code du conducteur vérifié.
 FAB_RELAIS_DELAI_SECONDES = int(os.getenv("FAB_RELAIS_DELAI_SECONDES", "300"))
+# Qui peut reprendre une machine : tenu le poste « conducteur » au Planning RH
+# sur ce nombre de semaines (les aides-conducteurs ont le même rôle de compte).
+FAB_RELAIS_SEMAINES_RH = int(os.getenv("FAB_RELAIS_SEMAINES_RH", "8"))
 
 # Délai de réaction au passage calage → production (minutes). La machine
 # démarre, puis le conducteur clique « Production » et relève le compteur :

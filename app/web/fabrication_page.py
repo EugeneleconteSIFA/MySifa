@@ -2826,7 +2826,7 @@ async function relaisLancer(){
     marquer('verif','cours');
     await apiFetch('/api/fabrication/relais/verifier',{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({vers_user_id: vers.id, code: S.relaisCode}),
+      body: JSON.stringify({vers_user_id: vers.id, code: S.relaisCode, machine_id: mid}),
     });
     S.relaisVerifie = true;
     S.relaisCode = '';
@@ -2919,18 +2919,24 @@ function renderRelaisModal(){
       h('div',{style:{fontWeight:'800',fontSize:'15px',color:'var(--text)',marginBottom:'10px'}},
         'Qui reprend la machine ?'),
       ops == null ? h('div',{className:'fab-field-hint'},'Chargement…')
-      : !ops.length ? h('div',{className:'fab-field-hint'},'Aucun autre conducteur actif.')
-      : h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:'8px',
-          maxHeight:'50vh',overflowY:'auto'}},
-          ...ops.map(o=>h('button',{type:'button',className:'fab-btn',
-              style:{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',
-                     justifyContent:'flex-start',flexDirection:'column',alignItems:'flex-start',gap:'2px'},
-              onClick:()=>{
-                set({relaisVers:o, relaisEtape:'code', relaisErreur:'', relaisCode:''});
-                setTimeout(()=>{ const el = document.getElementById('relais-code'); if(el) el.focus(); }, 0);
-              }},
-            h('span',{style:{fontWeight:'700'}}, o.nom),
-            o.planifie ? h('span',{style:{fontSize:'11px',color:'var(--accent)',fontWeight:'600'}},'Planifié sur la machine') : null))),
+      : !ops.length ? h('div',{className:'fab-field-hint'},'Aucun autre conducteur au Planning RH.')
+      : h('div',{style:{maxHeight:'55vh',overflowY:'auto'}},
+          ...[['machine','Sur la machine aujourd\'hui'],['conducteur','Autres conducteurs'],['renfort','Renfort']].map(([g,titreG])=>{
+            const liste = ops.filter(o=>o.groupe===g);
+            if(!liste.length) return null;
+            return h('div',{style:{marginBottom:'12px'}},
+              h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',textTransform:'uppercase',
+                color: g==='machine' ? 'var(--accent)' : 'var(--muted)',margin:'0 0 6px'}}, titreG),
+              h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:'8px'}},
+                ...liste.map(o=>h('button',{type:'button',className:'fab-btn',
+                    style:{background: g==='machine' ? 'var(--accent-bg)' : 'var(--bg)',
+                           border:'1px solid '+(g==='machine' ? 'var(--accent)' : 'var(--border)'),
+                           color:'var(--text)',justifyContent:'flex-start',fontWeight:'700'},
+                    onClick:()=>{
+                      set({relaisVers:o, relaisEtape:'code', relaisErreur:'', relaisCode:''});
+                      setTimeout(()=>{ const el = document.getElementById('relais-code'); if(el) el.focus(); }, 0);
+                    }}, o.nom))));
+          })),
       erreur);
     boutons = [h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',onClick:relaisFermer},'Annuler')];
   } else {
