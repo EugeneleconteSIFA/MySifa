@@ -37,6 +37,17 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app.routers.qualite_eudr as r_eudr  # noqa: E402
 
+# Les PDF de réponses vont dans un dossier jetable, jamais dans data/uploads.
+r_eudr.RESSOURCES_UPLOAD_DIR = os.path.join(_TMP, "ressources")
+with get_db() as _c:
+    _c.execute(
+        """INSERT INTO qualite_ref_fiches (slug, nom, acronyme, categorie, definition, position_sifa,
+               details, statut_sifa, statut_validation, created_at, updated_at)
+           VALUES ('eudr-test', 'EUDR test', 'EUDR', 'tracabilite', 'Définition test', 'Position test',
+               '', 'en_cours', 'valide', '2026-11-27T00:00:00', '2026-11-27T00:00:00')""")
+    FICHE_EUDR = _c.execute("SELECT id FROM qualite_ref_fiches WHERE slug='eudr-test'").fetchone()[0]
+    _c.commit()
+
 ECHECS = []
 
 
@@ -268,6 +279,56 @@ check("lien commun désactivé : 404", client.get(f"/portail/eudr/commun/{TOKC}"
 import app.services.qualite_eudr as _s  # noqa: E402
 check("suggestion ambiguë : aucune", _s.suggerer_fournisseur([{"id": 1, "nom": "Frimpeks UK"}, {"id": 2, "nom": "Frimpeks Italy"}], "Frimpeks"), None)
 check("suggestion : forme juridique ignorée", _s.suggerer_fournisseur([{"id": 7, "nom": "Kanzan"}], "KANZAN Spezialpapiere GmbH"), 7)
+
+# Classement des réponses dans Ressources fournisseurs
+with get_db() as c:
+    reps_all = [dict(r) for r in c.execute("SELECT id, source, certificat_id FROM eudr_reponses").fetchall()]
+    formulaire = [r for r in reps_all if (r["source"] or "portail") in ("portail", "lien_commun")]
+    manuelles = [r for r in reps_all if r["source"] == "manuel"]
+    check("réponses du formulaire classées automatiquement",
+          all(r["certificat_id"] for r in formulaire) and len(formulaire) > 0, True)
+    check("saisie manuelle jamais mise en PDF", all(not r["certificat_id"] for r in manuelles), True)
+    certs = [dict(r) for r in c.execute(
+        "SELECT * FROM qualite_fournisseur_certificats WHERE id IN (%s)" % ",".join(str(r["certificat_id"]) for r in formulaire)
+    ).fetchall()]
+    check("un document par réponse", len(certs), len(formulaire))
+    check("document sur la fiche du fournisseur qui a répondu", all(x["fournisseur_id"] == FID for x in certs), True)
+    chemin = os.path.join(r_eudr.RESSOURCES_UPLOAD_DIR, certs[0]["filename"])
+    check("PDF écrit sur disque", os.path.isfile(chemin) and open(chemin, "rb").read(4) == b"%PDF", True)
+    check("nom d'origine EUDR_[fournisseur]", certs[0]["original_name"].startswith("EUDR_"), True)
+    liees = c.execute("SELECT COUNT(*) FROM qualite_fournisseur_certificat_fiches WHERE fiche_id=?", (FICHE_EUDR,)).fetchone()[0]
+    check("documents liés à la fiche EUDR du référentiel", liees, len(formulaire))
+lst = client.get("/api/qualite/eudr/fournisseurs").json()
+check("onglet : fiche EUDR transmise", (lst["fiche_eudr"] or {}).get("id"), FICHE_EUDR)
+check("onglet : plus rien à classer", lst["a_classer"], 0)
+with get_db() as c:
+    c.execute("UPDATE eudr_reponses SET certificat_id=NULL WHERE id=?", (formulaire[0]["id"],))
+    c.commit()
+check("réponse antérieure : à classer", client.get("/api/qualite/eudr/fournisseurs").json()["a_classer"], 1)
+r = client.post("/api/qualite/eudr/classer-reponses")
+check("rattrapage : une réponse classée", (r.status_code, r.json().get("classees"), r.json().get("a_classer")), (200, 1, 0))
+check("rattrapage rejoué : rien de plus", client.post("/api/qualite/eudr/classer-reponses").json()["classees"], 0)
+
+# Export Excel
+from io import BytesIO  # noqa: E402
+from openpyxl import load_workbook  # noqa: E402
+r = client.get("/api/qualite/eudr/export.xlsx")
+check("export Excel : 200", r.status_code, 200)
+check("export Excel : type", r.headers["content-type"].startswith("application/vnd.openxmlformats"), True)
+wb = load_workbook(BytesIO(r.content))
+check("export : trois feuilles", wb.sheetnames, ["Réponses", "Suivi", "À rattacher"])
+with get_db() as c:
+    nb_rep = c.execute("SELECT COUNT(*) FROM eudr_reponses").fetchone()[0]
+    nb_four = c.execute("SELECT COUNT(DISTINCT fournisseur_id) FROM eudr_reponses").fetchone()[0]
+ws = wb["Réponses"]
+lignes = list(ws.iter_rows(min_row=2, values_only=True))
+check("export : une ligne par réponse", len(lignes), nb_rep)
+check("export : une « Dernière » par fournisseur", sum(1 for l in lignes if l[3] == "Oui"), nb_four)
+entetes = [c.value for c in ws[1]]
+check("export : rôle en libellé, pas en clé",
+      lignes[0][entetes.index("Rôle EUDR")] in ("aval", "operateur", ""), False)
+tout = " ".join(str(v) for f in wb for row in f.iter_rows(values_only=True) for v in row if v is not None)
+check("export : aucune IP", "testclient" in tout or "127.0.0.1" in tout, False)
 
 print()
 if ECHECS:

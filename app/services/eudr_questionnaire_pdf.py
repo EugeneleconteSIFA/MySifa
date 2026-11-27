@@ -168,3 +168,95 @@ def construire_pdf(langue: str | None, *, fournisseur: str = "", retour: str = "
                             title=f"{t['title']} — {APP_ORG_NAME}", author=APP_ORG_NAME)
     doc.build(h, onFirstPage=pied, onLaterPages=pied)
     return buf.getvalue()
+
+
+def reponse_pdf(rep: dict, *, fournisseur: str, source: str) -> bytes:
+    """La réponse d'un fournisseur au questionnaire, mise en page pour être
+    classée dans Ressources fournisseurs. Questions en français (MyQualité),
+    réponses telles que saisies ; les choix portent leur libellé complet."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    t = _textes("fr")
+    accent = colors.HexColor("#0891b2")  # hex-ok : PDF reportlab
+    gris = colors.HexColor("#64748b")    # hex-ok : PDF reportlab
+    trait = colors.HexColor("#e2e8f0")   # hex-ok : PDF reportlab
+    st = {
+        "brand": ParagraphStyle("brand", fontName="Helvetica-Bold", fontSize=8, textColor=accent, leading=10),
+        "h1": ParagraphStyle("h1", fontName="Helvetica-Bold", fontSize=17, leading=21, spaceAfter=2),
+        "sub": ParagraphStyle("sub", fontName="Helvetica", fontSize=9, textColor=gris, leading=12),
+        "h2": ParagraphStyle("h2", fontName="Helvetica-Bold", fontSize=10, textColor=accent, leading=13,
+                             spaceBefore=10, spaceAfter=4, keepWithNext=1),
+        "q": ParagraphStyle("q", fontName="Helvetica", fontSize=8.5, textColor=gris, leading=11),
+        "r": ParagraphStyle("r", fontName="Helvetica", fontSize=9.5, leading=12.5),
+        "vide": ParagraphStyle("vide", fontName="Helvetica-Oblique", fontSize=9, textColor=gris, leading=12),
+    }
+
+    def p(texte, style):
+        return Paragraph(escape(str(texte)).replace("\n", "<br/>"), st[style])
+
+    def valeur(champ: str | None, cle: str):
+        brut = rep.get(cle)
+        if champ:
+            opt = EUDR_CHOIX.get(champ, {}).get(brut or "")
+            brut = opt["fr"] if opt else brut
+        brut = (str(brut).strip() if brut is not None else "")
+        return p(brut, "r") if brut else p("Non renseigné", "vide")
+
+    def bloc(lignes):
+        data = [[p(t[q].replace("__ORG__", APP_ORG_NAME), "q"), valeur(ch, cle)] for q, ch, cle in lignes]
+        tb = Table(data, colWidths=[62 * mm, 108 * mm], hAlign="LEFT")
+        tb.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.5, trait),
+            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (0, -1), 0),
+        ]))
+        return tb
+
+    recue = str(rep.get("created_at") or "")
+    jour = f"{recue[8:10]}/{recue[5:7]}/{recue[:4]}" if len(recue) >= 10 else recue
+    heure = recue[11:16] if len(recue) >= 16 else ""
+    h = [
+        p(f"{APP_ORG_NAME} · MyQualité · EUDR", "brand"), Spacer(1, 2 * mm),
+        p("Réponse au questionnaire EUDR", "h1"),
+        p(f"Fournisseur : {fournisseur}", "sub"),
+        p(f"Reçue le {jour}{' à ' + heure if heure else ''} · {source}", "sub"),
+        Spacer(1, 3 * mm),
+        p(t["s_you"], "h2"),
+        bloc([("q_company", None, "repondant_societe"), ("q_name", None, "repondant_nom"),
+              ("q_position", None, "repondant_fonction"), ("q_email", None, "repondant_email"),
+              ("q_phone", None, "repondant_tel")]),
+        p(t["p1"], "h2"),
+        bloc([("q_etab", "etablissement", "etablissement"), ("q_scope", "perimetre", "perimetre"),
+              ("q_cn", None, "codes_nc"), ("q_role", "role", "role"), ("q_date", None, "date_debut_dds")]),
+        p(t["p2"], "h2"),
+        bloc([("q_trans", "transmission", "transmission"), ("q_detail", None, "transmission_detail"),
+              ("q_perdel", "ref_par_livraison", "ref_par_livraison"), ("q_amont", None, "amont")]),
+        p(t["s_origin"], "h2"),
+        bloc([("q_geo", "geolocalisation", "geolocalisation"), ("q_species", None, "essences"),
+              ("q_countries", None, "pays_recolte")]),
+        KeepTogether([p(t["p3"], "h2"),
+                      bloc([("q_cname", None, "contact_nom"), ("q_cemail", None, "contact_email"),
+                            ("q_comment", None, "commentaire")])]),
+    ]
+
+    buf = io.BytesIO()
+
+    def pied(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(gris)
+        canvas.drawString(20 * mm, 10 * mm,
+                          f"Réponse saisie par le fournisseur dans le formulaire {APP_ORG_NAME} — document généré par MySifa.")
+        canvas.drawRightString(190 * mm, 10 * mm, f"Page {doc.page}")
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
+                            topMargin=16 * mm, bottomMargin=18 * mm,
+                            title=f"Réponse EUDR — {fournisseur}", author=APP_ORG_NAME)
+    doc.build(h, onFirstPage=pied, onLaterPages=pied)
+    return buf.getvalue()
