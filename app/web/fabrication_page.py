@@ -2708,11 +2708,13 @@ function relaisDossier(){
 }
 
 function relaisPossible(){
-  return !!relaisDossier() && !S.adminMachineId && !isRepiquageMode();
+  // Admin compris (décision du 27/11/2026) : sa session est remplacée par
+  // celle du conducteur qui reprend. Pas en vue Admin, qui est en lecture seule.
+  return !!relaisDossier() && S.saisieViewMode!=='admin' && !isRepiquageMode();
 }
 
 function relaisMachineId(){
-  return (S.machine && S.machine.id) || S.wantedMachineId || S.machineIdCourant || null;
+  return S.adminMachineId || (S.machine && S.machine.id) || S.wantedMachineId || S.machineIdCourant || null;
 }
 
 // Dernière opération du dossier depuis son démarrage, à reprendre après le 01.
