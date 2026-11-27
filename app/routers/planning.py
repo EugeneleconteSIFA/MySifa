@@ -4198,6 +4198,31 @@ def repiquage_sources(request: Request, entry_id: Optional[int] = None, q: str =
     return {"sources": sources, "actuelle": actuelle}
 
 
+@router.put("/machines/{machine_id}/famille")
+async def set_machine_famille(machine_id: int, request: Request):
+    """Famille de la machine : des machines que les mêmes conducteurs
+    conduisent (« Passer la main » propose les conducteurs de la famille).
+
+    Body: {"famille": "Cohésio"} — vide = aucune famille.
+    """
+    user = require_admin(request)
+    body = await request.json()
+    famille = str(body.get("famille") or "").strip()[:60] or None
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute("UPDATE machines SET famille=? WHERE id=?", (famille, machine_id))
+        conn.commit()
+    try:
+        log_action(user=user, action="UPDATE", module="planning",
+                   objet=f"Famille du poste {ex['nom']} → {famille or 'aucune'}",
+                   detail={"famille": famille}, ip=request.client.host if request.client else None)
+    except Exception:
+        pass
+    return {"success": True, "famille": famille}
+
+
 @router.put("/machines/{machine_id}/type")
 async def set_machine_type(machine_id: int, request: Request):
     """Type du poste : `impression` ou `repiquage` (config.MACHINE_TYPES).

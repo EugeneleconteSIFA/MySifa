@@ -1513,6 +1513,11 @@ __SETTINGS_FAMILLES__
           <p class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
             Un poste de repiquage surimprime des &eacute;tiquettes d&eacute;j&agrave; fabriqu&eacute;es : saisie au carton, pas de code de d&eacute;but ni de fin de dossier, et ses dossiers se relient &agrave; la production qu&rsquo;ils repiquent. MySifa lit ce type, plus le nom de la machine.
           </p>
+          <label for="mac-famille" style="display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Famille</label>
+          <input id="mac-famille" type="text" maxlength="60" placeholder="Aucune" style="width:100%;max-width:320px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;margin-bottom:6px;box-sizing:border-box">
+          <p class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
+            Machines que les m&ecirc;mes conducteurs conduisent. &laquo;&nbsp;Passer la main&nbsp;&raquo; propose les conducteurs de la famille. Sans famille, seulement ceux de la machine.
+          </p>
           <label id="mac-sbm-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:6px;font-size:13px">
             <input type="checkbox" id="mac-sbm">
             <span style="font-weight:600;color:var(--text)">Poste sans matière première</span>
@@ -4084,6 +4089,8 @@ function renderMacHorairesForm() {
   if (jeBox) jeBox.checked = !!(m && +m.journee_entiere === 1);
   const typeSel = document.getElementById('mac-type');
   if (typeSel) typeSel.value = (m && m.type) || 'impression';
+  const famInp = document.getElementById('mac-famille');
+  if (famInp) famInp.value = (m && m.famille) || '';
   const sbmBox = document.getElementById('mac-sbm');
   if (sbmBox) sbmBox.checked = !!(m && +m.sans_matiere_premiere === 1);
   const hpBox = document.getElementById('mac-hp');
@@ -4266,6 +4273,15 @@ async function saveMacHoraires() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: typeSel.value }),
+      });
+    }
+    // Famille : conducteurs proposés par « Passer la main ».
+    const famInp = document.getElementById('mac-famille');
+    if (famInp) {
+      await api('/api/planning/machines/' + id + '/famille', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ famille: famInp.value.trim() }),
       });
     }
     // Consommation matière : propriété de la machine, lue par MyStock.

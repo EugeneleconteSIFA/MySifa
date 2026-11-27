@@ -80,7 +80,7 @@ def _noter_echec(uid: int) -> None:
 def _conducteurs(conn, machine_id: Optional[int], exclure_id: int) -> list:
     """Qui peut reprendre une machine (décision d'Eugène du 27/11/2026) :
     les conducteurs planifiés aujourd'hui sur cette machine, puis les autres
-    conducteurs, puis les comptes cochés « Peut reprendre une machine ». « Conducteur » se lit au Planning RH (poste `conducteur` sur
+    conducteurs de la machine ou de sa famille (Paramètres › Machines), puis les comptes cochés « Peut reprendre une machine ». « Conducteur » se lit au Planning RH (poste `conducteur` sur
     les `FAB_RELAIS_SEMAINES_RH` dernières semaines), pas dans le rôle du
     compte : les aides-conducteurs ont le même rôle et ne reprennent pas."""
     from app.routers.fabrication import _iso_semaine  # import tardif : gros module
@@ -90,17 +90,31 @@ def _conducteurs(conn, machine_id: Optional[int], exclure_id: int) -> list:
     depuis = _iso_semaine(auj - timedelta(weeks=FAB_RELAIS_SEMAINES_RH))
     semaine = _iso_semaine(auj)
     day_bit = 1 << auj.weekday()
+    # Machines de la même famille (Paramètres › Machines) : la machine
+    # elle-même, plus celles qui portent la même famille non vide.
+    mid = int(machine_id or 0)
+    try:
+        fam = conn.execute("SELECT famille FROM machines WHERE id=?", (mid,)).fetchone()
+        famille = (fam["famille"] or "").strip() if fam else ""
+    except Exception:
+        famille = ""  # base pas encore migrée
+    machines = {mid}
+    if famille:
+        machines |= {int(r["id"]) for r in conn.execute(
+            "SELECT id FROM machines WHERE lower(trim(famille)) = lower(?)", (famille,))}
+    ph = ",".join("?" * len(machines))
     rows = conn.execute(
-        """SELECT u.id, u.nom,
+        f"""SELECT u.id, u.nom,
                   MAX(CASE WHEN p.semaine = ? AND (p.jours & ?) != 0 AND p.machine_id = ?
                            THEN 1 ELSE 0 END) AS sur_machine
              FROM users u
              JOIN rh_planning_postes p ON p.user_id = u.id
             WHERE u.actif = 1 AND u.id <> ?
               AND p.poste = ? AND p.semaine >= ? AND p.semaine <= ?
+              AND p.machine_id IN ({ph})
          GROUP BY u.id, u.nom""",
-        (semaine, day_bit, int(machine_id or 0), int(exclure_id or 0),
-         POSTE_CONDUCTEUR, depuis, semaine),
+        (semaine, day_bit, mid, int(exclure_id or 0),
+         POSTE_CONDUCTEUR, depuis, semaine, *sorted(machines)),
     ).fetchall()
     out = [{"id": int(r["id"]), "nom": (r["nom"] or "").strip(),
             "groupe": "machine" if r["sur_machine"] else "conducteur"} for r in rows]
