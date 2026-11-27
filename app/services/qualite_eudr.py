@@ -14,6 +14,7 @@ Les libellés des choix vivent dans `config.EUDR_CHOIX`.
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from datetime import datetime
@@ -23,6 +24,7 @@ from config import (
     APP_ORG_NAME,
     EUDR_CATEGORIES_BOBINES,
     EUDR_CHOIX,
+    EUDR_REF_ACRONYME,
     EUDR_REPONSE_AVANT,
     eudr_langue,
     eudr_libelle,
@@ -683,3 +685,256 @@ def rattacher(conn, *, reponse_commune_id: int, fournisseur_id: int, auteur: str
         (int(fournisseur_id), cur.lastrowid, auteur, now, int(reponse_commune_id)),
     )
     return {"fournisseur": four["nom"], "reponse_id": int(cur.lastrowid)}
+
+
+# ─── Export Excel ────────────────────────────────────────────────────────
+
+# Colonnes des feuilles « Réponses » et « À rattacher » : (clé, en-tête, largeur).
+_EXPORT_COLONNES_REPONSE = (
+    ("repondant_societe", "Société déclarée", 28),
+    ("repondant_nom", "Répondant", 20),
+    ("repondant_fonction", "Fonction", 18),
+    ("repondant_email", "Email répondant", 26),
+    ("repondant_tel", "Téléphone", 14),
+    ("etablissement", "Établissement", 16),
+    ("perimetre", "Produits concernés", 16),
+    ("codes_nc", "Codes NC", 16),
+    ("role", "Rôle EUDR", 30),
+    ("date_debut_dds", "Début DDS", 12),
+    ("transmission", "Transmission", 18),
+    ("transmission_detail", "Détail transmission", 40),
+    ("ref_par_livraison", "Réf. par livraison", 16),
+    ("amont", "Chaîne amont", 40),
+    ("geolocalisation", "Géolocalisation", 22),
+    ("essences", "Essences", 30),
+    ("pays_recolte", "Pays de récolte", 24),
+    ("contact_nom", "Contact EUDR", 20),
+    ("contact_email", "Email contact EUDR", 26),
+    ("commentaire", "Commentaire", 50),
+)
+_EXPORT_SOURCES = {"portail": "Lien personnel", "lien_commun": "Lien commun", "manuel": "Saisie manuelle"}
+_EXPORT_STATUTS = {ST_REPONDUE: "Répondu", ST_OUVERTE: "Ouvert", ST_ENVOYEE: "Envoyé", "jamais": "Jamais demandé"}
+
+
+def _export_valeur(cle: str, rep: dict) -> str:
+    """Valeur d'une réponse pour l'export : le libellé court pour un choix."""
+    val = rep.get(cle)
+    if cle in CHAMPS_CHOIX:
+        return eudr_libelle(cle, val) if val else ""
+    return "" if val is None else str(val)
+
+
+def _export_date(iso: str | None) -> str:
+    """« 2026-10-19T11:52:00 » → « 19/10/2026 11:52 » ; vide si absente."""
+    if not iso:
+        return ""
+    s = str(iso)
+    try:
+        d = datetime.fromisoformat(s[:19])
+    except ValueError:
+        return s
+    return d.strftime("%d/%m/%Y %H:%M") if len(s) > 10 else d.strftime("%d/%m/%Y")
+
+
+def export_xlsx(conn) -> bytes:
+    """Classeur des réponses EUDR, trois feuilles :
+
+    - Réponses : toutes les réponses rattachées à une fiche, la plus récente
+      de chaque fournisseur marquée « Oui » dans « Dernière » (c'est elle qui fait foi) ;
+    - Suivi : un fournisseur actif par ligne, avec l'état de sa demande ;
+    - À rattacher : les réponses reçues par lien commun pas encore rangées.
+
+    L'adresse IP des répondants n'est jamais exportée."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    entete_fond = PatternFill("solid", fgColor="1E293B")
+    entete_police = Font(bold=True, color="FFFFFF")
+
+    def feuille(ws, titre: str, colonnes: list[tuple[str, int]], lignes: list[list]) -> None:
+        ws.title = titre
+        ws.append([c[0] for c in colonnes])
+        for i in range(1, len(colonnes) + 1):
+            cell = ws.cell(row=1, column=i)
+            cell.fill, cell.font = entete_fond, entete_police
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+        for ligne in lignes:
+            ws.append(ligne)
+        for i, (_, largeur) in enumerate(colonnes, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = largeur
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+        ws.freeze_panes = "B2"
+        ws.auto_filter.ref = ws.dimensions
+
+    fiches = {
+        int(r["id"]): dict(r)
+        for r in conn.execute("SELECT id, nom, pays FROM fournisseurs_fsc").fetchall()
+    }
+
+    # Réponses
+    dernieres = {
+        int(r["fid"]): int(r["mid"])
+        for r in conn.execute(
+            "SELECT fournisseur_id AS fid, MAX(id) AS mid FROM eudr_reponses GROUP BY fournisseur_id"
+        ).fetchall()
+    }
+    reponses = conn.execute(
+        "SELECT * FROM eudr_reponses ORDER BY fournisseur_id, id DESC"
+    ).fetchall()
+    lignes = []
+    for r in reponses:
+        rep = dict(r)
+        fiche = fiches.get(int(rep["fournisseur_id"]), {})
+        lignes.append(
+            [fiche.get("nom") or "", fiche.get("pays") or "", _export_date(rep.get("created_at")),
+             "Oui" if dernieres.get(int(rep["fournisseur_id"])) == int(rep["id"]) else "Non",
+             _EXPORT_SOURCES.get(rep.get("source") or "", rep.get("source") or ""),
+             rep.get("saisi_par") or ""]
+            + [_export_valeur(cle, rep) for cle, _, _ in _EXPORT_COLONNES_REPONSE]
+            + [rep.get("piece_original") or ""]
+        )
+    lignes.sort(key=lambda l: (l[0].lower(), l[3] != "Oui"))
+    feuille(
+        wb.active, "Réponses",
+        [("Fournisseur", 24), ("Pays", 8), ("Reçue le", 16), ("Dernière", 10), ("Source", 16), ("Saisie par", 20)]
+        + [(t, w) for _, t, w in _EXPORT_COLONNES_REPONSE]
+        + [("Pièce jointe", 24)],
+        lignes,
+    )
+
+    # Suivi
+    lignes = []
+    for f in liste(conn):
+        ds = f["demandes"]
+        rep = f["reponse"] or {}
+        lignes.append([
+            f["nom"], f["pays"] or "", ", ".join(f["categories"]),
+            _EXPORT_STATUTS.get(f["statut"], f["statut"]),
+            ", ".join(sorted({d["email"] for d in ds if d.get("email")})),
+            _export_date(f["derniere_demande"]),
+            _export_date(max((d["ouvert_le"] or "" for d in ds), default="") or None),
+            _export_date(rep.get("created_at")),
+            f["nb_reponses"],
+            _export_valeur("role", rep) if rep else "",
+            _export_valeur("transmission", rep) if rep else "",
+        ])
+    feuille(
+        wb.create_sheet(), "Suivi",
+        [("Fournisseur", 24), ("Pays", 8), ("Catégories", 22), ("Statut", 14), ("Envoyé à", 30),
+         ("Dernier envoi", 16), ("Ouvert le", 16), ("Dernière réponse", 16), ("Nb réponses", 10),
+         ("Rôle EUDR", 30), ("Transmission", 18)],
+        lignes,
+    )
+
+    # À rattacher
+    lignes = []
+    for x in a_rattacher(conn):
+        rep = x["reponse"]
+        sugg = fiches.get(x["suggestion"] or 0, {}).get("nom") or ""
+        lignes.append(
+            [_export_date(x.get("created_at")), x.get("lien_libelle") or "", sugg]
+            + [_export_valeur(cle, rep) for cle, _, _ in _EXPORT_COLONNES_REPONSE]
+        )
+    feuille(
+        wb.create_sheet(), "À rattacher",
+        [("Reçue le", 16), ("Lien commun", 18), ("Fiche suggérée", 22)]
+        + [(t, w) for _, t, w in _EXPORT_COLONNES_REPONSE],
+        lignes,
+    )
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# ─── Classement des réponses dans Ressources fournisseurs ────────────────
+
+# Sources dont la réponse est mise en PDF. Une saisie manuelle n'en fait pas :
+# son courrier, joint à la saisie, est déjà le document du fournisseur.
+SOURCES_A_CLASSER = ("portail", "lien_commun")
+_SOURCES_PDF = {"portail": "formulaire en ligne (lien personnel)",
+                "lien_commun": "formulaire en ligne (lien commun)"}
+
+
+def fiche_eudr(conn) -> dict | None:
+    """Fiche du référentiel RSE qui porte l'EUDR (acronyme `EUDR_REF_ACRONYME`),
+    la validée de préférence ; None si personne ne l'a encore créée."""
+    row = conn.execute(
+        """SELECT id, nom, acronyme, definition, position_sifa, details, statut_sifa,
+                  statut_validation, source_url, updated_at
+           FROM qualite_ref_fiches
+           WHERE UPPER(TRIM(COALESCE(acronyme,''))) = UPPER(?)
+           ORDER BY (statut_validation='valide') DESC, id LIMIT 1""",
+        (EUDR_REF_ACRONYME.strip(),),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def reponses_a_classer(conn) -> list[int]:
+    """Réponses reçues par le formulaire qui n'ont pas encore leur PDF."""
+    marques = ",".join("?" * len(SOURCES_A_CLASSER))
+    return [int(r["id"]) for r in conn.execute(
+        f"""SELECT id FROM eudr_reponses
+            WHERE certificat_id IS NULL AND COALESCE(source,'portail') IN ({marques})
+            ORDER BY id""",
+        SOURCES_A_CLASSER,
+    ).fetchall()]
+
+
+def _nom_fichier(nom: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "-", nom or "").strip("-") or "fournisseur"
+
+
+def classer_reponse(conn, reponse_id: int, *, dossier: str, auteur_id: int | None = None) -> int | None:
+    """Dépose le PDF de la réponse dans Ressources fournisseurs, sur la fiche du
+    fournisseur qui a répondu, lié à la fiche EUDR du référentiel. Renvoie l'id
+    du document, ou None si la réponse n'est pas à classer (saisie manuelle,
+    déjà classée, introuvable). Ne commite pas."""
+    from app.services.eudr_questionnaire_pdf import reponse_pdf
+
+    row = conn.execute("SELECT * FROM eudr_reponses WHERE id=?", (int(reponse_id),)).fetchone()
+    if not row:
+        return None
+    rep = dict(row)
+    source = rep.get("source") or "portail"
+    if rep.get("certificat_id") or source not in SOURCES_A_CLASSER:
+        return None
+    four = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (int(rep["fournisseur_id"]),)).fetchone()
+    if not four:
+        return None
+
+    contenu = reponse_pdf(rep, fournisseur=four["nom"], source=_SOURCES_PDF[source])
+    jour = str(rep.get("created_at") or now_paris_iso())[:10]
+    os.makedirs(dossier, exist_ok=True)
+    disque = f"eudr_reponse_{four['id']}_{rep['id']}.pdf"
+    with open(os.path.join(dossier, disque), "wb") as fh:
+        fh.write(contenu)
+
+    jour_fr = f"{jour[8:10]}/{jour[5:7]}/{jour[:4]}"
+    qui = ", ".join(x for x in (rep.get("repondant_nom"), rep.get("repondant_societe")) if x)
+    cur = conn.execute(
+        """INSERT INTO qualite_fournisseur_certificats
+             (fournisseur_id, filename, original_name, mime_type, size_bytes, titre,
+              date_emission, date_expiration, commentaire, uploaded_at, uploaded_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (int(four["id"]), disque, f"EUDR_{_nom_fichier(four['nom'])}_{jour}.pdf", "application/pdf",
+         len(contenu), f"EUDR – Réponse au questionnaire du {jour_fr}", jour, None,
+         f"Réponse au questionnaire EUDR reçue le {jour_fr} par le {_SOURCES_PDF[source]}"
+         + (f" ({qui})" if qui else "") + ". Document généré par MySifa depuis la réponse.",
+         now_paris_iso(), auteur_id),
+    )
+    cert_id = int(cur.lastrowid)
+    fiche = fiche_eudr(conn)
+    if fiche:
+        conn.execute(
+            "INSERT OR IGNORE INTO qualite_fournisseur_certificat_fiches (certificat_id, fiche_id) VALUES (?,?)",
+            (cert_id, int(fiche["id"])),
+        )
+    conn.execute("UPDATE eudr_reponses SET certificat_id=? WHERE id=?", (cert_id, int(rep["id"])))
+    return cert_id

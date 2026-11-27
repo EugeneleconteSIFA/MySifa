@@ -2262,6 +2262,11 @@ EUDR_CATEGORIES_BOBINES = ("frontal", "complexe", "glassine")
 # Délai indiqué au fournisseur dans l'email de demande.
 EUDR_REPONSE_AVANT = os.getenv("EUDR_REPONSE_AVANT", "2026-11-15")
 
+# Fiche du référentiel RSE (MyQualité) qui porte l'EUDR : affichée dans l'onglet
+# EUDR et liée aux PDF de réponses déposés dans Ressources fournisseurs.
+# Retrouvée par son acronyme, la fiche étant créée et éditée dans l'appli.
+EUDR_REF_ACRONYME = os.getenv("EUDR_REF_ACRONYME", "EUDR")
+
 
 def eudr_libelle(champ: str, cle: str | None, langue: str = "court") -> str:
     """Libellé d'un choix EUDR (« court » = MyQualité) ; la clé brute si inconnue."""

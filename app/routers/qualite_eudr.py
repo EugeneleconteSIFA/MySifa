@@ -11,6 +11,7 @@ Deux faces, comme la taxe carburant de MyExpé :
 """
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime
 from typing import Optional
@@ -25,7 +26,12 @@ from app.routers.expe_portail import (
     _record_invalid_attempt,
     _visiteur_interne,
 )
-from app.routers.qualite import _require_qualite_access, _require_qualite_view, _sanitize_filename
+from app.routers.qualite import (
+    RESSOURCES_UPLOAD_DIR,
+    _require_qualite_access,
+    _require_qualite_view,
+    _sanitize_filename,
+)
 from app.services import qualite_eudr as eudr
 from app.services.audit_service import log_action
 from app.services.email_service import send_email
@@ -37,6 +43,7 @@ router_html = APIRouter(tags=["eudr_portail"])
 router_api = APIRouter(prefix="/api/portail/eudr", tags=["eudr_portail_api"])
 
 EUDR_PIECES_DIR = os.path.join(UPLOAD_DIR, "qualite", "eudr")
+logger = logging.getLogger(__name__)
 
 
 def _auteur(user: dict) -> str | None:
@@ -56,7 +63,46 @@ def liste_fournisseurs(request: Request):
             "choix": EUDR_CHOIX,
             "liens_communs": _liens_avec_url(eudr.liens_communs(conn)),
             "a_rattacher": eudr.a_rattacher(conn),
+            "fiche_eudr": eudr.fiche_eudr(conn),
+            "a_classer": len(eudr.reponses_a_classer(conn)),
         }
+
+
+def _classer(reponse_id: int, auteur_id: int | None = None) -> None:
+    """Dépose le PDF d'une réponse dans Ressources fournisseurs. Un échec ici
+    ne doit jamais faire échouer la réponse : elle reste « à classer » et se
+    rattrape depuis l'onglet."""
+    try:
+        with get_db() as conn:
+            eudr.classer_reponse(conn, reponse_id, dossier=RESSOURCES_UPLOAD_DIR, auteur_id=auteur_id)
+            conn.commit()
+    except Exception:
+        logger.exception("EUDR : classement de la réponse %s dans Ressources fournisseurs impossible", reponse_id)
+
+
+@router.post("/classer-reponses")
+def classer_reponses(request: Request):
+    """Met en PDF, dans Ressources fournisseurs, toutes les réponses reçues par
+    le formulaire qui n'y sont pas encore (rattrapage des réponses antérieures)."""
+    user = _require_qualite_access(request)
+    faits, echecs = [], 0
+    with get_db() as conn:
+        for rid in eudr.reponses_a_classer(conn):
+            try:
+                cid = eudr.classer_reponse(conn, rid, dossier=RESSOURCES_UPLOAD_DIR, auteur_id=user.get("id"))
+                conn.commit()
+                if cid:
+                    faits.append(rid)
+            except Exception:
+                conn.rollback()
+                echecs += 1
+                logger.exception("EUDR : classement de la réponse %s impossible", rid)
+        reste = len(eudr.reponses_a_classer(conn))
+    if faits:
+        log_action(user=user, action="CREATE", module="qualite",
+                   objet=f"EUDR — {len(faits)} réponse(s) classée(s) dans Ressources fournisseurs",
+                   ip=request.client.host if request.client else None)
+    return {"classees": len(faits), "echecs": echecs, "a_classer": reste}
 
 
 def _liens_avec_url(liens: list[dict]) -> list[dict]:
@@ -115,7 +161,10 @@ def rattacher_reponse(request: Request, reponse_commune_id: int, body: dict = Bo
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         conn.commit()
-        out = {"fournisseurs": eudr.liste(conn), "a_rattacher": eudr.a_rattacher(conn)}
+    _classer(res["reponse_id"], user.get("id"))
+    with get_db() as conn:
+        out = {"fournisseurs": eudr.liste(conn), "a_rattacher": eudr.a_rattacher(conn),
+               "a_classer": len(eudr.reponses_a_classer(conn))}
     log_action(user=user, action="UPDATE", module="qualite",
                objet=f"EUDR — réponse par lien commun rattachée à {res['fournisseur']}",
                ip=request.client.host if request.client else None)
@@ -231,6 +280,25 @@ def piece_jointe(request: Request, reponse_id: int):
     mode = "inline" if ext in eudr.PIECE_EN_LIGNE else "attachment"
     return FileResponse(chemin, media_type=media,
                         headers={"Content-Disposition": f'{mode}; filename="{nom}"'})
+
+
+@router.get("/export.xlsx")
+def export_reponses(request: Request):
+    """Toutes les réponses EUDR en Excel : réponses, suivi des demandes, à rattacher."""
+    from fastapi.responses import Response
+
+    user = _require_qualite_view(request)
+    with get_db() as conn:
+        contenu = eudr.export_xlsx(conn)
+    log_action(user=user, action="EXPORT", module="qualite",
+               objet="EUDR — export Excel des réponses fournisseurs",
+               ip=request.client.host if request.client else None)
+    nom = f"EUDR_reponses_fournisseurs_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return Response(
+        contenu,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nom}"'},
+    )
 
 
 @router.get("/questionnaire.pdf")
@@ -470,10 +538,11 @@ def repondre(request: Request, token: str, body: dict = Body(...)):
             reponse = eudr.valider_reponse(body or {})
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-        eudr.enregistrer_reponse(conn, demande=dem, reponse=reponse, ip=ip)
+        rid = eudr.enregistrer_reponse(conn, demande=dem, reponse=reponse, ip=ip)
         if (body or {}).get("langue"):
             eudr.noter_langue(conn, dem, body["langue"])
         conn.commit()
+    _classer(rid)
 
     # La notification ne doit jamais faire échouer la réponse du fournisseur.
     destinataire = (dem.get("envoye_par") or "").strip()

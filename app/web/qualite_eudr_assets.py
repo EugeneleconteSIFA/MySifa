@@ -87,10 +87,13 @@ function eudrRender(){
       <div class="fsc-hero-actions">
         <a class="fsc-btn" href="/qualite/eudr/apercu?lang=fr" target="_blank" rel="noopener" title="Le formulaire tel que le voit le fournisseur — rien n'est enregistré">Aperçu du questionnaire</a>
         <button type="button" class="fsc-btn" onclick="eudrOuvrirPdf()" title="Le questionnaire à remplir à la main, en anglais, français ou espagnol">Questionnaire PDF</button>
+        <a class="fsc-btn" href="/api/qualite/eudr/export.xlsx" download title="Toutes les réponses, le suivi des demandes et les réponses par lien commun à rattacher">Exporter Excel</a>
+        ${admin && d.a_classer ? `<button type="button" class="fsc-btn" id="eudr-classer-btn" onclick="eudrClasserReponses()" title="Met chaque réponse reçue par le formulaire en PDF dans les documents du fournisseur (Ressources fournisseurs)">Classer ${d.a_classer} réponse${d.a_classer>1?'s':''} dans Ressources</button>` : ''}
         ${admin ? `<button type="button" class="fsc-btn" onclick="eudrOuvrirLiensCommuns()" title="Un seul lien à coller dans un email adressé à plusieurs fournisseurs">Lien commun</button>` : ''}
         ${admin ? `<button type="button" class="btn btn-accent" id="eudr-send-btn" onclick="eudrOuvrirEnvoi()" title="Cochez un ou plusieurs fournisseurs : chacun reçoit son lien personnel">Envoyer le questionnaire${S.eudr.sel.size ? ` (${S.eudr.sel.size})` : ''}</button>` : ''}
       </div>
     </div>
+    ${eudrFicheHtml(d.fiche_eudr)}
     <div class="fsc-kpis">
       ${kpi('sollicites', sollicites, 'Fournisseurs sollicités')}
       ${kpi('attente', n('envoyee')+n('ouverte'), 'En attente de réponse')}
@@ -107,6 +110,7 @@ function eudrRender(){
       <span class="eudr-selinfo" id="eudr-selinfo"></span>
     </div>
     <div id="eudr-list"></div>`;
+  eudrFicheRemplir(d.fiche_eudr);
   eudrRenderList();
 }
 
@@ -310,6 +314,52 @@ function eudrRattacherHtml(admin){
   </div>`;
 }
 
+// ─── Fiche EUDR du référentiel RSE ──────────────────────────────────
+// La position de SIFA sur l'EUDR vit dans le référentiel RSE (acronyme EUDR) :
+// on l'affiche ici telle quelle, l'édition reste dans le référentiel.
+const EUDR_STATUTS_SIFA = {conforme:'Conforme', partiel:'Partiel', en_cours:'En cours', non_applicable:'Non applicable', a_evaluer:'À évaluer'};
+function eudrFicheHtml(f){
+  if(!f) return `<div class="eudr-ref vide">Aucune fiche EUDR dans le référentiel RSE. Créez-la avec l'acronyme « EUDR » : sa définition et la position de SIFA s'afficheront ici, et les réponses classées dans Ressources fournisseurs y seront liées.
+      <button type="button" class="fsc-btn sm" onclick="setView('ref-list')">Ouvrir le référentiel RSE</button></div>`;
+  const ouvert = (() => { try{ return localStorage.getItem('mysifa_eudr_ref_ouvert') === '1'; }catch(e){ return false; } })();
+  const brouillon = f.statut_validation !== 'valide';
+  return `<details class="eudr-ref"${ouvert?' open':''} ontoggle="try{localStorage.setItem('mysifa_eudr_ref_ouvert', this.open?'1':'0')}catch(e){}">
+    <summary>
+      <span class="eudr-ref-t">Référentiel RSE · ${escHtml(f.nom || 'EUDR')}</span>
+      <span class="eudr-ref-chip">${escHtml(EUDR_STATUTS_SIFA[f.statut_sifa] || f.statut_sifa || '')}</span>
+      ${brouillon ? `<span class="eudr-ref-chip warn" title="Une fiche non validée n'apparaît pas dans les labels des Ressources fournisseurs">Non validée</span>` : ''}
+    </summary>
+    <div class="eudr-ref-b">
+      ${f.definition ? `<div><div class="eudr-ref-k">Définition</div><p></p></div>` : ''}
+      ${f.position_sifa ? `<div><div class="eudr-ref-k">Position SIFA</div><p></p></div>` : ''}
+      ${f.details ? `<div><div class="eudr-ref-k">Détails</div><p></p></div>` : ''}
+      <div class="eudr-ref-a">
+        <button type="button" class="fsc-btn sm" onclick="openRef(${parseInt(f.id,10)})">Ouvrir la fiche</button>
+        ${f.source_url ? `<a class="fsc-btn sm" href="${escAttr(f.source_url)}" target="_blank" rel="noopener">Texte officiel</a>` : ''}
+      </div>
+    </div>
+  </details>`;
+}
+// Texte libre de la fiche : posé en textContent après le rendu (pas d'innerHTML).
+function eudrFicheRemplir(f){
+  const box = document.querySelector('.eudr-ref-b'); if(!box || !f) return;
+  const ps = box.querySelectorAll('p');
+  [f.definition, f.position_sifa, f.details].filter(Boolean).forEach((txt, i) => { if(ps[i]) ps[i].textContent = txt; });
+}
+
+async function eudrClasserReponses(){
+  const b = document.getElementById('eudr-classer-btn');
+  if(b){ b.disabled = true; b.textContent = 'Classement…'; }
+  try{
+    const r = await api('/api/qualite/eudr/classer-reponses', {method:'POST'});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Classement impossible.','danger'); if(b) b.disabled = false; return; }
+    S.eudr.data.a_classer = j.a_classer || 0;
+    showToast(j.echecs ? `${j.classees} réponse(s) classée(s), ${j.echecs} en échec.` : `${j.classees} réponse(s) classée(s) dans Ressources fournisseurs.`, j.echecs ? 'danger' : 'success');
+    eudrRender();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); if(b) b.disabled = false; }
+}
+
 async function eudrRattacher(id){
   const fid = document.getElementById('eudr-ratt-'+id).value;
   if(!fid){ showToast('Choisissez le fournisseur.','danger'); return; }
@@ -320,7 +370,8 @@ async function eudrRattacher(id){
     if(!r.ok){ showToast(j.detail || 'Rattachement impossible.','danger'); return; }
     S.eudr.data.fournisseurs = j.fournisseurs || S.eudr.data.fournisseurs;
     S.eudr.data.a_rattacher = j.a_rattacher || [];
-    showToast('Réponse rattachée.','success');
+    if(typeof j.a_classer === 'number') S.eudr.data.a_classer = j.a_classer;
+    showToast('Réponse rattachée et classée dans Ressources fournisseurs.','success');
     eudrRender();
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
 }
@@ -469,6 +520,20 @@ async function eudrVoirReponse(fid){
   const st = document.createElement('style');
   st.textContent = `
   .eudr-kpi.active{border-color:var(--accent);background:var(--accent-bg)}
+  .eudr-ref{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;font-size:13px;color:var(--text2)}
+  .eudr-ref.vide{padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;color:var(--muted)}
+  .eudr-ref summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;cursor:pointer;list-style:none}
+  .eudr-ref summary::-webkit-details-marker{display:none}
+  .eudr-ref summary::before{content:'▸';color:var(--muted);transition:transform .15s}
+  .eudr-ref[open] summary::before{transform:rotate(90deg)}
+  .eudr-ref-t{font-weight:600;color:var(--text)}
+  .eudr-ref-chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent)}
+  .eudr-ref-chip.warn{background:var(--warn-bg, var(--bg));color:var(--warn, var(--muted))}
+  .eudr-ref-b{display:grid;gap:12px;padding:0 16px 14px 34px}
+  .eudr-ref-b p{margin:0;white-space:pre-wrap;line-height:1.5;max-width:90ch}
+  .eudr-ref-k{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+  .eudr-ref-a{display:flex;gap:8px;flex-wrap:wrap}
+  @media (prefers-reduced-motion:reduce){.eudr-ref summary::before{transition:none}}
   .eudr-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
   .eudr-search{flex:1;min-width:220px;max-width:420px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);
     background:var(--card);color:var(--text);font:inherit;font-size:13px}
