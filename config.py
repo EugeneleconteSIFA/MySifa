@@ -387,6 +387,13 @@ PF_UNITES_EQUIVALENTES = (("carton", "boite", "box"),)
 # tournent autour de 75-100 m/min.
 PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
 
+# « Passer la main » (saisie de production) : durée pendant laquelle le relais
+# impose sa machine au conducteur qui reprend, avant le Planning RH. Couvre un
+# poste de nuit qui passe minuit.
+FAB_RELAIS_VALIDITE_HEURES = int(os.getenv("FAB_RELAIS_VALIDITE_HEURES", "12"))
+# Délai pour mener le relais à son terme une fois le code du conducteur vérifié.
+FAB_RELAIS_DELAI_SECONDES = int(os.getenv("FAB_RELAIS_DELAI_SECONDES", "300"))
+
 # Délai de réaction au passage calage → production (minutes). La machine
 # démarre, puis le conducteur clique « Production » et relève le compteur :
 # le clic arrive en retard. Sur un dossier court, ce retard pèse lourd

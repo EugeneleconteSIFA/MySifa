@@ -57,6 +57,7 @@ from app.routers.prod_ecarts import router as prod_ecarts_router
 from app.routers.clients import router as clients_api_router
 from app.web.settings_page import router as settings_page_router
 from app.routers.fabrication import router as fabrication_api_router
+from app.routers.fab_relais import router as fab_relais_router
 from app.routers.arret_seuils import router as arret_seuils_router
 from app.routers.encres import router as encres_router
 # Traceur de traçabilité FSC (MyProd → Traçabilité → Traceur) : reconstitue la
@@ -948,6 +949,7 @@ app.include_router(settings_api_router)
 app.include_router(clients_api_router)
 app.include_router(settings_page_router)
 app.include_router(fabrication_api_router)
+app.include_router(fab_relais_router)
 app.include_router(traca_api_router)
 app.include_router(fsc_negoce_router)
 app.include_router(of_import_router, prefix="")
