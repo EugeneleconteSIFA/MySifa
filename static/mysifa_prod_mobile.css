@@ -458,8 +458,9 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
   .prod-liste-orph td:not(:first-child):not(.td-actions)::before{display:block;margin-bottom:2px;
     font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
   .prod-liste-of tr>td:first-child::before,.prod-liste-fiche tr>td:first-child::before{content:none!important}
+  /* Colonnes depuis le 28/11/2026 : la machine est sous la référence. */
   .prod-liste-of td:nth-child(3)::before{content:'Référence'}
-  .prod-liste-of td:nth-child(4)::before{content:'Machine'}
+  .prod-liste-of td:nth-child(4)::before{content:'Dossier'}
   .prod-liste-of td:nth-child(5)::before{content:'Délai client'}
   .prod-liste-of td:nth-child(6)::before{content:'Qté étiquettes'}
   .prod-liste-of td:nth-child(7)::before{content:'Date création'}

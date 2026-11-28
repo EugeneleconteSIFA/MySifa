@@ -5167,7 +5167,14 @@ function ofLigneScan(row){
 }
 function ofCelluleDossier(row){
   const d=row.dossier;
-  if(!d) return h('td',null,h('span',{style:{fontSize:'12px',color:'var(--warn)',fontWeight:'600'}},'Non planifié'),ofLigneScan(row));
+  // Non planifié : le geste qui suit, dans la cellule même (28/11/2026 :
+  // le bouton calendrier des actions est retiré). Il ouvre « Relier ou créer ».
+  if(!d) return h('td',null,
+    h('button',{type:'button',title:'Relier cet OF à un dossier du planning, ou en créer un',
+      onClick:function(e){ e.stopPropagation(); ofCreerDossierProd(row); },
+      style:'display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:7px;border:1px dashed var(--warn);background:transparent;color:var(--warn);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap'},
+      iconEl('calendar',12),'Planifier…'),
+    ofLigneScan(row));
   const etat=d.statut==='en_cours'?['En cours','var(--accent)']:d.statut==='termine'?['Terminé','var(--success)']
     :d.a_placer?['À placer','var(--warn)']:['En attente','var(--text2)'];
   return h('td',null,
@@ -5182,6 +5189,32 @@ function ofCelluleDossier(row){
         style:{fontSize:'11px',color:'var(--danger)',fontWeight:'700',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},
         'Écart : '+d.ecarts.map(e=>e.libelle).join(', ')):null),
     ofLigneScan(row));
+}
+/* Référence : la fiche produit s'ouvre d'un clic quand c'en est une (le
+   bouton « Produit », grisé une ligne sur deux, est retiré), et la machine de
+   l'OF se lit dessous (la colonne Machine coupait tout en « COHE… »). */
+function ofCelluleReference(row){
+  const ref=String(row.reference||'').trim();
+  const pm=window.MySifaProduitMemoire;
+  const lien=ref&&pm&&pm.boutonFiche?pm.boutonFiche(ref,{label:ref,className:'of-ref-lien'}):null;
+  return h('td',null,
+    lien||h('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:ref},escHtml(ref||'—')),
+    row.machine?h('div',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'},title:row.machine},escHtml(row.machine)):null);
+}
+/* Dates : « 16/12/26 », quel que soit le format reçu (ISO du pont Access ou
+   JJ/MM/AAAA), la date complète au survol. Coupées, ni l'une ni l'autre ne
+   se lisait. */
+function ofDateCourte(v){
+  const t=String(v||'').trim();
+  let m=t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return [m[3]+'/'+m[2]+'/'+m[1].slice(2), m[3]+'/'+m[2]+'/'+m[1]];
+  m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if(m) return [m[1]+'/'+m[2]+'/'+m[3].slice(2), m[1]+'/'+m[2]+'/'+m[3]];
+  return [t||'—', t];
+}
+function ofCelluleDate(v){
+  const d=ofDateCourte(v);
+  return h('td',{title:d[1]||'',style:{whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}},escHtml(d[0]));
 }
 function renderOfTab(){
   const PAGE_SIZE=50;
@@ -5257,7 +5290,6 @@ function renderOfTab(){
   );
 
   const rows=(S.ofImports||[]).map(row=>{
-    const dateCrea=(row.date_creation||'').slice(0,10)||'—';
     // Mêmes boutons, même ordre, sur chaque ligne (15/11/2026). Ils
     // dépendaient de l'origine de l'OF : Imprimer et Télécharger n'existaient
     // que pour un OF déposé en PDF, si bien qu'un OF créé dans MySifa ne
@@ -5287,29 +5319,9 @@ function renderOfTab(){
       // Le scan de l'OF terminé vit dans la colonne Dossier (ofLigneScan,
       // 28/11/2026) : ici, une case d'icône restait vide sur presque toutes
       // les lignes.
-      // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
-      // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
-      // Un OF qui a déjà son dossier à produire l'ouvre, il n'en crée pas un
-      // second (26/11/2026).
-      // Déjà au planning : icône cochée en couleur d'accent, pour lire d'un
-      // coup d'œil quels OF ont leur dossier (26/11/2026).
-      (row.dossier&&(row.dossier.statut==='attente'||row.dossier.statut==='en_cours'))
-        ? h('button',{style:bStyle+';color:var(--accent);border-color:var(--accent);background:var(--accent-bg)',
-            title:'Déjà au planning : ouvrir le dossier '+(row.dossier.reference||''),
-            onClick:()=>ofCreerDossierProd(row)},iconEl('calendar-check',13))
-        : bouton('Créer directement un dossier de prod','calendar',()=>ofCreerDossierProd(row)),
+      // Planifier / ouvrir le dossier : dans la colonne Dossier (28/11/2026).
     ];
-    // Mémoire produit : of_imports.reference EST la clé produit normalisée.
-    // Quand Access a envoyé autre chose (le numéro d'OF), le bouton reste à sa
-    // place, grisé, pour que les colonnes restent alignées.
-    const bp=window.MySifaProduitMemoire?window.MySifaProduitMemoire.boutonFiche(row.reference,{label:'Produit'}):null;
-    // Même classe que le vrai bouton : grisé, il garde sa largeur, et les
-    // colonnes de boutons restent alignées d'une ligne à l'autre.
-    acts.push(bp||h('button',{
-      className:'pmem-btn pmem-btn-sm',
-      style:'opacity:.35;cursor:default',disabled:true,
-      title:'Référence produit inconnue — la référence de cet OF n\'est pas une clé produit (« 1164/0067 »).'
-    },'Produit'));
+    // La fiche produit s'ouvre depuis la référence elle-même (28/11/2026).
     if(S.user&&S.user.role==='superadmin'){
       acts.push(h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger)',
@@ -5330,19 +5342,18 @@ function renderOfTab(){
         h('div',null,escHtml(row.of_numero||'—')),
         row.imported_by?h('div',{style:{fontSize:'11px',color:'var(--muted)'}},escHtml(row.imported_by)):null,
       ),
-      h('td',null,escHtml(row.reference||'—')),
-      h('td',null,escHtml(row.machine||'—')),
+      ofCelluleReference(row),
       ofCelluleDossier(row),
-      h('td',null,escHtml(row.delai_client||'—')),
-      h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
-      h('td',null,escHtml(dateCrea)),
+      ofCelluleDate(row.delai_client),
+      h('td',null,row.qte_etiquettes!=null?escHtml(Number(row.qte_etiquettes).toLocaleString('fr-FR')):'—'),
+      ofCelluleDate(row.date_creation),
       // v1.7 — className 'td-actions' pour override du clip global (cf. CSS)
       h('td',{className:'td-actions'},h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
   const empty=h('tr',null,
-    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+    h('td',{colSpan:'8',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
       S.ofImportsLoading?'Chargement…':(S.ofSearch?`Aucun résultat pour « ${escHtml(S.ofSearch)} »`:'Aucun OF importé')
     )
   );
@@ -5367,7 +5378,7 @@ function renderOfTab(){
               }
             })
           ),
-          h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),h('th',null,'Dossier'),
+          h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Dossier'),
           h('th',null,'Délai client'),h('th',null,'Qté étiquettes'),h('th',null,'Date création'),
           h('th',{className:'th-actions'},'Actions')
         )),
