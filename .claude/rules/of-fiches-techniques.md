@@ -570,6 +570,13 @@ dossiers le sont) sans scan, le clic dépose un PDF rattaché à CET OF
 ignoré). Un scan déjà reçu mais orphelin (« À rattacher ») redéposé ainsi est
 rattaché au lieu d'être refusé comme doublon. Test : `tests/test_of_scans.py`.
 
+**Scans d'OF : onglet « Attendus » et tri** (28/11/2026). L'onglet liste les OF
+terminés (tous leurs dossiers) sans scan, du plus récemment terminé au plus ancien,
+chacun avec « Déposer le scan » (`_of_attendus`, `GET /api/produits/documents/attendus`,
+adresse `?page=scans&sous=attendus`). Le tri des scans normalise `date_document`,
+qui mêle « 30/06/2026 » et l'ISO (`_SQL_DATE_TRI`) : trié comme du texte, l'ordre
+suivait le jour du mois.
+
 **« Créer directement un dossier de prod »** (liste des OF, 26/11/2026). Le
 préremplissage (`/api/of/{id}/dossier-prefill`) dit d'abord ce que l'OF a déjà :
 `dossier_existant` (dossier à produire relié) → le bouton l'ouvre au planning,

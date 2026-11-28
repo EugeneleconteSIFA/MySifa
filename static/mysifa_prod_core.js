@@ -292,7 +292,7 @@
     fiches:['liste','orphelines'],
     traceabilite:['dossiers','traceur'],
     rentabilite:['tableau','dossiers','pilotage','devis'],
-    scans:['scannes','rattacher']
+    scans:['scannes','attendus','rattacher']
   };
   var _SOUS_CHAMP={production:'subPage',of:'ofSubTab',fiches:'fichesSubTab',traceabilite:'tracaSubTab',rentabilite:'rentSubTab',scans:'scansSous'};
   // Anciennes adresses « #saisies », « #pending » : relues, puis réécrites.

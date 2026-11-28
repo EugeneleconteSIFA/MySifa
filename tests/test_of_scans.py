@@ -191,6 +191,28 @@ with dbmod.get_db() as conn:
     st = conn.execute("SELECT statut, of_import_id FROM produit_documents WHERE id=?", (premier["id"],)).fetchone()
 check("l'orphelin quitte la file", (st["statut"], st["of_import_id"]), ("rattache", 1))
 
+print("--- OF attendus et tri chronologique (28/11/2026) ---")
+with dbmod.get_db() as conn:
+    conn.execute("INSERT INTO of_imports (id, of_numero, reference, date_import) VALUES (2, '9932500', '122/0021', '2026-11-01')")
+    conn.execute("INSERT INTO planning_entries (machine_id, position, reference, statut, of_import_id, planned_end) "
+                 "VALUES (992, 2, 'D-9932500', 'termine', 2, '2026-11-20T12:00:00')")
+    conn.execute("INSERT INTO of_imports (id, of_numero, reference, date_import) VALUES (3, '9932600', '122/0022', '2026-11-01')")
+    conn.execute("INSERT INTO planning_entries (machine_id, position, reference, statut, of_import_id) "
+                 "VALUES (992, 3, 'D-9932600', 'attente', 3)")
+    conn.commit()
+    attendus = [o["of_numero"] for o in pmr._of_attendus(conn)]
+check("OF termine sans scan : attendu", "9932500" in attendus, True)
+check("OF scanne : pas attendu", "9931987" in attendus, False)
+check("OF encore a produire : pas attendu", "9932600" in attendus, False)
+with dbmod.get_db() as conn:
+    conn.execute("UPDATE produit_documents SET date_document='30/06/2026' WHERE id=?", (res["id"],))
+    conn.execute("UPDATE produit_documents SET date_document='2026-06-26' WHERE id=?", (res2["id"],))
+    conn.execute("UPDATE produit_documents SET date_document='2026-07-01' WHERE id=?", (res3["id"],))
+    conn.commit()
+liste = [d["id"] for d in pmr.liste_documents_scannes(request=None)["documents"]]
+ordre = [i for i in liste if i in (res["id"], res2["id"], res3["id"])]
+check("tri : 01/07 puis 30/06 puis 26/06", ordre, [res3["id"], res["id"], res2["id"]])
+
 print("--- parcours du dossier reseau (sous-dossiers par annee) ---")
 import of_scans_commun as osc
 

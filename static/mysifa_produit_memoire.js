@@ -1689,8 +1689,10 @@
       state.tous = r.documents || [];
       state.total = r.total || 0;
       state.nbARattacher = r.a_rattacher || 0;
+      state.nbAttendus = r.attendus;
     } catch (e) { toast(e.message || 'Erreur.', 'danger'); return; }
     if (state.tab === 'rattacher') { await chargerDocs(); return; }
+    if (state.tab === 'attendus') { await chargerAttendus(); return; }
     renderScans();
   }
 
@@ -1705,9 +1707,98 @@
     renderScans();
   }
 
+  // OF terminés sans scan (28/11/2026) : la page ne montrait que ce qui
+  // était arrivé, jamais ce qui manquait.
+  async function chargerAttendus() {
+    try {
+      var r = await api('/api/produits/documents/attendus?q=' + encodeURIComponent(state.qa || ''));
+      state.attendus = r.of || [];
+      if (!state.qa) state.nbAttendus = r.total || 0;
+    } catch (e) { toast(e.message || 'Erreur.', 'danger'); return; }
+    renderScans();
+  }
+
+  function deposerPourOF(o) {
+    var input = el('input', { type: 'file', accept: 'application/pdf,.pdf', style: 'display:none' });
+    document.body.appendChild(input);
+    input.addEventListener('change', async function () {
+      var f = input.files && input.files[0];
+      input.remove();
+      if (!f) return;
+      if (!/\.pdf$/i.test(f.name)) { toast('Fichier PDF requis.', 'danger'); return; }
+      var fd = new FormData();
+      fd.append('file', f, f.name);
+      fd.append('of_import_id', String(o.id));
+      try {
+        var r = await api('/api/produits/documents', { method: 'POST', body: fd });
+        toast(r && r.doublon && !r.rattache_a_of ? 'Ce scan était déjà enregistré.' : 'Scan rattaché à l\'OF ' + (o.of_numero || '') + '.', 'success');
+        await chargerScans();
+      } catch (e) { toast(e.message || 'Dépôt impossible.', 'danger'); }
+    });
+    input.click();
+  }
+
+  function vueAttendus() {
+    var input = el('input', {
+      className: 'pmem-input', type: 'text', id: 'pmem-attendus-q',
+      placeholder: 'Rechercher (n\u00b0 d\'OF, reference, dossier, client)…',
+      value: state.qa || '',
+    });
+    var t0 = null;
+    input.addEventListener('input', function (e) {
+      state.qa = e.target.value;
+      clearTimeout(t0);
+      t0 = setTimeout(function () {
+        var pos = input.selectionStart;
+        chargerAttendus().then(function () {
+          var n = document.getElementById('pmem-attendus-q');
+          if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (x) {} }
+        });
+      }, 220);
+    });
+    var liste = state.attendus || [];
+    var aide = el('div', { style: 'font-size:12px;color:var(--muted);margin:-4px 0 12px',
+      text: 'OF dont tous les dossiers sont terminés au planning, sans scan reçu. Le plus récemment terminé en tête.' });
+    if (!liste.length) {
+      return [el('div', { style: 'margin-bottom:14px' }, [input]), aide,
+              el('div', { className: 'pmem-empty',
+                text: state.qa ? ('Aucun OF attendu pour « ' + state.qa + ' »') : 'Aucun scan attendu : tous les OF terminés sont scannés.' })];
+    }
+    var lignes = liste.map(function (o) {
+      var infos = [];
+      if (o.machine) infos.push(o.machine);
+      if (o.client) infos.push(o.client);
+      if (o.qte_etiquettes) infos.push(fNum(o.qte_etiquettes) + ' etiq.');
+      var cellRef = el('td', {});
+      var b = o.ref_produit_norm ? boutonFiche(o.ref_produit_norm, { label: o.ref_produit_norm }) : null;
+      if (b) cellRef.appendChild(b); else cellRef.textContent = o.reference || '—';
+      var bouton = el('button', { type: 'button', className: 'pmem-btn pmem-btn-sm', text: 'Déposer le scan',
+        title: 'Choisir le PDF scanné : il sera rattaché à cet OF, quel que soit son nom' });
+      bouton.addEventListener('click', function () { deposerPourOF(o); });
+      return el('tr', {}, [
+        el('td', { text: fDate(o.fin) }),
+        el('td', {}, [el('strong', { text: o.of_numero || '—' })]),
+        cellRef,
+        el('td', { text: o.dossier || '—' }),
+        el('td', { text: infos.join(' · ') || '—' }),
+        el('td', {}, [bouton]),
+      ]);
+    });
+    var table = el('div', { className: 'pmem-tablecard pmem-scroll' }, [
+      el('table', { className: 'pmem-tbl pmem-tbl-sobre' }, [
+        el('thead', {}, [el('tr', {}, ['Fin de production', 'OF', 'Produit', 'Dossier', 'Production', ''].map(function (t) {
+          return el('th', { text: t });
+        }))]),
+        el('tbody', {}, lignes),
+      ]),
+    ]);
+    return [el('div', { style: 'margin-bottom:14px' }, [input]), aide, table];
+  }
+
   function scansOnglets() {
     var defs = [
       { key: 'scannes', label: 'Scannes', count: state.total },
+      { key: 'attendus', label: 'Attendus', count: state.nbAttendus },
       { key: 'rattacher', label: 'A rattacher', count: state.nbARattacher },
     ];
     return el('div', { className: 'pmem-tabs is-sobre' }, defs.map(function (t) {
@@ -1718,6 +1809,7 @@
         onclick: function () {
           state.tab = t.key;
           if (t.key === 'rattacher' && !state.docs) { chargerDocs(); return; }
+          if (t.key === 'attendus' && !state.attendus) { chargerAttendus(); return; }
           renderScans();
         },
       });
@@ -1989,11 +2081,12 @@
   }
 
   function renderScans() {
-    var corps = state.tab === 'rattacher' ? vueARattacher() : vueScannes();
+    var corps = state.tab === 'rattacher' ? vueARattacher() : (state.tab === 'attendus' ? vueAttendus() : vueScannes());
     mount(panel(
       header('Scans d\'OF', 'Deposer des scans, et rattacher ceux qui n\'ont pas pu l\'etre',
              [(state.total || 0) + ' scan(s)',
-              (state.nbARattacher || 0) + ' en attente de rattachement']),
+              (state.nbARattacher || 0) + ' en attente de rattachement']
+              .concat(state.nbAttendus ? [state.nbAttendus + ' OF terminé(s) sans scan'] : [])),
       scansOnglets(),
       [zoneDepot(chargerScans)].concat(corps)
     ));
@@ -2133,7 +2226,7 @@
     contenantInline = contenant;
     scansSurChange = typeof surChange === 'function' ? surChange : null;
     init = init || {};
-    state = { tab: init.onglet === 'rattacher' ? 'rattacher' : 'scannes', data: null, mode: 'rattachement',
+    state = { tab: (init.onglet === 'rattacher' || init.onglet === 'attendus') ? init.onglet : 'scannes', data: null, mode: 'rattachement',
               noDossier: null, docs: null, sel: init.scan ? Number(init.scan) : null, q: init.q || '' };
     await chargerScans();
   }

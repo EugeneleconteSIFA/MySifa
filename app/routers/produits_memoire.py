@@ -192,7 +192,7 @@ def liste_documents_scannes(request: Request, q: str = "", limit: int = 300):
                   LEFT JOIN of_imports    o ON o.id = d.of_import_id
                   LEFT JOIN produit_series s ON s.no_dossier = d.no_dossier
                  WHERE {' AND '.join(where)}
-                 ORDER BY COALESCE(d.date_document, d.importe_le) DESC, d.id DESC
+                 ORDER BY {_SQL_DATE_TRI} DESC, d.id DESC
                  LIMIT ?""",
             params,
         ).fetchall()
@@ -202,6 +202,10 @@ def liste_documents_scannes(request: Request, q: str = "", limit: int = 300):
         a_rattacher = conn.execute(
             "SELECT COUNT(*) AS n FROM produit_documents WHERE statut = 'a_rattacher'"
         ).fetchone()["n"]
+        try:
+            attendus = len(_of_attendus(conn, ""))
+        except Exception:
+            attendus = None
 
     docs = []
     for r in rows:
@@ -211,7 +215,61 @@ def liste_documents_scannes(request: Request, q: str = "", limit: int = 300):
         d["etiquettes"] = d.get("serie_etiquettes") or d.get("of_qte_etiquettes")
         docs.append(d)
     return {"documents": docs, "total": int(total or 0),
-            "a_rattacher": int(a_rattacher or 0), "affiches": len(docs)}
+            "a_rattacher": int(a_rattacher or 0), "attendus": attendus, "affiches": len(docs)}
+
+
+# Tri des scans (28/11/2026) : `date_document` mêle « 30/06/2026 » (59 scans)
+# et l'ISO (414). Trié comme du texte, « 30/06 » passait devant « 27/05 » mais
+# aussi devant « 26/06 » : l'ordre suivait le jour du mois, pas la date.
+_SQL_DATE_TRI = (
+    "CASE WHEN substr(COALESCE(d.date_document,''),3,1) = '/' "
+    "THEN substr(d.date_document,7,4)||'-'||substr(d.date_document,4,2)||'-'||substr(d.date_document,1,2) "
+    "ELSE COALESCE(d.date_document, d.importe_le) END"
+)
+
+
+def _of_attendus(conn, q: str = "", limite: int = 500) -> list:
+    """OF terminés au planning (tous leurs dossiers) dont aucun scan n'est
+    arrivé, le plus récemment terminé d'abord. Même définition que l'icône
+    « scan attendu » de la liste des OF (`termine` de /api/of/list)."""
+    from app.routers.of_import import _SQL_SCAN_DE_OF
+    params: list = []
+    filtre = ""
+    if (q or "").strip():
+        like = "%" + q.strip() + "%"
+        filtre = ("AND (o.of_numero LIKE ? OR o.reference LIKE ? OR t.dossier LIKE ? "
+                  "OR LOWER(COALESCE(t.client,'')) LIKE LOWER(?))")
+        params += [like, like, like, like]
+    rows = conn.execute(
+        f"""WITH t AS (
+              SELECT pe.of_import_id AS of_id, MAX(pe.planned_end) AS fin,
+                     (SELECT p2.reference FROM planning_entries p2 WHERE p2.of_import_id = pe.of_import_id
+                       ORDER BY p2.planned_end DESC, p2.id DESC LIMIT 1) AS dossier,
+                     (SELECT p2.client FROM planning_entries p2 WHERE p2.of_import_id = pe.of_import_id
+                       ORDER BY p2.planned_end DESC, p2.id DESC LIMIT 1) AS client,
+                     (SELECT m.nom FROM planning_entries p2 JOIN machines m ON m.id = p2.machine_id
+                       WHERE p2.of_import_id = pe.of_import_id ORDER BY p2.planned_end DESC, p2.id DESC LIMIT 1) AS machine
+                FROM planning_entries pe WHERE pe.of_import_id IS NOT NULL
+               GROUP BY pe.of_import_id
+              HAVING MIN(CASE WHEN pe.statut = 'termine' THEN 1 ELSE 0 END) = 1)
+            SELECT o.id, o.of_numero, o.reference, o.qte_etiquettes, t.fin, t.dossier, t.client, t.machine
+              FROM t JOIN of_imports o ON o.id = t.of_id
+             WHERE NOT EXISTS (SELECT 1 FROM produit_documents d WHERE d.statut != 'ecarte' AND ({_SQL_SCAN_DE_OF}))
+               {filtre}
+             ORDER BY t.fin DESC, o.id DESC
+             LIMIT ?""", params + [int(limite)]).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/api/produits/documents/attendus")
+def liste_scans_attendus(request: Request, q: str = ""):
+    """Les OF terminés qui attendent encore leur scan (onglet « Attendus »)."""
+    get_current_user(request)
+    with get_db() as conn:
+        rows = _of_attendus(conn, q)
+    for r in rows:
+        r["ref_produit_norm"] = pm._norm(str(r.get("reference") or "").split(" - ")[0])
+    return {"of": rows, "total": len(rows)}
 
 
 @router.get("/api/produits/fiches-non-reliees")
