@@ -2057,11 +2057,15 @@ function ofChoisirAvantCreer(num,corr,row,produitOf){
     // choisir sans les regarder).
     const carte=(d,detail)=>'<div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px">'+
-      '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+(d.reservation?'Réservation · numéro à venir <span style="font-weight:500;color:var(--muted)">'+escHtml(d.reference||'')+'</span>':escHtml(d.reference||('#'+d.id)))+'</div>'+
-      '<div style="font-size:12px;color:var(--muted)">'+escHtml(detail)+
-        (d.meme_produit===true?' <span style="margin-left:4px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;color:var(--success);border:1px solid var(--success)">même produit</span>':'')+
-        (d.meme_produit===false?' <span style="margin-left:4px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;color:var(--danger);border:1px solid var(--danger)">autre produit</span>':'')+
-      '</div></div>'+
+      // Produit en pastille sur la ligne du titre : verte s'il est celui de
+      // l'OF, rouge sinon, neutre si l'OF n'en dit rien.
+      '<div style="min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:700;color:var(--text)">'+
+        '<span>'+(d.reservation?'Réservation · numéro à venir <span style="font-weight:500;color:var(--muted)">'+escHtml(d.reference||'')+'</span>':escHtml(d.reference||('#'+d.id)))+'</span>'+
+        (d.ref_produit&&d.meme_produit!==undefined&&d.meme_produit!==null
+          ?'<span title="'+(d.meme_produit?'Même produit que l\'OF':'Pas le produit de l\'OF')+'" style="white-space:nowrap;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;'+
+            (d.meme_produit?'color:var(--success);border:1px solid var(--success)">✓ ':'color:var(--danger);border:1px solid var(--danger)">× ')+escHtml(d.ref_produit)+'</span>':'')+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--muted)">'+escHtml(detail)+'</div></div>'+
       '<span style="display:flex;gap:6px;flex-shrink:0">'+
       '<button type="button" data-voir="'+Number(d.id)+'" aria-expanded="false" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Voir</button>'+
       '<button type="button" data-relier="'+Number(d.id)+'" style="padding:7px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Relier</button></span></div>'+
@@ -2087,7 +2091,7 @@ function ofChoisirAvantCreer(num,corr,row,produitOf){
       '<div style="font-size:12px;color:var(--muted);margin-top:4px">'+(produitOf?'Produit de l\'OF : <strong style="color:var(--text)">'+escHtml(produitOf)+'</strong> · ':'')+'Reliez-le au dossier qui l\'attend au planning. N\'en créez un que s\'il n\'existe pas.</div></div>'+
       '<div style="padding:0 20px;overflow-y:auto;flex:1;min-height:0">'+
         (corr.length?'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 6px">'+(corr.length>1?corr.length+' dossiers correspondent':'Un dossier correspond')+'</div>'+
-          corr.map(d=>carte(d,[d.ref_produit,d.machine,etat(d),d.raison].filter(Boolean).join(' · '))).join(''):'')+
+          corr.map(d=>carte(d,[(d.meme_produit===true||d.meme_produit===false)?null:d.ref_produit,d.machine,etat(d),d.raison].filter(Boolean).join(' · '))).join(''):'')+
         '<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:12px 0 6px">Autres dossiers à produire sans OF</div>'+
         '<input type="search" data-q placeholder="Chercher (dossier, produit, client, machine)" style="width:100%;height:36px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--text);font:inherit;font-size:13px;outline:none;margin-bottom:8px">'+
         '<div data-autres><div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Chargement…</div></div>'+
@@ -5148,9 +5152,22 @@ function renderPaginationBar(page, total, pageSize, onPrev, onNext){
 
 /* Colonne « Dossier » de la liste des OF (22/11/2026) : où en est l'OF au
    planning. Un clic ouvre le dossier dans un nouvel onglet. */
+/* Le scan de l'OF terminé, sous l'état du dossier (28/11/2026 : une colonne
+   d'icônes vide sur la plupart des lignes). Reçu : il s'ouvre. Attendu (OF
+   terminé sans scan) : on le dépose sur l'OF. Sinon rien. */
+function ofLigneScan(row){
+  const st={fontSize:'11px',fontWeight:'700',whiteSpace:'nowrap',display:'block',marginTop:'2px'};
+  if(row.scan_id) return h('a',{href:'/api/produits/documents/'+row.scan_id+'/pdf',target:'_blank',rel:'noopener',
+    title:'Voir le scan de l\'OF terminé',style:Object.assign({},st,{color:'var(--accent)',textDecoration:'none'})},'Scan reçu ↗');
+  if(row.termine) return h('button',{type:'button',title:'OF terminé, scan pas encore reçu. Cliquer pour déposer le PDF scanné de cet OF',
+    onClick:function(e){ e.preventDefault(); e.stopPropagation(); ofDeposerScan(row); },
+    style:Object.assign({},st,{color:'var(--muted)',background:'none',border:'none',padding:'0',cursor:'pointer',font:'inherit',fontSize:'11px',fontWeight:'700'})},
+    'Scan attendu · ',h('span',{style:{color:'var(--accent)',textDecoration:'underline'}},'Déposer'));
+  return null;
+}
 function ofCelluleDossier(row){
   const d=row.dossier;
-  if(!d) return h('td',null,h('span',{style:{fontSize:'12px',color:'var(--warn)',fontWeight:'600'}},'Non planifié'));
+  if(!d) return h('td',null,h('span',{style:{fontSize:'12px',color:'var(--warn)',fontWeight:'600'}},'Non planifié'),ofLigneScan(row));
   const etat=d.statut==='en_cours'?['En cours','var(--accent)']:d.statut==='termine'?['Terminé','var(--success)']
     :d.a_placer?['À placer','var(--warn)']:['En attente','var(--text2)'];
   return h('td',null,
@@ -5163,7 +5180,8 @@ function ofCelluleDossier(row){
       (d.ecarts&&d.ecarts.length)?h('div',{
         title:d.ecarts.map(e=>e.libelle+' : dossier '+e.avant+' · OF '+e.apres).join('\n'),
         style:{fontSize:'11px',color:'var(--danger)',fontWeight:'700',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},
-        'Écart : '+d.ecarts.map(e=>e.libelle).join(', ')):null));
+        'Écart : '+d.ecarts.map(e=>e.libelle).join(', ')):null),
+    ofLigneScan(row));
 }
 function renderOfTab(){
   const PAGE_SIZE=50;
@@ -5266,24 +5284,9 @@ function renderOfTab(){
         });
       }),
       bouton('Télécharger PDF','download',()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}),
-      // Le papier atelier annoté, une fois l'OF terminé et scanné (17/11/2026).
-      // Sans scan : signalé seulement quand l'OF est terminé au planning
-      // (19/11/2026). 1 100 icônes grises ne disaient rien ; une icône vide
-      // garde l'alignement de la colonne.
-      // Scan reçu : bouton plein (accent), il ouvre le PDF. Scan attendu :
-      // contour pointillé et grisé (retour du 26/11/2026 : en --warn, bleu
-      // dans Ambre, il ressemblait à un scan disponible), il cherche le scan
-      // de CET OF dans Scans d'OF au lieu d'ouvrir la page en général.
-      row.scan_id
-        ? h('button',{style:bStyle+';color:var(--accent);border-color:var(--accent);background:var(--accent-bg)',title:'Voir le scan de l\'OF terminé',
-            onClick:()=>{window.open('/api/produits/documents/'+row.scan_id+'/pdf','_blank');}},iconEl('file-text',13))
-        : row.termine
-          // Scan attendu : le clic dépose le PDF scanné sur CET OF, sans
-          // dépendre du nom du fichier (26/11/2026 : ouvrir Scans d'OF sur une
-          // recherche forcément vide n'apportait rien).
-          ? h('button',{style:bStyle+';color:var(--muted);border-style:dashed;background:transparent',title:'OF terminé, scan pas encore reçu. Cliquer pour déposer le PDF scanné de cet OF',
-              onClick:()=>ofDeposerScan(row)},iconEl('file-text',13))
-          : h('span',{style:bStyle+';visibility:hidden;display:inline-flex','aria-hidden':'true'},iconEl('file-text',13)),
+      // Le scan de l'OF terminé vit dans la colonne Dossier (ofLigneScan,
+      // 28/11/2026) : ici, une case d'icône restait vide sur presque toutes
+      // les lignes.
       // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
       // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
       // Un OF qui a déjà son dossier à produire l'ouvre, il n'en crée pas un

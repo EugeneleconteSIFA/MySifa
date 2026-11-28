@@ -562,8 +562,8 @@ Plus de carte « Relier un OF existant » : il reste Créer, Importer, et un lie
 de recherche par numéro. L'onglet Fiche technique charge son PDF à la
 première ouverture (`data-src`) : chargé masqué, Safari l'affichait en vignette.
 
-**Scan d'un OF depuis sa ligne** (26/11/2026). Colonne scan de la liste des OF :
-plein (accent) = scan reçu, ouvre le PDF ; pointillé gris = OF terminé (tous ses
+**Scan d'un OF depuis sa ligne** (26/11/2026, dans la colonne Dossier depuis le 28/11/2026, `ofLigneScan`) :
+« Scan reçu ↗ » ouvre le PDF ; « Scan attendu · Déposer » = OF terminé (tous ses
 dossiers le sont) sans scan, le clic dépose un PDF rattaché à CET OF
 (`of_import_id` de `POST /api/produits/documents`, `of_impose` de
 `_enregistrer_scan` : dossier terminé de l'OF, référence de l'OF, nom du fichier
