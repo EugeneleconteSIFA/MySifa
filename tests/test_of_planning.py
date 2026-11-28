@@ -388,5 +388,26 @@ class TestConcordance(unittest.TestCase):
         self.assertNotIn(1, res)
 
 
+class TestMemeCommandeDansLeNumero(unittest.TestCase):
+    """OF « 9932957 - L1 » : les dossiers « 9932957 » sont proposés,
+    pas celui d'une autre ligne (28/11/2026)."""
+
+    def setUp(self):
+        with get_db() as conn:
+            m = _preparer(conn)
+            for i, ref in ((40, "9932957"), (41, "9932957"), (42, "9932957 - L2"), (43, "9932957 - L1")):
+                conn.execute("INSERT INTO planning_entries (id, machine_id, position, reference, numero_of, statut) "
+                             "VALUES (?, ?, ?, ?, ?, 'attente')", (i, m, 20 + i, ref, ref))
+            conn.commit()
+
+    def test_dossiers_de_la_commande(self):
+        with get_db() as conn:
+            ids = [d["id"] for d in op.candidats(conn, None, "9932957 - L1", [])]
+        self.assertEqual(ids[0], 43)              # même numéro d'abord
+        self.assertIn(40, ids)
+        self.assertIn(41, ids)
+        self.assertNotIn(42, ids)                 # autre ligne
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

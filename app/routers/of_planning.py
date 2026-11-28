@@ -299,6 +299,22 @@ def candidats(conn, of_id: Optional[int], numero: Optional[str],
             "AND (? IS NULL OR r.ligne IS NULL OR r.ligne=?) "
             "AND pe.statut IN ('attente','en_cours')", (n, lg, lg)):
             raisons.setdefault(int(r["id"]), "Même commande %s%s" % (n, "/L%d" % lg if lg else ""))
+    # 4. La commande lue dans le numéro : l'OF « 9932957 - L1 » et les
+    #    dossiers « 9932957 » (28/11/2026 : trois dossiers en attente jamais
+    #    proposés, le bouton invitait à en créer un quatrième).
+    #    Une autre ligne citée des deux côtés (OF « - L1 », dossier « - L2 »)
+    #    n'est pas ce dossier-là.
+    m = _COMMANDE_RE.search(num) if num else None
+    if m:
+        lg_of = _LIGNE_RE.search(num)
+        for r in conn.execute(
+                "SELECT id, reference, numero_of FROM planning_entries WHERE statut IN ('attente','en_cours') AND "
+                "(COALESCE(reference,'') LIKE ? OR COALESCE(numero_of,'') LIKE ?)",
+                ("%" + m.group(1) + "%", "%" + m.group(1) + "%")):
+            lg_d = _LIGNE_RE.search("%s %s" % (r["reference"] or "", r["numero_of"] or ""))
+            if lg_of and lg_d and int(lg_of.group(1)) != int(lg_d.group(1)):
+                continue
+            raisons.setdefault(int(r["id"]), "Même commande %s" % m.group(1))
     if not raisons:
         return []
     ph = ",".join("?" * len(raisons))
