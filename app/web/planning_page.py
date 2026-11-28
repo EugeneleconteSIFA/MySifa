@@ -799,6 +799,9 @@ body.light .btn-p{color:#fff}
 .slot.tl-drop-over{outline:3px solid var(--accent);outline-offset:3px;z-index:30;filter:brightness(1.15)}
 /* Dossier montré par ?voir= (lien « À positionner » de la liste des OF). */
 .voir-flash{outline:3px solid var(--accent)!important;outline-offset:2px;animation:voirFlash 1s ease-in-out 3}
+.voir-aide{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0;padding:8px 12px;border-radius:8px;
+  border:1px solid var(--accent);background:var(--accent-bg);color:var(--text);font-size:12.5px;font-weight:600}
+.voir-aide button{border:none;background:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;font-family:inherit}
 @keyframes voirFlash{50%{outline-color:transparent}}
 /* À placer au planning — zébré */
 .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 20px)!important}
@@ -5457,7 +5460,17 @@ function planningMontrerDossier(id){
   const tr=cibles.find(c=>c.classList.contains('tr'))||cibles[0];
   try{ tr.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){ tr.scrollIntoView(); }
   cibles.forEach(c=>{ c.classList.add('voir-flash'); setTimeout(()=>c.classList.remove('voir-flash'),3200); });
-  showToast("Glissez le dossier à sa place dans la file, puis décochez « À placer au planning » dans sa fiche.","info");
+  // Consigne juste au-dessus du dossier, pas en toast (retour du 28/11/2026 :
+  // en orange, posé sur la barre d'outils, il se lisait comme une erreur).
+  if(tr.classList.contains('tr')&&tr.parentNode){
+    document.querySelectorAll('.voir-aide').forEach(x=>x.remove());
+    const aide=document.createElement('div');
+    aide.className='voir-aide';
+    aide.innerHTML='Glissez ce dossier à sa place dans la file, puis décochez « À placer au planning » dans sa fiche : il garde la position choisie. <button type="button" aria-label="Masquer">×</button>';
+    aide.querySelector('button').onclick=()=>aide.remove();
+    tr.parentNode.insertBefore(aide,tr);
+    setTimeout(()=>aide.remove(),12000);
+  }
 }
 async function openAddDepuisOf(ofId){
   if(!CAN_EDIT) return;
