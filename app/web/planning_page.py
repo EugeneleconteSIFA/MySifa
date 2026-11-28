@@ -797,6 +797,9 @@ body.light .btn-p{color:#fff}
 .slot.slot-reel-termine.tl-match-current{opacity:1!important;filter:none!important}
 #tbody.has-search .tr.tr-reel-termine{opacity:1;filter:none}
 .slot.tl-drop-over{outline:3px solid var(--accent);outline-offset:3px;z-index:30;filter:brightness(1.15)}
+/* Dossier montré par ?voir= (lien « À positionner » de la liste des OF). */
+.voir-flash{outline:3px solid var(--accent)!important;outline-offset:2px;animation:voirFlash 1s ease-in-out 3}
+@keyframes voirFlash{50%{outline-color:transparent}}
 /* À placer au planning — zébré */
 .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 20px)!important}
 body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,color-mix(in srgb,var(--accent,#0891b2) 8%,transparent) 10px,color-mix(in srgb,var(--accent,#0891b2) 8%,transparent) 20px)!important}
@@ -5188,6 +5191,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
               Dossier validé
             </label>
           </div>
+          ${aPlacer?`<div style="margin-top:6px;font-size:11.5px;color:var(--muted);line-height:1.45">En fin de file, à positionner : glissez le dossier à sa place dans la liste ou sur la timeline, puis décochez « À placer au planning ». Il garde la position choisie.</div>`:""}
         </div>
       </div>
       <div class="dossier-section">
@@ -5447,6 +5451,14 @@ function openAddSwitchTab(tab){
    file et la durée sont des arbitrages de planification que l'OF ne porte pas.
    Ce qu'il apporte, c'est tout le reste — et les lignes de commande, posées en
    attente pour être rattachées au dossier dès sa création. */
+function planningMontrerDossier(id){
+  const cibles=[...document.querySelectorAll('.tr[data-eid="'+id+'"],.slot[data-eid="'+id+'"]')];
+  if(!cibles.length){ showToast("Dossier introuvable sur cette machine.","info"); return; }
+  const tr=cibles.find(c=>c.classList.contains('tr'))||cibles[0];
+  try{ tr.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){ tr.scrollIntoView(); }
+  cibles.forEach(c=>{ c.classList.add('voir-flash'); setTimeout(()=>c.classList.remove('voir-flash'),3200); });
+  showToast("Glissez le dossier à sa place dans la file, puis décochez « À placer au planning » dans sa fiche.","info");
+}
 async function openAddDepuisOf(ofId){
   if(!CAN_EDIT) return;
   let p=null;
@@ -7596,6 +7608,11 @@ async function boot(){
     if(depuisOf&&/^\d+$/.test(depuisOf)){
       setTimeout(()=>{try{openAddDepuisOf(parseInt(depuisOf,10));}catch(e){}},260);
     }
+    // « voir » (lien « À positionner » de la liste des OF, 28/11/2026) : le
+    // dossier est montré dans la file, sans ouvrir sa fiche, pour être
+    // glissé à sa place. Un seul usage, comme depuis-of.
+    const voir=sp.get("voir");
+    if(voir&&/^\d+$/.test(voir)) setTimeout(()=>{try{planningMontrerDossier(Number(voir));}catch(e){}},300);
   }catch(e){}
   // Les paramètres d'un seul usage sont lus : l'adresse peut maintenant suivre
   // l'écran, et rouvrir la fenêtre qu'elle demande (?dossier=, ?of=, ?stats=).

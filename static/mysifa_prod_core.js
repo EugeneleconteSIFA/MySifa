@@ -5175,11 +5175,16 @@ function ofCelluleDossier(row){
       style:'display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:7px;border:1px dashed var(--warn);background:transparent;color:var(--warn);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap'},
       iconEl('calendar',12),'Planifier…'),
     ofLigneScan(row));
+  // « À placer » se lisait comme une action et ne menait qu'à la fiche
+  // (28/11/2026) : c'est un état, « en fin de file, à positionner », et le
+  // lien montre alors le dossier dans la file (?voir=) pour le glisser.
+  const aPositionner=d.statut==='attente'&&d.a_placer;
   const etat=d.statut==='en_cours'?['En cours','var(--accent)']:d.statut==='termine'?['Terminé','var(--success)']
-    :d.a_placer?['À placer','var(--warn)']:['En attente','var(--text2)'];
+    :aPositionner?['En fin de file · à positionner','var(--warn)']:['En attente','var(--text2)'];
   return h('td',null,
-    h('a',{href:'/planning?machine='+encodeURIComponent(d.machine_id)+'&dossier='+encodeURIComponent(d.id),target:'_blank',rel:'noopener',
-      title:'Ouvrir le dossier au planning',style:{textDecoration:'none',color:'var(--text)',display:'block',minWidth:'0'}},
+    h('a',{href:'/planning?machine='+encodeURIComponent(d.machine_id)+(aPositionner?'&voir=':'&dossier=')+encodeURIComponent(d.id),target:'_blank',rel:'noopener',
+      title:aPositionner?'Montrer le dossier dans la file de sa machine, pour le glisser à sa place':'Ouvrir le dossier au planning',
+      style:{textDecoration:'none',color:'var(--text)',display:'block',minWidth:'0'}},
       h('div',{style:{fontSize:'13px',fontWeight:'600',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},d.reference||'#'+d.id),
       h('div',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap'}},
         (d.machine?d.machine+' · ':''),h('span',{style:{color:etat[1],fontWeight:'600'}},etat[0])),
