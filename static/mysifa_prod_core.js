@@ -2026,8 +2026,10 @@ async function ofCreerDossierProd(row){
   if(p&&p.bloque){ toast('OF '+num+' '+p.bloque+' : pas de nouveau dossier.','error'); return; }
   // 3. Des dossiers à produire lui correspondent (même numéro, même
   //    commande) : relier passe avant créer.
+  // 3. Relier passe avant créer : la fenêtre s'ouvre toujours, avec les
+  //    dossiers qui correspondent puis tous les dossiers à produire sans OF.
   const corr=(p&&p.correspondants)||[];
-  if(corr.length&&!(await ofChoisirAvantCreer(num,corr))) return;
+  if(!(await ofChoisirAvantCreer(num,corr,row))) return;
   const sp=new URLSearchParams();
   if(p&&p.machine_id) sp.set('machine',String(p.machine_id));
   sp.set('depuis-of',String(row.id));
@@ -2037,33 +2039,71 @@ async function ofCreerDossierProd(row){
   location.href='/planning?'+sp.toString();
 }
 window.ofCreerDossierProd = ofCreerDossierProd;
-/* Avant de créer : les dossiers qui correspondent déjà à l'OF. Ouvrir l'un
-   d'eux mène à son panneau OF, où l'OF est proposé à relier. Rend true pour
-   « Créer quand même », false sinon. */
-function ofChoisirAvantCreer(num,corr){
+/* Avant de créer : relier l'OF à un dossier existant passe d'abord
+   (28/11/2026 : le bouton invitait à créer un dossier en double alors que
+   « 9932957 » attendait déjà au planning). La fenêtre montre les dossiers qui
+   correspondent, puis tous les dossiers à produire sans OF, chacun reliable
+   d'un clic ; « Créer un nouveau dossier » reste au pied. Rend true pour
+   créer, false sinon (relié ou annulé). Les écarts éventuels entre l'OF et le
+   dossier relié se signalent ensuite au planning (concordance). */
+function ofChoisirAvantCreer(num,corr,row){
   return new Promise(function(fin){
     const fond=document.createElement('div');
     fond.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
-    const etat=d=>d.statut==='en_cours'?'en cours':'en attente';
-    fond.innerHTML='<div role="dialog" aria-label="Dossiers existants" style="width:min(560px,100%);background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-sizing:border-box">'+
-      '<div style="font-size:15px;font-weight:700;color:var(--text)">'+(corr.length>1?corr.length+' dossiers correspondent':'Un dossier correspond')+' à l\'OF '+escHtml(num)+'</div>'+
-      '<div style="font-size:12px;color:var(--muted);margin:4px 0 12px">Reliez l\'OF à ce dossier plutôt que d\'en créer un second.</div>'+
-      corr.map(d=>'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'+
-        '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+escHtml(d.reference||('#'+d.id))+'</div>'+
-        '<div style="font-size:12px;color:var(--muted)">'+escHtml([d.machine,etat(d),d.raison].filter(Boolean).join(' · '))+'</div></div>'+
-        '<a href="/planning?'+(d.machine_id?'machine='+encodeURIComponent(d.machine_id)+'&':'')+'of='+encodeURIComponent(d.id)+'" style="padding:7px 14px;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap">Ouvrir pour relier</a></div>').join('')+
-      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap">'+
+    const etat=d=>d.statut==='en_cours'?'en cours':(d.a_placer?'à placer':'en attente');
+    const idsCorr=new Set(corr.map(d=>Number(d.id)));
+    const carte=(d,detail)=>'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'+
+      '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+(d.reservation?'Réservation · numéro à venir <span style="font-weight:500;color:var(--muted)">'+escHtml(d.reference||'')+'</span>':escHtml(d.reference||('#'+d.id)))+'</div>'+
+      '<div style="font-size:12px;color:var(--muted)">'+escHtml(detail)+'</div></div>'+
+      '<button type="button" data-relier="'+Number(d.id)+'" style="padding:7px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Relier</button></div>';
+    fond.innerHTML='<div role="dialog" aria-label="Relier ou créer" style="width:min(620px,100%);max-height:86vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;box-sizing:border-box;overflow:hidden">'+
+      '<div style="padding:16px 20px 10px"><div style="font-size:15px;font-weight:700;color:var(--text)">L\'OF '+escHtml(num)+' n\'a pas de dossier</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:4px">Reliez-le au dossier qui l\'attend au planning. N\'en créez un que s\'il n\'existe pas.</div></div>'+
+      '<div style="padding:0 20px;overflow-y:auto;flex:1;min-height:0">'+
+        (corr.length?'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 6px">'+(corr.length>1?corr.length+' dossiers correspondent':'Un dossier correspond')+'</div>'+
+          corr.map(d=>carte(d,[d.machine,etat(d),d.raison].filter(Boolean).join(' · '))).join(''):'')+
+        '<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:12px 0 6px">Autres dossiers à produire sans OF</div>'+
+        '<input type="search" data-q placeholder="Chercher (dossier, produit, client, machine)" style="width:100%;height:36px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--text);font:inherit;font-size:13px;outline:none;margin-bottom:8px">'+
+        '<div data-autres><div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Chargement…</div></div>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);flex-wrap:wrap">'+
         '<button type="button" data-annuler style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer">Annuler</button>'+
-        '<button type="button" data-creer style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font:inherit;font-size:13px;font-weight:600;cursor:pointer">Créer quand même un nouveau dossier</button>'+
+        '<button type="button" data-creer style="padding:8px 14px;border-radius:8px;font:inherit;font-size:13px;font-weight:'+(corr.length?'600':'700')+';cursor:pointer;'+
+          (corr.length?'border:1px solid var(--border);background:var(--bg);color:var(--text2)':'border:none;background:var(--accent);color:#fff')+'">Créer un nouveau dossier</button>'+
       '</div></div>';
     const fermer=function(r){ fond.remove(); document.removeEventListener('keydown',clavier,true); fin(r); };
     const clavier=function(e){ if(e.key==='Escape'){ e.stopPropagation(); fermer(false); } };
     document.addEventListener('keydown',clavier,true);
-    fond.addEventListener('click',function(e){
-      if(e.target===fond||(e.target.closest&&e.target.closest('[data-annuler]'))) fermer(false);
-      else if(e.target.closest&&e.target.closest('[data-creer]')) fermer(true);
+    const zone=fond.querySelector('[data-autres]'), q=fond.querySelector('[data-q]');
+    let autres=[];
+    const peindre=function(){
+      const mots=q.value.toLowerCase().split(/\s+/).filter(Boolean);
+      const vus=autres.filter(d=>!idsCorr.has(Number(d.id))&&mots.every(w=>[d.reference,d.ref_produit,d.client,d.machine,d.commande].join(' ').toLowerCase().indexOf(w)>=0));
+      zone.innerHTML=vus.length?vus.map(d=>carte(d,[d.ref_produit,d.client,d.machine,etat(d),d.livraison?'livraison '+d.livraison:''].filter(Boolean).join(' · '))).join('')
+        :'<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">'+(q.value?'Aucun résultat pour « '+escHtml(q.value)+' »':'Aucun autre dossier à produire sans OF.')+'</div>';
+    };
+    api('/api/of-planning/dossiers-sans-of').then(function(r){ autres=(r&&r.items)||[]; peindre(); },
+      function(){ zone.innerHTML='<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Liste indisponible.</div>'; });
+    q.addEventListener('input',peindre);
+    fond.addEventListener('click',async function(e){
+      if(e.target===fond||(e.target.closest&&e.target.closest('[data-annuler]'))){ fermer(false); return; }
+      if(e.target.closest&&e.target.closest('[data-creer]')){ fermer(true); return; }
+      const b=e.target.closest&&e.target.closest('[data-relier]');
+      if(!b) return;
+      b.disabled=true; b.textContent='…';
+      try{
+        const r=await api('/api/of/'+encodeURIComponent(row.id)+'/planning',{method:'POST',
+          body:JSON.stringify({action:'relier',entry_id:Number(b.getAttribute('data-relier')),champs:[]})});
+        toast((r&&r.message)||'OF relié au dossier.','success');
+        fermer(false);
+        loadOfImports();
+      }catch(err){
+        b.disabled=false; b.textContent='Relier';
+        toast(err.message||'Rattachement impossible.','error');
+      }
     });
     document.body.appendChild(fond);
+    requestAnimationFrame(()=>q.focus());
   });
 }
 

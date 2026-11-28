@@ -574,8 +574,12 @@ rattaché au lieu d'être refusé comme doublon. Test : `tests/test_of_scans.py`
 préremplissage (`/api/of/{id}/dossier-prefill`) dit d'abord ce que l'OF a déjà :
 `dossier_existant` (dossier à produire relié) → le bouton l'ouvre au planning,
 jamais de second dossier ; `bloque` (OF produit) → refus ; `correspondants`
-(`candidats()` hors dossiers reliés à un autre OF) → proposés à relier avant
-« Créer quand même ». Machine reconnue par `cle_machine` (« COHESIO 1 » = « Cohésio 1 »).
+(`candidats()` hors dossiers reliés à un autre OF). Sinon, une fenêtre s'ouvre
+TOUJOURS avant de créer (28/11/2026) : dossiers qui correspondent, puis tous les
+dossiers à produire sans OF, chacun « Relier » d'un clic (action `relier`, les
+écarts se signalent ensuite par la concordance) ; « Créer un nouveau dossier »
+au pied. `candidats()` trouve aussi la commande lue dans le numéro (OF
+« 9932957 - L1 » → dossiers « 9932957 »), sauf une autre ligne citée des deux côtés. Machine reconnue par `cle_machine` (« COHESIO 1 » = « Cohésio 1 »).
 
 **Concordance OF ↔ dossier en continu** (26/11/2026). Les écarts produit, délai,
 laize et format entre un dossier À PRODUIRE et son OF de tête sont contrôlés à
