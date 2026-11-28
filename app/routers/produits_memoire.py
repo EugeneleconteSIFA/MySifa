@@ -527,6 +527,46 @@ async def bridge_of_scan(file: UploadFile = File(...),
                              chemin_origine=chemin_origine, date_fichier=date_fichier)
 
 
+def _of_par_ligne_ou_produit(conn, numero: str, ligne: Optional[int], ref_nom: Optional[str]):
+    """L'OF d'une commande à plusieurs lignes, d'après ce que dit le nom du
+    scan. Candidats : les OF dont le numéro contient celui du nom. Départage
+    par la ligne citée (« L1 »), sinon par le produit (référence de l'OF, ou
+    ligne RVGI de son numéro). Un seul candidat restant, ou None : jamais un
+    choix au hasard."""
+    num = str(numero or "").strip()
+    if not num:
+        return None
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, of_numero, reference FROM of_imports WHERE of_numero LIKE ? ORDER BY id DESC LIMIT 30",
+        ("%" + num + "%",))]
+    if not rows:
+        return None
+    if ligne:
+        par_ligne = []
+        for r in rows:
+            m = pm._LIGNE_SCAN_RE.search(str(r["of_numero"] or ""))
+            if m and int(m.group(1)) == int(ligne):
+                par_ligne.append(r)
+        if len(par_ligne) == 1:
+            return par_ligne[0]
+        if par_ligne:
+            rows = par_ligne
+    if ref_nom:
+        try:
+            from app.routers.of_planning import produit_de_l_of
+        except Exception:
+            produit_de_l_of = None
+        par_produit = []
+        for r in rows:
+            p = produit_de_l_of(conn, r) if produit_de_l_of else None
+            if p and str(p).lower() == str(ref_nom).lower():
+                par_produit.append(r)
+        if len(par_produit) == 1:
+            return par_produit[0]
+        return None
+    return rows[0] if len(rows) == 1 and not ligne else None
+
+
 def _lire_of_numero(content: bytes) -> tuple[Optional[str], bool]:
     """Numero d'OF lu dans le PDF, et si le PDF portait du texte.
 
@@ -685,11 +725,18 @@ def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
                 "ORDER BY id DESC LIMIT 1",
                 (numero,),
             ).fetchone()
+            if not row:
+                # Pas d'OF à ce numéro exact : l'OF d'une ligne (« 9932957 -
+                # L1 ») se retrouve par la ligne ou le produit du nom
+                # (28/11/2026). Un seul candidat, ou rien.
+                row = _of_par_ligne_ou_produit(conn, numero, infos.get("ligne"), ref_nom)
+                if row:
+                    numero = row["of_numero"]
             if row:
                 of_import_id = row["id"]
                 pe = conn.execute(
                     "SELECT reference FROM planning_entries WHERE of_import_id=? "
-                    "ORDER BY id DESC LIMIT 1", (of_import_id,)
+                    "ORDER BY (statut='termine') DESC, id DESC LIMIT 1", (of_import_id,)
                 ).fetchone()
                 if pe:
                     dossier = pe["reference"]

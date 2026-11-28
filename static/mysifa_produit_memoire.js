@@ -1600,7 +1600,7 @@
     var sous = el('div', {
       className: 'pmem-drop-s',
       text: 'Glissez vos PDF ici, ou cliquez pour les choisir. '
-          + 'Le numero d\'OF et la reference produit sont lus dans le nom du fichier.',
+          + 'Le numero d\'OF, la ligne (L1, L2…) et la reference produit sont lus dans le nom du fichier.',
     });
     var barre = el('div', { className: 'pmem-prog-b' });
     var prog = el('div', { className: 'pmem-prog', style: 'display:none' }, [barre]);

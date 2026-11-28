@@ -114,6 +114,8 @@ _OF_RELIQUAT_RE = re.compile(r"\b(reliquat)\s+(99\d{5})\b", re.IGNORECASE)
 # prendre la premiere occurrence : « Stock 16-07-2026 961-0007 » contient
 # « 07-2026 », qui ressemble a une reference et n'en est pas une.
 _REF_FIN_RE = re.compile(r"(\d{2,5})\s*[-/]\s*(\d{4})\s*$")
+# Ligne de commande citée dans le nom : « 9932957 - L1 », « L2 », « ligne 3 ».
+_LIGNE_SCAN_RE = re.compile(r"(?:\bL|\bligne\s*)(\d{1,2})\b", re.IGNORECASE)
 
 
 def _ressemble_a_une_date(gauche: str, droite: str) -> bool:
@@ -127,7 +129,7 @@ def _ressemble_a_une_date(gauche: str, droite: str) -> bool:
 
 def analyser_nom_scan(nom: str) -> Dict[str, Any]:
     """Numero d'OF et reference produit lus dans le nom d'un fichier scanne."""
-    out: Dict[str, Any] = {"of_numero": None, "ref_produit_norm": None}
+    out: Dict[str, Any] = {"of_numero": None, "ref_produit_norm": None, "ligne": None}
     base = os.path.splitext(os.path.basename(str(nom or "")))[0]
     base = base.replace("_", " ").strip()
     if not base:
@@ -141,6 +143,9 @@ def analyser_nom_scan(nom: str) -> Dict[str, Any]:
         m_of = _OF_RACINE_SCAN_RE.search(base)
         if m_of:
             out["of_numero"] = m_of.group(1)
+    m_lg = _LIGNE_SCAN_RE.search(base)
+    if m_lg:
+        out["ligne"] = int(m_lg.group(1))
 
     m_ref = _REF_FIN_RE.search(base)
     if m_ref and not _ressemble_a_une_date(m_ref.group(1), m_ref.group(2)):
