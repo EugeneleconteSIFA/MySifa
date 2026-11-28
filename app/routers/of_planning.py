@@ -243,6 +243,35 @@ def concordance_dossiers(conn, entry_ids: Optional[List[int]] = None) -> Dict[in
     return {e: {"of_id": o, "of_numero": nums.get(o), "ecarts": ecs} for (e, o), ecs in res.items()}
 
 
+@router.get("/api/of-planning/dossier/{entry_id}/apercu")
+def of_planning_apercu_dossier(entry_id: int, request: Request, of_id: Optional[int] = None):
+    """Un dossier vu depuis un OF qu'on s'apprête à y relier (28/11/2026 :
+    « sinon j'y vais à l'aveugle ») : son aperçu, et ce que l'OF y changerait
+    ou contredirait (produit, délai, laize, format)."""
+    _require_of_access(request)
+    with get_db() as conn:
+        r = conn.execute(
+            "SELECT pe.*, m.nom AS machine_nom FROM planning_entries pe "
+            "LEFT JOIN machines m ON m.id = pe.machine_id WHERE pe.id=?", (entry_id,)).fetchone()
+        if not r:
+            raise HTTPException(404, "Dossier introuvable.")
+        d = dict(r)
+        comparaison = []
+        if of_id:
+            of = conn.execute("SELECT * FROM of_imports WHERE id=?", (of_id,)).fetchone()
+            if of:
+                vals = valeurs_de_l_of(dict(of))
+                if vals.get("ref_produit") and not _CLE_PRODUIT_RE.match(str(vals["ref_produit"])):
+                    vals["ref_produit"] = None
+                comparaison = [{"libelle": e["libelle"], "dossier": e["avant"], "of": e["apres"],
+                                "contradiction": e["avant"] != "vide"}
+                               for e in ecarts(d, vals, conn) if e["champ"] in CONTROLES]
+    return {"id": d["id"], "reference": d.get("reference"), "machine": d.get("machine_nom"),
+            "machine_id": d.get("machine_id"), "statut": d.get("statut"),
+            "livraison": _jour(d.get("date_livraison")) or None,
+            "apercu": _apercu(d), "comparaison": comparaison}
+
+
 @router.get("/api/of-planning/concordance")
 def of_planning_concordance(request: Request, machine_id: Optional[int] = None):
     """Les dossiers à produire qui contredisent leur OF (planning, liste)."""
