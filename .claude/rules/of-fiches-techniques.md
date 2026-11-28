@@ -577,6 +577,12 @@ adresse `?page=scans&sous=attendus`). Le tri des scans normalise `date_document`
 qui mêle « 30/06/2026 » et l'ISO (`_SQL_DATE_TRI`) : trié comme du texte, l'ordre
 suivait le jour du mois.
 
+**Dépôt par nom de fichier : OF d'une ligne** (28/11/2026). Sans OF au numéro
+exact, `_of_par_ligne_ou_produit` cherche les OF dont le numéro contient celui du
+nom (« 9932957 » → « 9932957 - L1/L2/L3 ») et départage par la ligne lue dans le
+nom (`analyser_nom_scan` → `ligne`), sinon par le produit (référence de l'OF ou
+ligne RVGI). Un seul candidat, ou rien. Vaut pour la zone de dépôt et l'agent.
+
 **« Créer directement un dossier de prod »** (liste des OF, 26/11/2026). Le
 préremplissage (`/api/of/{id}/dossier-prefill`) dit d'abord ce que l'OF a déjà :
 `dossier_existant` (dossier à produire relié) → le bouton l'ouvre au planning,

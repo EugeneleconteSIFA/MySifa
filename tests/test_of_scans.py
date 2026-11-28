@@ -213,6 +213,23 @@ liste = [d["id"] for d in pmr.liste_documents_scannes(request=None)["documents"]
 ordre = [i for i in liste if i in (res["id"], res2["id"], res3["id"])]
 check("tri : 01/07 puis 30/06 puis 26/06", ordre, [res3["id"], res["id"], res2["id"]])
 
+print("--- depot par la zone : OF d'une ligne retrouve (28/11/2026) ---")
+with dbmod.get_db() as conn:
+    for i, num, ref in ((10, "9932957 - L1", "9932957 - L1"), (11, "9932957 - L2", "9932957 - L2"),
+                        (12, "9932958 - L1", "1013/0290"), (13, "9932958 - L2", "1013/0291"),
+                        (14, "9932959 - L1", "1013/0290"), (15, "9932959 - L2", "1013/0291")):
+        conn.execute("INSERT INTO of_imports (id, of_numero, reference, date_import) VALUES (?, ?, ?, '2026-11-20')", (i, num, ref))
+    conn.commit()
+check("ligne lue dans le nom", pm.analyser_nom_scan("9932957 - L2 1013-0290.pdf")["ligne"], 2)
+r = pmr._enregistrer_scan(pdf_octets("L2"), "9932957 - L2 1013-0290.pdf", "test")
+check("par la ligne : 9932957 - L2", r["of_numero"], "9932957 - L2")
+r = pmr._enregistrer_scan(pdf_octets("prod"), "9932958 1013-0291.pdf", "test")
+check("par le produit : 9932958 - L2", r["of_numero"], "9932958 - L2")
+r = pmr._enregistrer_scan(pdf_octets("ambigu"), "9932959 1013-0299.pdf", "test")
+with dbmod.get_db() as conn:
+    oid = conn.execute("SELECT of_import_id FROM produit_documents WHERE id=?", (r["id"],)).fetchone()[0]
+check("ni ligne ni produit commun : aucun OF choisi", oid, None)
+
 print("--- parcours du dossier reseau (sous-dossiers par annee) ---")
 import of_scans_commun as osc
 

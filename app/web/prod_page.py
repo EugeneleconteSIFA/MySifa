@@ -162,7 +162,7 @@ __ARRIVEE_PLANNING__
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack6"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
-<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem25"></script>
+<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem26"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>"""
