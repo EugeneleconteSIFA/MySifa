@@ -579,7 +579,15 @@ TOUJOURS avant de créer (28/11/2026) : dossiers qui correspondent, puis tous le
 dossiers à produire sans OF, chacun « Relier » d'un clic (action `relier`, les
 écarts se signalent ensuite par la concordance) ; « Créer un nouveau dossier »
 au pied. `candidats()` trouve aussi la commande lue dans le numéro (OF
-« 9932957 - L1 » → dossiers « 9932957 »), sauf une autre ligne citée des deux côtés. Machine reconnue par `cle_machine` (« COHESIO 1 » = « Cohésio 1 »).
+« 9932957 - L1 » → dossiers « 9932957 »), sauf une autre ligne citée des deux côtés.
+
+**Produit d'un OF du pont Access** (28/11/2026). Le pont range le numéro dans
+la référence (« 9932957 - L1 ») : `produit_de_l_of()` prend alors le produit des
+lignes de commande rattachées, sinon de la ligne RVGI que désigne le numéro
+(ligne 1 de 9932957 → 1013/0292), un seul article ou rien. `valeurs_completes()`
+l'utilise pour relier, la concordance et l'aperçu : un numéro n'est jamais
+écrit comme produit d'un dossier, et les dossiers d'une même commande se
+départagent (« même produit » en tête de la fenêtre « Relier ou créer »). Machine reconnue par `cle_machine` (« COHESIO 1 » = « Cohésio 1 »).
 
 **Concordance OF ↔ dossier en continu** (26/11/2026). Les écarts produit, délai,
 laize et format entre un dossier À PRODUIRE et son OF de tête sont contrôlés à

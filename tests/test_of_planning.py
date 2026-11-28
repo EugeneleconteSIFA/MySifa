@@ -409,5 +409,54 @@ class TestMemeCommandeDansLeNumero(unittest.TestCase):
         self.assertNotIn(42, ids)                 # autre ligne
 
 
+class TestProduitDeLOF(unittest.TestCase):
+    """OF du pont Access sans produit : la ligne RVGI de son numéro le donne."""
+
+    def setUp(self):
+        from app.services import of_proposition
+        self.prop = of_proposition
+        self._lire = of_proposition.lire_commandes
+        lignes = {1: "1013/0292", 2: "1013/0290", 3: "1013/0291"}
+        def lire(ls):
+            arts = sorted({lignes[l["ligne"]] for l in ls if l.get("ligne") in lignes}) if all(l.get("ligne") for l in ls) \
+                else sorted(lignes.values())
+            return {"articles": arts}
+        of_proposition.lire_commandes = lire
+        with get_db() as conn:
+            m = _preparer(conn)
+            conn.execute("DELETE FROM planning_of_links")
+            conn.execute("INSERT INTO of_imports (id, of_numero, reference, statut) "
+                         "VALUES (60, '9932957 - L1', '9932957 - L1', 'en_attente')")
+            for i, rp in ((70, "1013/0292"), (71, "1013/0290")):
+                conn.execute("INSERT INTO planning_entries (id, machine_id, position, reference, numero_of, statut, ref_produit, of_import_id) "
+                             "VALUES (?, ?, ?, '9932957', '9932957', 'attente', ?, 60)", (i, m, 30 + i, rp))
+            conn.commit()
+
+    def tearDown(self):
+        self.prop.lire_commandes = self._lire
+
+    def test_produit_lu_dans_la_ligne(self):
+        with get_db() as conn:
+            of = dict(conn.execute("SELECT * FROM of_imports WHERE id=60").fetchone())
+            self.assertEqual(op.produit_de_l_of(conn, of), "1013/0292")
+            # Sans ligne citée, trois articles : aucun choix au hasard.
+            self.assertIsNone(op.produit_de_l_of(conn, {"of_numero": "9932957", "reference": "9932957"}))
+
+    def test_concordance_departage(self):
+        with get_db() as conn:
+            res = op.concordance_paires(conn, [(70, 60), (71, 60)])
+        self.assertNotIn((70, 60), res)
+        self.assertEqual([e["champ"] for e in res[(71, 60)]], ["ref_produit"])
+
+    def test_numero_jamais_ecrit_comme_produit(self):
+        self.prop.lire_commandes = lambda ls: {"articles": []}
+        with get_db() as conn:
+            conn.execute("UPDATE planning_entries SET ref_produit=NULL WHERE id=70")
+            of = dict(conn.execute("SELECT * FROM of_imports WHERE id=60").fetchone())
+            op._relier(conn, None, {"nom": "Essai"}, "Essai", "2026-11-28T10:00:00", of, 70, ["ref_produit"])
+            rp = conn.execute("SELECT ref_produit FROM planning_entries WHERE id=70").fetchone()[0]
+        self.assertIsNone(rp)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

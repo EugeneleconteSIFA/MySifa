@@ -2029,7 +2029,7 @@ async function ofCreerDossierProd(row){
   // 3. Relier passe avant créer : la fenêtre s'ouvre toujours, avec les
   //    dossiers qui correspondent puis tous les dossiers à produire sans OF.
   const corr=(p&&p.correspondants)||[];
-  if(!(await ofChoisirAvantCreer(num,corr,row))) return;
+  if(!(await ofChoisirAvantCreer(num,corr,row,p&&p.produit_of))) return;
   const sp=new URLSearchParams();
   if(p&&p.machine_id) sp.set('machine',String(p.machine_id));
   sp.set('depuis-of',String(row.id));
@@ -2046,7 +2046,7 @@ window.ofCreerDossierProd = ofCreerDossierProd;
    d'un clic ; « Créer un nouveau dossier » reste au pied. Rend true pour
    créer, false sinon (relié ou annulé). Les écarts éventuels entre l'OF et le
    dossier relié se signalent ensuite au planning (concordance). */
-function ofChoisirAvantCreer(num,corr,row){
+function ofChoisirAvantCreer(num,corr,row,produitOf){
   return new Promise(function(fin){
     const fond=document.createElement('div');
     fond.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
@@ -2058,7 +2058,10 @@ function ofChoisirAvantCreer(num,corr,row){
     const carte=(d,detail)=>'<div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px">'+
       '<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--text)">'+(d.reservation?'Réservation · numéro à venir <span style="font-weight:500;color:var(--muted)">'+escHtml(d.reference||'')+'</span>':escHtml(d.reference||('#'+d.id)))+'</div>'+
-      '<div style="font-size:12px;color:var(--muted)">'+escHtml(detail)+'</div></div>'+
+      '<div style="font-size:12px;color:var(--muted)">'+escHtml(detail)+
+        (d.meme_produit===true?' <span style="margin-left:4px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;color:var(--success);border:1px solid var(--success)">même produit</span>':'')+
+        (d.meme_produit===false?' <span style="margin-left:4px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;color:var(--danger);border:1px solid var(--danger)">autre produit</span>':'')+
+      '</div></div>'+
       '<span style="display:flex;gap:6px;flex-shrink:0">'+
       '<button type="button" data-voir="'+Number(d.id)+'" aria-expanded="false" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Voir</button>'+
       '<button type="button" data-relier="'+Number(d.id)+'" style="padding:7px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Relier</button></span></div>'+
@@ -2081,10 +2084,10 @@ function ofChoisirAvantCreer(num,corr,row){
     };
     fond.innerHTML='<div role="dialog" aria-label="Relier ou créer" style="width:min(620px,100%);max-height:86vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;box-sizing:border-box;overflow:hidden">'+
       '<div style="padding:16px 20px 10px"><div style="font-size:15px;font-weight:700;color:var(--text)">L\'OF '+escHtml(num)+' n\'a pas de dossier</div>'+
-      '<div style="font-size:12px;color:var(--muted);margin-top:4px">Reliez-le au dossier qui l\'attend au planning. N\'en créez un que s\'il n\'existe pas.</div></div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:4px">'+(produitOf?'Produit de l\'OF : <strong style="color:var(--text)">'+escHtml(produitOf)+'</strong> · ':'')+'Reliez-le au dossier qui l\'attend au planning. N\'en créez un que s\'il n\'existe pas.</div></div>'+
       '<div style="padding:0 20px;overflow-y:auto;flex:1;min-height:0">'+
         (corr.length?'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 6px">'+(corr.length>1?corr.length+' dossiers correspondent':'Un dossier correspond')+'</div>'+
-          corr.map(d=>carte(d,[d.machine,etat(d),d.raison].filter(Boolean).join(' · '))).join(''):'')+
+          corr.map(d=>carte(d,[d.ref_produit,d.machine,etat(d),d.raison].filter(Boolean).join(' · '))).join(''):'')+
         '<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:12px 0 6px">Autres dossiers à produire sans OF</div>'+
         '<input type="search" data-q placeholder="Chercher (dossier, produit, client, machine)" style="width:100%;height:36px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--text);font:inherit;font-size:13px;outline:none;margin-bottom:8px">'+
         '<div data-autres><div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Chargement…</div></div>'+
