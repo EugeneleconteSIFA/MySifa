@@ -154,7 +154,7 @@ __ARRIVEE_PLANNING__
 <script src="/static/mysifa_rent_tableau.js?v=7"></script>
 <!-- Rentabilite > lecture d'un devis : resultat, chaine du classeur, sensibilite -->
 <script src="/static/mysifa_rent_devis.js?v=3"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent32-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit5-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp79-rep2"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of3-annul1-rent32-ecart3-sais4-bob5-msb1-san3-mpm3-ton1-vit5-sev1-url7-ecart4-cal1-clot7-fiche6-act1-grp1-cpt3-pes5-opk2-ofp80-rep2"></script>
 <!-- Repartir une fin de production sur plusieurs dossiers de la commande -->
 <script src="/static/mysifa_repartition.js?v=2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
@@ -162,7 +162,7 @@ __ARRIVEE_PLANNING__
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack6"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
-<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem24"></script>
+<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem25"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>"""
