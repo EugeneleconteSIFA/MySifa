@@ -588,6 +588,14 @@ bandeau du panneau OF avec « Reporter les valeurs de l'OF sur le dossier »
 (route de l'étape Planning, action `relier`), mention « Écart : … » dans la
 colonne Dossier de la liste des OF. Tests : `TestConcordance`.
 
+**« À relire » : absents ≠ écarts** (28/11/2026). Une case VIDE de l'OF ne
+contredit pas la fiche : l'import (pont Access comme PDF) ne remplit jamais
+outil, palette, particularités (vides sur les 1 155 OF), souvent ni glassine ni
+adhésif, et l'aperçu les complète depuis la fiche. Elles se rangent sous
+« Absents de l'OF » (replié, hors du compte des points à relire) avec « Tout
+reprendre de la fiche » (`ofeReprendreAbsents`, une étape d'historique). Seules
+les valeurs présentes des deux côtés et différentes restent « Écarts avec la fiche ».
+
 **Numéros d'OF abrégés d'Access** (26/11/2026, `_of_tokens` de
 `of_import.py`). 387 OF de la prod portent plusieurs commandes dans leur
 numéro, souvent abrégées : « 9932913, 914, 915 et 916 », « 9932929-935-936 »,

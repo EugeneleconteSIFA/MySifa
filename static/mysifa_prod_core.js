@@ -2482,7 +2482,12 @@ function ofePeindreEcarts(m){
   if(!z) return;
   const journal=Object.values(m._journal||{}).sort((a,b)=>b.ordre-a.ordre);
   const dansJournal=new Set(journal.map(x=>x.col));
-  const e=ofeEcartsListe(m).filter(x=>!dansJournal.has(x.col)), inc=m._incoherences||[];
+  const tous=ofeEcartsListe(m).filter(x=>!dansJournal.has(x.col)), inc=m._incoherences||[];
+  // Une case VIDE de l'OF ne contredit pas la fiche : l'import ne la remplit
+  // jamais (outil, palette, particularités vides sur tous les OF au
+  // 28/11/2026) et l'aperçu la complète depuis la fiche. Elle se range à part,
+  // repliée, hors du compte des points à relire.
+  const e=tous.filter(x=>String(x.of||'').trim()!==''), absents=tous.filter(x=>String(x.of||'').trim()==='');
   const bouton='padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap';
   const ligne='display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border-top:1px solid var(--border);font-size:13px;color:var(--text)';
   let h='';
@@ -2508,8 +2513,19 @@ function ofePeindreEcarts(m){
     h+='<div style="'+ligne+'"><span>Délai client : <span style="color:var(--muted)">commande '+escHtml(fr(dateCmd))+'</span> → <strong>'+escHtml(fr(champDelai.value))+'</strong></span><button type="button" data-reprendre-delai="'+escAttr(dateCmd)+'" style="'+bouton+'">Reprendre la date de la commande</button></div>';
   }
   const total=journal.length+e.length+inc.length+(ecartDelai?1:0);
-  z.style.display=total?'block':'none';
-  z.innerHTML=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">À relire</div>'+h:'';
+  let hAbs='';
+  if(absents.length){
+    const ouvert=!!m._absentsOuverts;
+    hAbs='<div style="'+ligne+(total?'':';border-top:none')+'"><span style="color:var(--muted)">'+
+      '<button type="button" data-absents-voir style="border:none;background:none;padding:0;margin-right:6px;color:var(--muted);cursor:pointer;font:inherit" aria-expanded="'+(ouvert?'true':'false')+'">'+(ouvert?'▾':'▸')+'</button>'+
+      '<strong style="color:var(--text2)">Absents de l\'OF</strong> · '+absents.length+' case'+(absents.length>1?'s':'')+' vide'+(absents.length>1?'s':'')+', reprise'+(absents.length>1?'s':'')+' de la fiche à l\'impression</span>'+
+      '<button type="button" data-absents-reprendre style="'+bouton+'">Tout reprendre de la fiche</button></div>';
+    if(ouvert) hAbs+='<div style="padding:2px 0 6px 18px;font-size:12px;color:var(--muted);line-height:1.7">'+
+      absents.map(x=>escHtml(x.lib)+' : <span style="color:var(--text2)">'+escHtml(ofeTexteValeur(x.fiche))+'</span>').join('<br>')+'</div>';
+  }
+  const titre=total?'<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px">À relire</div>':'';
+  z.style.display=(total||absents.length)?'block':'none';
+  z.innerHTML=(total||absents.length)?titre+h+hAbs:'';
   if(pied){
     pied.style.display=total?'inline-flex':'none';
     pied.textContent=total+(total>1?' points à relire':' point à relire');
@@ -2528,6 +2544,30 @@ async function ofeActualiserEcarts(m){
   m._ficheRef=p.fiche_valeurs||{};
   m._incoherences=p.incoherences||[];
   ofePeindreEcarts(m);
+}
+/* « Tout reprendre de la fiche » : les cases vides de l'OF reçoivent la
+   valeur de la fiche, en une seule étape d'historique. */
+function ofeReprendreAbsents(m){
+  const r=m._ficheRef||{};
+  const cols=ofeEcartsListe(m).filter(x=>String(x.of||'').trim()==='').map(x=>x.col);
+  if(!cols.length) return;
+  ofeMemoriser(m);
+  captureSaisie('ofe-',m);
+  m._dom=m._dom||{};
+  cols.forEach(function(col){
+    const id=OFE_CHAMPS[col];
+    if(!id||r[col]===undefined) return;
+    if(m._journal) delete m._journal[id];
+    m._dom[id]=String(r[col]);
+    m[col]=r[col];
+    if(OFE_REF_DE[col]) m[OFE_REF_DE[col]]=r[OFE_REF_DE[col]]||null;
+    if(m._manuels) delete m._manuels[id];
+  });
+  m._modifie=true;
+  set({ofEditModal:m});
+  renderOfEditModal();
+  ofeRecalculer();
+  toast(cols.length+(cols.length>1?' cases reprises':' case reprise')+' de la fiche.','success');
 }
 function ofeRevenirFiche(m,col,dejaMemorise){
   const r=m._ficheRef||{}, id=OFE_CHAMPS[col];
@@ -3401,8 +3441,10 @@ function ofeBrancherFiche(overlay,m){
     if(e.target.matches&&e.target.matches('.ofe-case[type=date],#ofe-delai-etape2')){
       try{ e.target.showPicker(); }catch(err){}
     }
-    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],[data-signaler-fiche],[data-annuler-modif],#ofe-ecarts-pied');
+    const b=e.target.closest&&e.target.closest('[data-ecart],[data-incoh],[data-reprendre-delai],[data-signaler-fiche],[data-annuler-modif],[data-absents-voir],[data-absents-reprendre],#ofe-ecarts-pied');
     if(!b) return;
+    if(b.hasAttribute('data-absents-voir')){ m._absentsOuverts=!m._absentsOuverts; ofePeindreEcarts(m); return; }
+    if(b.hasAttribute('data-absents-reprendre')){ ofeReprendreAbsents(m); return; }
     if(b.hasAttribute('data-annuler-modif')){ ofeAnnulerModif(m,b.getAttribute('data-annuler-modif')); return; }
     if(b.hasAttribute('data-signaler-fiche')){ ofeSignalerFicheManquante(m); return; }
     if(b.hasAttribute('data-reprendre-delai')){
