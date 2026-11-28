@@ -2950,6 +2950,7 @@ def of_dossier_prefill(of_id: int, request: Request):
             "ORDER BY pe.id DESC LIMIT 1", (of_id, of_id)).fetchone()
         etat = (_op.etat_des_of(conn, [of_id]) or {}).get(of_id) or {}
         correspondants = []
+        produit_of = None
         if not existant and etat.get("etat") != "produit":
             for d in _op.candidats(conn, None, of.get("of_numero"),
                                    [{"numero": l["numero"], "ligne": l["ligne"]} for l in lignes])[:5]:
@@ -2957,7 +2958,17 @@ def of_dossier_prefill(of_id: int, request: Request):
                     continue          # déjà relié à un autre OF : pas ce dossier-là
                 correspondants.append({"id": d["id"], "reference": d.get("reference"),
                                        "machine_id": d.get("machine_id"), "machine": d.get("machine_nom"),
-                                       "statut": d.get("statut"), "raison": d.get("_raison")})
+                                       "statut": d.get("statut"), "raison": d.get("_raison"),
+                                       "ref_produit": d.get("ref_produit")})
+            # Le produit de l'OF (lu dans la ligne RVGI pour un OF du pont
+            # Access) départage les dossiers d'une même commande : le bon en
+            # tête, les autres marqués (28/11/2026).
+            produit_of = _op.produit_de_l_of(conn, of)
+            if produit_of:
+                for c in correspondants:
+                    rp = str(c.get("ref_produit") or "").split(" - ")[0].strip()
+                    c["meme_produit"] = (rp.lower() == produit_of.lower()) if rp else None
+                correspondants.sort(key=lambda c: {True: 0, None: 1, False: 2}[c.get("meme_produit")])
 
     largeur, hauteur = _format_lh(of.get("format"))
     client = next((l["vu_client"] for l in lignes if l.get("vu_client")), None)
@@ -2979,6 +2990,7 @@ def of_dossier_prefill(of_id: int, request: Request):
         "dossier_existant": (dict(existant) if existant else None),
         "bloque": (etat.get("note") if etat.get("etat") == "produit" else None),
         "correspondants": correspondants,
+        "produit_of": (produit_of if not existant and etat.get("etat") != "produit" else None),
         "machine_id": machine_id,
         "machine": nom_machine or None,
         "fiche_id": (fiche.get("id") if fiche else None),

@@ -90,6 +90,47 @@ def valeurs_de_l_of(of: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def produit_de_l_of(conn, of: Dict[str, Any]) -> Optional[str]:
+    """La clé produit de l'OF. Celle de sa référence quand c'en est une ;
+    sinon celle de ses lignes de commande rattachées ; sinon celle de la ligne
+    RVGI que désigne son numéro (« 9932957 - L1 » : ligne 1 de la commande
+    9932957). Les OF du pont Access portent leur numéro à la place du produit
+    (28/11/2026 : trois dossiers « 9932957 » de produits différents, tous
+    déclarés concordants faute de produit à comparer). Un seul article, ou
+    rien : jamais un choix au hasard."""
+    cle = _cle_produit(of.get("reference"))
+    if cle and _CLE_PRODUIT_RE.match(cle):
+        return cle
+    lignes: List[Dict[str, Any]] = []
+    try:
+        if of.get("id"):
+            lignes = [{"numero": l["numero"], "ligne": l.get("ligne")}
+                      for l in ratt.lister(conn, "of", int(of["id"])) if l["piece"] == "commande"]
+    except Exception:
+        lignes = []
+    if not lignes:
+        texte = "%s %s" % (of.get("of_numero") or "", of.get("reference") or "")
+        m = _COMMANDE_RE.search(texte)
+        if not m:
+            return None
+        lg = _LIGNE_RE.search(texte)
+        lignes = [{"numero": m.group(1), "ligne": int(lg.group(1)) if lg else None}]
+    try:
+        from app.services.of_proposition import lire_commandes
+        articles = lire_commandes(lignes).get("articles") or []
+    except Exception:
+        return None
+    return articles[0] if len(articles) == 1 else None
+
+
+def valeurs_completes(conn, of: Dict[str, Any]) -> Dict[str, Any]:
+    """`valeurs_de_l_of`, avec le produit établi par `produit_de_l_of` :
+    jamais « 9932957 » écrit comme produit d'un dossier."""
+    vals = valeurs_de_l_of(of)
+    vals["ref_produit"] = produit_de_l_of(conn, of)
+    return vals
+
+
 def _format_dossier(d: Dict[str, Any]):
     l, h = _nombre(d.get("format_l")), _nombre(d.get("format_h"))
     return (l, h) if l and h else None
@@ -195,13 +236,14 @@ def concordance_paires(conn, paires: List[tuple]) -> Dict[tuple, List[Dict[str, 
     ofs = {int(r["id"]): dict(r) for r in conn.execute(
         "SELECT * FROM of_imports WHERE id IN (%s)" % ",".join("?" * len(oids)), oids)}
     out: Dict[tuple, List[Dict[str, Any]]] = {}
+    cache: Dict[int, Dict[str, Any]] = {}
     for e, o in paires:
         d, of = dossiers.get(e), ofs.get(o)
         if not d or not of:
             continue
-        vals = valeurs_de_l_of(of)
-        if vals.get("ref_produit") and not _CLE_PRODUIT_RE.match(str(vals["ref_produit"])):
-            vals["ref_produit"] = None
+        vals = cache.get(o)
+        if vals is None:
+            vals = cache[o] = valeurs_completes(conn, of)
         # Un champ vide du dossier n'est pas une contradiction : il reste à
         # compléter (l'étape Planning le propose), pas à signaler en rouge.
         ecs = [x for x in ecarts(d, vals, conn) if x["champ"] in CONTROLES and x["avant"] != "vide"]
@@ -260,9 +302,7 @@ def of_planning_apercu_dossier(entry_id: int, request: Request, of_id: Optional[
         if of_id:
             of = conn.execute("SELECT * FROM of_imports WHERE id=?", (of_id,)).fetchone()
             if of:
-                vals = valeurs_de_l_of(dict(of))
-                if vals.get("ref_produit") and not _CLE_PRODUIT_RE.match(str(vals["ref_produit"])):
-                    vals["ref_produit"] = None
+                vals = valeurs_completes(conn, dict(of))
                 comparaison = [{"libelle": e["libelle"], "dossier": e["avant"], "of": e["apres"],
                                 "contradiction": e["avant"] != "vide"}
                                for e in ecarts(d, vals, conn) if e["champ"] in CONTROLES]
@@ -509,7 +549,7 @@ def _relier(conn, request, user, qui, maintenant, of, entry_id, champs):
     sets: Dict[str, Any] = {}
     if "of_link_user_managed" in cols:
         sets["of_link_user_managed"] = 1
-    vals = valeurs_de_l_of(of)
+    vals = valeurs_completes(conn, of)
     voulus = {c for c in champs if isinstance(c, str)}
     ecrits = []
     for e in ecarts(d, vals, conn):
