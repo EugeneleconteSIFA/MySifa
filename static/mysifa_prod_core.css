@@ -1900,22 +1900,27 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
    numéro d'OF. */
 .table-std.table-actions-wide.prod-liste-of th.th-actions,
 .table-std.table-actions-wide.prod-liste-of td.td-actions{
-  width:336px !important;
-  min-width:336px !important;
-  max-width:336px !important;
+  width:196px !important;
+  min-width:196px !important;
+  max-width:196px !important;
 }
+/* 196px depuis le 28/11/2026 : Dossier (planifier) et Produit (la référence)
+   ont quitté les actions, la colonne Machine est passée sous la référence. */
 /* 336px depuis le 17/11/2026 : un huitième bouton, le scan de l'OF terminé. */
 /* 340px laissait un vide à droite des boutons pendant que « Délai client »,
    « Qté étiquettes » et les dates se coupaient. Ajusté au contenu réel, et
    un en-tête trop long passe à la ligne au lieu d'être tronqué. */
 /* 22/11/2026 : colonne « Dossier » (5e), où en est l'OF au planning. */
-.prod-liste-of th:nth-child(2){width:16%}
-.prod-liste-of th:nth-child(3){width:13%}
-.prod-liste-of th:nth-child(4){width:9%}
-.prod-liste-of th:nth-child(5){width:14%}
-.prod-liste-of th:nth-child(6){width:10%}
-.prod-liste-of th:nth-child(7){width:10%}
-.prod-liste-of th:nth-child(8){width:10%}
+.prod-liste-of th:nth-child(2){width:17%}
+.prod-liste-of th:nth-child(3){width:17%}
+.prod-liste-of th:nth-child(4){width:22%}
+.prod-liste-of th:nth-child(5){width:9%}
+.prod-liste-of th:nth-child(6){width:11%}
+.prod-liste-of th:nth-child(7){width:9%}
+/* Référence cliquable : ouvre la fiche produit (mémoire produit). */
+.prod-liste-of .of-ref-lien{display:block;max-width:100%;padding:0;border:none;background:none;color:var(--text);font:inherit;text-align:left;
+  cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prod-liste-of .of-ref-lien:hover{color:var(--accent);text-decoration:underline}
 .table-std.table-actions-wide.prod-liste-of th{white-space:normal;text-overflow:clip;line-height:1.3}
 @media (max-width:900px){
   .table-std.table-actions-wide.prod-liste-of th.th-actions,
